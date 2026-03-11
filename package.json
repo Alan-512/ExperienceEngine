@@ -1,0 +1,29 @@
+{
+  "name": "experienceengine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "ExperienceEngine v2 MVP scaffold for OpenClaw companion-layer experience intervention.",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "bin": {
+    "ee": "./dist/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json",
+    "dev": "tsx watch src/cli/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "check": "pnpm typecheck && pnpm test && pnpm build"
+  },
+  "dependencies": {
+    "zod": "^3.25.76"
+  },
+  "devDependencies": {
+    "@types/node": "^22.13.14",
+    "tsx": "^4.19.3",
+    "typescript": "^5.8.2",
+    "vitest": "^3.0.9"
+  }
+}

@@ -1,0 +1,13 @@
+node_modules
+dist
+.turbo
+.env
+.env.local
+coverage
+*.log
+data/sqlite/*.db
+data/sqlite/*.db-*
+data/vector/*
+!data/vector/.gitkeep
+data/logs/*.jsonl
+
