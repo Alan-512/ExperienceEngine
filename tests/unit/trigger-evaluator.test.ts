@@ -31,5 +31,19 @@ describe("evaluateTrigger", () => {
   it("skips unknown tasks", () => {
     expect(evaluateTrigger({ ...baseInput, task_type: "unknown" })).toBe(false);
   });
-});
 
+  it("fires when a known similar candidate pattern strongly overlaps", () => {
+    expect(
+      evaluateTrigger(
+        {
+          ...baseInput,
+          task_type: "test_debug",
+          task_summary: "Fix the failing vitest auth test by checking the current workspace"
+        },
+        undefined,
+        "Fix the failing vitest auth test. Start by checking the current workspace",
+        0.6
+      )
+    ).toBe(true);
+  });
+});

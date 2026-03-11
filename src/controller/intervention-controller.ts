@@ -17,11 +17,14 @@ export const decideIntervention = (
   threshold = 0.6,
   maxHints = 3
 ): InterventionDecision => {
-  if (!evaluateTrigger(input, stats, undefined, threshold)) {
+  const candidates = retrieveCandidates(input, nodes);
+  const ranked = rankNodes(input.task_summary, candidates);
+  const candidateRiskSummary = ranked[0]?.trigger_pattern ?? ranked[0]?.compact_hint;
+
+  if (!evaluateTrigger(input, stats, candidateRiskSummary, threshold)) {
     return { mode: "skip", selected: [] };
   }
 
-  const ranked = rankNodes(input.task_summary, retrieveCandidates(input, nodes));
   if (!ranked.length) {
     return { mode: "skip", selected: [] };
   }

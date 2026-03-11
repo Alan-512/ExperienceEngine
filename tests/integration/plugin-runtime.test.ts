@@ -187,6 +187,54 @@ describe("OpenClaw plugin runtime", () => {
     expect(secondTurn.prependContext).toContain("Reproduce first");
   });
 
+  it("injects on a later similar turn even when the host payload lacks context summary", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const handlers = new Map<string, Handler>();
+
+    plugin.register({
+      pluginConfig: {
+        dataDir: join(runtimeDir, "data"),
+        sqlitePath,
+        triggerThreshold: 0.6,
+        maxHints: 3
+      },
+      on(event, handler) {
+        handlers.set(event, handler);
+      }
+    });
+
+    const beforePromptBuild = handlers.get("before_prompt_build");
+    const persistToolResult = handlers.get("tool_result_persist");
+    const finalize = handlers.get("message_sent");
+
+    await beforePromptBuild?.({
+      session: { key: "seed-no-context" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Fix the failing vitest auth test by checking the current workspace" }
+    });
+    await persistToolResult?.({
+      sessionKey: "seed-no-context",
+      tool: { name: "exec" },
+      result: { exitCode: 0, output: "/tmp/repo" },
+      success: true
+    });
+    await finalize?.({
+      session: { key: "seed-no-context" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Fix the failing vitest auth test by checking the current workspace" }
+    });
+
+    const secondTurn = (await beforePromptBuild?.({
+      session: { key: "replay-no-context" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Fix the failing vitest auth test by checking the current workspace" }
+    })) as Record<string, unknown>;
+
+    expect(typeof secondTurn.prependContext).toBe("string");
+    expect(secondTurn.prependContext).toContain("Conservative execution hints:");
+  });
+
   it.each(replayScenarios)("replays fixture corpus: $name", async (scenario: ReplayScenario) => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
