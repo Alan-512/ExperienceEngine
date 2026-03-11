@@ -10,8 +10,8 @@
 
 ## 3. Promote Regression Assets
 
-- [ ] 3.1 Sanitize and promote at least one real runtime payload sequence into the fixture corpus when it adds host-shape coverage
-- [ ] 3.2 Extend replay assertions if the promoted fixture reveals a previously untested host shape
+- [x] 3.1 Sanitize and promote at least one real runtime payload sequence into the fixture corpus when it adds host-shape coverage
+- [x] 3.2 Extend replay assertions if the promoted fixture reveals a previously untested host shape
 
 ## 4. Validate
 

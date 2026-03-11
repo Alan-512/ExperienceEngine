@@ -23,4 +23,15 @@ describe("sanitizeRuntimePayload", () => {
     expect(sanitized.senderEmail).toBe("<redacted-identity>");
     expect(((sanitized.tool as Record<string, unknown>).name)).toBe("pnpm test");
   });
+
+  it("redacts absolute paths even when they appear in free-text fields", () => {
+    const sanitized = sanitizeRuntimePayload({
+      message: {
+        content: "Run pwd and expect /home/alice/workspace/project before continuing"
+      }
+    }) as Record<string, unknown>;
+
+    expect((sanitized.message as Record<string, unknown>).content).toContain("/redacted/path");
+    expect((sanitized.message as Record<string, unknown>).content).not.toContain("/home/alice");
+  });
 });

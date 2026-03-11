@@ -256,12 +256,24 @@ describe("OpenClaw plugin runtime", () => {
     const persistToolResult = handlers.get("tool_result_persist");
     const finalize = handlers.get("message_sent");
 
-    await beforePromptBuild?.(structuredClone(scenario.seedPrompt));
-    await persistToolResult?.(structuredClone(scenario.toolResult));
-    await finalize?.(structuredClone(scenario.finalize));
+    await beforePromptBuild?.(
+      structuredClone(scenario.seedPrompt),
+      structuredClone(scenario.seedPromptContext)
+    );
+    await persistToolResult?.(
+      structuredClone(scenario.toolResult),
+      structuredClone(scenario.toolResultContext)
+    );
+    await finalize?.(
+      structuredClone(scenario.finalize),
+      structuredClone(scenario.finalizeContext)
+    );
 
     const replayPayload = structuredClone(scenario.replayPrompt);
-    const replayResult = (await beforePromptBuild?.(replayPayload)) as Record<string, unknown>;
+    const replayResult = (await beforePromptBuild?.(
+      replayPayload,
+      structuredClone(scenario.replayPromptContext)
+    )) as Record<string, unknown>;
 
     expect(replayResult.prependContext, scenario.name).toBeTruthy();
     if (Array.isArray(scenario.replayPrompt.prependContext)) {

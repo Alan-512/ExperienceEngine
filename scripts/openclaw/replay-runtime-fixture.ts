@@ -8,9 +8,13 @@ type Handler = (payload: unknown) => unknown | Promise<unknown>;
 type ReplayScenario = {
   name?: string;
   seedPrompt: Record<string, unknown>;
+  seedPromptContext?: Record<string, unknown>;
   toolResult: Record<string, unknown>;
+  toolResultContext?: Record<string, unknown>;
   finalize: Record<string, unknown>;
+  finalizeContext?: Record<string, unknown>;
   replayPrompt: Record<string, unknown>;
+  replayPromptContext?: Record<string, unknown>;
 };
 
 const [, , fixturePathArg] = process.argv;
@@ -39,10 +43,18 @@ try {
     }
   });
 
-  await handlers.get("before_prompt_build")?.(structuredClone(fixture.seedPrompt));
-  await handlers.get("tool_result_persist")?.(structuredClone(fixture.toolResult));
-  await handlers.get("message_sent")?.(structuredClone(fixture.finalize));
-  const replayResult = (await handlers.get("before_prompt_build")?.(structuredClone(fixture.replayPrompt))) as
+  await handlers
+    .get("before_prompt_build")
+    ?.(structuredClone(fixture.seedPrompt), structuredClone(fixture.seedPromptContext));
+  await handlers
+    .get("tool_result_persist")
+    ?.(structuredClone(fixture.toolResult), structuredClone(fixture.toolResultContext));
+  await handlers
+    .get("message_sent")
+    ?.(structuredClone(fixture.finalize), structuredClone(fixture.finalizeContext));
+  const replayResult = (await handlers
+    .get("before_prompt_build")
+    ?.(structuredClone(fixture.replayPrompt), structuredClone(fixture.replayPromptContext))) as
     | Record<string, unknown>
     | undefined;
 

@@ -7,6 +7,7 @@ const IDENTITY_KEY_PATTERN = /(email|phone|user(name)?|displayName|account|targe
 const UUID_PATTERN =
   /\b[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\b/gi;
 const TOKEN_PATTERN = /\b(?:gh[opsu]_[A-Za-z0-9_]{20,}|sk-[A-Za-z0-9]{16,}|Bearer\s+[A-Za-z0-9._-]{10,})\b/g;
+const ABSOLUTE_PATH_PATTERN = /\b(?:[A-Za-z]:)?\/(?:[^\s"]+\/)*[^\s"]+\b/g;
 
 const sanitizeString = (value: string, keyPath: string[]): string => {
   const joined = keyPath.join(".");
@@ -26,6 +27,7 @@ const sanitizeString = (value: string, keyPath: string[]): string => {
   return value
     .replace(UUID_PATTERN, "<uuid>")
     .replace(TOKEN_PATTERN, "<redacted-secret>")
+    .replace(ABSOLUTE_PATH_PATTERN, "/redacted/path")
     .replace(/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi, "<redacted-email>");
 };
 
