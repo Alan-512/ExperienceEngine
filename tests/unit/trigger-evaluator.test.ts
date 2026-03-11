@@ -46,4 +46,20 @@ describe("evaluateTrigger", () => {
       )
     ).toBe(true);
   });
+
+  it("uses a slightly lower conservative threshold for known candidate overlap", () => {
+    expect(
+      evaluateTrigger(
+        {
+          ...baseInput,
+          task_type: "test_debug",
+          task_summary:
+            "Fix the failing vitest auth test. Start by using the exec tool to run exactly this shell command in the current workspace: pwd. Then reply with only the absolute path returned by the tool and no other text. Do not answer from memory. Do not continue to the actual fix in this turn. If the tool is unavailable or fails, reply with TOOL_FAILED."
+        },
+        undefined,
+        "Fix the failing vitest auth test. Start by using the exec tool to run exactly this shell command in the current workspace: pwd. Then reply with only t...",
+        0.6
+      )
+    ).toBe(true);
+  });
 });
