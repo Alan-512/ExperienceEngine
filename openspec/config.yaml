@@ -1,0 +1,18 @@
+schema: spec-driven
+
+context: |
+  Tech stack: TypeScript, Node.js 20+, pnpm, Vitest, SQLite via node:sqlite.
+  Runtime target: OpenClaw plugin using register(api) lifecycle callbacks.
+  Product shape: ExperienceEngine is a companion-sidecar experience intervention controller,
+  not a ContextEngine replacement and not a memory slot plugin.
+  Current storage policy: SQLite + JSONL are required; vector search is optional and deferred.
+  Current validation policy: every implementation step should keep pnpm check green and extend
+  integration replay coverage when host payload shapes evolve.
+
+rules:
+  proposal:
+    - Keep proposals tightly scoped to one capability or compatibility adjustment.
+    - State explicit host assumptions and whether they are guaranteed, inferred, or optional.
+  tasks:
+    - Order tasks so host integration and verification happen before optimization work.
+    - Each task list should end with executable validation steps.
