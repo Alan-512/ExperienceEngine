@@ -51,6 +51,30 @@ const readNested = (payload: UnknownRecord, path: string[]): unknown => {
   return current;
 };
 
+const extractContentText = (value: unknown): string | undefined => {
+  if (typeof value === "string") {
+    return value.trim() || undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    return undefined;
+  }
+
+  const text = value
+    .flatMap((item) => {
+      if (!isRecord(item)) {
+        return [];
+      }
+
+      const blockText = readString(item.text, readNested(item, ["content", "text"]));
+      return blockText ? [blockText] : [];
+    })
+    .join("\n")
+    .trim();
+
+  return text || undefined;
+};
+
 const extractMessageText = (payload: UnknownRecord): string | undefined => {
   const direct = readString(
     payload.userMessage,
@@ -59,7 +83,7 @@ const extractMessageText = (payload: UnknownRecord): string | undefined => {
     readNested(payload, ["message", "content"]),
     readNested(payload, ["message", "text"]),
     readNested(payload, ["input", "text"])
-  );
+  ) ?? extractContentText(readNested(payload, ["message", "content"]));
 
   if (direct) {
     return direct;
@@ -78,7 +102,10 @@ const extractMessageText = (payload: UnknownRecord): string | undefined => {
     return undefined;
   }
 
-  return readString(lastUser.content, lastUser.text, readNested(lastUser, ["content", "text"]));
+  return (
+    readString(lastUser.content, lastUser.text, readNested(lastUser, ["content", "text"])) ??
+    extractContentText(lastUser.content)
+  );
 };
 
 export const extractSessionKey = (payload: unknown): string => {
@@ -92,10 +119,25 @@ export const extractSessionKey = (payload: unknown): string => {
       payload.sessionId,
       readNested(payload, ["session", "key"]),
       readNested(payload, ["session", "id"]),
+      readNested(payload, ["context", "sessionId"]),
       readNested(payload, ["context", "sessionKey"]),
       readNested(payload, ["context", "session", "key"])
     ) ?? "global"
   );
+};
+
+export const mergeHookPayload = (payload: unknown, context?: unknown): UnknownRecord => {
+  const merged: UnknownRecord = {};
+
+  if (isRecord(payload)) {
+    Object.assign(merged, payload);
+  }
+
+  if (isRecord(context)) {
+    Object.assign(merged, context);
+  }
+
+  return merged;
 };
 
 export const normalizePromptPayload = (payload: unknown): HostPromptContext => {
@@ -107,6 +149,7 @@ export const normalizePromptPayload = (payload: unknown): HostPromptContext => {
     sessionId: extractSessionKey(payload),
     cwd: readString(
       payload.cwd,
+      payload.workspaceDir,
       payload.workspacePath,
       readNested(payload, ["workspace", "cwd"]),
       readNested(payload, ["context", "cwd"]),

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   applyInjectionToPayload,
   extractSessionKey,
+  mergeHookPayload,
   normalizePromptPayload,
   normalizeToolPayload
 } from "../../src/plugin/runtime-helpers.js";
@@ -39,6 +40,32 @@ describe("runtime helpers", () => {
       exitCode: 1,
       errorSignature: "Assertion failed",
       status: "failure"
+    });
+  });
+
+  it("merges hook payload with hook context and reads content block arrays", () => {
+    const merged = mergeHookPayload(
+      {
+        messages: [
+          {
+            role: "user",
+            content: [{ type: "text", text: "Fix the runtime payload parser" }]
+          }
+        ]
+      },
+      {
+        sessionKey: "sess_ctx",
+        workspaceDir: "/repo/runtime"
+      }
+    );
+
+    expect(extractSessionKey(merged)).toBe("sess_ctx");
+    expect(normalizePromptPayload(merged)).toEqual({
+      sessionId: "sess_ctx",
+      cwd: "/repo/runtime",
+      userMessage: "Fix the runtime payload parser",
+      taskSummary: "Fix the runtime payload parser",
+      contextSummary: undefined
     });
   });
 

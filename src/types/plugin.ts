@@ -42,7 +42,13 @@ export type OpenClawLogger = {
 };
 
 export type OpenClawPluginApi = {
-  config?: Partial<ExperienceEngineConfig>;
+  config?: Record<string, unknown>;
+  pluginConfig?: Partial<ExperienceEngineConfig>;
   log?: OpenClawLogger;
-  on?: (event: string, handler: (payload: unknown) => unknown | Promise<unknown>) => void;
+  logger?: OpenClawLogger;
+  resolvePath?: (path: string) => string;
+  on?: (
+    event: string,
+    handler: (payload: unknown, context?: unknown) => unknown | Promise<unknown>
+  ) => void;
 };

@@ -20,6 +20,14 @@
         "enum": ["debug", "info", "warn", "error"],
         "description": "Plugin log verbosity."
       },
+      "captureRawPayloads": {
+        "type": "boolean",
+        "description": "Persist raw OpenClaw lifecycle payloads for local runtime validation."
+      },
+      "captureDir": {
+        "type": "string",
+        "description": "Directory used to store raw runtime payload captures."
+      },
       "maxHints": {
         "type": "integer",
         "minimum": 1,
@@ -45,6 +53,13 @@
     },
     "logLevel": {
       "label": "Log Level"
+    },
+    "captureRawPayloads": {
+      "label": "Capture Raw Payloads"
+    },
+    "captureDir": {
+      "label": "Capture Directory",
+      "placeholder": "./data/runtime-captures"
     },
     "maxHints": {
       "label": "Max Hints"

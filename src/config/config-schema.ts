@@ -4,6 +4,8 @@ export const configSchema = z.object({
   dataDir: z.string().default("./data"),
   sqlitePath: z.string().default("./data/sqlite/experienceengine.db"),
   logLevel: z.enum(["debug", "info", "warn", "error"]).default("info"),
+  captureRawPayloads: z.boolean().default(false),
+  captureDir: z.string().default("./data/runtime-captures"),
   maxHints: z.number().int().min(1).max(3).default(3),
   triggerThreshold: z.number().min(0).max(1).default(0.6)
 });
@@ -26,6 +28,14 @@ export const pluginConfigJsonSchema = {
       type: "string",
       enum: ["debug", "info", "warn", "error"],
       description: "Plugin log verbosity."
+    },
+    captureRawPayloads: {
+      type: "boolean",
+      description: "Persist raw OpenClaw lifecycle payloads for local runtime validation."
+    },
+    captureDir: {
+      type: "string",
+      description: "Directory used to store raw runtime payload captures."
     },
     maxHints: {
       type: "integer",
@@ -53,6 +63,13 @@ export const pluginUiHints = {
   },
   logLevel: {
     label: "Log Level"
+  },
+  captureRawPayloads: {
+    label: "Capture Raw Payloads"
+  },
+  captureDir: {
+    label: "Capture Directory",
+    placeholder: "./data/runtime-captures"
   },
   maxHints: {
     label: "Max Hints"

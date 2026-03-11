@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
@@ -32,7 +32,7 @@ describe("OpenClaw plugin runtime", () => {
     const handlers = new Map<string, Handler>();
 
     plugin.register({
-      config: {
+      pluginConfig: {
         dataDir: join(runtimeDir, "data"),
         sqlitePath,
         triggerThreshold: 0.6,
@@ -95,13 +95,54 @@ describe("OpenClaw plugin runtime", () => {
     });
   });
 
+  it("bootstraps from module-relative schema paths even when cwd differs", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const handlers = new Map<string, Handler>();
+    const originalCwd = process.cwd();
+
+    process.chdir(runtimeDir);
+
+    try {
+      plugin.register({
+        pluginConfig: {
+          dataDir: join(runtimeDir, "data"),
+          sqlitePath,
+          triggerThreshold: 0.6,
+          maxHints: 3
+        },
+        on(event, handler) {
+          handlers.set(event, handler);
+        }
+      });
+
+      await handlers.get("before_prompt_build")?.({
+        session: { key: "cwd-shift" },
+        workspace: { cwd: "/tmp/repo" },
+        message: { content: "Fix schema bootstrap when cwd differs" }
+      });
+      await handlers.get("message_sent")?.({
+        session: { key: "cwd-shift" },
+        workspace: { cwd: "/tmp/repo" },
+        message: { content: "Fix schema bootstrap when cwd differs" }
+      });
+
+      const db = new DatabaseSync(sqlitePath);
+      const inputCount = db.prepare("SELECT COUNT(*) AS count FROM experience_input_records").get() as { count: number };
+
+      expect(inputCount.count).toBe(1);
+    } finally {
+      process.chdir(originalCwd);
+    }
+  });
+
   it("injects conservative hints on a later similar turn once a node exists", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
     const handlers = new Map<string, Handler>();
 
     plugin.register({
-      config: {
+      pluginConfig: {
         dataDir: join(runtimeDir, "data"),
         sqlitePath,
         triggerThreshold: 0.6,
@@ -152,7 +193,7 @@ describe("OpenClaw plugin runtime", () => {
     const handlers = new Map<string, Handler>();
 
     plugin.register({
-      config: {
+      pluginConfig: {
         dataDir: join(runtimeDir, "data"),
         sqlitePath,
         triggerThreshold: 0.6,
@@ -181,5 +222,68 @@ describe("OpenClaw plugin runtime", () => {
     } else {
       expect(String(replayResult.prependContext), scenario.name).toContain("execution hints");
     }
+  });
+
+  it("captures raw payload files when runtime capture is enabled", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const captureDir = join(runtimeDir, "captures");
+    const handlers = new Map<string, Handler>();
+
+    plugin.register({
+      pluginConfig: {
+        dataDir: join(runtimeDir, "data"),
+        sqlitePath,
+        captureRawPayloads: true,
+        captureDir,
+        triggerThreshold: 0.6,
+        maxHints: 3
+      },
+      on(event, handler) {
+        handlers.set(event, handler);
+      }
+    });
+
+    await handlers.get("before_prompt_build")?.({
+      session: { key: "capture-1" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Inspect a real OpenClaw payload" }
+    });
+    await handlers.get("tool_result_persist")?.({
+      sessionKey: "capture-1",
+      tool: { name: "pnpm test" },
+      result: { exitCode: 0, output: "ok" },
+      success: true
+    });
+    await handlers.get("message_sent")?.({
+      session: { key: "capture-1" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Inspect a real OpenClaw payload" }
+    });
+
+    const captureFiles = readdirSync(captureDir).filter((file) => file.endsWith(".json"));
+
+    expect(captureFiles.length).toBe(4);
+
+    const capture = JSON.parse(readFileSync(join(captureDir, captureFiles[0]), "utf8")) as {
+      event: string;
+      sessionId: string | null;
+      payload: Record<string, unknown>;
+    };
+
+    expect(["plugin_register", "before_prompt_build", "tool_result_persist", "finalize"]).toContain(capture.event);
+    expect(capture.payload).toBeTypeOf("object");
+
+    const sessionEvents = captureFiles
+      .map((file) =>
+        JSON.parse(readFileSync(join(captureDir, file), "utf8")) as {
+          event: string;
+          sessionId: string | null;
+        }
+      )
+      .filter((entry) => entry.event !== "plugin_register");
+
+    expect(sessionEvents).toHaveLength(3);
+    expect(sessionEvents.every((entry) => entry.sessionId === "capture-1")).toBe(true);
   });
 });

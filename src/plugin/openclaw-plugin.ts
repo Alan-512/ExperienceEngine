@@ -34,7 +34,14 @@ import { NodeRepository } from "../store/sqlite/repositories/node-repo.js";
 import { ScopeRepository } from "../store/sqlite/repositories/scope-repo.js";
 import { StatsRepository } from "../store/sqlite/repositories/stats-repo.js";
 import { normalizeToolResult } from "./hooks/tool-result-persist.js";
-import { normalizePromptPayload, normalizeToolPayload, applyInjectionToPayload, extractSessionKey } from "./runtime-helpers.js";
+import { RuntimeCaptureWriter } from "./runtime-capture.js";
+import {
+  normalizePromptPayload,
+  normalizeToolPayload,
+  applyInjectionToPayload,
+  extractSessionKey,
+  mergeHookPayload
+} from "./runtime-helpers.js";
 
 type SessionState = {
   context?: HostPromptContext;
@@ -99,6 +106,7 @@ class ExperienceEngineRuntime implements ExperiencePlugin {
   private readonly nodeRepo;
   private readonly candidateRepo;
   private readonly statsRepo;
+  private readonly captureWriter;
 
   constructor(
     private readonly config: ExperienceEngineConfig,
@@ -112,6 +120,7 @@ class ExperienceEngineRuntime implements ExperiencePlugin {
     this.nodeRepo = new NodeRepository(db);
     this.candidateRepo = new CandidateRepository(db);
     this.statsRepo = new StatsRepository(db);
+    this.captureWriter = new RuntimeCaptureWriter(config, this.logger);
   }
 
   private getSession(sessionId: string): SessionState {
@@ -239,8 +248,17 @@ class ExperienceEngineRuntime implements ExperiencePlugin {
   }
 
   register(api: OpenClawPluginApi): void {
-    api.on?.("before_prompt_build", async (payload) => {
-      const context = normalizePromptPayload(payload);
+    this.captureWriter.capture("plugin_register", "global", {
+      hasOn: typeof api.on === "function",
+      captureRawPayloads: this.config.captureRawPayloads,
+      captureDir: this.config.captureDir,
+      sqlitePath: this.config.sqlitePath
+    });
+
+    api.on?.("before_prompt_build", async (payload, hookContext) => {
+      const source = mergeHookPayload(payload, hookContext);
+      this.captureWriter.capture("before_prompt_build", extractSessionKey(source), { payload, context: hookContext });
+      const context = normalizePromptPayload(source);
       const result = await this.beforePromptBuild(context);
       if (result.text && result.mode !== "skip") {
         return applyInjectionToPayload(payload, result.text);
@@ -249,19 +267,23 @@ class ExperienceEngineRuntime implements ExperiencePlugin {
       return payload;
     });
 
-    api.on?.("tool_result_persist", async (payload) => {
-      const normalized = normalizeToolPayload(payload);
+    api.on?.("tool_result_persist", async (payload, hookContext) => {
+      const source = mergeHookPayload(payload, hookContext);
+      this.captureWriter.capture("tool_result_persist", extractSessionKey(source), { payload, context: hookContext });
+      const normalized = normalizeToolPayload(source);
       if (!normalized) {
         return payload;
       }
 
-      const sessionId = extractSessionKey(payload);
+      const sessionId = extractSessionKey(source);
       await this.persistToolResult({ ...normalized, sessionId } as HostToolResult & { sessionId: string });
       return payload;
     });
 
-    const finalize = async (payload: unknown) => {
-      const context = normalizePromptPayload(payload);
+    const finalize = async (payload: unknown, hookContext?: unknown) => {
+      const source = mergeHookPayload(payload, hookContext);
+      this.captureWriter.capture("finalize", extractSessionKey(source), { payload, context: hookContext });
+      const context = normalizePromptPayload(source);
       if (!context.userMessage && !context.taskSummary) {
         return payload;
       }
@@ -281,13 +303,29 @@ export const createExperiencePlugin = (
   logger?: OpenClawLogger
 ): ExperienceEngineRuntime => new ExperienceEngineRuntime(loadConfig(configOverrides), logger);
 
+const resolvePluginConfig = (api: OpenClawPluginApi): Partial<ExperienceEngineConfig> => {
+  const rawConfig = (api.pluginConfig ?? api.config ?? {}) as Partial<ExperienceEngineConfig>;
+  const resolvePath = api.resolvePath;
+
+  if (!resolvePath) {
+    return rawConfig;
+  }
+
+  return {
+    ...rawConfig,
+    dataDir: rawConfig.dataDir ? resolvePath(rawConfig.dataDir) : rawConfig.dataDir,
+    sqlitePath: rawConfig.sqlitePath ? resolvePath(rawConfig.sqlitePath) : rawConfig.sqlitePath,
+    captureDir: rawConfig.captureDir ? resolvePath(rawConfig.captureDir) : rawConfig.captureDir
+  };
+};
+
 const plugin = {
   id: "experienceengine",
   name: "ExperienceEngine",
   configSchema: pluginConfigJsonSchema,
   uiHints: pluginUiHints,
   register(api: OpenClawPluginApi) {
-    const runtime = createExperiencePlugin(api.config ?? {}, api.log);
+    const runtime = createExperiencePlugin(resolvePluginConfig(api), api.logger ?? api.log);
     runtime.register(api);
   }
 };

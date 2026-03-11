@@ -28,7 +28,7 @@ const handlers = new Map<string, Handler>();
 
 try {
   plugin.register({
-    config: {
+    pluginConfig: {
       dataDir: join(runtimeDir, "data"),
       sqlitePath,
       triggerThreshold: 0.6,
