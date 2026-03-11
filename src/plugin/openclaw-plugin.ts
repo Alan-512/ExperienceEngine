@@ -38,6 +38,7 @@ import { RuntimeCaptureWriter } from "./runtime-capture.js";
 import {
   normalizePromptPayload,
   normalizeToolPayload,
+  extractToolResultsFromPayload,
   applyInjectionToPayload,
   extractSessionKey,
   mergeHookPayload
@@ -46,6 +47,7 @@ import {
 type SessionState = {
   context?: HostPromptContext;
   toolEvents: ToolEvent[];
+  toolEventKeys: Set<string>;
   injectedNodeIds: string[];
 };
 
@@ -98,9 +100,21 @@ const mergeContext = (existing: HostPromptContext | undefined, incoming: HostPro
   injectedNodeIds: incoming.injectedNodeIds ?? existing?.injectedNodeIds
 });
 
+const buildToolEventKey = (toolEvent: ToolEvent, toolCallId?: string): string =>
+  toolCallId ??
+  [
+    toolEvent.tool_name,
+    toolEvent.status,
+    toolEvent.exit_code ?? "",
+    toolEvent.error_signature ?? "",
+    toolEvent.output_summary ?? "",
+    toolEvent.ended_at ?? ""
+  ].join(":");
+
 class ExperienceEngineRuntime implements ExperiencePlugin {
   private readonly logger: OpenClawLogger;
   private readonly sessions = new Map<string, SessionState>();
+  private readonly orphanToolEvents = new Map<string, ToolEvent>();
   private readonly scopeRepo;
   private readonly inputRepo;
   private readonly nodeRepo;
@@ -131,10 +145,37 @@ class ExperienceEngineRuntime implements ExperiencePlugin {
 
     const next: SessionState = {
       toolEvents: [],
+      toolEventKeys: new Set<string>(),
       injectedNodeIds: []
     };
     this.sessions.set(sessionId, next);
     return next;
+  }
+
+  private appendToolEvent(sessionId: string, toolEvent: ToolEvent, toolCallId?: string): void {
+    const session = this.getSession(sessionId);
+    const key = buildToolEventKey(toolEvent, toolCallId);
+
+    if (session.toolEventKeys.has(key)) {
+      return;
+    }
+
+    session.toolEventKeys.add(key);
+    session.toolEvents.push(toolEvent);
+  }
+
+  private recoverToolEvents(sessionId: string, payload: unknown): void {
+    for (const toolResult of extractToolResultsFromPayload(payload)) {
+      const recoveredEvent = toolResult.toolCallId
+        ? this.orphanToolEvents.get(toolResult.toolCallId)
+        : undefined;
+      const nextEvent = recoveredEvent ?? normalizeToolResult(toolResult);
+      this.appendToolEvent(sessionId, nextEvent, toolResult.toolCallId);
+
+      if (toolResult.toolCallId) {
+        this.orphanToolEvents.delete(toolResult.toolCallId);
+      }
+    }
   }
 
   private finalizeInput(context: HostPromptContext): ExperienceInput {
@@ -218,14 +259,19 @@ class ExperienceEngineRuntime implements ExperiencePlugin {
 
   async persistToolResult(result: HostToolResult) {
     const normalizedToolEvent = normalizeToolResult(result);
-
     const sessionId = result.sessionId ?? "global";
-    this.getSession(sessionId).toolEvents.push(normalizedToolEvent);
+
+    if (sessionId !== "global") {
+      this.appendToolEvent(sessionId, normalizedToolEvent, result.toolCallId);
+    } else if (result.toolCallId) {
+      this.orphanToolEvents.set(result.toolCallId, normalizedToolEvent);
+    }
 
     this.logger.debug?.("experienceengine.tool_result_persist", {
       sessionId,
       toolName: normalizedToolEvent.tool_name,
-      status: normalizedToolEvent.status
+      status: normalizedToolEvent.status,
+      toolCallId: result.toolCallId
     });
 
     return normalizedToolEvent;
@@ -286,6 +332,10 @@ class ExperienceEngineRuntime implements ExperiencePlugin {
       const context = normalizePromptPayload(source);
       if (!context.userMessage && !context.taskSummary) {
         return payload;
+      }
+
+      if (context.sessionId) {
+        this.recoverToolEvents(context.sessionId, source);
       }
 
       await this.finalizeTask(context);

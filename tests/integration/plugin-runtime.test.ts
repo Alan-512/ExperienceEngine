@@ -6,7 +6,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import plugin from "../../src/plugin/openclaw-plugin.js";
 import { replayScenarios, type ReplayScenario } from "../fixtures/openclaw/index.js";
 
-type Handler = (payload: unknown) => unknown | Promise<unknown>;
+type Handler = (payload: unknown, context?: unknown) => unknown | Promise<unknown>;
 
 const tempDirs: string[] = [];
 
@@ -285,5 +285,120 @@ describe("OpenClaw plugin runtime", () => {
 
     expect(sessionEvents).toHaveLength(3);
     expect(sessionEvents.every((entry) => entry.sessionId === "capture-1")).toBe(true);
+  });
+
+  it("recovers tool evidence from finalize payloads when tool_result_persist lacks session context", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const handlers = new Map<string, Handler>();
+
+    plugin.register({
+      pluginConfig: {
+        dataDir: join(runtimeDir, "data"),
+        sqlitePath,
+        triggerThreshold: 0.6,
+        maxHints: 3
+      },
+      on(event, handler) {
+        handlers.set(event, handler);
+      }
+    });
+
+    await handlers.get("before_prompt_build")?.(
+      {
+        prompt: "Fix the failing vitest auth test by checking the current workspace",
+        messages: []
+      },
+      {
+        sessionId: "real-openclaw-shape",
+        workspaceDir: "/tmp/repo"
+      }
+    );
+
+    await handlers.get("tool_result_persist")?.(
+      {
+        toolName: "exec",
+        toolCallId: "call_real_1",
+        message: {
+          role: "toolResult",
+          toolCallId: "call_real_1",
+          toolName: "exec",
+          content: [{ type: "text", text: "/tmp/repo" }],
+          details: {
+            status: "completed",
+            exitCode: 0,
+            aggregated: "/tmp/repo"
+          },
+          isError: false
+        },
+        isSynthetic: false
+      },
+      {
+        agentId: "main",
+        toolName: "exec",
+        toolCallId: "call_real_1"
+      }
+    );
+
+    await handlers.get("message_sent")?.(
+      {
+        messages: [
+          {
+            role: "user",
+            content: [{ type: "text", text: "Fix the failing vitest auth test by checking the current workspace" }]
+          },
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "toolCall",
+                id: "call_real_1",
+                name: "exec",
+                arguments: { command: "pwd" }
+              }
+            ]
+          },
+          {
+            role: "toolResult",
+            toolCallId: "call_real_1",
+            toolName: "exec",
+            content: [{ type: "text", text: "/tmp/repo" }],
+            details: {
+              status: "completed",
+              exitCode: 0,
+              aggregated: "/tmp/repo"
+            },
+            isError: false
+          }
+        ]
+      },
+      {
+        sessionId: "real-openclaw-shape",
+        workspaceDir: "/tmp/repo"
+      }
+    );
+
+    const db = new DatabaseSync(sqlitePath);
+    const inputRow = db
+      .prepare("SELECT evidence_json, task_type FROM experience_input_records ORDER BY created_at DESC LIMIT 1")
+      .get() as {
+        evidence_json: string;
+        task_type: string;
+      };
+    const nodeCount = db.prepare("SELECT COUNT(*) AS count FROM experience_nodes").get() as { count: number };
+    const statsRow = db
+      .prepare("SELECT total_tasks, success_tasks FROM scope_task_stats ORDER BY rowid DESC LIMIT 1")
+      .get() as {
+        total_tasks: number;
+        success_tasks: number;
+      };
+
+    expect(JSON.parse(inputRow.evidence_json)).toContain("exec: success: /tmp/repo");
+    expect(inputRow.task_type).toBe("test_debug");
+    expect(nodeCount.count).toBe(1);
+    expect(statsRow).toEqual({
+      total_tasks: 1,
+      success_tasks: 1
+    });
   });
 });

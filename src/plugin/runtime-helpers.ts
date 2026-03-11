@@ -75,6 +75,33 @@ const extractContentText = (value: unknown): string | undefined => {
   return text || undefined;
 };
 
+const normalizeToolStatus = (...values: unknown[]): HostToolResult["status"] => {
+  for (const value of values) {
+    if (typeof value !== "string") {
+      continue;
+    }
+
+    const normalized = value.trim().toLowerCase();
+    if (!normalized) {
+      continue;
+    }
+
+    if (["success", "completed", "complete", "ok", "passed"].includes(normalized)) {
+      return "success";
+    }
+
+    if (["failure", "failed", "error", "errored"].includes(normalized)) {
+      return "failure";
+    }
+
+    if (normalized === "unknown") {
+      return "unknown";
+    }
+  }
+
+  return undefined;
+};
+
 const extractMessageText = (payload: UnknownRecord): string | undefined => {
   const direct = readString(
     payload.userMessage,
@@ -176,6 +203,38 @@ export const normalizeToolPayload = (payload: unknown): HostToolResult | null =>
     return null;
   }
 
+  const toolResultMessage =
+    readString(payload.role) === "toolResult"
+      ? payload
+      : isRecord(payload.message) && readString(payload.message.role) === "toolResult"
+        ? payload.message
+        : null;
+
+  if (toolResultMessage) {
+    const messageText =
+      extractContentText(toolResultMessage.content) ??
+      readString(readNested(toolResultMessage, ["details", "aggregated"]));
+
+    return {
+      sessionId: extractSessionKey(payload),
+      toolCallId: readString(payload.toolCallId, toolResultMessage.toolCallId, toolResultMessage.id),
+      toolName: readString(payload.toolName, toolResultMessage.toolName, toolResultMessage.name) ?? "unknown-tool",
+      outputSummary: summarizeUnknown(messageText),
+      exitCode: readNumber(payload.exitCode, readNested(toolResultMessage, ["details", "exitCode"])),
+      errorSignature: readString(
+        payload.errorSignature,
+        toolResultMessage.error,
+        readNested(toolResultMessage, ["details", "error"]),
+        toolResultMessage.isError ? messageText : undefined
+      ),
+      status:
+        normalizeToolStatus(payload.status, readNested(toolResultMessage, ["details", "status"])) ??
+        (toolResultMessage.isError === true ? "failure" : undefined),
+      startedAt: readString(payload.startedAt, toolResultMessage.startedAt, readNested(toolResultMessage, ["details", "startedAt"])),
+      endedAt: readString(payload.endedAt, toolResultMessage.endedAt, readNested(toolResultMessage, ["details", "endedAt"]))
+    };
+  }
+
   const toolName = readString(
     payload.toolName,
     payload.name,
@@ -190,24 +249,31 @@ export const normalizeToolPayload = (payload: unknown): HostToolResult | null =>
   const exitCode = readNumber(payload.exitCode, readNested(payload, ["result", "exitCode"]));
   const success = payload.success;
   const status =
-    typeof payload.status === "string"
-      ? payload.status
-      : typeof success === "boolean"
-        ? success
-          ? "success"
-          : "failure"
-        : undefined;
+    normalizeToolStatus(payload.status, readNested(payload, ["message", "details", "status"])) ??
+    (typeof success === "boolean" ? (success ? "success" : "failure") : undefined);
 
   return {
+    sessionId: extractSessionKey(payload),
+    toolCallId: readString(
+      payload.toolCallId,
+      readNested(payload, ["result", "toolCallId"]),
+      readNested(payload, ["message", "toolCallId"])
+    ),
     toolName,
     inputSummary: summarizeUnknown(payload.inputSummary ?? payload.args ?? readNested(payload, ["tool", "args"])),
     outputSummary: summarizeUnknown(
-      payload.outputSummary ?? payload.result ?? readNested(payload, ["output", "summary"])
+      payload.outputSummary ??
+        readNested(payload, ["message", "details", "aggregated"]) ??
+        extractContentText(readNested(payload, ["message", "content"])) ??
+        payload.result ??
+        readNested(payload, ["output", "summary"])
     ),
-    exitCode,
+    exitCode: readNumber(exitCode, readNested(payload, ["message", "details", "exitCode"])),
     errorSignature: readString(
       payload.errorSignature,
       payload.error,
+      readNested(payload, ["message", "error"]),
+      readNested(payload, ["message", "details", "error"]),
       readNested(payload, ["result", "error"]),
       readNested(payload, ["error", "message"])
     ),
@@ -218,6 +284,23 @@ export const normalizeToolPayload = (payload: unknown): HostToolResult | null =>
     startedAt: readString(payload.startedAt, readNested(payload, ["timing", "startedAt"])),
     endedAt: readString(payload.endedAt, readNested(payload, ["timing", "endedAt"]))
   };
+};
+
+export const extractToolResultsFromPayload = (payload: unknown): HostToolResult[] => {
+  if (!isRecord(payload)) {
+    return [];
+  }
+
+  const messages = Array.isArray(payload.messages)
+    ? payload.messages
+    : isRecord(payload.payload) && Array.isArray(payload.payload.messages)
+      ? payload.payload.messages
+      : [];
+
+  return messages
+    .filter((message): message is UnknownRecord => isRecord(message) && readString(message.role) === "toolResult")
+    .map((message) => normalizeToolPayload(message))
+    .filter((message): message is HostToolResult => Boolean(message));
 };
 
 export const applyInjectionToPayload = (payload: unknown, text: string): unknown => {

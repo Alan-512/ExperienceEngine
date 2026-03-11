@@ -12,6 +12,7 @@ export type HostPromptContext = {
 
 export type HostToolResult = {
   sessionId?: string;
+  toolCallId?: string;
   toolName: string;
   inputSummary?: string;
   outputSummary?: string;

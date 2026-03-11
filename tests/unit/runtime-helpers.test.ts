@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   applyInjectionToPayload,
+  extractToolResultsFromPayload,
   extractSessionKey,
   mergeHookPayload,
   normalizePromptPayload,
@@ -36,11 +37,54 @@ describe("runtime helpers", () => {
 
     expect(extractSessionKey(payload)).toBe("sess_2");
     expect(normalizeToolPayload(payload)).toMatchObject({
+      sessionId: "sess_2",
       toolName: "pnpm test",
       exitCode: 1,
       errorSignature: "Assertion failed",
       status: "failure"
     });
+  });
+
+  it("normalizes real tool_result payloads and recovers tool messages from finalize payloads", () => {
+    const toolPersistPayload = {
+      toolName: "exec",
+      toolCallId: "call_123",
+      message: {
+        role: "toolResult",
+        toolCallId: "call_123",
+        toolName: "exec",
+        content: [{ type: "text", text: "/repo/runtime" }],
+        details: {
+          status: "completed",
+          exitCode: 0,
+          aggregated: "/repo/runtime"
+        },
+        isError: false
+      }
+    };
+
+    expect(normalizeToolPayload(toolPersistPayload)).toMatchObject({
+      sessionId: "global",
+      toolCallId: "call_123",
+      toolName: "exec",
+      outputSummary: "/repo/runtime",
+      exitCode: 0,
+      status: "success"
+    });
+
+    expect(
+      extractToolResultsFromPayload({
+        messages: [toolPersistPayload.message]
+      })
+    ).toMatchObject([
+      {
+        toolCallId: "call_123",
+        toolName: "exec",
+        outputSummary: "/repo/runtime",
+        exitCode: 0,
+        status: "success"
+      }
+    ]);
   });
 
   it("merges hook payload with hook context and reads content block arrays", () => {
