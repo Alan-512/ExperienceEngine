@@ -18,3 +18,5 @@ export const tokenize = (value: string): string[] =>
     .split(/[^a-z0-9_]+/i)
     .filter(Boolean);
 
+export const stripLeadingTimestampTag = (value: string): string =>
+  normalizeWhitespace(value).replace(/^\[[^\]]+\]\s*/, "");

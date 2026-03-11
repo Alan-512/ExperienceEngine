@@ -7,6 +7,7 @@ import {
   normalizePromptPayload,
   normalizeToolPayload
 } from "../../src/plugin/runtime-helpers.js";
+import { buildExperienceInput } from "../../src/input/input-adapter.js";
 import { replayScenarios } from "../fixtures/openclaw/index.js";
 
 describe("runtime helpers", () => {
@@ -129,5 +130,17 @@ describe("runtime helpers", () => {
       expect(tool, scenario.name).not.toBeNull();
       expect(tool?.toolName, scenario.name).toBeTruthy();
     }
+  });
+
+  it("strips host timestamp prefixes before building experience input", () => {
+    const input = buildExperienceInput({
+      sessionId: "sess_ts",
+      cwd: "/repo/runtime",
+      userMessage:
+        "[Wed 2026-03-11 23:04 GMT+8] Fix the failing vitest auth test by checking the current workspace"
+    });
+
+    expect(input.task_summary).toBe("Fix the failing vitest auth test by checking the current workspace");
+    expect(input.task_type).toBe("test_debug");
   });
 });
