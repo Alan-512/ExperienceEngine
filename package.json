@@ -17,6 +17,8 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "dev": "tsx watch src/cli/index.ts",
+    "runtime:promote-payload": "tsx scripts/openclaw/promote-runtime-payload.ts",
+    "runtime:replay-fixture": "tsx scripts/openclaw/replay-runtime-fixture.ts",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check": "pnpm typecheck && pnpm test && pnpm build"
