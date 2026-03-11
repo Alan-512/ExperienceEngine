@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import plugin from "../../src/plugin/openclaw-plugin.js";
+import { replayScenarios, type ReplayScenario } from "../fixtures/openclaw/index.js";
 
 type Handler = (payload: unknown) => unknown | Promise<unknown>;
 
@@ -143,5 +144,42 @@ describe("OpenClaw plugin runtime", () => {
     expect(typeof secondTurn.prependContext).toBe("string");
     expect(secondTurn.prependContext).toContain("Conservative execution hints:");
     expect(secondTurn.prependContext).toContain("Reproduce first");
+  });
+
+  it.each(replayScenarios)("replays fixture corpus: $name", async (scenario: ReplayScenario) => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const handlers = new Map<string, Handler>();
+
+    plugin.register({
+      config: {
+        dataDir: join(runtimeDir, "data"),
+        sqlitePath,
+        triggerThreshold: 0.6,
+        maxHints: 3
+      },
+      on(event, handler) {
+        handlers.set(event, handler);
+      }
+    });
+
+    const beforePromptBuild = handlers.get("before_prompt_build");
+    const persistToolResult = handlers.get("tool_result_persist");
+    const finalize = handlers.get("message_sent");
+
+    await beforePromptBuild?.(structuredClone(scenario.seedPrompt));
+    await persistToolResult?.(structuredClone(scenario.toolResult));
+    await finalize?.(structuredClone(scenario.finalize));
+
+    const replayPayload = structuredClone(scenario.replayPrompt);
+    const replayResult = (await beforePromptBuild?.(replayPayload)) as Record<string, unknown>;
+
+    expect(replayResult.prependContext, scenario.name).toBeTruthy();
+    if (Array.isArray(scenario.replayPrompt.prependContext)) {
+      expect(Array.isArray(replayResult.prependContext), scenario.name).toBe(true);
+      expect((replayResult.prependContext as unknown[])[0], scenario.name).toContain("execution hints");
+    } else {
+      expect(String(replayResult.prependContext), scenario.name).toContain("execution hints");
+    }
   });
 });

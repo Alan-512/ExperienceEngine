@@ -5,6 +5,7 @@ import {
   normalizePromptPayload,
   normalizeToolPayload
 } from "../../src/plugin/runtime-helpers.js";
+import { replayScenarios } from "../fixtures/openclaw/index.js";
 
 describe("runtime helpers", () => {
   it("normalizes prompt payloads from nested OpenClaw-like context", () => {
@@ -45,5 +46,17 @@ describe("runtime helpers", () => {
     const payload: Record<string, unknown> = { prependContext: "Existing context" };
     applyInjectionToPayload(payload, "New hints");
     expect(payload.prependContext).toBe("New hints\n\nExisting context");
+  });
+
+  it("normalizes every fixture corpus payload into a usable prompt context", () => {
+    for (const scenario of replayScenarios) {
+      const prompt = normalizePromptPayload(scenario.seedPrompt);
+      const tool = normalizeToolPayload(scenario.toolResult);
+
+      expect(prompt.userMessage, scenario.name).not.toBe("");
+      expect(prompt.sessionId, scenario.name).toBeTruthy();
+      expect(tool, scenario.name).not.toBeNull();
+      expect(tool?.toolName, scenario.name).toBeTruthy();
+    }
   });
 });

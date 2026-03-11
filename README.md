@@ -46,6 +46,7 @@ This is an initialization baseline, not a production-complete plugin. The reposi
 - a SQLite schema and bootstrap path
 - OpenClaw plugin manifest + `register(api)` entrypoint
 - agent-loop payload normalization for `before_prompt_build`, `tool_result_persist`, and finalize events
+- fixture-backed integration replay coverage for multiple OpenClaw payload shapes
 - test coverage for task typing, trigger evaluation, rendering, and payload normalization
 
 Next implementation steps should focus on validating the plugin against a real OpenClaw runtime, then replacing heuristic extractors with stronger evidence-aware logic.

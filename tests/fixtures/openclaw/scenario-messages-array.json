@@ -1,0 +1,34 @@
+{
+  "name": "messages-array-shape",
+  "seedPrompt": {
+    "sessionId": "seed-array",
+    "repo": { "root": "/tmp/repo-array" },
+    "messages": [
+      { "role": "system", "content": "You are coding." },
+      { "role": "user", "content": "Fix the failing vitest auth test" }
+    ],
+    "compaction": { "summary": "Recent auth test failures remain unresolved." }
+  },
+  "toolResult": {
+    "sessionId": "seed-array",
+    "toolName": "pnpm test",
+    "args": ["--filter", "auth"],
+    "exitCode": 0,
+    "outputSummary": "auth tests passed",
+    "status": "success"
+  },
+  "finalize": {
+    "sessionId": "seed-array",
+    "input": { "text": "Fix the failing vitest auth test" },
+    "repo": { "root": "/tmp/repo-array" }
+  },
+  "replayPrompt": {
+    "sessionId": "replay-array",
+    "repo": { "root": "/tmp/repo-array" },
+    "messages": [
+      { "role": "user", "content": "Fix the failing vitest auth test" }
+    ],
+    "compaction": { "summary": "Fix the failing vitest auth test" },
+    "prependContext": ["Existing context block"]
+  }
+}

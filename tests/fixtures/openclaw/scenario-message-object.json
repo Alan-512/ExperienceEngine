@@ -1,0 +1,26 @@
+{
+  "name": "message-object-shape",
+  "seedPrompt": {
+    "session": { "key": "seed-object" },
+    "workspace": { "cwd": "/tmp/repo-object" },
+    "message": { "content": "Fix the failing vitest auth test" },
+    "context": { "summary": "Fix the failing vitest auth test" }
+  },
+  "toolResult": {
+    "sessionKey": "seed-object",
+    "tool": { "name": "pnpm test", "args": ["auth"] },
+    "result": { "exitCode": 0, "output": "auth tests passed" },
+    "success": true
+  },
+  "finalize": {
+    "session": { "key": "seed-object" },
+    "workspace": { "cwd": "/tmp/repo-object" },
+    "message": { "content": "Fix the failing vitest auth test" }
+  },
+  "replayPrompt": {
+    "session": { "key": "replay-object" },
+    "workspace": { "cwd": "/tmp/repo-object" },
+    "message": { "content": "Fix the failing vitest auth test" },
+    "context": { "summary": "Fix the failing vitest auth test" }
+  }
+}
