@@ -1,4 +1,5 @@
 import type { ExperienceInput, InjectionMode, ToolEvent } from "./domain.js";
+import type { ExperienceEngineConfig } from "../config/config-schema.js";
 
 export type HostPromptContext = {
   sessionId?: string;
@@ -10,6 +11,7 @@ export type HostPromptContext = {
 };
 
 export type HostToolResult = {
+  sessionId?: string;
   toolName: string;
   inputSummary?: string;
   outputSummary?: string;
@@ -32,3 +34,15 @@ export type ExperiencePlugin = {
   finalizeTask(context: HostPromptContext): Promise<ExperienceInput>;
 };
 
+export type OpenClawLogger = {
+  debug?: (message: string, meta?: unknown) => void;
+  info?: (message: string, meta?: unknown) => void;
+  warn?: (message: string, meta?: unknown) => void;
+  error?: (message: string, meta?: unknown) => void;
+};
+
+export type OpenClawPluginApi = {
+  config?: Partial<ExperienceEngineConfig>;
+  log?: OpenClawLogger;
+  on?: (event: string, handler: (payload: unknown) => unknown | Promise<unknown>) => void;
+};

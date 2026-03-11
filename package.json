@@ -1,9 +1,13 @@
 {
   "name": "experienceengine",
   "version": "0.1.0",
-  "private": true,
   "type": "module",
   "description": "ExperienceEngine v2 MVP scaffold for OpenClaw companion-layer experience intervention.",
+  "openclaw": {
+    "extensions": [
+      "./src/plugin/openclaw-plugin.ts"
+    ]
+  },
   "engines": {
     "node": ">=20.0.0"
   },

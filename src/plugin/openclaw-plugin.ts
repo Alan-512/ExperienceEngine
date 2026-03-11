@@ -1,36 +1,295 @@
-import { loadConfig } from "../config/load-config.js";
-import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import { analyzeExperience } from "../analyzer/experience-analyzer.js";
-import type { ExperienceNode, ToolEvent } from "../types/domain.js";
-import type { ExperiencePlugin, HostPromptContext, HostToolResult } from "../types/plugin.js";
-import { handleBeforePromptBuild } from "./hooks/before-prompt-build.js";
-import { finalizeExperienceInput } from "./hooks/message-sent.js";
+import { loadConfig } from "../config/load-config.js";
+import { applyFeedback } from "../feedback/feedback-manager.js";
+import { createEmptyStats, updateStats } from "../feedback/stats-updater.js";
+import { buildExperienceInput } from "../input/input-adapter.js";
+import { resolveScope } from "../input/scope-resolver.js";
+import { decideIntervention } from "../controller/intervention-controller.js";
+import { nowIso } from "../utils/clock.js";
+import { createId, stableId } from "../utils/ids.js";
+import type {
+  ExperienceCandidate,
+  ExperienceInput,
+  ExperienceInputRecord,
+  ExperienceNode,
+  ScopeTaskStats,
+  ToolEvent
+} from "../types/domain.js";
+import type {
+  ExperiencePlugin,
+  HostPromptContext,
+  HostToolResult,
+  OpenClawLogger,
+  OpenClawPluginApi
+} from "../types/plugin.js";
+import {
+  pluginConfigJsonSchema,
+  pluginUiHints,
+  type ExperienceEngineConfig
+} from "../config/config-schema.js";
+import { bootstrapDatabase, openDatabase } from "../store/sqlite/db.js";
+import { CandidateRepository } from "../store/sqlite/repositories/candidate-repo.js";
+import { InputRecordRepository } from "../store/sqlite/repositories/input-record-repo.js";
+import { NodeRepository } from "../store/sqlite/repositories/node-repo.js";
+import { ScopeRepository } from "../store/sqlite/repositories/scope-repo.js";
+import { StatsRepository } from "../store/sqlite/repositories/stats-repo.js";
 import { normalizeToolResult } from "./hooks/tool-result-persist.js";
+import { normalizePromptPayload, normalizeToolPayload, applyInjectionToPayload, extractSessionKey } from "./runtime-helpers.js";
 
-export const createExperiencePlugin = (
-  configOverrides: Partial<ExperienceEngineConfig> = {},
-  seededNodes: ExperienceNode[] = []
-): ExperiencePlugin => {
-  const config = loadConfig(configOverrides);
-  const toolEvents: ToolEvent[] = [];
+type SessionState = {
+  context?: HostPromptContext;
+  toolEvents: ToolEvent[];
+  injectedNodeIds: string[];
+};
+
+const toEvidence = (input: ExperienceInput): string[] =>
+  input.tool_events.map((event) =>
+    [event.tool_name, event.status, event.error_signature ?? event.output_summary]
+      .filter(Boolean)
+      .join(": ")
+  );
+
+const toInputRecord = (input: ExperienceInput, sessionId?: string): ExperienceInputRecord => ({
+  record_id: createId("input"),
+  scope_id: input.scope_id,
+  session_id: sessionId,
+  task_type: input.task_type,
+  task_summary: input.task_summary,
+  outcome_signal: input.outcome_signal,
+  context_summary: input.context_summary,
+  evidence: toEvidence(input),
+  injected_node_ids: input.injected_node_ids,
+  created_at: nowIso()
+});
+
+const candidateToNode = (candidate: ExperienceCandidate): ExperienceNode => {
+  const timestamp = nowIso();
+  const id = stableId(
+    "node",
+    [candidate.scope_id, candidate.task_type, candidate.node_type, candidate.compact_hint].join(":")
+  );
 
   return {
-    async beforePromptBuild(context: HostPromptContext) {
-      return handleBeforePromptBuild(context, seededNodes, undefined, toolEvents.slice(-10));
-    },
-
-    async persistToolResult(result: HostToolResult) {
-      const event = normalizeToolResult(result);
-      toolEvents.push(event);
-      return event;
-    },
-
-    async finalizeTask(context: HostPromptContext) {
-      const input = finalizeExperienceInput(context, toolEvents.slice(-20));
-      analyzeExperience(input);
-      return input;
-    }
+    id,
+    ...candidate,
+    state: "candidate",
+    usage_count: 0,
+    helped_count: 0,
+    harmed_count: 0,
+    support_count: 1,
+    created_at: timestamp,
+    updated_at: timestamp
   };
 };
 
-export const defaultPlugin = createExperiencePlugin;
+const mergeContext = (existing: HostPromptContext | undefined, incoming: HostPromptContext): HostPromptContext => ({
+  sessionId: incoming.sessionId ?? existing?.sessionId,
+  cwd: incoming.cwd ?? existing?.cwd,
+  userMessage: incoming.userMessage || existing?.userMessage || "",
+  taskSummary: incoming.taskSummary ?? existing?.taskSummary,
+  contextSummary: incoming.contextSummary ?? existing?.contextSummary,
+  injectedNodeIds: incoming.injectedNodeIds ?? existing?.injectedNodeIds
+});
+
+class ExperienceEngineRuntime implements ExperiencePlugin {
+  private readonly logger: OpenClawLogger;
+  private readonly sessions = new Map<string, SessionState>();
+  private readonly scopeRepo;
+  private readonly inputRepo;
+  private readonly nodeRepo;
+  private readonly candidateRepo;
+  private readonly statsRepo;
+
+  constructor(
+    private readonly config: ExperienceEngineConfig,
+    logger?: OpenClawLogger
+  ) {
+    this.logger = logger ?? {};
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    this.scopeRepo = new ScopeRepository(db);
+    this.inputRepo = new InputRecordRepository(db);
+    this.nodeRepo = new NodeRepository(db);
+    this.candidateRepo = new CandidateRepository(db);
+    this.statsRepo = new StatsRepository(db);
+  }
+
+  private getSession(sessionId: string): SessionState {
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      return session;
+    }
+
+    const next: SessionState = {
+      toolEvents: [],
+      injectedNodeIds: []
+    };
+    this.sessions.set(sessionId, next);
+    return next;
+  }
+
+  private finalizeInput(context: HostPromptContext): ExperienceInput {
+    const sessionId = context.sessionId ?? "global";
+    const session = this.getSession(sessionId);
+    const mergedContext = mergeContext(session.context, context);
+    const input = buildExperienceInput(
+      {
+        ...mergedContext,
+        injectedNodeIds: session.injectedNodeIds
+      },
+      session.toolEvents
+    );
+
+    this.scopeRepo.upsert(resolveScope(mergedContext.cwd));
+    this.inputRepo.upsert(toInputRecord(input, sessionId));
+
+    if (input.task_type !== "unknown") {
+      const currentStats =
+        this.statsRepo.get(input.scope_id, input.task_type) ?? createEmptyStats(input.scope_id, input.task_type);
+      this.statsRepo.upsert(updateStats(currentStats, input.outcome_signal, input.injected_node_ids.length > 0));
+    }
+
+    return input;
+  }
+
+  private persistCandidates(input: ExperienceInput): void {
+    const analysis = analyzeExperience(input);
+    for (const candidate of analysis.accepted) {
+      this.nodeRepo.upsert(candidateToNode(candidate));
+    }
+  }
+
+  private updateInjectedNodes(input: ExperienceInput): void {
+    if (!input.injected_node_ids.length) {
+      return;
+    }
+
+    const touched = input.injected_node_ids
+      .map((id) => this.nodeRepo.getById(id))
+      .filter((node): node is ExperienceNode => Boolean(node));
+
+    for (const node of applyFeedback(input, touched)) {
+      this.nodeRepo.upsert(node);
+    }
+  }
+
+  async beforePromptBuild(context: HostPromptContext) {
+    const sessionId = context.sessionId ?? "global";
+    const session = this.getSession(sessionId);
+    session.context = mergeContext(session.context, context);
+    const input = buildExperienceInput(session.context, session.toolEvents);
+
+    const stats =
+      input.task_type !== "unknown" ? this.statsRepo.get(input.scope_id, input.task_type) : undefined;
+    const nodes =
+      input.task_type !== "unknown" ? this.candidateRepo.listByScopeAndTask(input.scope_id, input.task_type) : [];
+    const decision = decideIntervention(input, nodes, stats, this.config.triggerThreshold, this.config.maxHints);
+
+    session.injectedNodeIds = decision.selected.map((node) => node.id);
+    session.context = {
+      ...session.context,
+      injectedNodeIds: session.injectedNodeIds
+    };
+
+    this.logger.debug?.("experienceengine.before_prompt_build", {
+      sessionId,
+      mode: decision.mode,
+      injectedCount: session.injectedNodeIds.length
+    });
+
+    return {
+      mode: decision.mode,
+      text: decision.text,
+      input: {
+        ...input,
+        injected_node_ids: session.injectedNodeIds
+      }
+    };
+  }
+
+  async persistToolResult(result: HostToolResult) {
+    const normalizedToolEvent = normalizeToolResult(result);
+
+    const sessionId = result.sessionId ?? "global";
+    this.getSession(sessionId).toolEvents.push(normalizedToolEvent);
+
+    this.logger.debug?.("experienceengine.tool_result_persist", {
+      sessionId,
+      toolName: normalizedToolEvent.tool_name,
+      status: normalizedToolEvent.status
+    });
+
+    return normalizedToolEvent;
+  }
+
+  async finalizeTask(context: HostPromptContext) {
+    const sessionId = context.sessionId ?? "global";
+    const input = this.finalizeInput(context);
+    this.persistCandidates(input);
+    this.updateInjectedNodes(input);
+    this.sessions.delete(sessionId);
+
+    this.logger.info?.("experienceengine.finalize", {
+      sessionId,
+      taskType: input.task_type,
+      outcome: input.outcome_signal
+    });
+
+    return input;
+  }
+
+  register(api: OpenClawPluginApi): void {
+    api.on?.("before_prompt_build", async (payload) => {
+      const context = normalizePromptPayload(payload);
+      const result = await this.beforePromptBuild(context);
+      if (result.text && result.mode !== "skip") {
+        return applyInjectionToPayload(payload, result.text);
+      }
+
+      return payload;
+    });
+
+    api.on?.("tool_result_persist", async (payload) => {
+      const normalized = normalizeToolPayload(payload);
+      if (!normalized) {
+        return payload;
+      }
+
+      const sessionId = extractSessionKey(payload);
+      await this.persistToolResult({ ...normalized, sessionId } as HostToolResult & { sessionId: string });
+      return payload;
+    });
+
+    const finalize = async (payload: unknown) => {
+      const context = normalizePromptPayload(payload);
+      if (!context.userMessage && !context.taskSummary) {
+        return payload;
+      }
+
+      await this.finalizeTask(context);
+      return payload;
+    };
+
+    api.on?.("agent_end", finalize);
+    api.on?.("session_end", finalize);
+    api.on?.("message_sent", finalize);
+  }
+}
+
+export const createExperiencePlugin = (
+  configOverrides: Partial<ExperienceEngineConfig> = {},
+  logger?: OpenClawLogger
+): ExperienceEngineRuntime => new ExperienceEngineRuntime(loadConfig(configOverrides), logger);
+
+const plugin = {
+  id: "experienceengine",
+  name: "ExperienceEngine",
+  configSchema: pluginConfigJsonSchema,
+  uiHints: pluginUiHints,
+  register(api: OpenClawPluginApi) {
+    const runtime = createExperiencePlugin(api.config ?? {}, api.log);
+    runtime.register(api);
+  }
+};
+
+export default plugin;

@@ -14,7 +14,7 @@ ExperienceEngine v2 MVP scaffold for an OpenClaw companion-layer plugin. The ini
 - Node.js 20+
 - TypeScript
 - pnpm
-- SQLite via `better-sqlite3`
+- SQLite via `node:sqlite`
 - Vitest
 
 ## Quick Start
@@ -22,7 +22,7 @@ ExperienceEngine v2 MVP scaffold for an OpenClaw companion-layer plugin. The ini
 ```bash
 pnpm install
 pnpm check
-pnpm ee stats
+node dist/cli/index.js stats
 ```
 
 ## Project Layout
@@ -44,8 +44,8 @@ This is an initialization baseline, not a production-complete plugin. The reposi
 
 - typed domain models from the v2 spec
 - a SQLite schema and bootstrap path
-- hook-safe controller and analyzer entry points
-- test coverage for task typing, trigger evaluation and rendering
+- OpenClaw plugin manifest + `register(api)` entrypoint
+- agent-loop payload normalization for `before_prompt_build`, `tool_result_persist`, and finalize events
+- test coverage for task typing, trigger evaluation, rendering, and payload normalization
 
-Next implementation steps should focus on wiring real OpenClaw hook payloads into `src/plugin/openclaw-plugin.ts` and replacing heuristic extractors with stronger evidence-aware logic.
-
+Next implementation steps should focus on validating the plugin against a real OpenClaw runtime, then replacing heuristic extractors with stronger evidence-aware logic.

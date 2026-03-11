@@ -62,4 +62,10 @@ export class NodeRepository {
   listAll(): ExperienceNode[] {
     return this.db.prepare("SELECT * FROM experience_nodes ORDER BY updated_at DESC").all() as unknown as ExperienceNode[];
   }
+
+  getById(id: string): ExperienceNode | undefined {
+    return this.db.prepare("SELECT * FROM experience_nodes WHERE id = ? LIMIT 1").get(id) as unknown as
+      | ExperienceNode
+      | undefined;
+  }
 }

@@ -1,5 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
-import type { ScopeTaskStats } from "../../../types/domain.js";
+import type { ScopeTaskStats, TaskType } from "../../../types/domain.js";
 
 export class StatsRepository {
   constructor(private readonly db: DatabaseSync) {}
@@ -22,6 +22,12 @@ export class StatsRepository {
       )
       .run(stats);
     return stats;
+  }
+
+  get(scopeId: string, taskType: TaskType): ScopeTaskStats | undefined {
+    return this.db
+      .prepare("SELECT * FROM scope_task_stats WHERE scope_id = ? AND task_type = ? LIMIT 1")
+      .get(scopeId, taskType) as unknown as ScopeTaskStats | undefined;
   }
 
   listAll(): ScopeTaskStats[] {
