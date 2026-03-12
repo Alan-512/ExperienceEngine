@@ -8,7 +8,11 @@ import {
   parseOpenClawPluginEntryConfig,
   parseOpenClawPluginInfo
 } from "../../src/install/openclaw-cli.js";
-import { inspectOpenClawInstall, installOpenClawAdapter } from "../../src/install/openclaw-installer.js";
+import {
+  classifyOpenClawHostWarnings,
+  inspectOpenClawInstall,
+  installOpenClawAdapter
+} from "../../src/install/openclaw-installer.js";
 
 const tempDirs: string[] = [];
 
@@ -117,5 +121,30 @@ describe("OpenClaw doctor host-state parsing", () => {
     expect(status.hostState.enabled).toBe(true);
     expect(status.hostState.error).toContain("EACCES");
     expect(status.hostState.configMatches).toBe(false);
+  });
+
+  it("classifies owned, advisory, and external warnings separately", () => {
+    const classified = classifyOpenClawHostWarnings({
+      packageRoot: "/mnt/d/project/ExperienceEngine",
+      hostState: {
+        warnings: [
+          "plugin experienceengine: copied install root is world-writable",
+          "plugins.allow is empty; discovered non-bundled plugins may auto-load unexpectedly",
+          "plugins.entries.feishu: plugin feishu: duplicate plugin id detected"
+        ],
+        sourcePath: "~/.openclaw/extensions/experienceengine/src/plugin/openclaw-plugin.ts",
+        installPath: "~/.openclaw/extensions/experienceengine"
+      }
+    });
+
+    expect(classified.owned).toEqual([
+      "plugin experienceengine: copied install root is world-writable"
+    ]);
+    expect(classified.advisory).toEqual([
+      "plugins.allow is empty; discovered non-bundled plugins may auto-load unexpectedly"
+    ]);
+    expect(classified.external).toEqual([
+      "plugins.entries.feishu: plugin feishu: duplicate plugin id detected"
+    ]);
   });
 });

@@ -1,10 +1,12 @@
 import {
+  classifyOpenClawHostWarnings,
   getOpenClawRepairHint,
   inspectOpenClawInstall
 } from "../../install/openclaw-installer.js";
 
 export const runDoctorCommand = (): void => {
   const status = inspectOpenClawInstall();
+  const warnings = classifyOpenClawHostWarnings(status);
   console.table([
     {
       adapter: status.adapter,
@@ -27,9 +29,23 @@ export const runDoctorCommand = (): void => {
     console.log(`Host error: ${status.hostState.error}`);
   }
 
-  if (status.hostState.warnings.length) {
-    console.log("Host warnings:");
-    for (const warning of status.hostState.warnings) {
+  if (warnings.owned.length) {
+    console.log("ExperienceEngine host warnings:");
+    for (const warning of warnings.owned) {
+      console.log(`- ${warning}`);
+    }
+  }
+
+  if (warnings.advisory.length) {
+    console.log("Host advisories:");
+    for (const warning of warnings.advisory) {
+      console.log(`- ${warning}`);
+    }
+  }
+
+  if (warnings.external.length) {
+    console.log("External host warnings:");
+    for (const warning of warnings.external) {
       console.log(`- ${warning}`);
     }
   }

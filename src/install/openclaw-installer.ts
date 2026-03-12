@@ -53,6 +53,12 @@ type HostState = {
 
 export type OpenClawInspection = ReturnType<typeof inspectOpenClawInstall>;
 
+export type ClassifiedOpenClawWarnings = {
+  owned: string[];
+  advisory: string[];
+  external: string[];
+};
+
 export const isOpenClawRepairRecommended = (inspection: {
   installed: boolean;
   hostState: Pick<HostState, "status" | "enabled" | "configMatches" | "error">;
@@ -67,6 +73,54 @@ export const getOpenClawRepairHint = (inspection: {
   installed: boolean;
   hostState: Pick<HostState, "status" | "enabled" | "configMatches" | "error">;
 }): string | null => (isOpenClawRepairRecommended(inspection) ? "ee repair openclaw" : null);
+
+const normalizeWarningNeedles = (inspection: {
+  packageRoot?: string;
+  hostState: Pick<HostState, "sourcePath" | "installPath">;
+}): string[] => {
+  const values = [
+    "experienceengine",
+    inspection.packageRoot,
+    inspection.hostState.sourcePath,
+    inspection.hostState.installPath
+  ].filter((value): value is string => Boolean(value && value.trim().length > 0));
+
+  return Array.from(
+    new Set(
+      values.flatMap((value) => {
+        const trimmed = value.trim();
+        return [trimmed.toLowerCase(), basename(trimmed).toLowerCase()];
+      })
+    )
+  );
+};
+
+export const classifyOpenClawHostWarnings = (inspection: {
+  packageRoot?: string;
+  hostState: Pick<HostState, "warnings" | "sourcePath" | "installPath">;
+}): ClassifiedOpenClawWarnings => {
+  const advisoryPatterns = [/plugins\.allow is empty/i];
+  const ownershipNeedles = normalizeWarningNeedles(inspection);
+
+  return inspection.hostState.warnings.reduce<ClassifiedOpenClawWarnings>(
+    (groups, warning) => {
+      if (advisoryPatterns.some((pattern) => pattern.test(warning))) {
+        groups.advisory.push(warning);
+        return groups;
+      }
+
+      const normalizedWarning = warning.toLowerCase();
+      if (ownershipNeedles.some((needle) => normalizedWarning.includes(needle))) {
+        groups.owned.push(warning);
+        return groups;
+      }
+
+      groups.external.push(warning);
+      return groups;
+    },
+    { owned: [], advisory: [], external: [] }
+  );
+};
 
 const identifyExperienceEnginePath = (rootPath: string): boolean => {
   if (!rootPath) {
