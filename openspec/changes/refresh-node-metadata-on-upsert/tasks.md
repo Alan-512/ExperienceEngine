@@ -10,5 +10,5 @@
 
 ## 3. Validate
 
-- [ ] 3.1 Run `npx @fission-ai/openspec@latest validate --changes --strict`
-- [ ] 3.2 Run `pnpm check`
+- [x] 3.1 Run `npx @fission-ai/openspec@latest validate --changes --strict`
+- [x] 3.2 Run `pnpm check`
