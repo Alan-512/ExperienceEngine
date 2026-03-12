@@ -48,11 +48,14 @@ export class NodeRepository {
          ON CONFLICT(id) DO UPDATE SET
           compact_hint = excluded.compact_hint,
           evidence_summary = excluded.evidence_summary,
-          state = excluded.state,
+         state = excluded.state,
           usage_count = excluded.usage_count,
           helped_count = excluded.helped_count,
           harmed_count = excluded.harmed_count,
           support_count = excluded.support_count,
+          last_used_at = excluded.last_used_at,
+          last_helped_at = excluded.last_helped_at,
+          last_harmed_at = excluded.last_harmed_at,
           updated_at = excluded.updated_at`
       )
       .run(payload);
