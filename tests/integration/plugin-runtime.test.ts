@@ -275,12 +275,16 @@ describe("OpenClaw plugin runtime", () => {
       structuredClone(scenario.replayPromptContext)
     )) as Record<string, unknown>;
 
-    expect(replayResult.prependContext, scenario.name).toBeTruthy();
-    if (Array.isArray(scenario.replayPrompt.prependContext)) {
-      expect(Array.isArray(replayResult.prependContext), scenario.name).toBe(true);
-      expect((replayResult.prependContext as unknown[])[0], scenario.name).toContain("execution hints");
+    if (scenario.expectInjection === false) {
+      expect(replayResult.prependContext, scenario.name).toBeFalsy();
     } else {
-      expect(String(replayResult.prependContext), scenario.name).toContain("execution hints");
+      expect(replayResult.prependContext, scenario.name).toBeTruthy();
+      if (Array.isArray(scenario.replayPrompt.prependContext)) {
+        expect(Array.isArray(replayResult.prependContext), scenario.name).toBe(true);
+        expect((replayResult.prependContext as unknown[])[0], scenario.name).toContain("execution hints");
+      } else {
+        expect(String(replayResult.prependContext), scenario.name).toContain("execution hints");
+      }
     }
   });
 

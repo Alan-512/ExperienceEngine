@@ -7,6 +7,7 @@ import plugin from "../../src/plugin/openclaw-plugin.js";
 type Handler = (payload: unknown) => unknown | Promise<unknown>;
 type ReplayScenario = {
   name?: string;
+  expectInjection?: boolean;
   seedPrompt: Record<string, unknown>;
   seedPromptContext?: Record<string, unknown>;
   toolResult: Record<string, unknown>;
@@ -69,6 +70,7 @@ try {
     JSON.stringify(
       {
         fixture: fixture.name ?? fixturePath,
+        expectInjection: fixture.expectInjection ?? true,
         counts,
         prependContext: replayResult?.prependContext ?? null
       },

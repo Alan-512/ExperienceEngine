@@ -6,6 +6,7 @@ const fixturesDir = dirname(fileURLToPath(import.meta.url));
 
 export type ReplayScenario = {
   name: string;
+  expectInjection?: boolean;
   seedPrompt: Record<string, unknown>;
   seedPromptContext?: Record<string, unknown>;
   toolResult: Record<string, unknown>;
@@ -22,5 +23,6 @@ export const loadReplayScenario = (fileName: string): ReplayScenario =>
 export const replayScenarios: ReplayScenario[] = [
   loadReplayScenario("scenario-message-object.json"),
   loadReplayScenario("scenario-messages-array.json"),
-  loadReplayScenario("scenario-real-runtime-followup.json")
+  loadReplayScenario("scenario-real-runtime-followup.json"),
+  loadReplayScenario("scenario-real-runtime-skip.json")
 ];
