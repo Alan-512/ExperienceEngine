@@ -19,7 +19,7 @@ const main = async (): Promise<void> => {
       await runClaudeHookCommand();
       break;
     case "doctor":
-      runDoctorCommand();
+      runDoctorCommand(args[0]);
       break;
     case "repair":
       runRepairCommand(args[0]);
@@ -38,7 +38,7 @@ const main = async (): Promise<void> => {
       break;
     default:
       console.log(
-        "Usage: ee <install openclaw|claude-code|repair openclaw|claude-hook|doctor|stats|inspect|disable|remember>"
+        "Usage: ee <install openclaw|claude-code|repair openclaw|claude-hook|doctor [claude-code]|stats|inspect|disable|remember>"
       );
   }
 };

@@ -1,10 +1,29 @@
+import { inspectClaudeCodeInstall } from "../../install/claude-code-doctor.js";
 import {
   classifyOpenClawHostWarnings,
   getOpenClawRepairHint,
   inspectOpenClawInstall
 } from "../../install/openclaw-installer.js";
 
-export const runDoctorCommand = (): void => {
+export const runDoctorCommand = (target?: string): void => {
+  if (target === "claude-code") {
+    const status = inspectClaudeCodeInstall();
+    console.table([
+      {
+        adapter: status.adapter,
+        installed: status.installed,
+        project_dir: status.projectDir,
+        settings_path: status.settingsPath,
+        prompt_hook: status.hooksPresent.userPromptSubmit,
+        pre_tool_hook: status.hooksPresent.preToolUse,
+        post_tool_hook: status.hooksPresent.postToolUse,
+        session_end_hook: status.hooksPresent.sessionEnd,
+        capture_dir: status.captureDir
+      }
+    ]);
+    return;
+  }
+
   const status = inspectOpenClawInstall();
   const warnings = classifyOpenClawHostWarnings(status);
   console.table([
