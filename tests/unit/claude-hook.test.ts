@@ -242,6 +242,88 @@ describe("Claude hook capture", () => {
     );
   });
 
+  it("replays a real captured Claude tool-failure fixture into injected harmed feedback", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    const scope = resolveScope("/tmp/example-claude-failure-project");
+    const timestamp = nowIso();
+
+    nodeRepo.upsert({
+      id: "node_claude_failure_fixture",
+      node_type: "strategy",
+      scope_id: scope.scope_id,
+      task_type: "test_debug",
+      trigger_pattern: "Reproduce the failing auth test",
+      applicability_notes: "Reuse the same repo and failing auth test scope",
+      env_signature: undefined,
+      compact_hint: "Run the auth test first and stop once the failure is confirmed.",
+      goal: "Confirm the auth test still fails",
+      recommended_steps: ["Run the auth test", "Stop once the failure is confirmed"],
+      avoid_steps: [],
+      fallback_steps: [],
+      success_signal: "The auth test failure is reproduced",
+      stop_condition: undefined,
+      escalation_condition: undefined,
+      evidence_summary: "A prior Claude run reproduced the same auth test failure.",
+      source_kind: "system_derived",
+      state: "candidate",
+      usage_count: 0,
+      helped_count: 0,
+      harmed_count: 0,
+      support_count: 1,
+      created_at: timestamp,
+      updated_at: timestamp
+    });
+
+    const fixture = JSON.parse(
+      readFileSync(resolve("tests/fixtures/claude-code/scenario-real-tool-failure-session.json"), "utf8")
+    ) as { events: Array<unknown> };
+
+    let firstResult:
+      | {
+          capturePath: string | null;
+          hookOutput?: string;
+        }
+      | undefined;
+
+    for (const [index, event] of fixture.events.entries()) {
+      const result = await processClaudeHookPayload(JSON.stringify(event), {
+        homeDir,
+        env
+      });
+      if (index === 0) {
+        firstResult = result;
+      }
+    }
+
+    expect(firstResult?.hookOutput).toContain("Run the auth test first and stop once the failure is confirmed.");
+
+    const row = db
+      .prepare(
+        "SELECT injected_node_ids_json, outcome_signal, evidence_json FROM experience_input_records WHERE session_id = ?"
+      )
+      .get("real-session-tool-failure") as
+      | {
+          injected_node_ids_json: string;
+          outcome_signal: string;
+          evidence_json: string;
+        }
+      | undefined;
+
+    expect(JSON.parse(row?.injected_node_ids_json ?? "[]")).toEqual(["node_claude_failure_fixture"]);
+    expect(row?.outcome_signal).toBe("failure");
+    expect(JSON.parse(row?.evidence_json ?? "[]")).toContain("Bash: failure: Exit code 1\nauth test failing");
+
+    const node = nodeRepo.getById("node_claude_failure_fixture");
+    expect(node?.usage_count).toBe(1);
+    expect(node?.helped_count).toBe(0);
+    expect(node?.harmed_count).toBe(1);
+  });
+
   it("replays a real captured Claude UserPromptSubmit payload fixture", async () => {
     const homeDir = makeTempDir();
     const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };

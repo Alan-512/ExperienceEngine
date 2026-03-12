@@ -61,4 +61,20 @@ describe("Claude hook normalizer", () => {
     expect(normalized.toolOutputSummary).toBe("/tmp/example\n1");
     expect(normalized.toolStatus).toBe("success");
   });
+
+  it("treats PostToolUseFailure as a failed tool result", () => {
+    const normalized = normalizeClaudeHookPayload({
+      hook_event_name: "PostToolUseFailure",
+      session_id: "session-failure",
+      tool_name: "Bash",
+      tool_input: {
+        command: "./auth-test.sh"
+      },
+      error: "Exit code 1\nauth test failing"
+    });
+
+    expect(normalized.eventName).toBe("PostToolUseFailure");
+    expect(normalized.toolStatus).toBe("failure");
+    expect(normalized.toolOutputSummary).toBe("Exit code 1\nauth test failing");
+  });
 });

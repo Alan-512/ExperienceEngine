@@ -17,7 +17,7 @@ export const toClaudePromptContext = (
 };
 
 export const toClaudeToolResult = (event: ClaudeNormalizedEvent): HostToolResult | null => {
-  if (event.eventName !== "PostToolUse" || !event.toolName) {
+  if (!["PostToolUse", "PostToolUseFailure"].includes(event.eventName) || !event.toolName) {
     return null;
   }
 

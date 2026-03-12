@@ -1,0 +1,53 @@
+{
+  "source": {
+    "runtime": "claude-code",
+    "version": "2.1.29",
+    "captured_from": "real-local-cli",
+    "captured_at": "2026-03-12T10:02:22.122Z"
+  },
+  "events": [
+    {
+      "session_id": "real-session-tool-failure",
+      "transcript_path": "/home/example/.claude/projects/example/real-session-tool-failure.jsonl",
+      "cwd": "/tmp/example-claude-failure-project",
+      "permission_mode": "bypassPermissions",
+      "hook_event_name": "UserPromptSubmit",
+      "prompt": "Reproduce the failing auth test"
+    },
+    {
+      "session_id": "real-session-tool-failure",
+      "transcript_path": "/home/example/.claude/projects/example/real-session-tool-failure.jsonl",
+      "cwd": "/tmp/example-claude-failure-project",
+      "permission_mode": "bypassPermissions",
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "./auth-test.sh",
+        "description": "Run auth test to reproduce failure"
+      },
+      "tool_use_id": "call_example_claude_tool_failure"
+    },
+    {
+      "session_id": "real-session-tool-failure",
+      "transcript_path": "/home/example/.claude/projects/example/real-session-tool-failure.jsonl",
+      "cwd": "/tmp/example-claude-failure-project",
+      "permission_mode": "bypassPermissions",
+      "hook_event_name": "PostToolUseFailure",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "./auth-test.sh",
+        "description": "Run auth test to reproduce failure"
+      },
+      "tool_use_id": "call_example_claude_tool_failure",
+      "error": "Exit code 1\nauth test failing",
+      "is_interrupt": false
+    },
+    {
+      "session_id": "real-session-tool-failure",
+      "transcript_path": "/home/example/.claude/projects/example/real-session-tool-failure.jsonl",
+      "cwd": "/tmp/example-claude-failure-project",
+      "hook_event_name": "SessionEnd",
+      "reason": "other"
+    }
+  ]
+}

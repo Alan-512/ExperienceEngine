@@ -133,6 +133,11 @@ const truncate = (value: string | undefined, limit = 400): string | undefined =>
 };
 
 const resolveToolStatus = (payload: UnknownRecord | undefined): ClaudeNormalizedEvent["toolStatus"] => {
+  const eventName = readString(payload, ["hook_event_name", "event_name", "event"])?.toLowerCase();
+  if (eventName === "posttoolusefailure") {
+    return "failure";
+  }
+
   const value = readString(payload, ["tool_status", "status", "result"]);
   if (!value) {
     return undefined;
@@ -155,7 +160,7 @@ const resolveToolStatus = (payload: UnknownRecord | undefined): ClaudeNormalized
 };
 
 const resolveToolOutputSummary = (payload: UnknownRecord | undefined): string | undefined => {
-  const direct = readString(payload, ["tool_output", "output", "tool_response"]);
+  const direct = readString(payload, ["tool_output", "output", "tool_response", "error"]);
   if (direct) {
     return truncate(direct);
   }
@@ -164,11 +169,13 @@ const resolveToolOutputSummary = (payload: UnknownRecord | undefined): string | 
     ["payload", "tool_result", "output"],
     ["payload", "tool_result", "content"],
     ["payload", "tool_result", "response"],
+    ["payload", "error"],
     ["payload", "tool_response", "stdout"],
     ["payload", "tool_response", "stderr"],
     ["tool_result", "output"],
     ["tool_result", "content"],
     ["tool_result", "response"],
+    ["error"],
     ["tool_response", "stdout"],
     ["tool_response", "stderr"]
   ]);
@@ -179,6 +186,11 @@ const resolveToolOutputSummary = (payload: UnknownRecord | undefined): string | 
 const resolveFallbackToolStatus = (
   payload: UnknownRecord | undefined
 ): ClaudeNormalizedEvent["toolStatus"] => {
+  const eventName = readString(payload, ["hook_event_name", "event_name", "event"])?.toLowerCase();
+  if (eventName === "posttoolusefailure") {
+    return "failure";
+  }
+
   const interrupted = readPathBoolean(payload, [
     ["payload", "tool_response", "interrupted"],
     ["tool_response", "interrupted"]

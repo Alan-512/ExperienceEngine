@@ -86,6 +86,7 @@ const mergeExperienceEngineHooks = (settings: ClaudeSettings, packageRoot: strin
   upsertHookMatcher(next.hooks!, "UserPromptSubmit", undefined, command);
   upsertHookMatcher(next.hooks!, "PreToolUse", "*", command);
   upsertHookMatcher(next.hooks!, "PostToolUse", "*", command);
+  upsertHookMatcher(next.hooks!, "PostToolUseFailure", "*", command);
   upsertHookMatcher(next.hooks!, "SessionEnd", undefined, command);
 
   return next;

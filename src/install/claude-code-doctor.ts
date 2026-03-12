@@ -61,6 +61,7 @@ export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
       userPromptSubmit: hasHookCommand(settings, "UserPromptSubmit", undefined, expectedCommand),
       preToolUse: hasHookCommand(settings, "PreToolUse", "*", expectedCommand),
       postToolUse: hasHookCommand(settings, "PostToolUse", "*", expectedCommand),
+      postToolUseFailure: hasHookCommand(settings, "PostToolUseFailure", "*", expectedCommand),
       sessionEnd: hasHookCommand(settings, "SessionEnd", undefined, expectedCommand)
     }
   };

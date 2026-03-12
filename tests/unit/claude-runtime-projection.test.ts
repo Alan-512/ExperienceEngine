@@ -48,6 +48,25 @@ describe("Claude runtime projection", () => {
     });
   });
 
+  it("projects post-tool failure events into HostToolResult", () => {
+    const toolResult = toClaudeToolResult({
+      ...baseEvent("PostToolUseFailure"),
+      sessionId: "session-failure",
+      toolName: "Bash",
+      toolInputSummary: "./auth-test.sh",
+      toolOutputSummary: "auth test failing",
+      toolStatus: "failure"
+    });
+
+    expect(toolResult).toEqual({
+      sessionId: "session-failure",
+      toolName: "Bash",
+      inputSummary: "./auth-test.sh",
+      outputSummary: "auth test failing",
+      status: "failure"
+    });
+  });
+
   it("resolves session end back to the latest prompt context", () => {
     const state = new ClaudeSessionProjectionState();
     const promptContext = toClaudePromptContext({

@@ -34,6 +34,7 @@ describe("Claude Code doctor", () => {
     expect(inspection.hooksPresent.userPromptSubmit).toBe(true);
     expect(inspection.hooksPresent.preToolUse).toBe(true);
     expect(inspection.hooksPresent.postToolUse).toBe(true);
+    expect(inspection.hooksPresent.postToolUseFailure).toBe(true);
     expect(inspection.hooksPresent.sessionEnd).toBe(true);
   });
 });
