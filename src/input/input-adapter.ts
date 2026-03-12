@@ -4,14 +4,16 @@ import { adaptContextSummary } from "./context-summary-adapter.js";
 import { resolveOutcome } from "./outcome-resolver.js";
 import { resolveScope } from "./scope-resolver.js";
 import { resolveTaskType } from "./tasktype-resolver.js";
-import { normalizeWhitespace, stripLeadingTimestampTag } from "../utils/text.js";
+import { normalizeWhitespace, stripLeadingExperienceInjection, stripLeadingTimestampTag } from "../utils/text.js";
 
 export const buildExperienceInput = (
   context: HostPromptContext,
   toolEvents: ToolEvent[] = []
 ): ExperienceInput => {
   const scope = resolveScope(context.cwd);
-  const taskSummary = normalizeWhitespace(stripLeadingTimestampTag(context.taskSummary ?? context.userMessage));
+  const taskSummary = normalizeWhitespace(
+    stripLeadingTimestampTag(stripLeadingExperienceInjection(context.taskSummary ?? context.userMessage))
+  );
 
   return {
     scope_id: scope.scope_id,

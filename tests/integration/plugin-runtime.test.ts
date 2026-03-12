@@ -235,6 +235,95 @@ describe("OpenClaw plugin runtime", () => {
     expect(secondTurn.prependContext).toContain("Conservative execution hints:");
   });
 
+  it("does not persist injected hint blocks back into follow-up task summaries", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const handlers = new Map<string, Handler>();
+
+    plugin.register({
+      pluginConfig: {
+        dataDir: join(runtimeDir, "data"),
+        sqlitePath,
+        triggerThreshold: 0.6,
+        maxHints: 3
+      },
+      on(event, handler) {
+        handlers.set(event, handler);
+      }
+    });
+
+    const beforePromptBuild = handlers.get("before_prompt_build");
+    const persistToolResult = handlers.get("tool_result_persist");
+    const finalize = handlers.get("message_sent");
+
+    await beforePromptBuild?.({
+      session: { key: "seed-clean" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Fix the failing vitest auth test in the current workspace." }
+    });
+    await persistToolResult?.({
+      sessionKey: "seed-clean",
+      tool: { name: "exec" },
+      result: { exitCode: 0, output: "/tmp/repo" },
+      success: true
+    });
+    await finalize?.({
+      session: { key: "seed-clean" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Fix the failing vitest auth test in the current workspace." }
+    });
+
+    const replayPayload = {
+      session: { key: "followup-clean" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Fix the failing vitest auth test in the current workspace." }
+    };
+    const secondTurn = (await beforePromptBuild?.(structuredClone(replayPayload))) as Record<string, unknown>;
+    expect(typeof secondTurn.prependContext).toBe("string");
+
+    await persistToolResult?.({
+      sessionKey: "followup-clean",
+      tool: { name: "read" },
+      result: { exitCode: 1, error: "ENOENT: auth.spec.ts" },
+      success: false
+    });
+    await finalize?.(
+      {
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: `${String(secondTurn.prependContext)}\n\n[Thu 2026-03-12 09:56 GMT+8] Fix the failing vitest auth test in the current workspace.`
+              }
+            ]
+          }
+        ]
+      },
+      {
+        sessionId: "followup-clean",
+        workspaceDir: "/tmp/repo"
+      }
+    );
+
+    const db = new DatabaseSync(sqlitePath);
+    const latestInput = db
+      .prepare(
+        "SELECT task_summary FROM experience_input_records WHERE session_id = ? ORDER BY created_at DESC LIMIT 1"
+      )
+      .get("followup-clean") as { task_summary: string };
+    const latestWarning = db
+      .prepare(
+        "SELECT trigger_pattern FROM experience_nodes WHERE node_type = 'warning' ORDER BY updated_at DESC LIMIT 1"
+      )
+      .get() as { trigger_pattern: string };
+
+    expect(latestInput.task_summary).toBe("Fix the failing vitest auth test in the current workspace.");
+    expect(latestWarning.trigger_pattern).toBe("Fix the failing vitest auth test in the current workspace.");
+    expect(latestWarning.trigger_pattern).not.toContain("Execution hints from prior similar tasks:");
+  });
+
   it.each(replayScenarios)("replays fixture corpus: $name", async (scenario: ReplayScenario) => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");

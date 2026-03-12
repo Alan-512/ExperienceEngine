@@ -143,4 +143,16 @@ describe("runtime helpers", () => {
     expect(input.task_summary).toBe("Fix the failing vitest auth test by checking the current workspace");
     expect(input.task_type).toBe("test_debug");
   });
+
+  it("strips ExperienceEngine injection headings before building experience input", () => {
+    const input = buildExperienceInput({
+      sessionId: "sess_injected",
+      cwd: "/repo/runtime",
+      userMessage:
+        "Execution hints from prior similar tasks:\n- Reproduce first, then validate the fix with exec before moving on.\n\n[Thu 2026-03-12 09:56 GMT+8] Fix the failing vitest auth test in the current workspace."
+    });
+
+    expect(input.task_summary).toBe("Fix the failing vitest auth test in the current workspace.");
+    expect(input.task_type).toBe("test_debug");
+  });
 });

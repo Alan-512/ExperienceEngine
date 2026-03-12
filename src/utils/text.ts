@@ -18,5 +18,25 @@ export const tokenize = (value: string): string[] =>
     .split(/[^a-z0-9_]+/i)
     .filter(Boolean);
 
+const EXPERIENCE_INJECTION_HEADINGS = [
+  "Execution hints from prior similar tasks:",
+  "Conservative execution hints:"
+];
+
+export const stripLeadingExperienceInjection = (value: string): string => {
+  let next = value.trimStart();
+
+  while (EXPERIENCE_INJECTION_HEADINGS.some((heading) => next.startsWith(heading))) {
+    const separator = next.indexOf("\n\n");
+    if (separator === -1) {
+      return "";
+    }
+
+    next = next.slice(separator + 2).trimStart();
+  }
+
+  return next;
+};
+
 export const stripLeadingTimestampTag = (value: string): string =>
   normalizeWhitespace(value).replace(/^\[[^\]]+\]\s*/, "");
