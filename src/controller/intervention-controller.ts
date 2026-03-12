@@ -10,6 +10,15 @@ export type InterventionDecision = {
   text?: string;
 };
 
+export const selectInjectableNodes = (
+  ranked: ExperienceNode[],
+  maxHints = 3
+): ExperienceNode[] => {
+  const strategyNodes = ranked.filter((node) => node.node_type === "strategy");
+  const fallback = strategyNodes.length ? strategyNodes : ranked.filter((node) => node.node_type === "warning");
+  return fallback.slice(0, maxHints);
+};
+
 export const decideIntervention = (
   input: ExperienceInput,
   nodes: ExperienceNode[],
@@ -30,7 +39,11 @@ export const decideIntervention = (
   }
 
   const mode: InjectionMode = ranked[0]?.state === "candidate" ? "inject_conservative" : "inject";
-  const selected = ranked.slice(0, maxHints);
+  const selected = selectInjectableNodes(ranked, maxHints);
+
+  if (!selected.length) {
+    return { mode: "skip", selected: [] };
+  }
 
   return {
     mode,
