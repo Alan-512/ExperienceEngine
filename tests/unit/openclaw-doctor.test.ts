@@ -13,6 +13,7 @@ import {
   inspectOpenClawInstall,
   installOpenClawAdapter
 } from "../../src/install/openclaw-installer.js";
+import { readCurrentPackageVersion } from "../../src/version/package-version.js";
 
 const tempDirs: string[] = [];
 
@@ -61,6 +62,8 @@ const pluginConfigOutput = `Config warnings:\\n- plugins.entries.feishu: plugin 
 `;
 
 describe("OpenClaw doctor host-state parsing", () => {
+  const currentVersion = readCurrentPackageVersion();
+
   it("parses formatted plugin info with warning prefixes", () => {
     const parsed = parseOpenClawPluginInfo(pluginInfoOutput);
 
@@ -121,6 +124,8 @@ describe("OpenClaw doctor host-state parsing", () => {
     expect(status.hostState.enabled).toBe(true);
     expect(status.hostState.error).toContain("EACCES");
     expect(status.hostState.configMatches).toBe(false);
+    expect(status.versionStatus.recordedVersion).toBe(currentVersion);
+    expect(status.versionStatus.state).toBe("current");
   });
 
   it("classifies owned, advisory, and external warnings separately", () => {

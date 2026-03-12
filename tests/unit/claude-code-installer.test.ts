@@ -33,6 +33,7 @@ describe("Claude Code installer", () => {
     };
     const installState = JSON.parse(readFileSync(report.paths.installStatePath, "utf8")) as {
       adapter: string;
+      installedVersion: string;
       settingsPath: string;
       captureDir: string;
     };
@@ -47,6 +48,7 @@ describe("Claude Code installer", () => {
     expect(settings.hooks?.UserPromptSubmit?.[0]?.hooks[0]?.command).toContain("node --no-warnings");
     expect(settings.hooks?.UserPromptSubmit?.[0]?.hooks[0]?.command).toContain("claude-hook");
     expect(installState.adapter).toBe("claude-code");
+    expect(installState.installedVersion).toBe(report.installedVersion);
     expect(installState.settingsPath).toBe(settingsPath);
     expect(installState.captureDir).toBe(report.captureDir);
   });

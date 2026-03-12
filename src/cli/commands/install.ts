@@ -6,6 +6,7 @@ export const runInstallCommand = (target?: string): void => {
   if (target === "openclaw") {
     const report = installOpenClawAdapter();
     console.log(`Installed ${report.adapter} adapter.`);
+    console.log(`Installed version: ${report.installedVersion}`);
     console.log(`Linked package root: ${report.packageRoot}`);
     console.log(`Active data root: ${report.paths.activeHome}`);
     console.log(`SQLite path: ${report.pluginConfig.sqlitePath}`);
@@ -19,6 +20,7 @@ export const runInstallCommand = (target?: string): void => {
   if (target === "claude-code") {
     const report = installClaudeCodeAdapter();
     console.log(`Installed ${report.adapter} adapter.`);
+    console.log(`Installed version: ${report.installedVersion}`);
     console.log(`Package root: ${report.packageRoot}`);
     console.log(`Project settings: ${report.settingsPath}`);
     console.log(`Capture path: ${report.captureDir}`);
@@ -28,6 +30,7 @@ export const runInstallCommand = (target?: string): void => {
   if (target === "codex") {
     const report = installCodexAdapter();
     console.log(`Installed ${report.adapter} adapter.`);
+    console.log(`Installed version: ${report.installedVersion}`);
     console.log(`Package root: ${report.packageRoot}`);
     console.log(`Server name: ${report.serverName}`);
     console.log(`Server command: ${report.serverCommand}`);

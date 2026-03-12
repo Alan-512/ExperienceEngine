@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { inspectOpenClawInstall, installOpenClawAdapter } from "../../src/install/openclaw-installer.js";
+import { readCurrentPackageVersion } from "../../src/version/package-version.js";
 
 const tempDirs: string[] = [];
 
@@ -22,6 +23,8 @@ afterEach(() => {
 });
 
 describe("OpenClaw installer", () => {
+  const currentVersion = readCurrentPackageVersion();
+
   it("writes install state into the product-owned data home", () => {
     const homeDir = makeTempDir();
     const commands: string[] = [];
@@ -74,6 +77,7 @@ describe("OpenClaw installer", () => {
 
     const payload = JSON.parse(readFileSync(report.paths.installStatePath, "utf8")) as {
       adapter: string;
+      installedVersion: string;
       installMode: string;
       sqlitePath: string;
       packageRoot: string;
@@ -81,6 +85,7 @@ describe("OpenClaw installer", () => {
     };
 
     expect(payload.adapter).toBe("openclaw");
+    expect(payload.installedVersion).toBe(report.installedVersion);
     expect(payload.installMode).toBe("copied-plugin");
     expect(payload.sqlitePath).toBe(report.pluginConfig.sqlitePath);
     expect(payload.packageRoot).toBe(report.packageRoot);
@@ -117,6 +122,8 @@ describe("OpenClaw installer", () => {
     });
 
     expect(status.installed).toBe(true);
+    expect(status.versionStatus.recordedVersion).toBe(currentVersion);
+    expect(status.versionStatus.state).toBe("current");
     expect(status.pathMode).toBe("product");
     expect(status.activeHome).toBe(join(homeDir, ".experienceengine"));
     expect(status.hostWiring.wired).toBe(true);

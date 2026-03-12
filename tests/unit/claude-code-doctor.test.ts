@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { installClaudeCodeAdapter } from "../../src/install/claude-code-installer.js";
 import { inspectClaudeCodeInstall } from "../../src/install/claude-code-doctor.js";
+import { readCurrentPackageVersion } from "../../src/version/package-version.js";
 
 const tempDirs: string[] = [];
 
@@ -23,6 +24,8 @@ afterEach(() => {
 });
 
 describe("Claude Code doctor", () => {
+  const currentVersion = readCurrentPackageVersion();
+
   it("reports installed hooks from project-local settings", () => {
     const homeDir = makeTempDir();
     const projectDir = makeTempDir();
@@ -31,6 +34,8 @@ describe("Claude Code doctor", () => {
     const inspection = inspectClaudeCodeInstall({ homeDir, projectDir });
 
     expect(inspection.installed).toBe(true);
+    expect(inspection.versionStatus.recordedVersion).toBe(currentVersion);
+    expect(inspection.versionStatus.state).toBe("current");
     expect(inspection.hooksPresent.userPromptSubmit).toBe(true);
     expect(inspection.hooksPresent.preToolUse).toBe(true);
     expect(inspection.hooksPresent.postToolUse).toBe(true);

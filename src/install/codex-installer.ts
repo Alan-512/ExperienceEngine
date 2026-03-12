@@ -16,6 +16,7 @@ import {
   type ResolvedPathInfo
 } from "../config/path-resolver.js";
 import { resolveExperienceEnginePackageRoot } from "./openclaw-cli.js";
+import { buildVersionStatus, readCurrentPackageVersion } from "../version/package-version.js";
 
 type InstallerOptions = {
   env?: NodeJS.ProcessEnv;
@@ -29,6 +30,7 @@ export type CodexInstallReport = {
   installed: true;
   paths: ResolvedPathInfo;
   packageRoot: string;
+  installedVersion: string;
   serverName: string;
   serverCommand: string;
   captureDir: string;
@@ -42,6 +44,7 @@ export type CodexInstallReport = {
 type CodexInstallState = {
   adapter: "codex";
   installedAt: string;
+  installedVersion?: string;
   packageRoot: string;
   serverName: string;
   serverCommand: string;
@@ -72,6 +75,7 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
     homeDir: options.homeDir
   });
   const packageRoot = resolveExperienceEnginePackageRoot();
+  const installedVersion = readCurrentPackageVersion(packageRoot);
   const existing = inspectCodexHost(runner, options.cliEnv);
 
   mkdirSync(paths.dataDir, { recursive: true });
@@ -88,6 +92,7 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
   const state: CodexInstallState = {
     adapter: "codex",
     installedAt: new Date().toISOString(),
+    installedVersion,
     packageRoot,
     serverName: "experienceengine",
     serverCommand: hostInfo?.commandDisplay ?? buildCodexMcpServerCommand(packageRoot).join(" "),
@@ -106,6 +111,7 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
     installed: true,
     paths,
     packageRoot,
+    installedVersion,
     serverName: state.serverName,
     serverCommand: state.serverCommand,
     captureDir: paths.captureDir,
@@ -129,6 +135,7 @@ export const inspectCodexInstall = (options: InstallerOptions = {}) => {
   return {
     adapter: "codex" as const,
     installed: Boolean(installState),
+    versionStatus: buildVersionStatus(Boolean(installState), installState?.installedVersion),
     packageRoot,
     captureDir: paths.captureDir,
     serverName: installState?.serverName ?? "experienceengine",

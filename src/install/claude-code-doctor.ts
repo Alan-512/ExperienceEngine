@@ -2,6 +2,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { resolveExperienceEnginePaths } from "../config/path-resolver.js";
 import { resolveExperienceEnginePackageRoot } from "./openclaw-cli.js";
+import { buildVersionStatus } from "../version/package-version.js";
 
 type ClaudeHookMatcher = {
   matcher?: string;
@@ -16,6 +17,10 @@ type InstallerOptions = {
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
   projectDir?: string;
+};
+
+type ClaudeInstallState = {
+  installedVersion?: string;
 };
 
 const shellQuote = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
@@ -49,10 +54,14 @@ export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
   const expectedCommand = buildExpectedCommand(packageRoot);
   const settings =
     existsSync(settingsPath) ? (JSON.parse(readFileSync(settingsPath, "utf8")) as ClaudeSettings) : null;
+  const installState = paths.usedInstallState
+    ? (JSON.parse(readFileSync(paths.installStatePath, "utf8")) as ClaudeInstallState)
+    : null;
 
   return {
     adapter: "claude-code" as const,
     installed: paths.usedInstallState,
+    versionStatus: buildVersionStatus(paths.usedInstallState, installState?.installedVersion),
     packageRoot,
     projectDir,
     settingsPath,

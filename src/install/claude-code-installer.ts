@@ -6,6 +6,7 @@ import {
   type ResolvedPathInfo
 } from "../config/path-resolver.js";
 import { resolveExperienceEnginePackageRoot } from "./openclaw-cli.js";
+import { readCurrentPackageVersion } from "../version/package-version.js";
 
 type ClaudeHookCommand = {
   type: "command";
@@ -34,6 +35,7 @@ export type ClaudeCodeInstallReport = {
   installed: true;
   paths: ResolvedPathInfo;
   packageRoot: string;
+  installedVersion: string;
   projectDir: string;
   settingsPath: string;
   captureDir: string;
@@ -99,6 +101,7 @@ export const installClaudeCodeAdapter = (options: InstallerOptions = {}): Claude
     homeDir: options.homeDir
   });
   const packageRoot = resolveExperienceEnginePackageRoot();
+  const installedVersion = readCurrentPackageVersion(packageRoot);
   const projectDir = resolve(options.projectDir ?? process.cwd());
   const settingsPath = join(projectDir, ".claude", "settings.local.json");
   const settings = readJsonFile<ClaudeSettings>(settingsPath) ?? {};
@@ -116,6 +119,7 @@ export const installClaudeCodeAdapter = (options: InstallerOptions = {}): Claude
       {
         adapter: "claude-code",
         installedAt: new Date().toISOString(),
+        installedVersion,
         packageRoot,
         projectDir,
         settingsPath,
@@ -132,6 +136,7 @@ export const installClaudeCodeAdapter = (options: InstallerOptions = {}): Claude
     installed: true,
     paths,
     packageRoot,
+    installedVersion,
     projectDir,
     settingsPath,
     captureDir: paths.captureDir

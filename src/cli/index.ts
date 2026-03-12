@@ -4,6 +4,7 @@ import { runCodexMcpServerCommand } from "./commands/codex-mcp-server.js";
 import { runDoctorCommand } from "./commands/doctor.js";
 import { runInstallCommand } from "./commands/install.js";
 import { runRepairCommand } from "./commands/repair.js";
+import { runUpgradeCommand } from "./commands/upgrade.js";
 import { runDisableCommand } from "./commands/disable.js";
 import { runInspectCommand } from "./commands/inspect.js";
 import { runRememberCommand } from "./commands/remember.js";
@@ -28,6 +29,9 @@ const main = async (): Promise<void> => {
     case "repair":
       runRepairCommand(args[0]);
       break;
+    case "upgrade":
+      runUpgradeCommand(args[0]);
+      break;
     case "stats":
       runStatsCommand();
       break;
@@ -42,7 +46,7 @@ const main = async (): Promise<void> => {
       break;
     default:
       console.log(
-        "Usage: ee <install openclaw|claude-code|codex|repair openclaw|claude-hook|codex-mcp-server|doctor [claude-code|codex]|stats|inspect|disable|remember>"
+        "Usage: ee <install openclaw|claude-code|codex|upgrade openclaw|claude-code|codex|repair openclaw|claude-hook|codex-mcp-server|doctor [claude-code|codex]|stats|inspect|disable|remember>"
       );
   }
 };

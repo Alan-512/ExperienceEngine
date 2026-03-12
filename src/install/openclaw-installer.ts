@@ -16,12 +16,14 @@ import {
   type OpenClawCommand,
   type OpenClawCommandRunner
 } from "./openclaw-cli.js";
+import { buildVersionStatus, readCurrentPackageVersion } from "../version/package-version.js";
 
 export type OpenClawInstallReport = {
   adapter: "openclaw";
   installed: true;
   paths: ResolvedPathInfo;
   packageRoot: string;
+  installedVersion: string;
   hostWiring: {
     wired: boolean;
     commands: OpenClawCommand[];
@@ -205,6 +207,7 @@ export const installOpenClawAdapter = (options: InstallerOptions = {}): OpenClaw
     homeDir: options.homeDir
   });
   const packageRoot = resolveExperienceEnginePackageRoot();
+  const installedVersion = readCurrentPackageVersion(packageRoot);
   const pluginConfig = {
     dataDir: paths.dataDir,
     sqlitePath: paths.sqlitePath,
@@ -226,6 +229,7 @@ export const installOpenClawAdapter = (options: InstallerOptions = {}): OpenClaw
   const payload = {
     adapter: "openclaw",
     installedAt: new Date().toISOString(),
+    installedVersion,
     packageRoot,
     installMode: installMode === "update" ? "updated-plugin" : "copied-plugin",
     hostWiring: {
@@ -242,6 +246,7 @@ export const installOpenClawAdapter = (options: InstallerOptions = {}): OpenClaw
     installed: true,
     paths,
     packageRoot,
+    installedVersion,
     hostWiring: {
       wired: true,
       commands,
@@ -254,6 +259,7 @@ export const installOpenClawAdapter = (options: InstallerOptions = {}): OpenClaw
 type PersistedInstallState = {
   adapter: string;
   installedAt: string;
+  installedVersion?: string;
   packageRoot?: string;
   installMode?: string;
   hostWiring?: {
@@ -328,6 +334,7 @@ export const inspectOpenClawInstall = (options: InstallerOptions = {}) => {
   return {
     adapter: "openclaw" as const,
     installed: paths.usedInstallState,
+    versionStatus: buildVersionStatus(paths.usedInstallState, state?.installedVersion),
     pathMode: paths.mode,
     activeHome: paths.activeHome,
     sqlitePath: paths.sqlitePath,

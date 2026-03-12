@@ -13,6 +13,10 @@ export const runDoctorCommand = (target?: string): void => {
       {
         adapter: status.adapter,
         installed: status.installed,
+        recorded_version: status.versionStatus.recordedVersion ?? "",
+        current_version: status.versionStatus.currentVersion,
+        version_state: status.versionStatus.state,
+        upgrade_available: status.versionStatus.updateAvailable,
         project_dir: status.projectDir,
         settings_path: status.settingsPath,
         prompt_hook: status.hooksPresent.userPromptSubmit,
@@ -22,6 +26,9 @@ export const runDoctorCommand = (target?: string): void => {
         capture_dir: status.captureDir
       }
     ]);
+    if (status.versionStatus.updateAvailable) {
+      console.log("Recommended next step: ee upgrade claude-code");
+    }
     return;
   }
 
@@ -31,6 +38,10 @@ export const runDoctorCommand = (target?: string): void => {
       {
         adapter: status.adapter,
         installed: status.installed,
+        recorded_version: status.versionStatus.recordedVersion ?? "",
+        current_version: status.versionStatus.currentVersion,
+        version_state: status.versionStatus.state,
+        upgrade_available: status.versionStatus.updateAvailable,
         server_name: status.serverName,
         host_wired: status.hostWiring.wired,
         host_enabled: status.hostWiring.enabled,
@@ -39,6 +50,9 @@ export const runDoctorCommand = (target?: string): void => {
         capture_dir: status.captureDir
       }
     ]);
+    if (status.versionStatus.updateAvailable) {
+      console.log("Recommended next step: ee upgrade codex");
+    }
     return;
   }
 
@@ -48,6 +62,10 @@ export const runDoctorCommand = (target?: string): void => {
     {
       adapter: status.adapter,
       installed: status.installed,
+      recorded_version: status.versionStatus.recordedVersion ?? "",
+      current_version: status.versionStatus.currentVersion,
+      version_state: status.versionStatus.state,
+      upgrade_available: status.versionStatus.updateAvailable,
       host_wired: status.hostWiring.wired,
       host_status: status.hostState.status ?? "",
       host_enabled: status.hostState.enabled ?? false,
@@ -90,5 +108,9 @@ export const runDoctorCommand = (target?: string): void => {
   const repairHint = getOpenClawRepairHint(status);
   if (repairHint) {
     console.log(`Recommended next step: ${repairHint}`);
+  }
+
+  if (status.versionStatus.updateAvailable) {
+    console.log("Recommended next step: ee upgrade openclaw");
   }
 };

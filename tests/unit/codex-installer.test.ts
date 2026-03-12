@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { inspectCodexInstall, installCodexAdapter } from "../../src/install/codex-installer.js";
+import { readCurrentPackageVersion } from "../../src/version/package-version.js";
 
 const tempDirs: string[] = [];
 
@@ -22,6 +23,8 @@ afterEach(() => {
 });
 
 describe("Codex installer", () => {
+  const currentVersion = readCurrentPackageVersion();
+
   it("writes install state and registers the MCP server", () => {
     const homeDir = makeTempDir();
     const commands: string[] = [];
@@ -57,11 +60,13 @@ describe("Codex installer", () => {
 
     const payload = JSON.parse(readFileSync(report.paths.installStatePath, "utf8")) as {
       adapter: string;
+      installedVersion: string;
       serverName: string;
       hostWiring: { wired: boolean };
     };
 
     expect(payload.adapter).toBe("codex");
+    expect(payload.installedVersion).toBe(report.installedVersion);
     expect(payload.serverName).toBe("experienceengine");
     expect(payload.hostWiring.wired).toBe(true);
   });
@@ -149,6 +154,8 @@ describe("Codex installer", () => {
     });
 
     expect(status.installed).toBe(true);
+    expect(status.versionStatus.recordedVersion).toBe(currentVersion);
+    expect(status.versionStatus.state).toBe("current");
     expect(status.hostWiring.wired).toBe(true);
     expect(status.hostWiring.transport).toBe("stdio");
   });
