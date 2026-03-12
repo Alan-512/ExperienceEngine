@@ -3,7 +3,12 @@ import { dirname } from "node:path";
 import { resolveExperienceEnginePaths, resolveProductStateDir, type ResolvedPathInfo } from "../config/path-resolver.js";
 import {
   buildOpenClawInstallCommands,
+  buildOpenClawConfigGetCommand,
+  buildOpenClawInfoCommand,
+  parseOpenClawPluginEntryConfig,
+  parseOpenClawPluginInfo,
   resolveExperienceEnginePackageRoot,
+  runOpenClawCommand,
   runOpenClawCommands,
   type OpenClawCommand,
   type OpenClawCommandRunner
@@ -30,6 +35,17 @@ type InstallerOptions = {
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
   runner?: OpenClawCommandRunner;
+};
+
+type HostState = {
+  status?: string;
+  error?: string;
+  warnings: string[];
+  sourcePath?: string;
+  installPath?: string;
+  enabled?: boolean;
+  configMatches: boolean;
+  liveConfig?: Record<string, unknown>;
 };
 
 export const installOpenClawAdapter = (options: InstallerOptions = {}): OpenClawInstallReport => {
@@ -111,6 +127,49 @@ export const inspectOpenClawInstall = (options: InstallerOptions = {}) => {
     homeDir: options.homeDir
   });
   const state = readInstallState(paths.installStatePath);
+  const expectedConfig = state
+    ? {
+        dataDir: state.dataDir,
+        sqlitePath: state.sqlitePath,
+        captureDir: state.captureDir
+      }
+    : undefined;
+
+  let hostState: HostState = {
+    warnings: [],
+    configMatches: false
+  };
+
+  try {
+    const infoOutput = runOpenClawCommand(buildOpenClawInfoCommand("experienceengine"), options.runner);
+    const configOutput = runOpenClawCommand(buildOpenClawConfigGetCommand("experienceengine"), options.runner);
+    const info = parseOpenClawPluginInfo(infoOutput);
+    const config = parseOpenClawPluginEntryConfig(configOutput);
+    const liveConfig = config.entry?.config;
+    const expected = expectedConfig;
+
+    hostState = {
+      status: info.status,
+      error: info.error,
+      warnings: [...info.warnings, ...config.warnings],
+      sourcePath: info.sourcePath,
+      installPath: info.installPath,
+      enabled: config.entry?.enabled,
+      liveConfig,
+      configMatches:
+        Boolean(expected) &&
+        Boolean(liveConfig) &&
+        liveConfig?.dataDir === expected?.dataDir &&
+        liveConfig?.sqlitePath === expected?.sqlitePath &&
+        liveConfig?.captureDir === expected?.captureDir
+    };
+  } catch (error) {
+    hostState = {
+      warnings: [],
+      configMatches: false,
+      error: error instanceof Error ? error.message : String(error)
+    };
+  }
 
   return {
     adapter: "openclaw" as const,
@@ -125,6 +184,7 @@ export const inspectOpenClawInstall = (options: InstallerOptions = {}) => {
     hostWiring: {
       wired: state?.hostWiring?.wired ?? false,
       restartRecommended: state?.hostWiring?.restartRecommended ?? false
-    }
+    },
+    hostState
   };
 };

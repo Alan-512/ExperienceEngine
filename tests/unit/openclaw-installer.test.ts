@@ -59,7 +59,12 @@ describe("OpenClaw installer", () => {
       }
     });
 
-    const status = inspectOpenClawInstall({ homeDir });
+    const status = inspectOpenClawInstall({
+      homeDir,
+      runner() {
+        return "";
+      }
+    });
 
     expect(status.installed).toBe(true);
     expect(status.pathMode).toBe("product");
@@ -80,7 +85,12 @@ describe("OpenClaw installer", () => {
       })
     ).toThrow("openclaw not found");
 
-    const status = inspectOpenClawInstall({ homeDir });
+    const status = inspectOpenClawInstall({
+      homeDir,
+      runner() {
+        return "";
+      }
+    });
     expect(status.installed).toBe(false);
     expect(status.hostWiring.wired).toBe(false);
   });
