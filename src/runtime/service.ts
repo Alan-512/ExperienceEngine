@@ -172,10 +172,12 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     const sessionId = context.sessionId ?? "global";
     const session = this.getSession(sessionId);
     const mergedContext = mergeContext(session.context, context);
+    const injectedNodeIds =
+      session.injectedNodeIds.length > 0 ? session.injectedNodeIds : mergedContext.injectedNodeIds ?? [];
     const input = buildExperienceInput(
       {
         ...mergedContext,
-        injectedNodeIds: session.injectedNodeIds
+        injectedNodeIds
       },
       session.toolEvents
     );

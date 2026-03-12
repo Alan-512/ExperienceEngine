@@ -90,6 +90,40 @@ const readPathString = (
   return undefined;
 };
 
+const readPathBoolean = (
+  record: UnknownRecord | undefined,
+  paths: string[][]
+): boolean | undefined => {
+  if (!record) {
+    return undefined;
+  }
+
+  for (const path of paths) {
+    let current: unknown = record;
+    let resolved: boolean | undefined;
+
+    for (let index = 0; index < path.length; index += 1) {
+      const key = path[index];
+      const next =
+        index === 0 && current && typeof current === "object" && !Array.isArray(current)
+          ? (current as UnknownRecord)[key]
+          : asRecord(current)?.[key];
+
+      if (index === path.length - 1) {
+        resolved = typeof next === "boolean" ? next : undefined;
+      } else {
+        current = next;
+      }
+    }
+
+    if (resolved !== undefined) {
+      return resolved;
+    }
+  }
+
+  return undefined;
+};
+
 const truncate = (value: string | undefined, limit = 400): string | undefined => {
   if (!value) {
     return undefined;
@@ -113,7 +147,56 @@ const resolveToolStatus = (payload: UnknownRecord | undefined): ClaudeNormalized
     return "failure";
   }
 
+  if (["unknown"].includes(normalized)) {
+    return "unknown";
+  }
+
   return "unknown";
+};
+
+const resolveToolOutputSummary = (payload: UnknownRecord | undefined): string | undefined => {
+  const direct = readString(payload, ["tool_output", "output", "tool_response"]);
+  if (direct) {
+    return truncate(direct);
+  }
+
+  const pathValue = readPathString(payload, [
+    ["payload", "tool_result", "output"],
+    ["payload", "tool_result", "content"],
+    ["payload", "tool_result", "response"],
+    ["payload", "tool_response", "stdout"],
+    ["payload", "tool_response", "stderr"],
+    ["tool_result", "output"],
+    ["tool_result", "content"],
+    ["tool_result", "response"],
+    ["tool_response", "stdout"],
+    ["tool_response", "stderr"]
+  ]);
+
+  return truncate(pathValue);
+};
+
+const resolveFallbackToolStatus = (
+  payload: UnknownRecord | undefined
+): ClaudeNormalizedEvent["toolStatus"] => {
+  const interrupted = readPathBoolean(payload, [
+    ["payload", "tool_response", "interrupted"],
+    ["tool_response", "interrupted"]
+  ]);
+
+  if (interrupted === true) {
+    return "failure";
+  }
+
+  const hasToolResponse =
+    asRecord(payload?.tool_response) !== undefined ||
+    asRecord(asRecord(payload?.payload)?.tool_response) !== undefined;
+
+  if (hasToolResponse) {
+    return "success";
+  }
+
+  return undefined;
 };
 
 export const normalizeClaudeHookPayload = (payload: unknown): ClaudeNormalizedEvent => {
@@ -144,17 +227,7 @@ export const normalizeClaudeHookPayload = (payload: unknown): ClaudeNormalizedEv
           ["tool_input", "command"]
         ])
     ),
-    toolOutputSummary: truncate(
-      readString(record, ["tool_output", "output", "tool_response"]) ??
-        readPathString(record, [
-          ["payload", "tool_result", "output"],
-          ["payload", "tool_result", "content"],
-          ["payload", "tool_result", "response"],
-          ["tool_result", "output"],
-          ["tool_result", "content"],
-          ["tool_result", "response"]
-        ])
-    ),
-    toolStatus: resolveToolStatus(record)
+    toolOutputSummary: resolveToolOutputSummary(record),
+    toolStatus: resolveToolStatus(record) ?? resolveFallbackToolStatus(record)
   };
 };

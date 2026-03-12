@@ -50,7 +50,7 @@ const readJsonFile = <T>(filePath: string): T | null => {
 const shellQuote = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
 
 const buildClaudeHookCommand = (packageRoot: string): string =>
-  `node ${shellQuote(join(packageRoot, "dist/cli/index.js"))} claude-hook`;
+  `node --no-warnings ${shellQuote(join(packageRoot, "dist/cli/index.js"))} claude-hook`;
 
 const upsertHookMatcher = (
   hooks: Record<string, ClaudeHookMatcher[]>,

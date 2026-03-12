@@ -24,8 +24,37 @@ type ClaudeHookOptions = {
   homeDir?: string;
 };
 
+export type ClaudeHookCommandResult = {
+  capturePath: string | null;
+  hookOutput?: string;
+};
+
 const sanitizeSegment = (value: string | undefined, fallback: string): string =>
   (value ?? fallback).replace(/[^a-zA-Z0-9_.-]+/g, "_");
+
+const createClaudeRuntime = (options: ClaudeHookOptions = {}): ExperienceRuntimeService => {
+  const paths = resolveExperienceEnginePaths({
+    adapter: "claude-code",
+    env: options.env ?? process.env,
+    homeDir: options.homeDir
+  });
+
+  return new ExperienceRuntimeService(
+    loadConfig({
+      dataDir: paths.dataDir,
+      sqlitePath: paths.sqlitePath,
+      captureDir: paths.captureDir
+    })
+  );
+};
+
+const buildClaudeHookOutput = (additionalContext: string): string =>
+  JSON.stringify({
+    hookSpecificOutput: {
+      hookEventName: "UserPromptSubmit",
+      additionalContext
+    }
+  });
 
 export const persistClaudeHookCapture = (
   rawInput: string,
@@ -77,10 +106,10 @@ export const persistClaudeHookCapture = (
 export const processClaudeHookPayload = async (
   rawInput: string,
   options: ClaudeHookOptions = {}
-): Promise<string | null> => {
+): Promise<ClaudeHookCommandResult> => {
   const capturePath = persistClaudeHookCapture(rawInput, options);
   if (!capturePath) {
-    return null;
+    return { capturePath: null };
   }
 
   let payload: unknown = null;
@@ -95,7 +124,21 @@ export const processClaudeHookPayload = async (
 
   const promptContext = toClaudePromptContext(event);
   if (promptContext) {
-    rememberClaudePromptContext(promptContext, options);
+    const runtime = createClaudeRuntime(options);
+    const promptResult = await runtime.beforePromptBuild(promptContext);
+    const rememberedContext = {
+      ...promptContext,
+      injectedNodeIds: promptResult.input.injected_node_ids
+    };
+    rememberClaudePromptContext(rememberedContext, options);
+
+    return {
+      capturePath,
+      hookOutput:
+        promptResult.text && promptResult.mode !== "skip"
+          ? buildClaudeHookOutput(promptResult.text)
+          : undefined
+    };
   }
 
   const toolResult = toClaudeToolResult(event);
@@ -106,20 +149,7 @@ export const processClaudeHookPayload = async (
   if (event.eventName === "SessionEnd" && event.sessionId) {
     const stored = loadClaudeSession(event.sessionId, options);
     if (stored?.promptContext) {
-      const paths = resolveExperienceEnginePaths({
-        adapter: "claude-code",
-        env: options.env ?? process.env,
-        homeDir: options.homeDir
-      });
-      const runtime = new ExperienceRuntimeService(
-        loadConfig({
-          dataDir: paths.dataDir,
-          sqlitePath: paths.sqlitePath,
-          captureDir: paths.captureDir
-        })
-      );
-
-      await runtime.beforePromptBuild(stored.promptContext);
+      const runtime = createClaudeRuntime(options);
       for (const pendingToolResult of stored.toolResults) {
         await runtime.persistToolResult(pendingToolResult);
       }
@@ -129,10 +159,13 @@ export const processClaudeHookPayload = async (
     clearClaudeSession(event.sessionId, options);
   }
 
-  return capturePath;
+  return { capturePath };
 };
 
 export const runClaudeHookCommand = async (): Promise<void> => {
   const rawInput = readFileSync(0, "utf8");
-  await processClaudeHookPayload(rawInput);
+  const result = await processClaudeHookPayload(rawInput);
+  if (result.hookOutput) {
+    process.stdout.write(`${result.hookOutput}\n`);
+  }
 };

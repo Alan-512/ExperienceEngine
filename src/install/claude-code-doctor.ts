@@ -21,7 +21,7 @@ type InstallerOptions = {
 const shellQuote = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
 
 const buildExpectedCommand = (packageRoot: string): string =>
-  `node ${shellQuote(join(packageRoot, "dist/cli/index.js"))} claude-hook`;
+  `node --no-warnings ${shellQuote(join(packageRoot, "dist/cli/index.js"))} claude-hook`;
 
 const hasHookCommand = (
   settings: ClaudeSettings | null,

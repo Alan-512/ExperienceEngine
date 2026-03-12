@@ -6,9 +6,11 @@ import { processClaudeHookPayload, persistClaudeHookCapture } from "../../src/cl
 import { persistClaudeNormalizedEvent } from "../../src/adapters/claude-code/event-store.js";
 import { normalizeClaudeHookPayload } from "../../src/adapters/claude-code/hook-normalizer.js";
 import { loadClaudeSession } from "../../src/adapters/claude-code/session-store.js";
-import { openDatabase } from "../../src/store/sqlite/db.js";
-import { InputRecordRepository } from "../../src/store/sqlite/repositories/input-record-repo.js";
+import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
+import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
 import { loadConfig } from "../../src/config/load-config.js";
+import { resolveScope } from "../../src/input/scope-resolver.js";
+import { nowIso } from "../../src/utils/clock.js";
 
 const tempDirs: string[] = [];
 
@@ -139,6 +141,105 @@ describe("Claude hook capture", () => {
     expect(row?.task_summary).toBe("Fix the failing auth test");
     expect(row?.outcome_signal).toBe("success");
     expect(row?.evidence_json).toContain("Bash: success: auth test now passes");
+  });
+
+  it("returns Claude additionalContext hook output for prompt-time injections and persists injected node ids", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    const scope = resolveScope("/repo");
+    const timestamp = nowIso();
+
+    nodeRepo.upsert({
+      id: "node_claude_prompt_injection",
+      node_type: "strategy",
+      scope_id: scope.scope_id,
+      task_type: "test_debug",
+      trigger_pattern: "Fix the failing auth test",
+      applicability_notes: "Use the same repo and test scope",
+      env_signature: undefined,
+      compact_hint: "Run the failing test before editing and verify after the fix.",
+      goal: "Stabilize the failing auth test",
+      recommended_steps: ["Run the failing test", "Apply the minimal fix", "Re-run the test"],
+      avoid_steps: [],
+      fallback_steps: [],
+      success_signal: "The targeted test passes",
+      stop_condition: undefined,
+      escalation_condition: undefined,
+      evidence_summary: "Recovered the same failing auth test in a prior task.",
+      source_kind: "system_derived",
+      state: "candidate",
+      usage_count: 0,
+      helped_count: 0,
+      harmed_count: 0,
+      support_count: 1,
+      created_at: timestamp,
+      updated_at: timestamp
+    });
+
+    const result = await processClaudeHookPayload(
+      JSON.stringify({
+        hook_event_name: "UserPromptSubmit",
+        session_id: "session-injected-prompt",
+        cwd: "/repo",
+        prompt: "Fix the failing auth test"
+      }),
+      { homeDir, env }
+    );
+
+    expect(result.hookOutput).toBeTruthy();
+    expect(JSON.parse(result.hookOutput ?? "{}")).toEqual({
+      hookSpecificOutput: {
+        hookEventName: "UserPromptSubmit",
+        additionalContext: expect.stringContaining(
+          "Run the failing test before editing and verify after the fix."
+        )
+      }
+    });
+
+    const stored = loadClaudeSession("session-injected-prompt", { homeDir, env });
+    expect(stored?.promptContext?.injectedNodeIds).toEqual(["node_claude_prompt_injection"]);
+
+    await processClaudeHookPayload(
+      JSON.stringify({
+        hook_event_name: "SessionEnd",
+        session_id: "session-injected-prompt"
+      }),
+      { homeDir, env }
+    );
+
+    const row = db
+      .prepare("SELECT injected_node_ids_json FROM experience_input_records WHERE session_id = ?")
+      .get("session-injected-prompt") as { injected_node_ids_json: string } | undefined;
+
+    expect(JSON.parse(row?.injected_node_ids_json ?? "[]")).toEqual(["node_claude_prompt_injection"]);
+  });
+
+  it("replays a real captured Claude tool-session fixture into evidence", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+    const fixture = JSON.parse(
+      readFileSync(resolve("tests/fixtures/claude-code/scenario-real-tool-session.json"), "utf8")
+    ) as { events: Array<unknown> };
+
+    for (const event of fixture.events) {
+      await processClaudeHookPayload(JSON.stringify(event), {
+        homeDir,
+        env
+      });
+    }
+
+    const db = openDatabase(loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME }));
+    const row = db
+      .prepare("SELECT evidence_json FROM experience_input_records WHERE session_id = ?")
+      .get("real-session-tool-sequence") as { evidence_json: string } | undefined;
+
+    expect(JSON.parse(row?.evidence_json ?? "[]")).toContain(
+      "Bash: success: /tmp/example-claude-tool-project\n1"
+    );
   });
 
   it("replays a real captured Claude UserPromptSubmit payload fixture", async () => {

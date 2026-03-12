@@ -1,0 +1,57 @@
+{
+  "source": {
+    "runtime": "claude-code",
+    "version": "2.1.29",
+    "captured_from": "real-local-cli",
+    "captured_at": "2026-03-12T09:16:01.637Z"
+  },
+  "events": [
+    {
+      "session_id": "real-session-tool-sequence",
+      "transcript_path": "/home/example/.claude/projects/example/real-session-tool-sequence.jsonl",
+      "cwd": "/tmp/example-claude-tool-project",
+      "permission_mode": "bypassPermissions",
+      "hook_event_name": "UserPromptSubmit",
+      "prompt": "Use Bash to print the current working directory, then count how many entries are in it, and answer with the path and count only."
+    },
+    {
+      "session_id": "real-session-tool-sequence",
+      "transcript_path": "/home/example/.claude/projects/example/real-session-tool-sequence.jsonl",
+      "cwd": "/tmp/example-claude-tool-project",
+      "permission_mode": "bypassPermissions",
+      "hook_event_name": "PreToolUse",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "pwd && ls -A | wc -l",
+        "description": "Print current directory and count entries"
+      },
+      "tool_use_id": "call_example_claude_tool_use"
+    },
+    {
+      "session_id": "real-session-tool-sequence",
+      "transcript_path": "/home/example/.claude/projects/example/real-session-tool-sequence.jsonl",
+      "cwd": "/tmp/example-claude-tool-project",
+      "permission_mode": "bypassPermissions",
+      "hook_event_name": "PostToolUse",
+      "tool_name": "Bash",
+      "tool_input": {
+        "command": "pwd && ls -A | wc -l",
+        "description": "Print current directory and count entries"
+      },
+      "tool_response": {
+        "stdout": "/tmp/example-claude-tool-project\n1",
+        "stderr": "",
+        "interrupted": false,
+        "isImage": false
+      },
+      "tool_use_id": "call_example_claude_tool_use"
+    },
+    {
+      "session_id": "real-session-tool-sequence",
+      "transcript_path": "/home/example/.claude/projects/example/real-session-tool-sequence.jsonl",
+      "cwd": "/tmp/example-claude-tool-project",
+      "hook_event_name": "SessionEnd",
+      "reason": "other"
+    }
+  ]
+}

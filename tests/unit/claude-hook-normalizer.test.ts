@@ -40,4 +40,25 @@ describe("Claude hook normalizer", () => {
     expect(normalized.toolOutputSummary).toBe("1 failed, 10 passed");
     expect(normalized.toolStatus).toBe("failure");
   });
+
+  it("extracts output and success status from a real-style PostToolUse payload", () => {
+    const normalized = normalizeClaudeHookPayload({
+      hook_event_name: "PostToolUse",
+      session_id: "session-real",
+      tool_name: "Bash",
+      tool_input: {
+        command: "pwd && ls -A | wc -l"
+      },
+      tool_response: {
+        stdout: "/tmp/example\n1",
+        stderr: "",
+        interrupted: false,
+        isImage: false
+      }
+    });
+
+    expect(normalized.toolInputSummary).toBe("pwd && ls -A | wc -l");
+    expect(normalized.toolOutputSummary).toBe("/tmp/example\n1");
+    expect(normalized.toolStatus).toBe("success");
+  });
 });

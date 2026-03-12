@@ -43,6 +43,7 @@ describe("Claude Code installer", () => {
     expect(settings.hooks?.PreToolUse?.[0]?.matcher).toBe("*");
     expect(settings.hooks?.PostToolUse?.[0]?.matcher).toBe("*");
     expect(settings.hooks?.SessionEnd).toHaveLength(1);
+    expect(settings.hooks?.UserPromptSubmit?.[0]?.hooks[0]?.command).toContain("node --no-warnings");
     expect(settings.hooks?.UserPromptSubmit?.[0]?.hooks[0]?.command).toContain("claude-hook");
     expect(installState.adapter).toBe("claude-code");
     expect(installState.settingsPath).toBe(settingsPath);
