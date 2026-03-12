@@ -143,7 +143,12 @@ describe("OpenClaw plugin runtime", () => {
     const handlers = new Map<string, Handler>();
 
     process.env.HOME = homeDir;
-    const installReport = installOpenClawAdapter({ homeDir });
+    const installReport = installOpenClawAdapter({
+      homeDir,
+      runner() {
+        return;
+      }
+    });
 
     try {
       plugin.register({

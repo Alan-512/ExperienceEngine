@@ -6,7 +6,10 @@ export const runDoctorCommand = (): void => {
     {
       adapter: status.adapter,
       installed: status.installed,
+      host_wired: status.hostWiring.wired,
+      restart_recommended: status.hostWiring.restartRecommended,
       path_mode: status.pathMode,
+      package_root: status.packageRoot ?? "",
       active_home: status.activeHome,
       sqlite_path: status.sqlitePath,
       capture_dir: status.captureDir
