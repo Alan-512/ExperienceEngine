@@ -2,7 +2,16 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { normalizeClaudeHookPayload } from "../../adapters/claude-code/hook-normalizer.js";
 import { persistClaudeNormalizedEvent } from "../../adapters/claude-code/event-store.js";
+import {
+  appendClaudeToolResult,
+  clearClaudeSession,
+  loadClaudeSession,
+  rememberClaudePromptContext
+} from "../../adapters/claude-code/session-store.js";
+import { toClaudePromptContext, toClaudeToolResult } from "../../adapters/claude-code/runtime-projection.js";
+import { loadConfig } from "../../config/load-config.js";
 import { resolveExperienceEnginePaths } from "../../config/path-resolver.js";
+import { ExperienceRuntimeService } from "../../runtime/service.js";
 
 type ClaudeHookPayload = {
   session_id?: string;
@@ -65,11 +74,13 @@ export const persistClaudeHookCapture = (
   return capturePath;
 };
 
-export const runClaudeHookCommand = (): void => {
-  const rawInput = readFileSync(0, "utf8");
-  const capturePath = persistClaudeHookCapture(rawInput);
+export const processClaudeHookPayload = async (
+  rawInput: string,
+  options: ClaudeHookOptions = {}
+): Promise<string | null> => {
+  const capturePath = persistClaudeHookCapture(rawInput, options);
   if (!capturePath) {
-    return;
+    return null;
   }
 
   let payload: unknown = null;
@@ -80,5 +91,48 @@ export const runClaudeHookCommand = (): void => {
   }
 
   const event = normalizeClaudeHookPayload(payload);
-  persistClaudeNormalizedEvent(event);
+  persistClaudeNormalizedEvent(event, options);
+
+  const promptContext = toClaudePromptContext(event);
+  if (promptContext) {
+    rememberClaudePromptContext(promptContext, options);
+  }
+
+  const toolResult = toClaudeToolResult(event);
+  if (toolResult) {
+    appendClaudeToolResult(toolResult, options);
+  }
+
+  if (event.eventName === "SessionEnd" && event.sessionId) {
+    const stored = loadClaudeSession(event.sessionId, options);
+    if (stored?.promptContext) {
+      const paths = resolveExperienceEnginePaths({
+        adapter: "claude-code",
+        env: options.env ?? {},
+        homeDir: options.homeDir
+      });
+      const runtime = new ExperienceRuntimeService(
+        loadConfig({
+          dataDir: paths.dataDir,
+          sqlitePath: paths.sqlitePath,
+          captureDir: paths.captureDir
+        })
+      );
+
+      await runtime.beforePromptBuild(stored.promptContext);
+      for (const pendingToolResult of stored.toolResults) {
+        await runtime.persistToolResult(pendingToolResult);
+      }
+      await runtime.finalizeTask(stored.promptContext);
+    }
+
+    clearClaudeSession(event.sessionId, options);
+  }
+
+  return capturePath;
+};
+
+export const runClaudeHookCommand = async (): Promise<void> => {
+  const rawInput = readFileSync(0, "utf8");
+  await processClaudeHookPayload(rawInput);
 };

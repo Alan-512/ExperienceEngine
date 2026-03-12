@@ -1,10 +1,14 @@
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
-import { persistClaudeHookCapture } from "../../src/cli/commands/claude-hook.js";
+import { processClaudeHookPayload, persistClaudeHookCapture } from "../../src/cli/commands/claude-hook.js";
 import { persistClaudeNormalizedEvent } from "../../src/adapters/claude-code/event-store.js";
 import { normalizeClaudeHookPayload } from "../../src/adapters/claude-code/hook-normalizer.js";
+import { loadClaudeSession } from "../../src/adapters/claude-code/session-store.js";
+import { openDatabase } from "../../src/store/sqlite/db.js";
+import { InputRecordRepository } from "../../src/store/sqlite/repositories/input-record-repo.js";
+import { loadConfig } from "../../src/config/load-config.js";
 
 const tempDirs: string[] = [];
 
@@ -74,5 +78,66 @@ describe("Claude hook capture", () => {
     expect(event.eventName).toBe("SessionEnd");
     expect(event.sessionId).toBe("session-789");
     expect(event.promptText).toBe("done");
+  });
+
+  it("persists session state across prompt and tool hooks, then replays on session end", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+
+    await processClaudeHookPayload(
+      JSON.stringify({
+        hook_event_name: "UserPromptSubmit",
+        session_id: "session-replay",
+        cwd: "/repo",
+        prompt: "Fix the failing auth test"
+      }),
+      { homeDir, env }
+    );
+    await processClaudeHookPayload(
+      JSON.stringify({
+        hook_event_name: "PostToolUse",
+        session_id: "session-replay",
+        tool_name: "Bash",
+        payload: {
+          tool_input: { command: "pnpm test" },
+          tool_result: { output: "auth test now passes" }
+        },
+        status: "success"
+      }),
+      { homeDir, env }
+    );
+
+    const stored = loadClaudeSession("session-replay", { homeDir, env });
+    expect(stored?.promptContext?.taskSummary).toBe("Fix the failing auth test");
+    expect(stored?.toolResults).toHaveLength(1);
+
+    await processClaudeHookPayload(
+      JSON.stringify({
+        hook_event_name: "SessionEnd",
+        session_id: "session-replay"
+      }),
+      { homeDir, env }
+    );
+
+    expect(loadClaudeSession("session-replay", { homeDir, env })).toBeNull();
+
+    const db = openDatabase(loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME },));
+    const row = db
+      .prepare(
+        "SELECT session_id, task_summary, outcome_signal, evidence_json FROM experience_input_records WHERE session_id = ?"
+      )
+      .get("session-replay") as
+      | {
+          session_id: string;
+          task_summary: string;
+          outcome_signal: string;
+          evidence_json: string;
+        }
+      | undefined;
+
+    expect(row?.session_id).toBe("session-replay");
+    expect(row?.task_summary).toBe("Fix the failing auth test");
+    expect(row?.outcome_signal).toBe("success");
+    expect(row?.evidence_json).toContain("Bash: success: auth test now passes");
   });
 });

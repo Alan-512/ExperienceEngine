@@ -8,35 +8,39 @@ import { runInspectCommand } from "./commands/inspect.js";
 import { runRememberCommand } from "./commands/remember.js";
 import { runStatsCommand } from "./commands/stats.js";
 
-const [, , command, ...args] = process.argv;
+const main = async (): Promise<void> => {
+  const [, , command, ...args] = process.argv;
 
-switch (command) {
-  case "install":
-    runInstallCommand(args[0]);
-    break;
-  case "claude-hook":
-    runClaudeHookCommand();
-    break;
-  case "doctor":
-    runDoctorCommand();
-    break;
-  case "repair":
-    runRepairCommand(args[0]);
-    break;
-  case "stats":
-    runStatsCommand();
-    break;
-  case "inspect":
-    runInspectCommand();
-    break;
-  case "disable":
-    runDisableCommand();
-    break;
-  case "remember":
-    runRememberCommand(args.join(" ").trim());
-    break;
-  default:
-    console.log(
-      "Usage: ee <install openclaw|claude-code|repair openclaw|claude-hook|doctor|stats|inspect|disable|remember>"
-    );
-}
+  switch (command) {
+    case "install":
+      runInstallCommand(args[0]);
+      break;
+    case "claude-hook":
+      await runClaudeHookCommand();
+      break;
+    case "doctor":
+      runDoctorCommand();
+      break;
+    case "repair":
+      runRepairCommand(args[0]);
+      break;
+    case "stats":
+      runStatsCommand();
+      break;
+    case "inspect":
+      runInspectCommand();
+      break;
+    case "disable":
+      runDisableCommand();
+      break;
+    case "remember":
+      runRememberCommand(args.join(" ").trim());
+      break;
+    default:
+      console.log(
+        "Usage: ee <install openclaw|claude-code|repair openclaw|claude-hook|doctor|stats|inspect|disable|remember>"
+      );
+  }
+};
+
+await main();
