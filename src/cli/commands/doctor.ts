@@ -1,4 +1,5 @@
 import { inspectClaudeCodeInstall } from "../../install/claude-code-doctor.js";
+import { inspectCodexInstall } from "../../install/codex-installer.js";
 import {
   classifyOpenClawHostWarnings,
   getOpenClawRepairHint,
@@ -18,6 +19,23 @@ export const runDoctorCommand = (target?: string): void => {
         pre_tool_hook: status.hooksPresent.preToolUse,
         post_tool_hook: status.hooksPresent.postToolUse,
         session_end_hook: status.hooksPresent.sessionEnd,
+        capture_dir: status.captureDir
+      }
+    ]);
+    return;
+  }
+
+  if (target === "codex") {
+    const status = inspectCodexInstall();
+    console.table([
+      {
+        adapter: status.adapter,
+        installed: status.installed,
+        server_name: status.serverName,
+        host_wired: status.hostWiring.wired,
+        host_enabled: status.hostWiring.enabled,
+        transport: status.hostWiring.transport ?? "",
+        command: status.hostWiring.command ?? "",
         capture_dir: status.captureDir
       }
     ]);

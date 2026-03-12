@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { runClaudeHookCommand } from "./commands/claude-hook.js";
+import { runCodexMcpServerCommand } from "./commands/codex-mcp-server.js";
 import { runDoctorCommand } from "./commands/doctor.js";
 import { runInstallCommand } from "./commands/install.js";
 import { runRepairCommand } from "./commands/repair.js";
@@ -17,6 +18,9 @@ const main = async (): Promise<void> => {
       break;
     case "claude-hook":
       await runClaudeHookCommand();
+      break;
+    case "codex-mcp-server":
+      await runCodexMcpServerCommand();
       break;
     case "doctor":
       runDoctorCommand(args[0]);
@@ -38,7 +42,7 @@ const main = async (): Promise<void> => {
       break;
     default:
       console.log(
-        "Usage: ee <install openclaw|claude-code|repair openclaw|claude-hook|doctor [claude-code]|stats|inspect|disable|remember>"
+        "Usage: ee <install openclaw|claude-code|codex|repair openclaw|claude-hook|codex-mcp-server|doctor [claude-code|codex]|stats|inspect|disable|remember>"
       );
   }
 };

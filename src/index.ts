@@ -5,6 +5,7 @@ export * from "./config/path-resolver.js";
 export * from "./controller/intervention-controller.js";
 export * from "./feedback/feedback-manager.js";
 export * from "./input/input-adapter.js";
+export * from "./install/codex-installer.js";
 export * from "./install/openclaw-installer.js";
 export * from "./plugin/openclaw-plugin.js";
 export * from "./runtime/service.js";
