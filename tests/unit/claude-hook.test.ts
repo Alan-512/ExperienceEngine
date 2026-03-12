@@ -1,5 +1,5 @@
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { processClaudeHookPayload, persistClaudeHookCapture } from "../../src/cli/commands/claude-hook.js";
@@ -139,5 +139,32 @@ describe("Claude hook capture", () => {
     expect(row?.task_summary).toBe("Fix the failing auth test");
     expect(row?.outcome_signal).toBe("success");
     expect(row?.evidence_json).toContain("Bash: success: auth test now passes");
+  });
+
+  it("replays a real captured Claude UserPromptSubmit payload fixture", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+    const fixture = JSON.parse(
+      readFileSync(
+        resolve("tests/fixtures/claude-code/scenario-real-user-prompt-submit.json"),
+        "utf8"
+      )
+    ) as {
+      events: Array<unknown>;
+    };
+
+    for (const event of fixture.events) {
+      await processClaudeHookPayload(JSON.stringify(event), {
+        homeDir,
+        env
+      });
+    }
+
+    const files = readdirSync(join(homeDir, ".experienceengine", "captures"));
+    expect(files).toHaveLength(1);
+
+    const session = loadClaudeSession("real-session-user-prompt", { homeDir, env });
+    expect(session?.promptContext?.userMessage).toBe("Reply with exactly OK.");
+    expect(session?.promptContext?.cwd).toBe("/tmp/example-claude-project");
   });
 });

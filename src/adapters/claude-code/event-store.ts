@@ -14,7 +14,7 @@ export const persistClaudeNormalizedEvent = (
 ): string => {
   const paths = resolveExperienceEnginePaths({
     adapter: "claude-code",
-    env: options.env ?? {},
+    env: options.env ?? process.env,
     homeDir: options.homeDir
   });
   const stateDir = resolveProductStateDir(paths);

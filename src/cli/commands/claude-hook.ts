@@ -38,7 +38,7 @@ export const persistClaudeHookCapture = (
 
   const paths = resolveExperienceEnginePaths({
     adapter: "claude-code",
-    env: options.env ?? {},
+    env: options.env ?? process.env,
     homeDir: options.homeDir
   });
 
@@ -108,7 +108,7 @@ export const processClaudeHookPayload = async (
     if (stored?.promptContext) {
       const paths = resolveExperienceEnginePaths({
         adapter: "claude-code",
-        env: options.env ?? {},
+        env: options.env ?? process.env,
         homeDir: options.homeDir
       });
       const runtime = new ExperienceRuntimeService(

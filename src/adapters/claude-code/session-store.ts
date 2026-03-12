@@ -20,7 +20,7 @@ const sanitizeSessionId = (sessionId: string): string =>
 const resolveSessionDir = (options: SessionStoreOptions = {}): string => {
   const paths = resolveExperienceEnginePaths({
     adapter: "claude-code",
-    env: options.env ?? {},
+    env: options.env ?? process.env,
     homeDir: options.homeDir
   });
   return join(resolveProductStateDir(paths), "sessions");

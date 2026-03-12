@@ -74,7 +74,7 @@ export const resolveExperienceEnginePaths = (options: ResolvePathOptions = {}): 
 
   const mode: PathMode = hasInstallState
     ? "product"
-    : hasCompatibilityData
+    : adapter === "openclaw" && hasCompatibilityData
       ? "openclaw-compat"
       : "product";
   const activeHome = mode === "openclaw-compat" ? compatibilityHome : productHome;

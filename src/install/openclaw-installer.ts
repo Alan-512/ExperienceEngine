@@ -201,7 +201,7 @@ const readOpenClawPluginsConfig = (runner?: OpenClawCommandRunner) => {
 export const installOpenClawAdapter = (options: InstallerOptions = {}): OpenClawInstallReport => {
   const paths = resolveExperienceEnginePaths({
     adapter: "openclaw",
-    env: options.env ?? {},
+    env: options.env ?? process.env,
     homeDir: options.homeDir
   });
   const packageRoot = resolveExperienceEnginePackageRoot();

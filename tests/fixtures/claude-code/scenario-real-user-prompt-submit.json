@@ -1,0 +1,18 @@
+{
+  "source": {
+    "runtime": "claude-code",
+    "version": "2.1.29",
+    "captured_from": "real-local-cli",
+    "captured_at": "2026-03-12T08:31:35.691Z"
+  },
+  "events": [
+    {
+      "session_id": "real-session-user-prompt",
+      "transcript_path": "/home/example/.claude/projects/example/real-session-user-prompt.jsonl",
+      "cwd": "/tmp/example-claude-project",
+      "permission_mode": "default",
+      "hook_event_name": "UserPromptSubmit",
+      "prompt": "Reply with exactly OK."
+    }
+  ]
+}

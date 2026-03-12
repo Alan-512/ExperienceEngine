@@ -94,7 +94,7 @@ const mergeExperienceEngineHooks = (settings: ClaudeSettings, packageRoot: strin
 export const installClaudeCodeAdapter = (options: InstallerOptions = {}): ClaudeCodeInstallReport => {
   const paths = resolveExperienceEnginePaths({
     adapter: "claude-code",
-    env: options.env ?? {},
+    env: options.env ?? process.env,
     homeDir: options.homeDir
   });
   const packageRoot = resolveExperienceEnginePackageRoot();

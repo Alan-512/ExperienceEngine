@@ -64,6 +64,12 @@ describe("resolveExperienceEnginePaths", () => {
 
   it("isolates non-openclaw adapter captures under the adapter state directory", () => {
     const homeDir = makeTempDir();
+    mkdirSync(join(homeDir, ".openclaw", "experienceengine", "sqlite"), { recursive: true });
+    writeFileSync(
+      join(homeDir, ".openclaw", "experienceengine", "sqlite", "experienceengine.db"),
+      "",
+      "utf8"
+    );
 
     const paths = resolveExperienceEnginePaths({
       homeDir,
@@ -71,6 +77,7 @@ describe("resolveExperienceEnginePaths", () => {
     });
 
     expect(paths.mode).toBe("product");
+    expect(paths.activeHome).toBe(join(homeDir, ".experienceengine"));
     expect(paths.captureDir).toBe(
       join(homeDir, ".experienceengine", "adapters", "claude-code", "captures")
     );
