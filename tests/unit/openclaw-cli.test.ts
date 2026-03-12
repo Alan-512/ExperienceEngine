@@ -6,7 +6,7 @@ import {
 
 describe("OpenClaw CLI install wiring", () => {
   it("builds the documented link-enable-config command sequence", () => {
-    const commands = buildOpenClawInstallCommands("/tmp/experienceengine", "experienceengine", {
+    const commands = buildOpenClawInstallCommands("/tmp/experienceengine", "experienceengine", "install", {
       dataDir: "/tmp/ee",
       sqlitePath: "/tmp/ee/sqlite/experienceengine.db",
       captureDir: "/tmp/ee/captures"
@@ -41,6 +41,21 @@ describe("OpenClaw CLI install wiring", () => {
     expect(seen).toEqual([
       "openclaw plugins install",
       "openclaw plugins enable experienceengine"
+    ]);
+  });
+
+  it("builds an update command when the plugin already exists", () => {
+    const commands = buildOpenClawInstallCommands("/tmp/experienceengine", "experienceengine", "update", {
+      dataDir: "/tmp/ee",
+      sqlitePath: "/tmp/ee/sqlite/experienceengine.db",
+      captureDir: "/tmp/ee/captures"
+    });
+
+    expect([commands[0].bin, ...commands[0].args]).toEqual([
+      "openclaw",
+      "plugins",
+      "update",
+      "experienceengine"
     ]);
   });
 });

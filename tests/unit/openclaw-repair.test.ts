@@ -86,26 +86,62 @@ describe("OpenClaw repair recommendation", () => {
   it("reuses install wiring for repair", () => {
     const homeDir = makeTempDir();
     const seen: string[] = [];
+    let installReads = 0;
 
     installOpenClawAdapter({
       homeDir,
       runner(command) {
-        seen.push([command.bin, ...command.args].join(" "));
+        const key = [command.bin, ...command.args].join(" ");
+        seen.push(key);
+        if (key === "openclaw config get plugins") {
+          installReads += 1;
+          if (installReads === 1) {
+            return `{
+  "load": {
+    "paths": []
+  },
+  "installs": {
+  }
+}`;
+          }
+          return `{
+  "load": {
+    "paths": []
+  },
+  "installs": {
+  }
+}`;
+        }
         return "";
       }
     });
 
     const repairSeen: string[] = [];
+    let repairReads = 0;
     const report = repairOpenClawAdapter({
       homeDir,
       runner(command) {
-        repairSeen.push([command.bin, ...command.args].join(" "));
+        const key = [command.bin, ...command.args].join(" ");
+        repairSeen.push(key);
+        if (key === "openclaw config get plugins") {
+          repairReads += 1;
+          return `{
+  "load": {
+    "paths": []
+  },
+  "installs": {
+    "experienceengine": {
+      "installPath": "${join(homeDir, ".openclaw", "extensions", "experienceengine")}"
+    }
+  }
+}`;
+        }
         return "";
       }
     });
 
-    expect(repairSeen).toEqual(seen);
-    expect(repairSeen[0]).toBe(`openclaw plugins install ${report.packageRoot}`);
+    expect(seen[1]).toBe(`openclaw plugins install ${report.packageRoot}`);
+    expect(repairSeen[1]).toBe("openclaw plugins update experienceengine");
     expect(report.installed).toBe(true);
   });
 

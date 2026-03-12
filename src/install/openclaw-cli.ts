@@ -35,18 +35,42 @@ export type OpenClawPluginEntryConfig = {
   config?: Record<string, unknown>;
 };
 
+export type OpenClawPluginsConfig = {
+  load?: {
+    paths?: string[];
+  };
+  entries?: Record<string, OpenClawPluginEntryConfig>;
+  installs?: Record<
+    string,
+    {
+      source?: string;
+      sourcePath?: string;
+      installPath?: string;
+      version?: string;
+      installedAt?: string;
+    }
+  >;
+};
+
 export const resolveExperienceEnginePackageRoot = (): string =>
   resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 export const buildOpenClawInstallCommands = (
   packageRoot: string,
   pluginId: string,
+  installMode: "install" | "update",
   pluginConfig: OpenClawConfigPayload
 ): OpenClawCommand[] => [
   {
     bin: "openclaw",
-    args: ["plugins", "install", packageRoot],
-    description: "Install the ExperienceEngine package into OpenClaw"
+    args:
+      installMode === "update"
+        ? ["plugins", "update", pluginId]
+        : ["plugins", "install", packageRoot],
+    description:
+      installMode === "update"
+        ? "Update the existing ExperienceEngine plugin install in OpenClaw"
+        : "Install the ExperienceEngine package into OpenClaw"
   },
   {
     bin: "openclaw",
@@ -78,6 +102,18 @@ export const buildOpenClawConfigGetCommand = (pluginId: string): OpenClawCommand
   description: "Query the live OpenClaw plugin entry config"
 });
 
+export const buildOpenClawPluginsConfigGetCommand = (): OpenClawCommand => ({
+  bin: "openclaw",
+  args: ["config", "get", "plugins"],
+  description: "Query the full OpenClaw plugins config"
+});
+
+export const buildOpenClawLoadPathsSetCommand = (paths: string[]): OpenClawCommand => ({
+  bin: "openclaw",
+  args: ["config", "set", "plugins.load.paths", JSON.stringify(paths), "--json"],
+  description: "Update OpenClaw plugin load paths"
+});
+
 export const defaultOpenClawCommandRunner: OpenClawCommandRunner = (command) => {
   return execFileSync(command.bin, command.args, {
     stdio: "pipe",
@@ -102,7 +138,7 @@ export const runOpenClawCommand = (
   return typeof result === "string" ? result : "";
 };
 
-const splitWarningPrefixedOutput = (output: string): { warnings: string[]; body: string } => {
+export const splitWarningPrefixedOutput = (output: string): { warnings: string[]; body: string } => {
   const lines = output
     .split(/\r?\n/)
     .map((line) => line.trimEnd())
@@ -167,15 +203,37 @@ export const parseOpenClawPluginEntryConfig = (output: string): {
   warnings: string[];
   entry: OpenClawPluginEntryConfig | null;
 } => {
+  const parsed = parseWarningPrefixedJson<OpenClawPluginEntryConfig>(output);
+  return {
+    warnings: parsed.warnings,
+    entry: parsed.value
+  };
+};
+
+export const parseWarningPrefixedJson = <T>(output: string): {
+  warnings: string[];
+  value: T | null;
+} => {
   const { warnings, body } = splitWarningPrefixedOutput(output);
   const jsonStart = body.indexOf("{");
   if (jsonStart < 0) {
-    return { warnings, entry: null };
+    return { warnings, value: null };
   }
 
   const jsonText = body.slice(jsonStart);
   return {
     warnings,
-    entry: JSON.parse(jsonText) as OpenClawPluginEntryConfig
+    value: JSON.parse(jsonText) as T
+  };
+};
+
+export const parseOpenClawPluginsConfig = (output: string): {
+  warnings: string[];
+  config: OpenClawPluginsConfig | null;
+} => {
+  const parsed = parseWarningPrefixedJson<OpenClawPluginsConfig>(output);
+  return {
+    warnings: parsed.warnings,
+    config: parsed.value
   };
 };

@@ -112,7 +112,7 @@ describe("OpenClaw doctor host-state parsing", () => {
       }
     });
 
-    expect(installCommands).toHaveLength(3);
+    expect(installCommands).toHaveLength(5);
     expect(status.hostState.status).toBe("error");
     expect(status.hostState.enabled).toBe(true);
     expect(status.hostState.error).toContain("EACCES");

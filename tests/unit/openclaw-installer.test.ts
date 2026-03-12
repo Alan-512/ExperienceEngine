@@ -25,17 +25,52 @@ describe("OpenClaw installer", () => {
   it("writes install state into the product-owned data home", () => {
     const homeDir = makeTempDir();
     const commands: string[] = [];
+    let pluginsReads = 0;
     const report = installOpenClawAdapter({
       homeDir,
       runner(command) {
-        commands.push([command.bin, ...command.args].join(" "));
+        const key = [command.bin, ...command.args].join(" ");
+        commands.push(key);
+        if (key === "openclaw config get plugins") {
+          pluginsReads += 1;
+          if (pluginsReads === 1) {
+            return `{
+  "load": {
+    "paths": [
+      "/mnt/d/project/ExperienceEngine",
+      "/tmp/other-plugin"
+    ]
+  },
+  "installs": {
+  }
+}`;
+          }
+          return `{
+  "load": {
+    "paths": [
+      "/mnt/d/project/ExperienceEngine",
+      "/tmp/other-plugin"
+    ]
+  },
+  "installs": {
+    "experienceengine": {
+      "installPath": "${join(homeDir, ".openclaw", "extensions", "experienceengine")}"
+    }
+  }
+}`;
+        }
+        return "";
       }
     });
 
     expect(report.installed).toBe(true);
     expect(report.paths.mode).toBe("product");
     expect(existsSync(report.paths.installStatePath)).toBe(true);
-    expect(commands).toHaveLength(3);
+    expect(commands).toHaveLength(6);
+    expect(commands[0]).toBe(`openclaw config get plugins`);
+    expect(commands[1]).toBe(`openclaw plugins install ${report.packageRoot}`);
+    expect(commands[4]).toBe("openclaw config get plugins");
+    expect(commands[5]).toBe('openclaw config set plugins.load.paths ["/tmp/other-plugin"] --json');
 
     const payload = JSON.parse(readFileSync(report.paths.installStatePath, "utf8")) as {
       adapter: string;
@@ -56,8 +91,21 @@ describe("OpenClaw installer", () => {
     const homeDir = makeTempDir();
     installOpenClawAdapter({
       homeDir,
-      runner() {
-        return;
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        if (key === "openclaw config get plugins") {
+          return `{
+  "load": {
+    "paths": []
+  },
+  "installs": {
+    "experienceengine": {
+      "installPath": "${join(homeDir, ".openclaw", "extensions", "experienceengine")}"
+    }
+  }
+}`;
+        }
+        return "";
       }
     });
 
@@ -95,5 +143,35 @@ describe("OpenClaw installer", () => {
     });
     expect(status.installed).toBe(false);
     expect(status.hostWiring.wired).toBe(false);
+  });
+
+  it("updates an existing install instead of reinstalling it", () => {
+    const homeDir = makeTempDir();
+    const commands: string[] = [];
+    let pluginsReads = 0;
+
+    installOpenClawAdapter({
+      homeDir,
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        commands.push(key);
+        if (key === "openclaw config get plugins") {
+          pluginsReads += 1;
+          return `{
+  "load": {
+    "paths": []
+  },
+  "installs": {
+    "experienceengine": {
+      "installPath": "${join(homeDir, ".openclaw", "extensions", "experienceengine")}"
+    }
+  }
+}`;
+        }
+        return "";
+      }
+    });
+
+    expect(commands[1]).toBe("openclaw plugins update experienceengine");
   });
 });

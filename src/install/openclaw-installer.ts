@@ -1,12 +1,15 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { basename, dirname, join } from "node:path";
 import { resolveExperienceEnginePaths, resolveProductStateDir, type ResolvedPathInfo } from "../config/path-resolver.js";
 import {
   buildOpenClawInstallCommands,
   buildOpenClawConfigGetCommand,
   buildOpenClawInfoCommand,
+  buildOpenClawLoadPathsSetCommand,
+  buildOpenClawPluginsConfigGetCommand,
   parseOpenClawPluginEntryConfig,
   parseOpenClawPluginInfo,
+  parseOpenClawPluginsConfig,
   resolveExperienceEnginePackageRoot,
   runOpenClawCommand,
   runOpenClawCommands,
@@ -65,6 +68,82 @@ export const getOpenClawRepairHint = (inspection: {
   hostState: Pick<HostState, "status" | "enabled" | "configMatches" | "error">;
 }): string | null => (isOpenClawRepairRecommended(inspection) ? "ee repair openclaw" : null);
 
+const identifyExperienceEnginePath = (rootPath: string): boolean => {
+  if (!rootPath) {
+    return false;
+  }
+
+  if (basename(rootPath).toLowerCase().includes("experienceengine")) {
+    return true;
+  }
+
+  const manifestPath = join(rootPath, "openclaw.plugin.json");
+  if (existsSync(manifestPath)) {
+    try {
+      const manifest = JSON.parse(readFileSync(manifestPath, "utf8")) as { id?: string };
+      return manifest.id === "experienceengine";
+    } catch {
+      return false;
+    }
+  }
+
+  const packagePath = join(rootPath, "package.json");
+  if (existsSync(packagePath)) {
+    try {
+      const pkg = JSON.parse(readFileSync(packagePath, "utf8")) as { name?: string };
+      return pkg.name === "experienceengine";
+    } catch {
+      return false;
+    }
+  }
+
+  return false;
+};
+
+export const filterExperienceEngineLoadPaths = (paths: string[]): string[] =>
+  paths.filter((path) => !identifyExperienceEnginePath(path));
+
+export const normalizeTreePermissions = (rootPath: string): void => {
+  if (!existsSync(rootPath)) {
+    return;
+  }
+
+  const stats = statSync(rootPath);
+  if (stats.isDirectory()) {
+    chmodSync(rootPath, 0o755);
+    for (const entry of readdirSync(rootPath)) {
+      normalizeTreePermissions(join(rootPath, entry));
+    }
+    return;
+  }
+
+  chmodSync(rootPath, 0o644);
+};
+
+const cleanupOpenClawWarningSources = (
+  paths: ResolvedPathInfo,
+  runner?: OpenClawCommandRunner
+): void => {
+  const pluginsOutput = runOpenClawCommand(buildOpenClawPluginsConfigGetCommand(), runner);
+  const parsed = parseOpenClawPluginsConfig(pluginsOutput);
+  const loadPaths = parsed.config?.load?.paths ?? [];
+  const filteredLoadPaths = filterExperienceEngineLoadPaths(loadPaths);
+
+  if (filteredLoadPaths.length !== loadPaths.length) {
+    runOpenClawCommand(buildOpenClawLoadPathsSetCommand(filteredLoadPaths), runner);
+  }
+
+  const installPath =
+    parsed.config?.installs?.experienceengine?.installPath ??
+    join(dirname(paths.compatibilityHome), "extensions", "experienceengine");
+  normalizeTreePermissions(installPath);
+};
+
+const readOpenClawPluginsConfig = (runner?: OpenClawCommandRunner) => {
+  const pluginsOutput = runOpenClawCommand(buildOpenClawPluginsConfigGetCommand(), runner);
+  return parseOpenClawPluginsConfig(pluginsOutput).config;
+};
+
 export const installOpenClawAdapter = (options: InstallerOptions = {}): OpenClawInstallReport => {
   const paths = resolveExperienceEnginePaths({
     adapter: "openclaw",
@@ -83,14 +162,18 @@ export const installOpenClawAdapter = (options: InstallerOptions = {}): OpenClaw
   mkdirSync(paths.captureDir, { recursive: true });
   mkdirSync(dirname(paths.sqlitePath), { recursive: true });
 
-  const commands = buildOpenClawInstallCommands(packageRoot, "experienceengine", pluginConfig);
+  const existingPluginsConfig = readOpenClawPluginsConfig(options.runner);
+  const installMode =
+    existingPluginsConfig?.installs?.experienceengine?.installPath ? "update" : "install";
+  const commands = buildOpenClawInstallCommands(packageRoot, "experienceengine", installMode, pluginConfig);
   runOpenClawCommands(commands, options.runner);
+  cleanupOpenClawWarningSources(paths, options.runner);
 
   const payload = {
     adapter: "openclaw",
     installedAt: new Date().toISOString(),
     packageRoot,
-    installMode: "copied-plugin",
+    installMode: installMode === "update" ? "updated-plugin" : "copied-plugin",
     hostWiring: {
       wired: true,
       restartRecommended: true
