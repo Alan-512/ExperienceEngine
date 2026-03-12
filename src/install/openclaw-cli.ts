@@ -45,8 +45,8 @@ export const buildOpenClawInstallCommands = (
 ): OpenClawCommand[] => [
   {
     bin: "openclaw",
-    args: ["plugins", "install", "-l", packageRoot],
-    description: "Link the ExperienceEngine package into OpenClaw"
+    args: ["plugins", "install", packageRoot],
+    description: "Install the ExperienceEngine package into OpenClaw"
   },
   {
     bin: "openclaw",

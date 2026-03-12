@@ -105,6 +105,7 @@ describe("OpenClaw repair recommendation", () => {
     });
 
     expect(repairSeen).toEqual(seen);
+    expect(repairSeen[0]).toBe(`openclaw plugins install ${report.packageRoot}`);
     expect(report.installed).toBe(true);
   });
 

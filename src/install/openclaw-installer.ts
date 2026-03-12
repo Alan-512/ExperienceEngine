@@ -90,7 +90,7 @@ export const installOpenClawAdapter = (options: InstallerOptions = {}): OpenClaw
     adapter: "openclaw",
     installedAt: new Date().toISOString(),
     packageRoot,
-    installMode: "linked-plugin",
+    installMode: "copied-plugin",
     hostWiring: {
       wired: true,
       restartRecommended: true

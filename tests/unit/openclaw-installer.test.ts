@@ -39,12 +39,14 @@ describe("OpenClaw installer", () => {
 
     const payload = JSON.parse(readFileSync(report.paths.installStatePath, "utf8")) as {
       adapter: string;
+      installMode: string;
       sqlitePath: string;
       packageRoot: string;
       hostWiring: { wired: boolean };
     };
 
     expect(payload.adapter).toBe("openclaw");
+    expect(payload.installMode).toBe("copied-plugin");
     expect(payload.sqlitePath).toBe(report.pluginConfig.sqlitePath);
     expect(payload.packageRoot).toBe(report.packageRoot);
     expect(payload.hostWiring.wired).toBe(true);

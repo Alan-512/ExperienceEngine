@@ -13,7 +13,7 @@ describe("OpenClaw CLI install wiring", () => {
     });
 
     expect(commands.map((command) => [command.bin, ...command.args])).toEqual([
-      ["openclaw", "plugins", "install", "-l", "/tmp/experienceengine"],
+      ["openclaw", "plugins", "install", "/tmp/experienceengine"],
       ["openclaw", "plugins", "enable", "experienceengine"],
       [
         "openclaw",
