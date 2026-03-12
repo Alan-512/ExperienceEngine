@@ -5,10 +5,38 @@ import {
   getOpenClawRepairHint,
   inspectOpenClawInstall
 } from "../../install/openclaw-installer.js";
+import { fetchLatestGitHubReleaseStatus, type RemoteReleaseStatus } from "../../version/remote-release.js";
 
-export const runDoctorCommand = (target?: string): void => {
+type DoctorDeps = {
+  fetchLatestGitHubReleaseStatus?: typeof fetchLatestGitHubReleaseStatus;
+  inspectClaudeCodeInstall?: typeof inspectClaudeCodeInstall;
+  inspectCodexInstall?: typeof inspectCodexInstall;
+  inspectOpenClawInstall?: typeof inspectOpenClawInstall;
+};
+
+const logRemoteReleaseStatus = (target: string, remoteStatus: RemoteReleaseStatus): void => {
+  if (remoteStatus.state === "update-available") {
+    console.log(
+      `Recommended next step: update local ExperienceEngine package to ${remoteStatus.latestVersion}, then run ee upgrade ${target}`
+    );
+    if (remoteStatus.releaseUrl) {
+      console.log(`Latest release: ${remoteStatus.releaseUrl}`);
+    }
+    return;
+  }
+
+  if (remoteStatus.state === "unavailable" && remoteStatus.error) {
+    console.log(`Remote release check unavailable: ${remoteStatus.error}`);
+  }
+};
+
+export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): Promise<void> => {
+  const resolveRemoteStatus = deps.fetchLatestGitHubReleaseStatus ?? fetchLatestGitHubReleaseStatus;
   if (target === "claude-code") {
-    const status = inspectClaudeCodeInstall();
+    const status = (deps.inspectClaudeCodeInstall ?? inspectClaudeCodeInstall)();
+    const remoteStatus = await resolveRemoteStatus({
+      currentVersion: status.versionStatus.currentVersion
+    });
     console.table([
       {
         adapter: status.adapter,
@@ -17,6 +45,9 @@ export const runDoctorCommand = (target?: string): void => {
         current_version: status.versionStatus.currentVersion,
         version_state: status.versionStatus.state,
         upgrade_available: status.versionStatus.updateAvailable,
+        remote_latest_version: remoteStatus.latestVersion ?? "",
+        remote_state: remoteStatus.state,
+        remote_update_available: remoteStatus.updateAvailable,
         project_dir: status.projectDir,
         settings_path: status.settingsPath,
         prompt_hook: status.hooksPresent.userPromptSubmit,
@@ -29,11 +60,15 @@ export const runDoctorCommand = (target?: string): void => {
     if (status.versionStatus.updateAvailable) {
       console.log("Recommended next step: ee upgrade claude-code");
     }
+    logRemoteReleaseStatus("claude-code", remoteStatus);
     return;
   }
 
   if (target === "codex") {
-    const status = inspectCodexInstall();
+    const status = (deps.inspectCodexInstall ?? inspectCodexInstall)();
+    const remoteStatus = await resolveRemoteStatus({
+      currentVersion: status.versionStatus.currentVersion
+    });
     console.table([
       {
         adapter: status.adapter,
@@ -42,6 +77,9 @@ export const runDoctorCommand = (target?: string): void => {
         current_version: status.versionStatus.currentVersion,
         version_state: status.versionStatus.state,
         upgrade_available: status.versionStatus.updateAvailable,
+        remote_latest_version: remoteStatus.latestVersion ?? "",
+        remote_state: remoteStatus.state,
+        remote_update_available: remoteStatus.updateAvailable,
         server_name: status.serverName,
         host_wired: status.hostWiring.wired,
         host_enabled: status.hostWiring.enabled,
@@ -53,10 +91,14 @@ export const runDoctorCommand = (target?: string): void => {
     if (status.versionStatus.updateAvailable) {
       console.log("Recommended next step: ee upgrade codex");
     }
+    logRemoteReleaseStatus("codex", remoteStatus);
     return;
   }
 
-  const status = inspectOpenClawInstall();
+  const status = (deps.inspectOpenClawInstall ?? inspectOpenClawInstall)();
+  const remoteStatus = await resolveRemoteStatus({
+    currentVersion: status.versionStatus.currentVersion
+  });
   const warnings = classifyOpenClawHostWarnings(status);
   console.table([
     {
@@ -66,6 +108,9 @@ export const runDoctorCommand = (target?: string): void => {
       current_version: status.versionStatus.currentVersion,
       version_state: status.versionStatus.state,
       upgrade_available: status.versionStatus.updateAvailable,
+      remote_latest_version: remoteStatus.latestVersion ?? "",
+      remote_state: remoteStatus.state,
+      remote_update_available: remoteStatus.updateAvailable,
       host_wired: status.hostWiring.wired,
       host_status: status.hostState.status ?? "",
       host_enabled: status.hostState.enabled ?? false,
@@ -113,4 +158,6 @@ export const runDoctorCommand = (target?: string): void => {
   if (status.versionStatus.updateAvailable) {
     console.log("Recommended next step: ee upgrade openclaw");
   }
+
+  logRemoteReleaseStatus("openclaw", remoteStatus);
 };

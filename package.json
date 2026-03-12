@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "type": "module",
   "description": "ExperienceEngine v2 MVP scaffold for OpenClaw companion-layer experience intervention.",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Alan-512/ExperienceEngine.git"
+  },
   "openclaw": {
     "extensions": [
       "./src/plugin/openclaw-plugin.ts"

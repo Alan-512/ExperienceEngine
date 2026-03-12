@@ -24,7 +24,7 @@ const main = async (): Promise<void> => {
       await runCodexMcpServerCommand();
       break;
     case "doctor":
-      runDoctorCommand(args[0]);
+      await runDoctorCommand(args[0]);
       break;
     case "repair":
       runRepairCommand(args[0]);
