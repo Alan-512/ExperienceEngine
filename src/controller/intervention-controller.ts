@@ -28,18 +28,19 @@ export const decideIntervention = (
 ): InterventionDecision => {
   const candidates = retrieveCandidates(input, nodes);
   const ranked = rankNodes(input.task_summary, candidates);
-  const candidateRiskSummary = ranked[0]?.trigger_pattern ?? ranked[0]?.compact_hint;
-
-  if (!evaluateTrigger(input, stats, candidateRiskSummary, threshold)) {
-    return { mode: "skip", selected: [] };
-  }
 
   if (!ranked.length) {
     return { mode: "skip", selected: [] };
   }
 
-  const mode: InjectionMode = ranked[0]?.state === "candidate" ? "inject_conservative" : "inject";
   const selected = selectInjectableNodes(ranked, maxHints);
+  const candidateRiskSummary = selected[0]?.trigger_pattern ?? selected[0]?.compact_hint;
+
+  if (!evaluateTrigger(input, stats, candidateRiskSummary, threshold)) {
+    return { mode: "skip", selected: [] };
+  }
+
+  const mode: InjectionMode = ranked[0]?.state === "candidate" ? "inject_conservative" : "inject";
 
   if (!selected.length) {
     return { mode: "skip", selected: [] };

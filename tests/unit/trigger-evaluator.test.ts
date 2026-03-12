@@ -62,4 +62,19 @@ describe("evaluateTrigger", () => {
       )
     ).toBe(true);
   });
+
+  it("fires when the current task summary is fully covered by a longer stored trigger pattern", () => {
+    expect(
+      evaluateTrigger(
+        {
+          ...baseInput,
+          task_type: "test_debug",
+          task_summary: "Fix the failing vitest auth test in the current workspace."
+        },
+        undefined,
+        "[Wed 2026-03-11 22:09 GMT+8] Fix the failing vitest auth test. Start by using the exec tool to run exactly this shell command in the current workspace: pwd. Then reply with only t...",
+        0.6
+      )
+    ).toBe(true);
+  });
 });

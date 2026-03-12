@@ -85,6 +85,36 @@ describe("decideIntervention", () => {
     expect(decision.text).not.toContain("Do not keep iterating blindly.");
   });
 
+  it("uses the selected strategy trigger instead of a higher-ranked warning trigger", () => {
+    const decision = decideIntervention(
+      input,
+      [
+        node({
+          id: "warning",
+          node_type: "warning",
+          trigger_pattern: "Execution hints from prior similar tasks: search around config drift first.",
+          compact_hint: "Do not keep iterating blindly.",
+          helped_count: 8,
+          support_count: 8
+        }),
+        node({
+          id: "strategy",
+          node_type: "strategy",
+          trigger_pattern: "Fix the failing vitest auth test in the current workspace",
+          helped_count: 2,
+          support_count: 2
+        })
+      ],
+      stats,
+      0.6,
+      3
+    );
+
+    expect(decision.mode).toBe("inject");
+    expect(decision.selected.map((entry) => entry.id)).toEqual(["strategy"]);
+    expect(decision.text).toContain("Reproduce first, then validate the fix with exec before moving on.");
+  });
+
   it("injects warning nodes when they are the only available guidance", () => {
     const decision = decideIntervention(
       input,

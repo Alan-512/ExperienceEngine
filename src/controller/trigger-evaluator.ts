@@ -9,7 +9,9 @@ const overlapScore = (left: string, right?: string): number => {
   }
 
   const overlap = [...lhs].filter((token) => rhs.has(token)).length;
-  return overlap / Math.max(lhs.size, rhs.size);
+  const jaccardLike = overlap / Math.max(lhs.size, rhs.size);
+  const inputCoverage = overlap / lhs.size;
+  return Math.max(jaccardLike, inputCoverage);
 };
 
 export const evaluateTrigger = (
