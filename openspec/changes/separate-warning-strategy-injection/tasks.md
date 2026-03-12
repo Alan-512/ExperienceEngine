@@ -10,10 +10,10 @@
 
 ## 3. Verify in Real Runtime
 
-- [ ] 3.1 Run a real injected turn in a scope containing both strategy and warning nodes
-- [ ] 3.2 Verify the persisted `injected_node_ids_json` excludes warning nodes when strategy nodes are available
+- [x] 3.1 Run a real injected turn in a scope containing both strategy and warning nodes
+- [x] 3.2 Verify the persisted `injected_node_ids_json` excludes warning nodes when strategy nodes are available
 
 ## 4. Validate
 
-- [ ] 4.1 Run `npx @fission-ai/openspec@latest validate --changes --strict`
-- [ ] 4.2 Run `pnpm check`
+- [x] 4.1 Run `npx @fission-ai/openspec@latest validate --changes --strict`
+- [x] 4.2 Run `pnpm check`
