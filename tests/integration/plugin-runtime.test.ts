@@ -740,4 +740,79 @@ describe("OpenClaw plugin runtime", () => {
     expect(nodeRow.harmed_count).toBe(0);
     expect(nodeRow.support_count).toBe(3);
   });
+
+  it("converges warning candidates from different failure sources onto one canonical node", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const handlers = new Map<string, Handler>();
+
+    plugin.register({
+      pluginConfig: {
+        dataDir: join(runtimeDir, "data"),
+        sqlitePath,
+        triggerThreshold: 0.6,
+        maxHints: 3
+      },
+      on(event, handler) {
+        handlers.set(event, handler);
+      }
+    });
+
+    const beforePromptBuild = handlers.get("before_prompt_build");
+    const persistToolResult = handlers.get("tool_result_persist");
+    const finalize = handlers.get("message_sent");
+
+    await beforePromptBuild?.({
+      session: { key: "warning-read" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Fix the failing vitest auth test in the current workspace." }
+    });
+    await persistToolResult?.({
+      sessionKey: "warning-read",
+      tool: { name: "read" },
+      result: { exitCode: 1, error: "ENOENT: auth.spec.ts" },
+      success: false
+    });
+    await finalize?.({
+      session: { key: "warning-read" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Fix the failing vitest auth test in the current workspace." }
+    });
+
+    await beforePromptBuild?.({
+      session: { key: "warning-process" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Fix the failing vitest auth test in the current workspace." }
+    });
+    await persistToolResult?.({
+      sessionKey: "warning-process",
+      tool: { name: "process" },
+      result: { exitCode: 1, error: "Process still running" },
+      success: false
+    });
+    await finalize?.({
+      session: { key: "warning-process" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Fix the failing vitest auth test in the current workspace." }
+    });
+
+    const db = new DatabaseSync(sqlitePath);
+    const warningRows = db
+      .prepare(
+        "SELECT id, compact_hint, evidence_summary, support_count FROM experience_nodes WHERE task_type = 'test_debug' AND node_type = 'warning' ORDER BY updated_at DESC"
+      )
+      .all() as Array<{
+        id: string;
+        compact_hint: string;
+        evidence_summary: string;
+        support_count: number;
+      }>;
+
+    expect(warningRows).toHaveLength(1);
+    expect(warningRows[0]?.compact_hint).toBe(
+      "Do not keep iterating on the current debug path without narrowing the failing signature first."
+    );
+    expect(warningRows[0]?.evidence_summary).toBe("Failure evidence captured from process.");
+    expect(warningRows[0]?.support_count).toBe(2);
+  });
 });
