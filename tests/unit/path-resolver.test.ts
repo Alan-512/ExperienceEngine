@@ -61,4 +61,18 @@ describe("resolveExperienceEnginePaths", () => {
     expect(paths.activeHome).toBe(join(homeDir, ".experienceengine"));
     expect(paths.usedInstallState).toBe(true);
   });
+
+  it("isolates non-openclaw adapter captures under the adapter state directory", () => {
+    const homeDir = makeTempDir();
+
+    const paths = resolveExperienceEnginePaths({
+      homeDir,
+      adapter: "claude-code"
+    });
+
+    expect(paths.mode).toBe("product");
+    expect(paths.captureDir).toBe(
+      join(homeDir, ".experienceengine", "adapters", "claude-code", "captures")
+    );
+  });
 });

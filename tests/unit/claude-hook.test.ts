@@ -3,6 +3,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { persistClaudeHookCapture } from "../../src/cli/commands/claude-hook.js";
+import { persistClaudeNormalizedEvent } from "../../src/adapters/claude-code/event-store.js";
+import { normalizeClaudeHookPayload } from "../../src/adapters/claude-code/hook-normalizer.js";
 
 const tempDirs: string[] = [];
 
@@ -34,7 +36,7 @@ describe("Claude hook capture", () => {
     );
 
     expect(capturePath).toBeTruthy();
-    const captureDir = join(homeDir, ".experienceengine", "captures");
+    const captureDir = join(homeDir, ".experienceengine", "adapters", "claude-code", "captures");
     const files = readdirSync(captureDir);
     expect(files).toHaveLength(1);
 
@@ -46,5 +48,31 @@ describe("Claude hook capture", () => {
     expect(capture.payload?.hook_event_name).toBe("PostToolUse");
     expect(capture.payload?.tool_name).toBe("Bash");
     expect(capture.raw).toContain("session-123");
+  });
+
+  it("appends normalized Claude events under the adapter state directory", () => {
+    const homeDir = makeTempDir();
+    const filePath = persistClaudeNormalizedEvent(
+      normalizeClaudeHookPayload({
+        hook_event_name: "SessionEnd",
+        session_id: "session-789",
+        message: "done"
+      }),
+      { homeDir }
+    );
+
+    const lines = readFileSync(filePath, "utf8").trim().split("\n");
+    expect(lines).toHaveLength(1);
+
+    const event = JSON.parse(lines[0]) as {
+      adapter: string;
+      eventName: string;
+      sessionId?: string;
+      promptText?: string;
+    };
+    expect(event.adapter).toBe("claude-code");
+    expect(event.eventName).toBe("SessionEnd");
+    expect(event.sessionId).toBe("session-789");
+    expect(event.promptText).toBe("done");
   });
 });

@@ -78,7 +78,12 @@ export const resolveExperienceEnginePaths = (options: ResolvePathOptions = {}): 
       ? "openclaw-compat"
       : "product";
   const activeHome = mode === "openclaw-compat" ? compatibilityHome : productHome;
-  const captureDir = join(activeHome, mode === "openclaw-compat" ? "runtime-captures" : "captures");
+  const captureDir =
+    mode === "openclaw-compat"
+      ? join(activeHome, "runtime-captures")
+      : adapter === "openclaw"
+        ? join(activeHome, "captures")
+        : join(productHome, "adapters", adapter, "captures");
 
   return {
     mode,

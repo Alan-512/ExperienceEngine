@@ -1,5 +1,7 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { normalizeClaudeHookPayload } from "../../adapters/claude-code/hook-normalizer.js";
+import { persistClaudeNormalizedEvent } from "../../adapters/claude-code/event-store.js";
 import { resolveExperienceEnginePaths } from "../../config/path-resolver.js";
 
 type ClaudeHookPayload = {
@@ -65,5 +67,18 @@ export const persistClaudeHookCapture = (
 
 export const runClaudeHookCommand = (): void => {
   const rawInput = readFileSync(0, "utf8");
-  persistClaudeHookCapture(rawInput);
+  const capturePath = persistClaudeHookCapture(rawInput);
+  if (!capturePath) {
+    return;
+  }
+
+  let payload: unknown = null;
+  try {
+    payload = JSON.parse(rawInput);
+  } catch {
+    payload = null;
+  }
+
+  const event = normalizeClaudeHookPayload(payload);
+  persistClaudeNormalizedEvent(event);
 };
