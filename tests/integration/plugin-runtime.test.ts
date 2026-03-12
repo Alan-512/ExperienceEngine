@@ -1,9 +1,10 @@
-import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
 import plugin from "../../src/plugin/openclaw-plugin.js";
+import { installOpenClawAdapter } from "../../src/install/openclaw-installer.js";
 import { replayScenarios, type ReplayScenario } from "../fixtures/openclaw/index.js";
 
 type Handler = (payload: unknown, context?: unknown) => unknown | Promise<unknown>;
@@ -133,6 +134,42 @@ describe("OpenClaw plugin runtime", () => {
       expect(inputCount.count).toBe(1);
     } finally {
       process.chdir(originalCwd);
+    }
+  });
+
+  it("uses the installed product data home when no explicit plugin config is provided", async () => {
+    const homeDir = makeTempDir();
+    const originalHome = process.env.HOME;
+    const handlers = new Map<string, Handler>();
+
+    process.env.HOME = homeDir;
+    const installReport = installOpenClawAdapter({ homeDir });
+
+    try {
+      plugin.register({
+        on(event, handler) {
+          handlers.set(event, handler);
+        }
+      });
+
+      await handlers.get("before_prompt_build")?.({
+        session: { key: "installed-home" },
+        workspace: { cwd: "/tmp/repo" },
+        message: { content: "Fix installed path resolution" }
+      });
+      await handlers.get("message_sent")?.({
+        session: { key: "installed-home" },
+        workspace: { cwd: "/tmp/repo" },
+        message: { content: "Fix installed path resolution" }
+      });
+
+      expect(existsSync(installReport.pluginConfig.sqlitePath)).toBe(true);
+      const db = new DatabaseSync(installReport.pluginConfig.sqlitePath);
+      const inputCount = db.prepare("SELECT COUNT(*) AS count FROM experience_input_records").get() as { count: number };
+
+      expect(inputCount.count).toBe(1);
+    } finally {
+      process.env.HOME = originalHome;
     }
   });
 
