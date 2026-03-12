@@ -1,0 +1,138 @@
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
+import {
+  resolveExperienceEnginePaths,
+  resolveProductStateDir,
+  type ResolvedPathInfo
+} from "../config/path-resolver.js";
+import { resolveExperienceEnginePackageRoot } from "./openclaw-cli.js";
+
+type ClaudeHookCommand = {
+  type: "command";
+  command: string;
+  timeout?: number;
+};
+
+type ClaudeHookMatcher = {
+  matcher?: string;
+  hooks: ClaudeHookCommand[];
+};
+
+type ClaudeSettings = {
+  hooks?: Record<string, ClaudeHookMatcher[]>;
+  [key: string]: unknown;
+};
+
+type InstallerOptions = {
+  env?: NodeJS.ProcessEnv;
+  homeDir?: string;
+  projectDir?: string;
+};
+
+export type ClaudeCodeInstallReport = {
+  adapter: "claude-code";
+  installed: true;
+  paths: ResolvedPathInfo;
+  packageRoot: string;
+  projectDir: string;
+  settingsPath: string;
+  captureDir: string;
+};
+
+const readJsonFile = <T>(filePath: string): T | null => {
+  if (!existsSync(filePath)) {
+    return null;
+  }
+
+  return JSON.parse(readFileSync(filePath, "utf8")) as T;
+};
+
+const shellQuote = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
+
+const buildClaudeHookCommand = (packageRoot: string): string =>
+  `node ${shellQuote(join(packageRoot, "dist/cli/index.js"))} claude-hook`;
+
+const upsertHookMatcher = (
+  hooks: Record<string, ClaudeHookMatcher[]>,
+  eventName: string,
+  matcher: string | undefined,
+  command: ClaudeHookCommand
+): void => {
+  const entries = hooks[eventName] ?? [];
+  const existing = entries.find((entry) => (entry.matcher ?? "") === (matcher ?? ""));
+
+  if (existing) {
+    if (!existing.hooks.some((hook) => hook.type === command.type && hook.command === command.command)) {
+      existing.hooks.push(command);
+    }
+  } else {
+    entries.push({
+      ...(matcher ? { matcher } : {}),
+      hooks: [command]
+    });
+  }
+
+  hooks[eventName] = entries;
+};
+
+const mergeExperienceEngineHooks = (settings: ClaudeSettings, packageRoot: string): ClaudeSettings => {
+  const next: ClaudeSettings = { ...settings, hooks: { ...(settings.hooks ?? {}) } };
+  const command: ClaudeHookCommand = {
+    type: "command",
+    command: buildClaudeHookCommand(packageRoot),
+    timeout: 10
+  };
+
+  upsertHookMatcher(next.hooks!, "UserPromptSubmit", undefined, command);
+  upsertHookMatcher(next.hooks!, "PreToolUse", "*", command);
+  upsertHookMatcher(next.hooks!, "PostToolUse", "*", command);
+  upsertHookMatcher(next.hooks!, "SessionEnd", undefined, command);
+
+  return next;
+};
+
+export const installClaudeCodeAdapter = (options: InstallerOptions = {}): ClaudeCodeInstallReport => {
+  const paths = resolveExperienceEnginePaths({
+    adapter: "claude-code",
+    env: options.env ?? {},
+    homeDir: options.homeDir
+  });
+  const packageRoot = resolveExperienceEnginePackageRoot();
+  const projectDir = resolve(options.projectDir ?? process.cwd());
+  const settingsPath = join(projectDir, ".claude", "settings.local.json");
+  const settings = readJsonFile<ClaudeSettings>(settingsPath) ?? {};
+  const mergedSettings = mergeExperienceEngineHooks(settings, packageRoot);
+
+  mkdirSync(paths.dataDir, { recursive: true });
+  mkdirSync(resolveProductStateDir(paths), { recursive: true });
+  mkdirSync(paths.captureDir, { recursive: true });
+  mkdirSync(dirname(settingsPath), { recursive: true });
+
+  writeFileSync(settingsPath, `${JSON.stringify(mergedSettings, null, 2)}\n`, "utf8");
+  writeFileSync(
+    paths.installStatePath,
+    `${JSON.stringify(
+      {
+        adapter: "claude-code",
+        installedAt: new Date().toISOString(),
+        packageRoot,
+        projectDir,
+        settingsPath,
+        captureDir: paths.captureDir
+      },
+      null,
+      2
+    )}\n`,
+    "utf8"
+  );
+
+  return {
+    adapter: "claude-code",
+    installed: true,
+    paths,
+    packageRoot,
+    projectDir,
+    settingsPath,
+    captureDir: paths.captureDir
+  };
+};

@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+import { runClaudeHookCommand } from "./commands/claude-hook.js";
 import { runDoctorCommand } from "./commands/doctor.js";
 import { runInstallCommand } from "./commands/install.js";
 import { runRepairCommand } from "./commands/repair.js";
@@ -12,6 +13,9 @@ const [, , command, ...args] = process.argv;
 switch (command) {
   case "install":
     runInstallCommand(args[0]);
+    break;
+  case "claude-hook":
+    runClaudeHookCommand();
     break;
   case "doctor":
     runDoctorCommand();
@@ -32,5 +36,7 @@ switch (command) {
     runRememberCommand(args.join(" ").trim());
     break;
   default:
-    console.log("Usage: ee <install openclaw|repair openclaw|doctor|stats|inspect|disable|remember>");
+    console.log(
+      "Usage: ee <install openclaw|claude-code|repair openclaw|claude-hook|doctor|stats|inspect|disable|remember>"
+    );
 }
