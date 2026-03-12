@@ -1,4 +1,7 @@
-import { inspectOpenClawInstall } from "../../install/openclaw-installer.js";
+import {
+  getOpenClawRepairHint,
+  inspectOpenClawInstall
+} from "../../install/openclaw-installer.js";
 
 export const runDoctorCommand = (): void => {
   const status = inspectOpenClawInstall();
@@ -29,5 +32,10 @@ export const runDoctorCommand = (): void => {
     for (const warning of status.hostState.warnings) {
       console.log(`- ${warning}`);
     }
+  }
+
+  const repairHint = getOpenClawRepairHint(status);
+  if (repairHint) {
+    console.log(`Recommended next step: ${repairHint}`);
   }
 };

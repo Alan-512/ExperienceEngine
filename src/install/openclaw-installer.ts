@@ -48,6 +48,23 @@ type HostState = {
   liveConfig?: Record<string, unknown>;
 };
 
+export type OpenClawInspection = ReturnType<typeof inspectOpenClawInstall>;
+
+export const isOpenClawRepairRecommended = (inspection: {
+  installed: boolean;
+  hostState: Pick<HostState, "status" | "enabled" | "configMatches" | "error">;
+}): boolean =>
+  !inspection.installed ||
+  inspection.hostState.enabled !== true ||
+  inspection.hostState.configMatches !== true ||
+  Boolean(inspection.hostState.error) ||
+  (inspection.hostState.status !== undefined && inspection.hostState.status.toLowerCase() !== "loaded");
+
+export const getOpenClawRepairHint = (inspection: {
+  installed: boolean;
+  hostState: Pick<HostState, "status" | "enabled" | "configMatches" | "error">;
+}): string | null => (isOpenClawRepairRecommended(inspection) ? "ee repair openclaw" : null);
+
 export const installOpenClawAdapter = (options: InstallerOptions = {}): OpenClawInstallReport => {
   const paths = resolveExperienceEnginePaths({
     adapter: "openclaw",
@@ -188,3 +205,6 @@ export const inspectOpenClawInstall = (options: InstallerOptions = {}) => {
     hostState
   };
 };
+
+export const repairOpenClawAdapter = (options: InstallerOptions = {}): OpenClawInstallReport =>
+  installOpenClawAdapter(options);

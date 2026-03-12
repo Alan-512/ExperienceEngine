@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { runDoctorCommand } from "./commands/doctor.js";
 import { runInstallCommand } from "./commands/install.js";
+import { runRepairCommand } from "./commands/repair.js";
 import { runDisableCommand } from "./commands/disable.js";
 import { runInspectCommand } from "./commands/inspect.js";
 import { runRememberCommand } from "./commands/remember.js";
@@ -15,6 +16,9 @@ switch (command) {
   case "doctor":
     runDoctorCommand();
     break;
+  case "repair":
+    runRepairCommand(args[0]);
+    break;
   case "stats":
     runStatsCommand();
     break;
@@ -28,5 +32,5 @@ switch (command) {
     runRememberCommand(args.join(" ").trim());
     break;
   default:
-    console.log("Usage: ee <install openclaw|doctor|stats|inspect|disable|remember>");
+    console.log("Usage: ee <install openclaw|repair openclaw|doctor|stats|inspect|disable|remember>");
 }
