@@ -561,4 +561,94 @@ describe("OpenClaw plugin runtime", () => {
     expect(nodeRow.last_harmed_at).toBeTruthy();
     expect(nodeRow.state).toBe("active");
   });
+
+  it("preserves prior feedback counters when a matching candidate is stored again", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const handlers = new Map<string, Handler>();
+
+    plugin.register({
+      pluginConfig: {
+        dataDir: join(runtimeDir, "data"),
+        sqlitePath,
+        triggerThreshold: 0.6,
+        maxHints: 3
+      },
+      on(event, handler) {
+        handlers.set(event, handler);
+      }
+    });
+
+    const beforePromptBuild = handlers.get("before_prompt_build");
+    const persistToolResult = handlers.get("tool_result_persist");
+    const finalize = handlers.get("message_sent");
+
+    await beforePromptBuild?.({
+      session: { key: "seed-preserve" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Fix the failing vitest auth test" }
+    });
+    await persistToolResult?.({
+      sessionKey: "seed-preserve",
+      tool: { name: "exec" },
+      result: { exitCode: 0, output: "/tmp/repo" },
+      success: true
+    });
+    await finalize?.({
+      session: { key: "seed-preserve" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Fix the failing vitest auth test" }
+    });
+
+    await beforePromptBuild?.({
+      session: { key: "helped-preserve" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Fix the failing vitest auth test" }
+    });
+    await persistToolResult?.({
+      sessionKey: "helped-preserve",
+      tool: { name: "exec" },
+      result: { exitCode: 0, output: "/tmp/repo" },
+      success: true
+    });
+    await finalize?.({
+      session: { key: "helped-preserve" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Fix the failing vitest auth test" }
+    });
+
+    await beforePromptBuild?.({
+      session: { key: "helped-preserve-2" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Fix the failing vitest auth test" }
+    });
+    await persistToolResult?.({
+      sessionKey: "helped-preserve-2",
+      tool: { name: "exec" },
+      result: { exitCode: 0, output: "/tmp/repo" },
+      success: true
+    });
+    await finalize?.({
+      session: { key: "helped-preserve-2" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Fix the failing vitest auth test" }
+    });
+
+    const db = new DatabaseSync(sqlitePath);
+    const nodeRow = db
+      .prepare(
+        "SELECT usage_count, helped_count, harmed_count, support_count FROM experience_nodes WHERE task_type = 'test_debug' AND node_type = 'strategy' LIMIT 1"
+      )
+      .get() as {
+        usage_count: number;
+        helped_count: number;
+        harmed_count: number;
+        support_count: number;
+      };
+
+    expect(nodeRow.usage_count).toBe(2);
+    expect(nodeRow.helped_count).toBe(2);
+    expect(nodeRow.harmed_count).toBe(0);
+    expect(nodeRow.support_count).toBe(3);
+  });
 });

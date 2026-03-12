@@ -71,7 +71,7 @@ const toInputRecord = (input: ExperienceInput, sessionId?: string): ExperienceIn
   created_at: nowIso()
 });
 
-const candidateToNode = (candidate: ExperienceCandidate): ExperienceNode => {
+const candidateToNode = (candidate: ExperienceCandidate, existing?: ExperienceNode): ExperienceNode => {
   const timestamp = nowIso();
   const id = stableId(
     "node",
@@ -81,12 +81,15 @@ const candidateToNode = (candidate: ExperienceCandidate): ExperienceNode => {
   return {
     id,
     ...candidate,
-    state: "candidate",
-    usage_count: 0,
-    helped_count: 0,
-    harmed_count: 0,
-    support_count: 1,
-    created_at: timestamp,
+    state: existing?.state ?? "candidate",
+    usage_count: existing?.usage_count ?? 0,
+    helped_count: existing?.helped_count ?? 0,
+    harmed_count: existing?.harmed_count ?? 0,
+    support_count: (existing?.support_count ?? 0) + 1,
+    created_at: existing?.created_at ?? timestamp,
+    last_used_at: existing?.last_used_at,
+    last_helped_at: existing?.last_helped_at,
+    last_harmed_at: existing?.last_harmed_at,
     updated_at: timestamp
   };
 };
@@ -205,7 +208,12 @@ class ExperienceEngineRuntime implements ExperiencePlugin {
   private persistCandidates(input: ExperienceInput): void {
     const analysis = analyzeExperience(input);
     for (const candidate of analysis.accepted) {
-      this.nodeRepo.upsert(candidateToNode(candidate));
+      const candidateId = stableId(
+        "node",
+        [candidate.scope_id, candidate.task_type, candidate.node_type, candidate.compact_hint].join(":")
+      );
+      const existing = this.nodeRepo.getById(candidateId);
+      this.nodeRepo.upsert(candidateToNode(candidate, existing));
     }
   }
 
