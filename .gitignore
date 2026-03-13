@@ -12,3 +12,4 @@ data/vector/*
 data/logs/*.jsonl
 .claude/
 .mcp.json
+internal-docs/
