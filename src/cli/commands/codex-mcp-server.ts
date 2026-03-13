@@ -1,5 +1,5 @@
-import { runCodexMcpServer } from "../../adapters/codex/mcp-server.js";
+import { runMcpServerCommand } from "./mcp-server.js";
 
 export const runCodexMcpServerCommand = async (): Promise<void> => {
-  await runCodexMcpServer();
+  await runMcpServerCommand();
 };

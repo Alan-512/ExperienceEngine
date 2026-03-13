@@ -8,6 +8,11 @@ import {
   ExperienceOperationalService,
   type ExperienceAdapter
 } from "../../interaction/operational-service.js";
+import {
+  ExperienceOperationalActionsService,
+  type HighImpactOperation,
+  type OperationalActionsDeps,
+} from "../../interaction/operational-actions-service.js";
 import { ExperienceRuntimeService } from "../../runtime/service.js";
 import type { ExperienceNodeType, ExperienceState, ToolEventStatus } from "../../types/domain.js";
 import { fetchLatestGitHubReleaseStatus } from "../../version/remote-release.js";
@@ -39,6 +44,8 @@ type CodexServerOptions = {
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
   fetchImpl?: typeof fetch;
+  operationalActionsDeps?: OperationalActionsDeps;
+  operationalActionsService?: ExperienceOperationalActionsService;
 };
 
 type CodexRecentMode = "all" | "injected";
@@ -49,6 +56,7 @@ type CodexScopeArgs = {
 const NODE_STATES: ExperienceState[] = ["candidate", "active", "cooling", "retired"];
 const NODE_TYPES: ExperienceNodeType[] = ["strategy", "warning"];
 const EXPERIENCE_ADAPTERS = ["openclaw", "claude-code", "codex"] as const;
+const HIGH_IMPACT_OPERATIONS = ["install", "repair", "upgrade"] as const satisfies readonly HighImpactOperation[];
 
 const createCodexRuntime = (options: CodexServerOptions = {}): ExperienceRuntimeService => {
   const paths = resolveExperienceEnginePaths({
@@ -111,6 +119,11 @@ const createCodexOperationalService = (
       })
   });
 };
+
+const createCodexOperationalActionsService = (
+  options: CodexServerOptions = {}
+): ExperienceOperationalActionsService =>
+  options.operationalActionsService ?? new ExperienceOperationalActionsService(options.operationalActionsDeps);
 
 const toTextToolResult = (result: unknown) => ({
   content: [
@@ -324,6 +337,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
   const behaviorLoop = createCodexBehaviorLoop(options);
   const interactionSurface = createCodexInteractionSurface(options);
   const operationalSurface = createCodexOperationalService(options);
+  const operationalActions = createCodexOperationalActionsService(options);
   const server = new McpServer({
     name: "experienceengine",
     version: "0.1.0"
@@ -471,6 +485,30 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
           nodeType: parseNodeType(String(variables.type))
         })
       )
+  );
+
+  server.registerPrompt(
+    "experienceengine_prepare_operational_change",
+    {
+      title: "ExperienceEngine Prepare Operational Change",
+      description: "Plan a high-impact ExperienceEngine install, repair, or upgrade before execution.",
+      argsSchema: {
+        adapter: z.enum(EXPERIENCE_ADAPTERS),
+        operation: z.enum(HIGH_IMPACT_OPERATIONS)
+      }
+    },
+    async ({ adapter, operation }) => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text:
+              `First call experienceengine_plan_${operation} with adapter=${adapter}. Review the returned summary, effects, and commandHint with the user. Only if the user explicitly confirms should you call experienceengine_execute_planned_operation with the returned planId and confirmationToken.`
+          }
+        }
+      ]
+    })
   );
 
   server.registerPrompt(
@@ -649,6 +687,68 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
         }
       ]
     })
+  );
+
+  server.registerTool(
+    "experienceengine_plan_install",
+    {
+      title: "ExperienceEngine Plan Install",
+      description: "Create a structured plan for installing ExperienceEngine on a supported adapter.",
+      inputSchema: z.object({
+        adapter: z.enum(EXPERIENCE_ADAPTERS)
+      })
+    },
+    async ({ adapter }) =>
+      toStructuredToolResult(
+        operationalActions.planOperation({ adapter, operation: "install" })
+      )
+  );
+
+  server.registerTool(
+    "experienceengine_plan_repair",
+    {
+      title: "ExperienceEngine Plan Repair",
+      description: "Create a structured plan for repairing ExperienceEngine wiring on a supported adapter.",
+      inputSchema: z.object({
+        adapter: z.enum(EXPERIENCE_ADAPTERS)
+      })
+    },
+    async ({ adapter }) =>
+      toStructuredToolResult(
+        operationalActions.planOperation({ adapter, operation: "repair" })
+      )
+  );
+
+  server.registerTool(
+    "experienceengine_plan_upgrade",
+    {
+      title: "ExperienceEngine Plan Upgrade",
+      description: "Create a structured plan for upgrading ExperienceEngine on a supported adapter.",
+      inputSchema: z.object({
+        adapter: z.enum(EXPERIENCE_ADAPTERS)
+      })
+    },
+    async ({ adapter }) =>
+      toStructuredToolResult(
+        operationalActions.planOperation({ adapter, operation: "upgrade" })
+      )
+  );
+
+  server.registerTool(
+    "experienceengine_execute_planned_operation",
+    {
+      title: "ExperienceEngine Execute Planned Operation",
+      description:
+        "Execute a previously planned high-impact ExperienceEngine operation after explicit user confirmation.",
+      inputSchema: z.object({
+        planId: z.string().min(1),
+        confirmationToken: z.string().min(1)
+      })
+    },
+    async ({ planId, confirmationToken }) =>
+      toStructuredToolResult(
+        operationalActions.executePlannedOperation({ planId, confirmationToken })
+      )
   );
 
   server.registerTool(

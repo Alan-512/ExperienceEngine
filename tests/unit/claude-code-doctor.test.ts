@@ -30,8 +30,46 @@ describe("Claude Code doctor", () => {
     const homeDir = makeTempDir();
     const projectDir = makeTempDir();
 
-    installClaudeCodeAdapter({ homeDir, projectDir });
-    const inspection = inspectClaudeCodeInstall({ homeDir, projectDir });
+    installClaudeCodeAdapter({
+      homeDir,
+      projectDir,
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        if (key === "claude mcp get experienceengine") {
+          return `experienceengine:
+  Scope: Project config (shared via .mcp.json)
+  Status: ✓ Connected
+  Type: stdio
+  Command: node
+  Args: --no-warnings /tmp/experienceengine/dist/cli/index.js mcp-server
+  Environment:
+    EXPERIENCE_ENGINE_HOME=${join(homeDir, ".experienceengine")}
+
+To remove this server, run: claude mcp remove "experienceengine" -s project`;
+        }
+        return "";
+      }
+    });
+    const inspection = inspectClaudeCodeInstall({
+      homeDir,
+      projectDir,
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        if (key === "claude mcp get experienceengine") {
+          return `experienceengine:
+  Scope: Project config (shared via .mcp.json)
+  Status: ✓ Connected
+  Type: stdio
+  Command: node
+  Args: --no-warnings /tmp/experienceengine/dist/cli/index.js mcp-server
+  Environment:
+    EXPERIENCE_ENGINE_HOME=${join(homeDir, ".experienceengine")}
+
+To remove this server, run: claude mcp remove "experienceengine" -s project`;
+        }
+        return "";
+      }
+    });
 
     expect(inspection.installed).toBe(true);
     expect(inspection.versionStatus.recordedVersion).toBe(currentVersion);
@@ -41,5 +79,8 @@ describe("Claude Code doctor", () => {
     expect(inspection.hooksPresent.postToolUse).toBe(true);
     expect(inspection.hooksPresent.postToolUseFailure).toBe(true);
     expect(inspection.hooksPresent.sessionEnd).toBe(true);
+    expect(inspection.hostWiring.wired).toBe(true);
+    expect(inspection.hostWiring.transport).toBe("stdio");
+    expect(inspection.hostWiring.scope).toContain("Project config");
   });
 });

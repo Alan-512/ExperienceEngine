@@ -23,6 +23,8 @@ export const runInstallCommand = (target?: string): void => {
     console.log(`Installed version: ${report.installedVersion}`);
     console.log(`Package root: ${report.packageRoot}`);
     console.log(`Project settings: ${report.settingsPath}`);
+    console.log(`Server name: ${report.serverName}`);
+    console.log(`Server command: ${report.serverCommand}`);
     console.log(`Capture path: ${report.captureDir}`);
     return;
   }

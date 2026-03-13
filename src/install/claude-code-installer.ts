@@ -6,6 +6,14 @@ import {
   type ResolvedPathInfo
 } from "../config/path-resolver.js";
 import { resolveExperienceEnginePackageRoot } from "./openclaw-cli.js";
+import {
+  buildClaudeAddCommand,
+  buildClaudeGetCommand,
+  buildClaudeRemoveCommand,
+  parseClaudeMcpServerInfo,
+  runClaudeCommand,
+  type ClaudeCommandRunner
+} from "./claude-cli.js";
 import { readCurrentPackageVersion } from "../version/package-version.js";
 
 type ClaudeHookCommand = {
@@ -28,6 +36,8 @@ type InstallerOptions = {
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
   projectDir?: string;
+  cliEnv?: NodeJS.ProcessEnv;
+  runner?: ClaudeCommandRunner;
 };
 
 export type ClaudeCodeInstallReport = {
@@ -39,6 +49,15 @@ export type ClaudeCodeInstallReport = {
   projectDir: string;
   settingsPath: string;
   captureDir: string;
+  serverName: string;
+  serverCommand: string;
+  hostWiring: {
+    wired: boolean;
+    command?: string;
+    transport?: string;
+    scope?: string;
+    status?: string;
+  };
 };
 
 const readJsonFile = <T>(filePath: string): T | null => {
@@ -94,7 +113,19 @@ const mergeExperienceEngineHooks = (settings: ClaudeSettings, packageRoot: strin
   return next;
 };
 
+const inspectClaudeHost = (
+  runner: ClaudeCommandRunner,
+  cliEnv?: NodeJS.ProcessEnv
+) => {
+  try {
+    return parseClaudeMcpServerInfo(runClaudeCommand(buildClaudeGetCommand(cliEnv), runner));
+  } catch {
+    return null;
+  }
+};
+
 export const installClaudeCodeAdapter = (options: InstallerOptions = {}): ClaudeCodeInstallReport => {
+  const runner = options.runner ?? ((command) => runClaudeCommand(command)) as ClaudeCommandRunner;
   const paths = resolveExperienceEnginePaths({
     adapter: "claude-code",
     env: options.env ?? process.env,
@@ -106,6 +137,7 @@ export const installClaudeCodeAdapter = (options: InstallerOptions = {}): Claude
   const settingsPath = join(projectDir, ".claude", "settings.local.json");
   const settings = readJsonFile<ClaudeSettings>(settingsPath) ?? {};
   const mergedSettings = mergeExperienceEngineHooks(settings, packageRoot);
+  const existingHost = inspectClaudeHost(runner, options.cliEnv);
 
   mkdirSync(paths.dataDir, { recursive: true });
   mkdirSync(resolveProductStateDir(paths), { recursive: true });
@@ -113,6 +145,14 @@ export const installClaudeCodeAdapter = (options: InstallerOptions = {}): Claude
   mkdirSync(dirname(settingsPath), { recursive: true });
 
   writeFileSync(settingsPath, `${JSON.stringify(mergedSettings, null, 2)}\n`, "utf8");
+
+  if (existingHost?.name === "experienceengine") {
+    runClaudeCommand(buildClaudeRemoveCommand(options.cliEnv), runner);
+  }
+
+  runClaudeCommand(buildClaudeAddCommand(packageRoot, paths.productHome, options.cliEnv), runner);
+  const hostInfo = inspectClaudeHost(runner, options.cliEnv);
+
   writeFileSync(
     paths.installStatePath,
     `${JSON.stringify(
@@ -123,7 +163,16 @@ export const installClaudeCodeAdapter = (options: InstallerOptions = {}): Claude
         packageRoot,
         projectDir,
         settingsPath,
-        captureDir: paths.captureDir
+        captureDir: paths.captureDir,
+        serverName: "experienceengine",
+        serverCommand: hostInfo?.commandDisplay,
+        hostWiring: {
+          wired: Boolean(hostInfo?.commandDisplay),
+          command: hostInfo?.commandDisplay,
+          transport: hostInfo?.transport,
+          scope: hostInfo?.scope,
+          status: hostInfo?.status
+        }
       },
       null,
       2
@@ -139,6 +188,15 @@ export const installClaudeCodeAdapter = (options: InstallerOptions = {}): Claude
     installedVersion,
     projectDir,
     settingsPath,
-    captureDir: paths.captureDir
+    captureDir: paths.captureDir,
+    serverName: "experienceengine",
+    serverCommand: hostInfo?.commandDisplay ?? "",
+    hostWiring: {
+      wired: Boolean(hostInfo?.commandDisplay),
+      command: hostInfo?.commandDisplay,
+      transport: hostInfo?.transport,
+      scope: hostInfo?.scope,
+      status: hostInfo?.status
+    }
   };
 };

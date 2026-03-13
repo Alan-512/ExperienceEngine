@@ -3,6 +3,12 @@ import { join, resolve } from "node:path";
 import { resolveExperienceEnginePaths } from "../config/path-resolver.js";
 import { resolveExperienceEnginePackageRoot } from "./openclaw-cli.js";
 import { buildVersionStatus } from "../version/package-version.js";
+import {
+  buildClaudeGetCommand,
+  parseClaudeMcpServerInfo,
+  runClaudeCommand,
+  type ClaudeCommandRunner
+} from "./claude-cli.js";
 
 type ClaudeHookMatcher = {
   matcher?: string;
@@ -17,10 +23,21 @@ type InstallerOptions = {
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
   projectDir?: string;
+  cliEnv?: NodeJS.ProcessEnv;
+  runner?: ClaudeCommandRunner;
 };
 
 type ClaudeInstallState = {
   installedVersion?: string;
+  serverName?: string;
+  serverCommand?: string;
+  hostWiring?: {
+    wired?: boolean;
+    command?: string;
+    transport?: string;
+    scope?: string;
+    status?: string;
+  };
 };
 
 const shellQuote = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
@@ -42,7 +59,19 @@ const hasHookCommand = (
   );
 };
 
+const inspectClaudeHost = (
+  runner: ClaudeCommandRunner,
+  cliEnv?: NodeJS.ProcessEnv
+) => {
+  try {
+    return parseClaudeMcpServerInfo(runClaudeCommand(buildClaudeGetCommand(cliEnv), runner));
+  } catch {
+    return null;
+  }
+};
+
 export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
+  const runner = options.runner ?? ((command) => runClaudeCommand(command)) as ClaudeCommandRunner;
   const paths = resolveExperienceEnginePaths({
     adapter: "claude-code",
     env: options.env,
@@ -57,6 +86,7 @@ export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
   const installState = paths.usedInstallState
     ? (JSON.parse(readFileSync(paths.installStatePath, "utf8")) as ClaudeInstallState)
     : null;
+  const hostInfo = inspectClaudeHost(runner, options.cliEnv);
 
   return {
     adapter: "claude-code" as const,
@@ -66,12 +96,21 @@ export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
     projectDir,
     settingsPath,
     captureDir: paths.captureDir,
+    serverName: installState?.serverName ?? "experienceengine",
     hooksPresent: {
       userPromptSubmit: hasHookCommand(settings, "UserPromptSubmit", undefined, expectedCommand),
       preToolUse: hasHookCommand(settings, "PreToolUse", "*", expectedCommand),
       postToolUse: hasHookCommand(settings, "PostToolUse", "*", expectedCommand),
       postToolUseFailure: hasHookCommand(settings, "PostToolUseFailure", "*", expectedCommand),
       sessionEnd: hasHookCommand(settings, "SessionEnd", undefined, expectedCommand)
-    }
+    },
+    hostWiring: {
+      wired: Boolean(hostInfo?.commandDisplay),
+      command: hostInfo?.commandDisplay ?? installState?.hostWiring?.command,
+      transport: hostInfo?.transport ?? installState?.hostWiring?.transport,
+      scope: hostInfo?.scope ?? installState?.hostWiring?.scope,
+      status: hostInfo?.status ?? installState?.hostWiring?.status
+    },
+    hostState: hostInfo
   };
 };

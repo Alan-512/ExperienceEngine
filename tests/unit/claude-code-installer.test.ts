@@ -25,8 +25,33 @@ describe("Claude Code installer", () => {
   it("writes project-local hook configuration and install state", () => {
     const homeDir = makeTempDir();
     const projectDir = makeTempDir();
+    const commands: string[] = [];
 
-    const report = installClaudeCodeAdapter({ homeDir, projectDir });
+    const report = installClaudeCodeAdapter({
+      homeDir,
+      projectDir,
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        commands.push(key);
+        if (key === "claude mcp get experienceengine") {
+          if (commands.length === 1) {
+            throw new Error("missing");
+          }
+
+          return `experienceengine:
+  Scope: Project config (shared via .mcp.json)
+  Status: ✓ Connected
+  Type: stdio
+  Command: node
+  Args: --no-warnings /tmp/experienceengine/dist/cli/index.js mcp-server
+  Environment:
+    EXPERIENCE_ENGINE_HOME=${join(homeDir, ".experienceengine")}
+
+To remove this server, run: claude mcp remove "experienceengine" -s project`;
+        }
+        return "";
+      }
+    });
     const settingsPath = join(projectDir, ".claude", "settings.local.json");
     const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as {
       hooks?: Record<string, Array<{ matcher?: string; hooks: Array<{ command: string }> }>>;
@@ -36,6 +61,8 @@ describe("Claude Code installer", () => {
       installedVersion: string;
       settingsPath: string;
       captureDir: string;
+      serverName: string;
+      hostWiring: { wired: boolean; transport?: string };
     };
 
     expect(report.settingsPath).toBe(settingsPath);
@@ -47,10 +74,18 @@ describe("Claude Code installer", () => {
     expect(settings.hooks?.SessionEnd).toHaveLength(1);
     expect(settings.hooks?.UserPromptSubmit?.[0]?.hooks[0]?.command).toContain("node --no-warnings");
     expect(settings.hooks?.UserPromptSubmit?.[0]?.hooks[0]?.command).toContain("claude-hook");
+    expect(commands[0]).toBe("claude mcp get experienceengine");
+    expect(commands[1]).toContain("claude mcp add --scope project -e");
+    expect(commands[1]).toContain("experienceengine -- node --no-warnings");
     expect(installState.adapter).toBe("claude-code");
     expect(installState.installedVersion).toBe(report.installedVersion);
     expect(installState.settingsPath).toBe(settingsPath);
     expect(installState.captureDir).toBe(report.captureDir);
+    expect(installState.serverName).toBe("experienceengine");
+    expect(installState.hostWiring.wired).toBe(true);
+    expect(installState.hostWiring.transport).toBe("stdio");
+    expect(report.serverName).toBe("experienceengine");
+    expect(report.hostWiring.wired).toBe(true);
   });
 
   it("merges ExperienceEngine hooks without clobbering unrelated settings", () => {
@@ -80,7 +115,17 @@ describe("Claude Code installer", () => {
       "utf8"
     );
 
-    installClaudeCodeAdapter({ homeDir, projectDir });
+    installClaudeCodeAdapter({
+      homeDir,
+      projectDir,
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        if (key === "claude mcp get experienceengine") {
+          throw new Error("missing");
+        }
+        return "";
+      }
+    });
     const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as {
       env?: Record<string, string>;
       hooks?: Record<string, Array<{ matcher?: string; hooks: Array<{ command: string }> }>>;

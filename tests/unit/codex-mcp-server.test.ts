@@ -501,4 +501,76 @@ describe("Codex MCP behavior loop", () => {
     });
     expect(nodeRepo.getById("node_codex_lifecycle")?.state).toBe("retired");
   });
+
+  it("registers plan-and-confirm MCP tools for high-impact operations", async () => {
+    const server = createCodexMcpServer({
+      operationalActionsDeps: {
+        tokenFactory: (() => {
+          let count = 0;
+          return () => `plan-${++count}`;
+        })(),
+        inspectCodexInstall: () => ({
+          versionStatus: {
+            recordedVersion: "0.1.0"
+          }
+        }),
+        installCodexAdapter: () => ({
+          adapter: "codex",
+          installedVersion: "0.2.0"
+        })
+      }
+    });
+    const planUpgradeTool = getRegisteredTool(server, "experienceengine_plan_upgrade");
+    const executeTool = getRegisteredTool(server, "experienceengine_execute_planned_operation");
+    const repairTool = getRegisteredTool(server, "experienceengine_plan_repair");
+    const prompt = getRegisteredPrompt(server, "experienceengine_prepare_operational_change");
+
+    const planPayload = parseTextPayload<{
+      adapter: string;
+      operation: string;
+      planId: string;
+      confirmationToken: string;
+      commandHint: string;
+    }>((await planUpgradeTool.handler({ adapter: "codex" })) as {
+      content: Array<{ type: string; text?: string }>;
+    });
+
+    expect(planPayload).toMatchObject({
+      adapter: "codex",
+      operation: "upgrade",
+      commandHint: "ee upgrade codex"
+    });
+
+    const executePayload = parseTextPayload<{
+      status: string;
+      adapter: string;
+      operation: string;
+      result: { previousVersion?: string; installedVersion?: string };
+    }>((await executeTool.handler({
+      planId: planPayload.planId,
+      confirmationToken: planPayload.confirmationToken
+    })) as {
+      content: Array<{ type: string; text?: string }>;
+    });
+
+    expect(executePayload).toMatchObject({
+      status: "executed",
+      adapter: "codex",
+      operation: "upgrade"
+    });
+
+    await expect(repairTool.handler({ adapter: "claude-code" })).rejects.toThrow(
+      "Unsupported repair operation for claude-code"
+    );
+
+    const promptPayload = (await prompt.callback({
+      adapter: "openclaw",
+      operation: "repair"
+    })) as {
+      messages: Array<{ role: string; content: { type: string; text?: string } }>;
+    };
+
+    expect(promptPayload.messages[0].content.text).toContain("experienceengine_plan_repair");
+    expect(promptPayload.messages[0].content.text).toContain("experienceengine_execute_planned_operation");
+  });
 });
