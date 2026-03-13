@@ -10,4 +10,5 @@ data/sqlite/*.db-*
 data/vector/*
 !data/vector/.gitkeep
 data/logs/*.jsonl
-
+.claude/
+.mcp.json

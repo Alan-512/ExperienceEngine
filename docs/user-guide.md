@@ -136,6 +136,8 @@ Local state changes:
 - project file `.mcp.json`
 - ExperienceEngine-managed product state under `~/.experienceengine`
 
+These project files are local host-wiring artifacts. They are intended for local use and should normally stay out of version control.
+
 After install:
 - new Claude sessions use the updated hooks
 - agent-side inspection and management can happen through MCP
