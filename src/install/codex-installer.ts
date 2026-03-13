@@ -4,7 +4,9 @@ import {
   buildCodexGetCommand,
   buildCodexMcpServerCommand,
   buildCodexRemoveCommand,
+  CODEX_EXPERIENCEENGINE_STARTUP_TIMEOUT_SEC,
   defaultCodexCommandRunner,
+  ensureCodexMcpServerStartupTimeout,
   parseCodexMcpServerInfo,
   runCodexCommand,
   type CodexCommandRunner,
@@ -87,6 +89,9 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
   }
 
   runCodexCommand(buildCodexAddCommand(packageRoot, paths.productHome, options.cliEnv), runner);
+  ensureCodexMcpServerStartupTimeout("experienceengine", CODEX_EXPERIENCEENGINE_STARTUP_TIMEOUT_SEC, {
+    homeDir: options.homeDir
+  });
 
   const hostInfo = inspectCodexHost(runner, options.cliEnv);
   const state: CodexInstallState = {

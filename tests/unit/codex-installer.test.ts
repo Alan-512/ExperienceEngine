@@ -55,6 +55,7 @@ describe("Codex installer", () => {
     expect(report.installed).toBe(true);
     expect(report.hostWiring.wired).toBe(true);
     expect(existsSync(report.paths.installStatePath)).toBe(true);
+    expect(readFileSync(join(homeDir, ".codex", "config.toml"), "utf8")).toContain("startup_timeout_sec = 60.0");
     expect(commands[0]).toBe("codex mcp get experienceengine");
     expect(commands[1]).toContain("codex mcp add experienceengine --env");
 
