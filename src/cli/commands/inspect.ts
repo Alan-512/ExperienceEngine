@@ -3,6 +3,10 @@ import { openDatabase } from "../../store/sqlite/db.js";
 import { runMigrations } from "../../store/sqlite/migrations.js";
 import { InputRecordRepository } from "../../store/sqlite/repositories/input-record-repo.js";
 import { NodeRepository } from "../../store/sqlite/repositories/node-repo.js";
+import type { ExperienceNode } from "../../types/domain.js";
+
+const NODE_STATES: ExperienceNode["state"][] = ["candidate", "active", "cooling", "retired"];
+const NODE_TYPES: ExperienceNode["node_type"][] = ["strategy", "warning"];
 
 const parseRecentArgs = (arg1?: string, arg2?: string): { injectedOnly: boolean; limit: number } | null => {
   const values = [arg1, arg2].filter((value): value is string => Boolean(value));
@@ -102,6 +106,60 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
 
   if (target === "node") {
     console.log("Usage: ee inspect node <id>");
+    return;
+  }
+
+  if (target === "state") {
+    if (!arg1 || !NODE_STATES.includes(arg1 as ExperienceNode["state"])) {
+      console.log("Usage: ee inspect state <candidate|active|cooling|retired>");
+      return;
+    }
+
+    const nodes = nodeRepo.listByState(arg1 as ExperienceNode["state"]);
+    if (!nodes.length) {
+      console.log(`No ${arg1} experience nodes stored yet.`);
+      return;
+    }
+
+    console.table(
+      nodes.map((node) => ({
+        id: node.id,
+        type: node.node_type,
+        task: node.task_type,
+        state: node.state,
+        helped: node.helped_count,
+        harmed: node.harmed_count,
+        last_used: node.last_used_at ?? "",
+        hint: node.compact_hint
+      }))
+    );
+    return;
+  }
+
+  if (target === "type") {
+    if (!arg1 || !NODE_TYPES.includes(arg1 as ExperienceNode["node_type"])) {
+      console.log("Usage: ee inspect type <strategy|warning>");
+      return;
+    }
+
+    const nodes = nodeRepo.listByType(arg1 as ExperienceNode["node_type"]);
+    if (!nodes.length) {
+      console.log(`No ${arg1} experience nodes stored yet.`);
+      return;
+    }
+
+    console.table(
+      nodes.map((node) => ({
+        id: node.id,
+        type: node.node_type,
+        task: node.task_type,
+        state: node.state,
+        helped: node.helped_count,
+        harmed: node.harmed_count,
+        last_used: node.last_used_at ?? "",
+        hint: node.compact_hint
+      }))
+    );
     return;
   }
 

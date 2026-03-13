@@ -265,4 +265,58 @@ describe("inspect command", () => {
       ])
     );
   });
+
+  it("filters nodes by state", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+
+    const nodeRepo = new NodeRepository(db);
+    nodeRepo.upsert(makeNode());
+    nodeRepo.upsert(
+      makeNode({
+        id: "node_cooling",
+        state: "cooling",
+        compact_hint: "Cooling node hint"
+      })
+    );
+
+    runInspectCommand("state", "cooling");
+
+    expect(consoleTableSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: "node_cooling",
+        state: "cooling",
+        hint: "Cooling node hint"
+      })
+    ]);
+  });
+
+  it("filters nodes by type", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+
+    const nodeRepo = new NodeRepository(db);
+    nodeRepo.upsert(makeNode());
+    nodeRepo.upsert(
+      makeNode({
+        id: "node_warning",
+        node_type: "warning",
+        compact_hint: "Warning node hint"
+      })
+    );
+
+    runInspectCommand("type", "warning");
+
+    expect(consoleTableSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: "node_warning",
+        type: "warning",
+        hint: "Warning node hint"
+      })
+    ]);
+  });
 });

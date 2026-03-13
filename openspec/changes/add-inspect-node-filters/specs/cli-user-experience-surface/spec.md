@@ -1,0 +1,36 @@
+## MODIFIED Requirements
+
+### Requirement: ExperienceEngine supports on-demand CLI inspection
+The product SHALL expose explicit CLI commands for users who want to inspect recent or active experience behavior.
+
+#### Scenario: User inspects the last intervention
+
+- **WHEN** a user runs `ee inspect --last`
+- **THEN** ExperienceEngine reports the last session/task context
+- **AND** it reports whether intervention happened
+- **AND** it reports which nodes were injected, if any
+
+#### Scenario: User inspects active experiences
+
+- **WHEN** a user runs `ee inspect active`
+- **THEN** ExperienceEngine lists currently active experience nodes with enough metadata for user review
+
+#### Scenario: User inspects recent history
+
+- **WHEN** a user runs `ee inspect recent`
+- **THEN** ExperienceEngine lists recent recorded task summaries and outcomes
+
+#### Scenario: User inspects a specific node
+
+- **WHEN** a user runs `ee inspect node <id>`
+- **THEN** ExperienceEngine prints detailed metadata for that node
+
+#### Scenario: User inspects nodes by state
+
+- **WHEN** a user runs `ee inspect state retired`
+- **THEN** ExperienceEngine lists only nodes with the requested lifecycle state
+
+#### Scenario: User inspects nodes by type
+
+- **WHEN** a user runs `ee inspect type warning`
+- **THEN** ExperienceEngine lists only nodes with the requested node type

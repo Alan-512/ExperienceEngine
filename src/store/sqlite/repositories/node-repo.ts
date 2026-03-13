@@ -147,6 +147,20 @@ export class NodeRepository {
       .map((row) => this.mapNode(row as Parameters<typeof this.mapNode>[0]));
   }
 
+  listByState(state: ExperienceNode["state"]): ExperienceNode[] {
+    return this.db
+      .prepare("SELECT * FROM experience_nodes WHERE state = ? ORDER BY updated_at DESC")
+      .all(state)
+      .map((row) => this.mapNode(row as Parameters<typeof this.mapNode>[0]));
+  }
+
+  listByType(nodeType: ExperienceNode["node_type"]): ExperienceNode[] {
+    return this.db
+      .prepare("SELECT * FROM experience_nodes WHERE node_type = ? ORDER BY updated_at DESC")
+      .all(nodeType)
+      .map((row) => this.mapNode(row as Parameters<typeof this.mapNode>[0]));
+  }
+
   getById(id: string): ExperienceNode | undefined {
     const row = this.db.prepare("SELECT * FROM experience_nodes WHERE id = ? LIMIT 1").get(id) as
       | Parameters<typeof this.mapNode>[0]
