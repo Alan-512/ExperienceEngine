@@ -39,11 +39,11 @@ export const buildClaudeAddCommand = (
   args: [
     "mcp",
     "add",
-    "--scope",
+    "-s",
     "project",
+    CLAUDE_EXPERIENCEENGINE_SERVER,
     "-e",
     `EXPERIENCE_ENGINE_HOME=${experienceEngineHome}`,
-    CLAUDE_EXPERIENCEENGINE_SERVER,
     "--",
     ...buildExperienceEngineMcpServerCommand(packageRoot)
   ],

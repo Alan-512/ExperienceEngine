@@ -13,11 +13,11 @@ describe("Claude CLI wiring", () => {
       "claude",
       "mcp",
       "add",
-      "--scope",
+      "-s",
       "project",
+      "experienceengine",
       "-e",
       "EXPERIENCE_ENGINE_HOME=/tmp/ee-home",
-      "experienceengine",
       "--",
       ...buildExperienceEngineMcpServerCommand("/tmp/experienceengine")
     ]);
