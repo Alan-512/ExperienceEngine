@@ -124,4 +124,28 @@ describe("ExperienceInteractionService", () => {
       changed: true
     });
   });
+
+  it("updates node lifecycle state through the shared interaction service", () => {
+    const homeDir = makeTempDir();
+    const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_interaction_lifecycle");
+
+    const service = new ExperienceInteractionService(config);
+    const cooled = service.coolNode("node_interaction_lifecycle");
+    const retired = service.retireNode("node_interaction_lifecycle");
+
+    expect(cooled).toEqual({
+      status: "updated",
+      nodeId: "node_interaction_lifecycle",
+      state: "cooling"
+    });
+    expect(retired).toEqual({
+      status: "updated",
+      nodeId: "node_interaction_lifecycle",
+      state: "retired"
+    });
+  });
 });

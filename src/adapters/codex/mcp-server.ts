@@ -300,6 +300,14 @@ export const createCodexInteractionSurface = (options: CodexServerOptions = {}) 
 
     async enableScope(args: CodexScopeArgs = {}) {
       return interaction.enableScope(args.cwd);
+    },
+
+    async coolNode(args: { nodeId: string }) {
+      return interaction.coolNode(args.nodeId);
+    },
+
+    async retireNode(args: { nodeId: string }) {
+      return interaction.retireNode(args.nodeId);
     }
   };
 };
@@ -802,6 +810,40 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
       })
     },
     async ({ cwd }) => toStructuredToolResult(await interactionSurface.enableScope({ cwd }))
+  );
+
+  server.registerTool(
+    "experienceengine_cool_node",
+    {
+      title: "ExperienceEngine Cool Node",
+      description: "Move a specific ExperienceEngine node into cooling state.",
+      inputSchema: z.object({
+        nodeId: z.string().min(1)
+      }),
+      outputSchema: z.object({
+        status: z.enum(["updated", "not_found"]),
+        nodeId: z.string(),
+        state: z.enum(["candidate", "active", "cooling", "retired"]).optional()
+      })
+    },
+    async ({ nodeId }) => toStructuredToolResult(await interactionSurface.coolNode({ nodeId }))
+  );
+
+  server.registerTool(
+    "experienceengine_retire_node",
+    {
+      title: "ExperienceEngine Retire Node",
+      description: "Retire a specific ExperienceEngine node so it is no longer injected.",
+      inputSchema: z.object({
+        nodeId: z.string().min(1)
+      }),
+      outputSchema: z.object({
+        status: z.enum(["updated", "not_found"]),
+        nodeId: z.string(),
+        state: z.enum(["candidate", "active", "cooling", "retired"]).optional()
+      })
+    },
+    async ({ nodeId }) => toStructuredToolResult(await interactionSurface.retireNode({ nodeId }))
   );
 
   return server;

@@ -72,6 +72,17 @@ export type ScopeToggleResult = {
   changed: boolean;
 };
 
+export type NodeLifecycleResult =
+  | {
+      status: "updated";
+      nodeId: string;
+      state: ExperienceNode["state"];
+    }
+  | {
+      status: "not_found";
+      nodeId: string;
+    };
+
 const toNodeSummary = (node: ExperienceNode): ExperienceNodeSummary => ({
   id: node.id,
   type: node.node_type,
@@ -227,6 +238,14 @@ export class ExperienceInteractionService {
     return this.setScopeDisabled(cwd, false);
   }
 
+  coolNode(nodeId: string): NodeLifecycleResult {
+    return this.setNodeState(nodeId, "cooling");
+  }
+
+  retireNode(nodeId: string): NodeLifecycleResult {
+    return this.setNodeState(nodeId, "retired");
+  }
+
   private setScopeDisabled(cwd: string | undefined, disabled: boolean): ScopeToggleResult {
     const resolvedScope = resolveScope(cwd);
     const existing = this.scopeRepo.getById(resolvedScope.scope_id);
@@ -244,6 +263,22 @@ export class ExperienceInteractionService {
       rootPath: next.root_path,
       isDisabled: next.is_disabled,
       changed
+    };
+  }
+
+  private setNodeState(nodeId: string, state: ExperienceNode["state"]): NodeLifecycleResult {
+    const updated = this.nodeRepo.updateState(nodeId, state);
+    if (!updated) {
+      return {
+        status: "not_found",
+        nodeId
+      };
+    }
+
+    return {
+      status: "updated",
+      nodeId,
+      state: updated.state
     };
   }
 }

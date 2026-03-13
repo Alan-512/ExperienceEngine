@@ -466,4 +466,39 @@ describe("Codex MCP behavior loop", () => {
       }
     });
   });
+
+  it("registers MCP tools for node lifecycle control", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_codex_lifecycle");
+
+    const server = createCodexMcpServer({ homeDir, env });
+    const coolTool = getRegisteredTool(server, "experienceengine_cool_node");
+    const retireTool = getRegisteredTool(server, "experienceengine_retire_node");
+
+    const coolPayload = parseTextPayload<{ status: string; state?: string }>(
+      (await coolTool.handler({ nodeId: "node_codex_lifecycle" })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+    const retirePayload = parseTextPayload<{ status: string; state?: string }>(
+      (await retireTool.handler({ nodeId: "node_codex_lifecycle" })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+
+    expect(coolPayload).toMatchObject({
+      status: "updated",
+      state: "cooling"
+    });
+    expect(retirePayload).toMatchObject({
+      status: "updated",
+      state: "retired"
+    });
+    expect(nodeRepo.getById("node_codex_lifecycle")?.state).toBe("retired");
+  });
 });
