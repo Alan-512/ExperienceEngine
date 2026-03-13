@@ -1,5 +1,7 @@
 # ExperienceEngine
 
+[简体中文版 README](./README.zh-CN.md)
+
 ExperienceEngine is a local experience-intervention layer for coding agents.
 
 It learns short, task-specific guidance from real coding work, injects that guidance into later similar tasks, and records whether the intervention helped or harmed the outcome.
@@ -49,6 +51,16 @@ If the package is installed as a binary, use:
 ee doctor codex
 ```
 
+## Prerequisites
+
+Before installing an adapter, make sure the host CLI already works on this machine:
+
+- `openclaw` for the OpenClaw adapter
+- `claude` for the Claude Code adapter
+- `codex` for the Codex adapter
+
+ExperienceEngine does not install those host CLIs for you. It wires itself into an already working host environment.
+
 ## Install By Host
 
 ```bash
@@ -81,6 +93,14 @@ That managed state includes:
 See the full user guide here:
 
 - [ExperienceEngine User Guide](./docs/user-guide.md)
+
+The user guide includes:
+- host-specific prerequisites
+- which local files ExperienceEngine modifies during installation
+- first-run validation steps
+- MCP vs CLI fallback usage
+- backup / export / import / rollback workflows
+- troubleshooting notes for OpenClaw, Claude Code, and Codex
 
 ## Validation
 

@@ -74,6 +74,14 @@ That applies to:
 
 ## Host-Specific Setup
 
+Before installing any adapter, make sure the host CLI itself already works on this machine:
+
+- `openclaw` for the OpenClaw adapter
+- `claude` for the Claude Code adapter
+- `codex` for the Codex adapter
+
+ExperienceEngine wires itself into an existing host environment. It does not install the host CLI for you.
+
 ### OpenClaw
 
 Install:
@@ -87,6 +95,10 @@ What happens:
 - OpenClaw runtime events are used for intervention and persistence
 - management remains mostly through CLI fallback today
 
+Local state changes:
+- OpenClaw plugin install state and config are updated through the OpenClaw CLI
+- ExperienceEngine-managed product state is written under `~/.experienceengine`
+
 Useful commands:
 
 ```bash
@@ -94,6 +106,18 @@ ee doctor openclaw
 ee repair openclaw
 ee upgrade openclaw
 ```
+
+First validation:
+
+```bash
+ee doctor openclaw
+openclaw plugins info experienceengine
+```
+
+Success looks like:
+- doctor reports the adapter as installed
+- OpenClaw reports the plugin as loaded or enabled
+- a real task later produces ExperienceEngine runtime records under `~/.experienceengine`
 
 ### Claude Code
 
@@ -107,6 +131,11 @@ What happens:
 - ExperienceEngine writes Claude hooks into `.claude/settings.local.json`
 - ExperienceEngine registers its shared MCP server with Claude Code for the current project
 
+Local state changes:
+- project file `.claude/settings.local.json`
+- project file `.mcp.json`
+- ExperienceEngine-managed product state under `~/.experienceengine`
+
 After install:
 - new Claude sessions use the updated hooks
 - agent-side inspection and management can happen through MCP
@@ -117,6 +146,23 @@ Useful commands:
 ee doctor claude-code
 ee upgrade claude-code
 ```
+
+First validation:
+
+```bash
+ee doctor claude-code
+claude mcp get experienceengine
+```
+
+Success looks like:
+- doctor reports Claude hooks as present
+- `claude mcp get experienceengine` shows the server as connected
+- in a new Claude session, the agent can inspect ExperienceEngine through MCP
+
+Host note:
+- Claude uses both `hooks` and `MCP`
+- hooks drive runtime capture and injection
+- MCP drives inspect/control/operational interaction
 
 ### Codex
 
@@ -130,12 +176,33 @@ What happens:
 - ExperienceEngine registers its shared MCP server with Codex
 - new Codex MCP sessions can use ExperienceEngine interaction surfaces
 
+Local state changes:
+- Codex MCP config in `~/.codex/config.toml`
+- ExperienceEngine-managed product state under `~/.experienceengine`
+
 Useful commands:
 
 ```bash
 ee doctor codex
 ee upgrade codex
 ```
+
+First validation:
+
+```bash
+ee doctor codex
+codex mcp get experienceengine
+```
+
+Success looks like:
+- doctor reports the adapter as installed
+- `codex mcp get experienceengine` shows the server as enabled
+- a new `codex exec` session can call ExperienceEngine MCP resources or tools
+
+Host note:
+- ExperienceEngine installs a longer `startup_timeout_sec` for Codex automatically
+- this avoids MCP handshake failures on slower local startups
+- if Codex still cannot see ExperienceEngine in new sessions, re-run `ee install codex`
 
 ## CLI Fallback
 
@@ -144,6 +211,13 @@ Even though MCP is the main user interaction model for Claude/Codex, the `ee` CL
 - automation
 - scripting
 - recovery path
+
+Use MCP first for normal day-to-day interaction inside Claude/Codex.
+
+Use `ee` directly when:
+- the host session cannot currently access MCP
+- you are scripting or automating locally
+- you are repairing or recovering a broken local setup
 
 Useful fallback commands:
 
@@ -197,6 +271,13 @@ ee upgrade openclaw
 ee upgrade claude-code
 ee upgrade codex
 ```
+
+Recommended order:
+
+1. `ee doctor <adapter>`
+2. if wiring drifted, run repair or upgrade
+3. start a new host session
+4. verify the host can see ExperienceEngine again
 
 ## Backups, Exports, Imports, and Rollbacks
 
@@ -370,3 +451,32 @@ If ExperienceEngine guidance is noisy rather than broken:
 - mark the last intervention as harmed
 - cool or retire the offending node
 - disable the current scope temporarily if needed
+
+### Quick troubleshooting by host
+
+OpenClaw:
+- run `ee doctor openclaw`
+- if doctor shows wiring drift, run `ee repair openclaw`
+- if OpenClaw still looks stale, open a new host session or restart the gateway
+
+Claude Code:
+- run `ee doctor claude-code`
+- verify `claude mcp get experienceengine`
+- if MCP or hooks are missing, run `ee install claude-code`
+- start a new Claude session after reinstall or upgrade
+
+Codex:
+- run `ee doctor codex`
+- verify `codex mcp get experienceengine`
+- if a new Codex session still cannot see ExperienceEngine, run `ee install codex`
+- then start a new Codex session so the MCP connection is recreated
+
+### What ExperienceEngine does not back up
+
+Managed backups and exports do not include:
+- host-private internal state unrelated to ExperienceEngine
+- your repositories or workspace files
+- provider credentials
+- arbitrary third-party plugin state
+
+If those matter to you, back them up separately.
