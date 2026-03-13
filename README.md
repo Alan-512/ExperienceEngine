@@ -1,52 +1,93 @@
 # ExperienceEngine
 
-ExperienceEngine v2 MVP scaffold for an OpenClaw companion-layer plugin. The initial repository focuses on a runnable TypeScript skeleton for:
+ExperienceEngine is a local experience-intervention layer for coding agents.
 
-- host input adaptation
-- experience extraction and gating
-- conservative intervention rendering
-- feedback/state updates
-- SQLite-backed persistence
-- a minimal `ee` CLI for local inspection
+It learns short, task-specific guidance from real coding work, injects that guidance into later similar tasks, and records whether the intervention helped or harmed the outcome.
 
-## Stack
+Current validated hosts:
+- `OpenClaw` for runtime/plugin integration
+- `Claude Code` for hooks + MCP interaction
+- `Codex` for MCP-first runtime and interaction
 
-- Node.js 20+
-- TypeScript
-- pnpm
-- SQLite via `node:sqlite`
-- Vitest
+## What It Does
+
+ExperienceEngine is not a general memory store and not a replacement context engine.
+
+It focuses on four things:
+- capture task/tool/outcome signals from the host agent
+- compress useful prior experience into short `strategy` or `warning` nodes
+- decide whether to inject guidance for a similar task
+- update node state from real `helped` / `harmed` outcomes
+
+## Current Product State
+
+The current repository is past the scaffold phase.
+
+What is already implemented and validated:
+- real runtime integration on OpenClaw
+- real runtime integration on Claude Code
+- real runtime integration on Codex
+- MCP-native interaction surface with `Resources`, `Prompts`, and `Tools`
+- CLI fallback for inspection, feedback, management, install, repair, and upgrade
+- MCP `plan + confirm` workflows for:
+  - install / repair / upgrade
+  - backup / export / import / rollback
 
 ## Quick Start
 
+From a source checkout:
+
 ```bash
 pnpm install
-pnpm check
-node dist/cli/index.js stats
+pnpm build
+node dist/cli/index.js doctor codex
 ```
 
-## Project Layout
+If the package is installed as a binary, use:
+
+```bash
+ee doctor codex
+```
+
+## Install By Host
+
+```bash
+ee install openclaw
+ee install claude-code
+ee install codex
+```
+
+Notes:
+- `OpenClaw` uses plugin/runtime integration and CLI fallback for management.
+- `Claude Code` installs both hooks and the shared ExperienceEngine MCP server.
+- `Codex` installs the shared ExperienceEngine MCP server.
+
+## Data Location
+
+By default, ExperienceEngine stores product data under:
 
 ```text
-src/
-  plugin/       OpenClaw-facing hooks and plugin factory
-  input/        Host signal normalization into ExperienceInput
-  analyzer/     Strategy and warning extraction
-  controller/   Trigger evaluation, retrieval, ranking, rendering
-  feedback/     Outcome attribution and state transitions
-  store/        SQLite, vector and JSONL storage adapters
-  cli/          Local control and inspection commands
+~/.experienceengine
 ```
 
-## Current Status
+That managed state includes:
+- SQLite database
+- product settings
+- per-adapter install state
+- managed backups and exports
 
-This is an initialization baseline, not a production-complete plugin. The repository now includes:
+## User Guide
 
-- typed domain models from the v2 spec
-- a SQLite schema and bootstrap path
-- OpenClaw plugin manifest + `register(api)` entrypoint
-- agent-loop payload normalization for `before_prompt_build`, `tool_result_persist`, and finalize events
-- fixture-backed integration replay coverage for multiple OpenClaw payload shapes
-- test coverage for task typing, trigger evaluation, rendering, and payload normalization
+See the full user guide here:
 
-Next implementation steps should focus on validating the plugin against a real OpenClaw runtime, then replacing heuristic extractors with stronger evidence-aware logic.
+- [ExperienceEngine User Guide](./docs/user-guide.md)
+
+## Validation
+
+The repository currently validates with:
+
+```bash
+pnpm check
+openspec validate --specs
+openspec validate --changes --strict
+```
