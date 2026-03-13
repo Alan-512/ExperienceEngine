@@ -24,6 +24,13 @@ Define the host-specific installer and doctor requirements for ExperienceEngine 
 - **THEN** ExperienceEngine reports whether Codex has an `experienceengine` MCP entry
 - **AND** it reports the current configured command or config target used by that entry
 
+#### Scenario: Inspect Claude hook and MCP readiness
+
+- **WHEN** a user runs `ee doctor claude-code`
+- **THEN** ExperienceEngine reports whether Claude Code has the required ExperienceEngine hook configuration
+- **AND** it reports whether Claude Code has an `experienceengine` MCP entry
+- **AND** it reports the current configured command or config target used by that entry
+
 ### Requirement: Codex foundation provides a local MCP entrypoint
 
 ExperienceEngine MUST expose a local Codex-facing MCP server entrypoint before attempting richer Codex automation.
@@ -34,3 +41,13 @@ ExperienceEngine MUST expose a local Codex-facing MCP server entrypoint before a
 - **THEN** the configured server command points at an ExperienceEngine-owned `codex-mcp-server` entrypoint
 - **AND** that entrypoint is suitable for Codex MCP registration
 
+### Requirement: Claude Code installs both runtime and interaction wiring
+
+ExperienceEngine MUST install Claude Code in a way that preserves both runtime hook integration and agent-session interaction through MCP.
+
+#### Scenario: Claude install writes hooks and MCP wiring
+
+- **WHEN** a user runs `ee install claude-code`
+- **THEN** ExperienceEngine writes the required Claude hook configuration for runtime capture and injection
+- **AND** it registers the shared ExperienceEngine MCP server with Claude Code
+- **AND** install state preserves the resulting hook and MCP wiring details
