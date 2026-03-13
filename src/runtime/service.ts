@@ -4,6 +4,7 @@ import { createEmptyStats, updateStats } from "../feedback/stats-updater.js";
 import { buildExperienceInput } from "../input/input-adapter.js";
 import { resolveScope } from "../input/scope-resolver.js";
 import { decideIntervention } from "../controller/intervention-controller.js";
+import { renderInlineNotice } from "../controller/inline-notice.js";
 import { nowIso } from "../utils/clock.js";
 import { createId, stableId } from "../utils/ids.js";
 import type {
@@ -182,7 +183,12 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       session.toolEvents
     );
 
-    this.scopeRepo.upsert(resolveScope(mergedContext.cwd));
+    const resolvedScope = resolveScope(mergedContext.cwd);
+    const existingScope = this.scopeRepo.getById(resolvedScope.scope_id);
+    this.scopeRepo.upsert({
+      ...resolvedScope,
+      is_disabled: existingScope?.is_disabled ?? resolvedScope.is_disabled
+    });
     this.inputRepo.upsert(toInputRecord(input, sessionId));
 
     if (input.task_type !== "unknown") {
@@ -225,6 +231,32 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     const session = this.getSession(sessionId);
     session.context = mergeContext(session.context, context);
     const input = buildExperienceInput(session.context, session.toolEvents);
+    const resolvedScope = resolveScope(session.context.cwd);
+    const existingScope = this.scopeRepo.getById(resolvedScope.scope_id);
+
+    if (existingScope?.is_disabled) {
+      session.injectedNodeIds = [];
+      session.context = {
+        ...session.context,
+        injectedNodeIds: []
+      };
+
+      this.logger.info?.("experienceengine.scope_disabled", {
+        sessionId,
+        scopeId: existingScope.scope_id
+      });
+
+      return {
+        mode: "skip" as const,
+        text: undefined,
+        notice: undefined,
+        input: {
+          ...input,
+          scope_id: existingScope.scope_id,
+          injected_node_ids: []
+        }
+      };
+    }
 
     const stats =
       input.task_type !== "unknown" ? this.statsRepo.get(input.scope_id, input.task_type) : undefined;
@@ -247,6 +279,8 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     return {
       mode: decision.mode,
       text: decision.text,
+      notice:
+        decision.mode !== "skip" && this.config.noticesInline ? renderInlineNotice(decision.selected) : undefined,
       input: {
         ...input,
         injected_node_ids: session.injectedNodeIds

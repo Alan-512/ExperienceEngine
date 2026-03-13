@@ -42,11 +42,17 @@ const createCodexRuntime = (options: CodexServerOptions = {}): ExperienceRuntime
   });
 
   return new ExperienceRuntimeService(
-    loadConfig({
-      dataDir: paths.dataDir,
-      sqlitePath: paths.sqlitePath,
-      captureDir: paths.captureDir
-    })
+    loadConfig(
+      {
+        dataDir: paths.dataDir,
+        sqlitePath: paths.sqlitePath,
+        captureDir: paths.captureDir
+      },
+      {
+        env: options.env ?? process.env,
+        homeDir: options.homeDir
+      }
+    )
   );
 };
 
@@ -74,6 +80,7 @@ export const createCodexBehaviorLoop = (options: CodexServerOptions = {}) => {
       return {
         mode: result.mode,
         text: result.text,
+        notice: result.notice,
         injectedNodeIds: result.input.injected_node_ids
       };
     },

@@ -27,6 +27,7 @@ type ClaudeHookOptions = {
 export type ClaudeHookCommandResult = {
   capturePath: string | null;
   hookOutput?: string;
+  notice?: string;
 };
 
 const sanitizeSegment = (value: string | undefined, fallback: string): string =>
@@ -40,11 +41,17 @@ const createClaudeRuntime = (options: ClaudeHookOptions = {}): ExperienceRuntime
   });
 
   return new ExperienceRuntimeService(
-    loadConfig({
-      dataDir: paths.dataDir,
-      sqlitePath: paths.sqlitePath,
-      captureDir: paths.captureDir
-    })
+    loadConfig(
+      {
+        dataDir: paths.dataDir,
+        sqlitePath: paths.sqlitePath,
+        captureDir: paths.captureDir
+      },
+      {
+        env: options.env ?? process.env,
+        homeDir: options.homeDir
+      }
+    )
   );
 };
 
@@ -134,6 +141,7 @@ export const processClaudeHookPayload = async (
 
     return {
       capturePath,
+      notice: promptResult.notice,
       hookOutput:
         promptResult.text && promptResult.mode !== "skip"
           ? buildClaudeHookOutput(promptResult.text)
@@ -165,6 +173,9 @@ export const processClaudeHookPayload = async (
 export const runClaudeHookCommand = async (): Promise<void> => {
   const rawInput = readFileSync(0, "utf8");
   const result = await processClaudeHookPayload(rawInput);
+  if (result.notice) {
+    process.stderr.write(`${result.notice}\n`);
+  }
   if (result.hookOutput) {
     process.stdout.write(`${result.hookOutput}\n`);
   }

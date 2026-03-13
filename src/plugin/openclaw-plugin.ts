@@ -50,6 +50,13 @@ class OpenClawExperiencePlugin implements ExperiencePlugin {
       this.runtime.captureWriter.capture("before_prompt_build", extractSessionKey(source), { payload, context: hookContext });
       const context = normalizePromptPayload(source);
       const result = await this.beforePromptBuild(context);
+      if (result.notice) {
+        (api.logger ?? api.log)?.info?.("experienceengine.notice", {
+          sessionId: context.sessionId,
+          notice: result.notice,
+          mode: result.mode
+        });
+      }
       if (result.text && result.mode !== "skip") {
         return applyInjectionToPayload(payload, result.text);
       }

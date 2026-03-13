@@ -4,6 +4,7 @@ export const configSchema = z.object({
   dataDir: z.string().default("./data"),
   sqlitePath: z.string().default("./data/sqlite/experienceengine.db"),
   logLevel: z.enum(["debug", "info", "warn", "error"]).default("info"),
+  noticesInline: z.boolean().default(true),
   captureRawPayloads: z.boolean().default(false),
   captureDir: z.string().default("./data/runtime-captures"),
   maxHints: z.number().int().min(1).max(3).default(3),
@@ -28,6 +29,10 @@ export const pluginConfigJsonSchema = {
       type: "string",
       enum: ["debug", "info", "warn", "error"],
       description: "Plugin log verbosity."
+    },
+    noticesInline: {
+      type: "boolean",
+      description: "Emit one-line inline notices when ExperienceEngine injects guidance."
     },
     captureRawPayloads: {
       type: "boolean",
@@ -63,6 +68,9 @@ export const pluginUiHints = {
   },
   logLevel: {
     label: "Log Level"
+  },
+  noticesInline: {
+    label: "Inline Notices"
   },
   captureRawPayloads: {
     label: "Capture Raw Payloads"

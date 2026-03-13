@@ -191,6 +191,7 @@ describe("Claude hook capture", () => {
     );
 
     expect(result.hookOutput).toBeTruthy();
+    expect(result.notice).toBe("[ExperienceEngine] Injected 1 strategy hint for this task.");
     expect(JSON.parse(result.hookOutput ?? "{}")).toEqual({
       hookSpecificOutput: {
         hookEventName: "UserPromptSubmit",
@@ -343,7 +344,7 @@ describe("Claude hook capture", () => {
       });
     }
 
-    const files = readdirSync(join(homeDir, ".experienceengine", "captures"));
+    const files = readdirSync(join(homeDir, ".experienceengine", "adapters", "claude-code", "captures"));
     expect(files).toHaveLength(1);
 
     const session = loadClaudeSession("real-session-user-prompt", { homeDir, env });

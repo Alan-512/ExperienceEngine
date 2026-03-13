@@ -1,25 +1,41 @@
 import { defaultConfig } from "./default-config.js";
 import { configSchema, type ExperienceEngineConfig } from "./config-schema.js";
 import { resolveExperienceEnginePaths } from "./path-resolver.js";
+import { readExperienceEngineSettings } from "./settings-store.js";
 
-export const loadConfig = (overrides: Partial<ExperienceEngineConfig> = {}): ExperienceEngineConfig => {
-  const paths = resolveExperienceEnginePaths({ overrides });
+type LoadConfigOptions = {
+  env?: NodeJS.ProcessEnv;
+  homeDir?: string;
+};
+
+export const loadConfig = (
+  overrides: Partial<ExperienceEngineConfig> = {},
+  options: LoadConfigOptions = {}
+): ExperienceEngineConfig => {
+  const env = options.env ?? process.env;
+  const paths = resolveExperienceEnginePaths({ overrides, env, homeDir: options.homeDir });
+  const settings = readExperienceEngineSettings({ env, homeDir: options.homeDir });
   const captureRawPayloads =
-    process.env.EXPERIENCE_ENGINE_CAPTURE_RAW_PAYLOADS !== undefined
-      ? process.env.EXPERIENCE_ENGINE_CAPTURE_RAW_PAYLOADS === "true"
+    env.EXPERIENCE_ENGINE_CAPTURE_RAW_PAYLOADS !== undefined
+      ? env.EXPERIENCE_ENGINE_CAPTURE_RAW_PAYLOADS === "true"
       : overrides.captureRawPayloads ?? defaultConfig.captureRawPayloads;
+  const noticesInline =
+    env.EXPERIENCE_ENGINE_INLINE_NOTICES !== undefined
+      ? env.EXPERIENCE_ENGINE_INLINE_NOTICES === "true"
+      : overrides.noticesInline ?? settings.notices?.inline ?? defaultConfig.noticesInline;
 
   const parsed = configSchema.parse({
     dataDir: paths.dataDir,
     sqlitePath: paths.sqlitePath,
-    logLevel: process.env.EXPERIENCE_ENGINE_LOG_LEVEL ?? overrides.logLevel ?? defaultConfig.logLevel,
+    logLevel: env.EXPERIENCE_ENGINE_LOG_LEVEL ?? overrides.logLevel ?? defaultConfig.logLevel,
+    noticesInline,
     captureRawPayloads,
     captureDir: paths.captureDir,
-    maxHints: process.env.EXPERIENCE_ENGINE_MAX_HINTS
-      ? Number(process.env.EXPERIENCE_ENGINE_MAX_HINTS)
+    maxHints: env.EXPERIENCE_ENGINE_MAX_HINTS
+      ? Number(env.EXPERIENCE_ENGINE_MAX_HINTS)
       : overrides.maxHints ?? defaultConfig.maxHints,
-    triggerThreshold: process.env.EXPERIENCE_ENGINE_TRIGGER_THRESHOLD
-      ? Number(process.env.EXPERIENCE_ENGINE_TRIGGER_THRESHOLD)
+    triggerThreshold: env.EXPERIENCE_ENGINE_TRIGGER_THRESHOLD
+      ? Number(env.EXPERIENCE_ENGINE_TRIGGER_THRESHOLD)
       : overrides.triggerThreshold ?? defaultConfig.triggerThreshold
   });
 

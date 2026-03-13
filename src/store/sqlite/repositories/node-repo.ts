@@ -77,9 +77,39 @@ export class NodeRepository {
     return this.db.prepare("SELECT * FROM experience_nodes ORDER BY updated_at DESC").all() as unknown as ExperienceNode[];
   }
 
+  listActive(): ExperienceNode[] {
+    return this.db
+      .prepare("SELECT * FROM experience_nodes WHERE state = 'active' ORDER BY updated_at DESC")
+      .all() as unknown as ExperienceNode[];
+  }
+
   getById(id: string): ExperienceNode | undefined {
     return this.db.prepare("SELECT * FROM experience_nodes WHERE id = ? LIMIT 1").get(id) as unknown as
       | ExperienceNode
       | undefined;
+  }
+
+  listByIds(ids: string[]): ExperienceNode[] {
+    if (!ids.length) {
+      return [];
+    }
+
+    const placeholders = ids.map(() => "?").join(", ");
+    return this.db
+      .prepare(`SELECT * FROM experience_nodes WHERE id IN (${placeholders}) ORDER BY updated_at DESC`)
+      .all(...ids) as unknown as ExperienceNode[];
+  }
+
+  updateState(id: string, state: ExperienceNode["state"]): ExperienceNode | undefined {
+    const node = this.getById(id);
+    if (!node) {
+      return undefined;
+    }
+
+    return this.upsert({
+      ...node,
+      state,
+      updated_at: new Date().toISOString()
+    });
   }
 }

@@ -55,6 +55,13 @@ export const resolveExperienceEnginePaths = (options: ResolvePathOptions = {}): 
 
   if (hasExplicitPaths(overrides, env)) {
     const activeHome = resolve(overrides.dataDir ?? env.EXPERIENCE_ENGINE_DATA_DIR ?? productHome);
+    const captureDir =
+      overrides.captureDir ??
+      env.EXPERIENCE_ENGINE_CAPTURE_DIR ??
+      (adapter === "openclaw"
+        ? join(activeHome, "captures")
+        : join(activeHome, "adapters", adapter, "captures"));
+
     return {
       mode: "explicit",
       productHome,
@@ -64,9 +71,7 @@ export const resolveExperienceEnginePaths = (options: ResolvePathOptions = {}): 
       sqlitePath: resolve(
         overrides.sqlitePath ?? join(activeHome, "sqlite", "experienceengine.db")
       ),
-      captureDir: resolve(
-        overrides.captureDir ?? env.EXPERIENCE_ENGINE_CAPTURE_DIR ?? join(activeHome, "captures")
-      ),
+      captureDir: resolve(captureDir),
       installStatePath,
       usedInstallState: hasInstallState
     };

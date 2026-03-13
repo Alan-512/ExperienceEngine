@@ -26,6 +26,7 @@ export type HostToolResult = {
 export type PromptBuildResult = {
   mode: InjectionMode;
   text?: string;
+  notice?: string;
   input: ExperienceInput;
 };
 

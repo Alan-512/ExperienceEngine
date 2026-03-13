@@ -7,6 +7,7 @@ import { loadConfig } from "../../src/config/load-config.js";
 import { resolveScope } from "../../src/input/scope-resolver.js";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
+import { ScopeRepository } from "../../src/store/sqlite/repositories/scope-repo.js";
 import { nowIso } from "../../src/utils/clock.js";
 
 const tempDirs: string[] = [];
@@ -75,6 +76,7 @@ describe("Codex MCP behavior loop", () => {
 
     expect(result.mode).toBe("inject_conservative");
     expect(result.text).toContain("Run the failing auth test before editing and verify after the fix.");
+    expect(result.notice).toBe("[ExperienceEngine] Injected 1 strategy hint for this task.");
     expect(result.injectedNodeIds).toEqual(["node_codex_prompt_injection"]);
   });
 
@@ -161,5 +163,33 @@ describe("Codex MCP behavior loop", () => {
     expect(node?.usage_count).toBe(1);
     expect(node?.helped_count).toBe(0);
     expect(node?.harmed_count).toBe(1);
+  });
+
+  it("skips intervention when the current scope has been disabled", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    const scopeRepo = new ScopeRepository(db);
+    const scope = resolveScope("/repo");
+    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_codex_disabled_scope");
+    scopeRepo.upsert({
+      ...scope,
+      is_disabled: true
+    });
+
+    const loop = createCodexBehaviorLoop({ homeDir, env });
+    const result = await loop.lookupHints({
+      cwd: "/repo",
+      prompt: "Fix the failing auth test",
+      sessionId: "codex-disabled-scope"
+    });
+
+    expect(result.mode).toBe("skip");
+    expect(result.text).toBeUndefined();
+    expect(result.notice).toBeUndefined();
+    expect(result.injectedNodeIds).toEqual([]);
   });
 });

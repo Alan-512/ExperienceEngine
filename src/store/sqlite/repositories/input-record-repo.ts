@@ -4,6 +4,32 @@ import type { ExperienceInputRecord } from "../../../types/domain.js";
 export class InputRecordRepository {
   constructor(private readonly db: DatabaseSync) {}
 
+  private mapRecord(row: {
+    record_id: string;
+    scope_id: string;
+    session_id: string | null;
+    task_type: ExperienceInputRecord["task_type"];
+    task_summary: string;
+    outcome_signal: ExperienceInputRecord["outcome_signal"];
+    context_summary: string | null;
+    evidence_json: string;
+    injected_node_ids_json: string;
+    created_at: string;
+  }): ExperienceInputRecord {
+    return {
+      record_id: row.record_id,
+      scope_id: row.scope_id,
+      session_id: row.session_id ?? undefined,
+      task_type: row.task_type,
+      task_summary: row.task_summary,
+      outcome_signal: row.outcome_signal,
+      context_summary: row.context_summary ?? undefined,
+      evidence: JSON.parse(row.evidence_json) as string[],
+      injected_node_ids: JSON.parse(row.injected_node_ids_json) as string[],
+      created_at: row.created_at
+    };
+  }
+
   upsert(record: ExperienceInputRecord): ExperienceInputRecord {
     const payload = {
       record_id: record.record_id,
@@ -32,5 +58,60 @@ export class InputRecordRepository {
       )
       .run(payload);
     return record;
+  }
+
+  getLatest(): ExperienceInputRecord | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT record_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary,
+                evidence_json, injected_node_ids_json, created_at
+         FROM experience_input_records
+         ORDER BY created_at DESC
+         LIMIT 1`
+      )
+      .get() as
+      | {
+          record_id: string;
+          scope_id: string;
+          session_id: string | null;
+          task_type: ExperienceInputRecord["task_type"];
+          task_summary: string;
+          outcome_signal: ExperienceInputRecord["outcome_signal"];
+          context_summary: string | null;
+          evidence_json: string;
+          injected_node_ids_json: string;
+          created_at: string;
+        }
+      | undefined;
+
+    return row ? this.mapRecord(row) : undefined;
+  }
+
+  getLatestInjected(): ExperienceInputRecord | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT record_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary,
+                evidence_json, injected_node_ids_json, created_at
+         FROM experience_input_records
+         WHERE injected_node_ids_json != '[]'
+         ORDER BY created_at DESC
+         LIMIT 1`
+      )
+      .get() as
+      | {
+          record_id: string;
+          scope_id: string;
+          session_id: string | null;
+          task_type: ExperienceInputRecord["task_type"];
+          task_summary: string;
+          outcome_signal: ExperienceInputRecord["outcome_signal"];
+          context_summary: string | null;
+          evidence_json: string;
+          injected_node_ids_json: string;
+          created_at: string;
+        }
+      | undefined;
+
+    return row ? this.mapRecord(row) : undefined;
   }
 }
