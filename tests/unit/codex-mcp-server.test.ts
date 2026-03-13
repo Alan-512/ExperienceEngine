@@ -2,7 +2,11 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
-import { createCodexBehaviorLoop } from "../../src/adapters/codex/mcp-server.js";
+import {
+  createCodexBehaviorLoop,
+  createCodexInteractionSurface,
+  createCodexMcpServer
+} from "../../src/adapters/codex/mcp-server.js";
 import { loadConfig } from "../../src/config/load-config.js";
 import { resolveScope } from "../../src/input/scope-resolver.js";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
@@ -26,6 +30,30 @@ afterEach(() => {
     }
   }
 });
+
+const parseTextPayload = <T>(result: { content: Array<{ type: string; text?: string }> }): T =>
+  JSON.parse(result.content[0]?.text ?? "null") as T;
+
+const getRegisteredTool = (server: ReturnType<typeof createCodexMcpServer>, name: string) =>
+  (server as unknown as { _registeredTools: Record<string, { handler: (args: unknown) => Promise<unknown> }> })
+    ._registeredTools[name];
+
+const getRegisteredResource = (server: ReturnType<typeof createCodexMcpServer>, uri: string) =>
+  (
+    server as unknown as {
+      _registeredResources: Record<string, { readCallback: (uri: URL, extra: unknown) => Promise<unknown> }>;
+    }
+  )._registeredResources[uri];
+
+const getRegisteredResourceTemplate = (server: ReturnType<typeof createCodexMcpServer>, name: string) =>
+  (
+    server as unknown as {
+      _registeredResourceTemplates: Record<
+        string,
+        { readCallback: (uri: URL, variables: Record<string, string>, extra: unknown) => Promise<unknown> }
+      >;
+    }
+  )._registeredResourceTemplates[name];
 
 const seedStrategyNode = (nodeRepo: NodeRepository, cwd: string, timestamp: string, id: string): void => {
   const scope = resolveScope(cwd);
@@ -191,5 +219,152 @@ describe("Codex MCP behavior loop", () => {
     expect(result.text).toBeUndefined();
     expect(result.notice).toBeUndefined();
     expect(result.injectedNodeIds).toEqual([]);
+  });
+
+  it("serves inspect views through the codex interaction surface", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_codex_surface_view");
+
+    const loop = createCodexBehaviorLoop({ homeDir, env });
+    await loop.lookupHints({
+      cwd: "/repo",
+      prompt: "Fix the failing auth test",
+      sessionId: "codex-surface-view"
+    });
+    await loop.finalizeTask({
+      sessionId: "codex-surface-view",
+      cwd: "/repo",
+      prompt: "Fix the failing auth test"
+    });
+
+    const surface = createCodexInteractionSurface({ homeDir, env });
+    const last = await surface.inspectLast();
+    const recent = await surface.inspectRecent({ mode: "injected", limit: 5 });
+    const candidateNodes = await surface.listNodesByState({ state: "candidate" });
+    const node = await surface.inspectNode({ nodeId: "node_codex_surface_view" });
+
+    expect(last?.sessionId).toBe("codex-surface-view");
+    expect(last?.intervention).toBe("inject");
+    expect(recent).toHaveLength(1);
+    expect(candidateNodes.map((entry) => entry.id)).toContain("node_codex_surface_view");
+    expect(node?.id).toBe("node_codex_surface_view");
+    expect(node?.recommendedSteps).toEqual([
+      "Run the failing test",
+      "Apply the minimal fix",
+      "Re-run the test"
+    ]);
+  });
+
+  it("registers MCP resources for inspect views", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_codex_resource_view");
+
+    const loop = createCodexBehaviorLoop({ homeDir, env });
+    await loop.lookupHints({
+      cwd: "/repo",
+      prompt: "Fix the failing auth test",
+      sessionId: "codex-resource-view"
+    });
+    await loop.finalizeTask({
+      sessionId: "codex-resource-view",
+      cwd: "/repo",
+      prompt: "Fix the failing auth test"
+    });
+
+    const server = createCodexMcpServer({ homeDir, env });
+    const lastResource = getRegisteredResource(server, "experienceengine://last");
+    const recentResource = getRegisteredResourceTemplate(server, "experienceengine_recent");
+    const nodeResource = getRegisteredResourceTemplate(server, "experienceengine_node");
+
+    const lastPayload = await lastResource.readCallback(new URL("experienceengine://last"), {});
+    const recentPayload = await recentResource.readCallback(
+      new URL("experienceengine://recent/injected/5"),
+      { mode: "injected", limit: "5" },
+      {}
+    );
+    const nodePayload = await nodeResource.readCallback(
+      new URL("experienceengine://node/node_codex_resource_view"),
+      { id: "node_codex_resource_view" },
+      {}
+    );
+
+    expect(JSON.parse((lastPayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({
+      sessionId: "codex-resource-view",
+      intervention: "inject"
+    });
+    expect(JSON.parse((recentPayload as { contents: Array<{ text: string }> }).contents[0].text)).toHaveLength(1);
+    expect(JSON.parse((nodePayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({
+      id: "node_codex_resource_view",
+      type: "strategy"
+    });
+  });
+
+  it("registers low-risk MCP tools for feedback and scope toggles", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_codex_mcp_feedback");
+
+    const loop = createCodexBehaviorLoop({ homeDir, env });
+    await loop.lookupHints({
+      cwd: "/repo",
+      prompt: "Fix the failing auth test",
+      sessionId: "codex-mcp-feedback"
+    });
+    await loop.finalizeTask({
+      sessionId: "codex-mcp-feedback",
+      cwd: "/repo",
+      prompt: "Fix the failing auth test"
+    });
+
+    const server = createCodexMcpServer({ homeDir, env });
+    const feedbackLastTool = getRegisteredTool(server, "experienceengine_feedback_last");
+    const disableScopeTool = getRegisteredTool(server, "experienceengine_disable_scope");
+    const enableScopeTool = getRegisteredTool(server, "experienceengine_enable_scope");
+
+    const feedbackResult = parseTextPayload<{ status: string; nodeIds?: string[] }>(
+      (await feedbackLastTool.handler({ feedback: "helped" })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+    const disableResult = parseTextPayload<{ isDisabled: boolean; changed: boolean }>(
+      (await disableScopeTool.handler({ cwd: "/repo" })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+    const enableResult = parseTextPayload<{ isDisabled: boolean; changed: boolean }>(
+      (await enableScopeTool.handler({ cwd: "/repo" })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+
+    expect(feedbackResult).toMatchObject({
+      status: "updated",
+      nodeIds: ["node_codex_mcp_feedback"]
+    });
+    expect(disableResult).toMatchObject({
+      isDisabled: true,
+      changed: true
+    });
+    expect(enableResult).toMatchObject({
+      isDisabled: false,
+      changed: true
+    });
+
+    const node = nodeRepo.getById("node_codex_mcp_feedback");
+    expect(node?.helped_count).toBe(1);
   });
 });

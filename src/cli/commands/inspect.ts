@@ -1,8 +1,5 @@
 import { loadConfig } from "../../config/load-config.js";
-import { openDatabase } from "../../store/sqlite/db.js";
-import { runMigrations } from "../../store/sqlite/migrations.js";
-import { InputRecordRepository } from "../../store/sqlite/repositories/input-record-repo.js";
-import { NodeRepository } from "../../store/sqlite/repositories/node-repo.js";
+import { ExperienceInteractionService } from "../../interaction/service.js";
 import type { ExperienceNode } from "../../types/domain.js";
 
 const NODE_STATES: ExperienceNode["state"][] = ["candidate", "active", "cooling", "retired"];
@@ -32,35 +29,31 @@ const parseRecentArgs = (arg1?: string, arg2?: string): { injectedOnly: boolean;
 };
 
 export const runInspectCommand = (target?: string, arg1?: string, arg2?: string): void => {
-  const db = openDatabase(loadConfig());
-  runMigrations(db);
-  const nodeRepo = new NodeRepository(db);
-  const inputRepo = new InputRecordRepository(db);
+  const interaction = new ExperienceInteractionService(loadConfig());
 
   if (target === "--last") {
-    const record = inputRepo.getLatest();
+    const record = interaction.inspectLast();
     if (!record) {
       console.log("No experience input records recorded yet.");
       return;
     }
 
-    const injectedNodes = nodeRepo.listByIds(record.injected_node_ids);
-    console.log(`Session: ${record.session_id ?? "unknown"}`);
-    console.log(`Scope: ${record.scope_id}`);
-    console.log(`Task type: ${record.task_type}`);
-    console.log(`Intervention: ${record.injected_node_ids.length ? "inject" : "skip"}`);
+    console.log(`Session: ${record.sessionId ?? "unknown"}`);
+    console.log(`Scope: ${record.scopeId}`);
+    console.log(`Task type: ${record.taskType}`);
+    console.log(`Intervention: ${record.intervention}`);
 
-    if (record.injected_node_ids.length) {
+    if (record.injectedNodes.length) {
       console.log("Injected nodes:");
-      for (const node of injectedNodes) {
-        console.log(`- ${node.id} ${node.node_type} ${node.state}`);
+      for (const node of record.injectedNodes) {
+        console.log(`- ${node.id} ${node.type} ${node.state}`);
       }
     }
 
-    if (injectedNodes.length) {
+    if (record.hints.length) {
       console.log("Hints:");
-      for (const node of injectedNodes) {
-        console.log(`- ${node.compact_hint}`);
+      for (const hint of record.hints) {
+        console.log(`- ${hint}`);
       }
     }
 
@@ -71,7 +64,7 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
       }
     }
 
-    console.log(`Outcome: ${record.outcome_signal}`);
+    console.log(`Outcome: ${record.outcome}`);
     return;
   }
 
@@ -82,7 +75,7 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
       return;
     }
 
-    const records = inputRepo.listRecent({
+    const records = interaction.inspectRecent({
       injectedOnly: parsed.injectedOnly,
       limit: parsed.limit
     });
@@ -93,12 +86,12 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
 
     console.table(
       records.map((record) => ({
-        session: record.session_id ?? "unknown",
-        task: record.task_type,
-        intervention: record.injected_node_ids.length ? "inject" : "skip",
-        outcome: record.outcome_signal,
-        created_at: record.created_at,
-        summary: record.task_summary
+        session: record.sessionId ?? "unknown",
+        task: record.taskType,
+        intervention: record.intervention,
+        outcome: record.outcome,
+        created_at: record.createdAt,
+        summary: record.summary
       }))
     );
     return;
@@ -115,7 +108,7 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
       return;
     }
 
-    const nodes = nodeRepo.listByState(arg1 as ExperienceNode["state"]);
+    const nodes = interaction.listNodesByState(arg1 as ExperienceNode["state"]);
     if (!nodes.length) {
       console.log(`No ${arg1} experience nodes stored yet.`);
       return;
@@ -124,13 +117,13 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
     console.table(
       nodes.map((node) => ({
         id: node.id,
-        type: node.node_type,
-        task: node.task_type,
+        type: node.type,
+        task: node.taskType,
         state: node.state,
-        helped: node.helped_count,
-        harmed: node.harmed_count,
-        last_used: node.last_used_at ?? "",
-        hint: node.compact_hint
+        helped: node.helped,
+        harmed: node.harmed,
+        last_used: node.lastUsedAt ?? "",
+        hint: node.hint
       }))
     );
     return;
@@ -142,7 +135,7 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
       return;
     }
 
-    const nodes = nodeRepo.listByType(arg1 as ExperienceNode["node_type"]);
+    const nodes = interaction.listNodesByType(arg1 as ExperienceNode["node_type"]);
     if (!nodes.length) {
       console.log(`No ${arg1} experience nodes stored yet.`);
       return;
@@ -151,13 +144,13 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
     console.table(
       nodes.map((node) => ({
         id: node.id,
-        type: node.node_type,
-        task: node.task_type,
+        type: node.type,
+        task: node.taskType,
         state: node.state,
-        helped: node.helped_count,
-        harmed: node.harmed_count,
-        last_used: node.last_used_at ?? "",
-        hint: node.compact_hint
+        helped: node.helped,
+        harmed: node.harmed,
+        last_used: node.lastUsedAt ?? "",
+        hint: node.hint
       }))
     );
     return;
@@ -165,54 +158,54 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
 
   if (target?.startsWith("node:")) {
     const nodeId = target.slice("node:".length);
-    const node = nodeRepo.getById(nodeId);
+    const node = interaction.inspectNode(nodeId);
     if (!node) {
       console.log(`[ExperienceEngine] Node ${nodeId} was not found.`);
       return;
     }
 
     console.log(`Node: ${node.id}`);
-    console.log(`Type: ${node.node_type}`);
-    console.log(`Task type: ${node.task_type}`);
+    console.log(`Type: ${node.type}`);
+    console.log(`Task type: ${node.taskType}`);
     console.log(`State: ${node.state}`);
-    console.log(`Scope: ${node.scope_id}`);
-    console.log(`Helped: ${node.helped_count}`);
-    console.log(`Harmed: ${node.harmed_count}`);
-    console.log(`Used: ${node.usage_count}`);
-    console.log(`Hint: ${node.compact_hint}`);
+    console.log(`Scope: ${node.scopeId}`);
+    console.log(`Helped: ${node.helped}`);
+    console.log(`Harmed: ${node.harmed}`);
+    console.log(`Used: ${node.used}`);
+    console.log(`Hint: ${node.hint}`);
     if (node.goal) {
       console.log(`Goal: ${node.goal}`);
     }
-    if (node.applicability_notes) {
-      console.log(`Applicability: ${node.applicability_notes}`);
+    if (node.applicability) {
+      console.log(`Applicability: ${node.applicability}`);
     }
-    console.log(`Success signal: ${node.success_signal}`);
-    console.log(`Evidence: ${node.evidence_summary}`);
-    if (node.recommended_steps?.length) {
+    console.log(`Success signal: ${node.successSignal}`);
+    console.log(`Evidence: ${node.evidence}`);
+    if (node.recommendedSteps.length) {
       console.log("Recommended steps:");
-      for (const step of node.recommended_steps) {
+      for (const step of node.recommendedSteps) {
         console.log(`- ${step}`);
       }
     }
     return;
   }
 
-  const nodes = target === "active" ? nodeRepo.listActive() : nodeRepo.listAll();
-  if (!nodes.length) {
+  const rows = target === "active" ? interaction.listActiveNodes() : interaction.listAllNodes();
+  if (!rows.length) {
     console.log(target === "active" ? "No active experience nodes stored yet." : "No experience nodes stored yet.");
     return;
   }
 
   console.table(
-    nodes.map((node) => ({
+    rows.map((node) => ({
       id: node.id,
-      type: node.node_type,
-      task: node.task_type,
+      type: node.type,
+      task: node.taskType,
       state: node.state,
-      helped: node.helped_count,
-      harmed: node.harmed_count,
-      last_used: node.last_used_at ?? "",
-      hint: node.compact_hint
+      helped: node.helped,
+      harmed: node.harmed,
+      last_used: node.lastUsedAt ?? "",
+      hint: node.hint
     }))
   );
 };
