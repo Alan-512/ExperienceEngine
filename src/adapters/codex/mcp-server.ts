@@ -151,6 +151,14 @@ const parseNodeType = (value: string): ExperienceNodeType => {
   throw new Error(`Unsupported node type: ${value}`);
 };
 
+const createJsonResourceLink = (uri: string, name: string, description: string) => ({
+  type: "resource_link" as const,
+  uri,
+  name,
+  mimeType: "application/json",
+  description
+});
+
 export const createCodexBehaviorLoop = (options: CodexServerOptions = {}) => {
   const runtime = createCodexRuntime(options);
 
@@ -383,6 +391,184 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
           nodeType: parseNodeType(String(variables.type))
         })
       )
+  );
+
+  server.registerPrompt(
+    "experienceengine_show_last_intervention",
+    {
+      title: "ExperienceEngine Show Last Intervention",
+      description: "Review the most recent ExperienceEngine interaction and summarize what happened."
+    },
+    async () => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text:
+              "Review the latest ExperienceEngine interaction. Summarize whether guidance was injected, which nodes were involved, and what outcome was recorded."
+          }
+        },
+        {
+          role: "user",
+          content: createJsonResourceLink(
+            "experienceengine://last",
+            "ExperienceEngine Last Interaction",
+            "The latest persisted ExperienceEngine record and any resolved injected nodes."
+          )
+        }
+      ]
+    })
+  );
+
+  server.registerPrompt(
+    "experienceengine_review_recent_injected",
+    {
+      title: "ExperienceEngine Review Recent Injected",
+      description: "Review recent ExperienceEngine turns that actually injected guidance.",
+      argsSchema: {
+        limit: z.string().optional()
+      }
+    },
+    async ({ limit }) => {
+      const resolvedLimit = limit ? parsePositiveLimit(limit) : 5;
+      const uri = `experienceengine://recent/injected/${resolvedLimit}`;
+
+      return {
+        messages: [
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text:
+                `Review the ${resolvedLimit} most recent ExperienceEngine turns that injected guidance. Summarize recurring successful patterns and any harmful repeats.`
+            }
+          },
+          {
+            role: "user",
+            content: createJsonResourceLink(
+              uri,
+              "ExperienceEngine Recent Injected History",
+              "Recent ExperienceEngine records filtered to injected turns."
+            )
+          }
+        ]
+      };
+    }
+  );
+
+  server.registerPrompt(
+    "experienceengine_review_warning_nodes",
+    {
+      title: "ExperienceEngine Review Warning Nodes",
+      description: "Review current warning nodes to assess whether they are still useful or noisy."
+    },
+    async () => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text:
+              "Review the current ExperienceEngine warning nodes. Identify noisy or stale warnings, and call out any warning that appears to be over-firing or no longer useful."
+          }
+        },
+        {
+          role: "user",
+          content: createJsonResourceLink(
+            "experienceengine://nodes/type/warning",
+            "ExperienceEngine Warning Nodes",
+            "All ExperienceEngine nodes currently classified as warning nodes."
+          )
+        }
+      ]
+    })
+  );
+
+  server.registerPrompt(
+    "experienceengine_pause_current_project",
+    {
+      title: "ExperienceEngine Pause Current Project",
+      description: "Guide the agent to pause ExperienceEngine interventions for the current project.",
+      argsSchema: {
+        cwd: z.string().optional()
+      }
+    },
+    async ({ cwd }) => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text:
+              `Pause ExperienceEngine interventions for the current project${cwd ? ` at ${cwd}` : ""}. Confirm this action before calling the experienceengine_disable_scope tool, then summarize which scope was changed.`
+          }
+        }
+      ]
+    })
+  );
+
+  server.registerPrompt(
+    "experienceengine_resume_current_project",
+    {
+      title: "ExperienceEngine Resume Current Project",
+      description: "Guide the agent to resume ExperienceEngine interventions for the current project.",
+      argsSchema: {
+        cwd: z.string().optional()
+      }
+    },
+    async ({ cwd }) => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text:
+              `Resume ExperienceEngine interventions for the current project${cwd ? ` at ${cwd}` : ""}. Confirm this action before calling the experienceengine_enable_scope tool, then summarize which scope was changed.`
+          }
+        }
+      ]
+    })
+  );
+
+  server.registerPrompt(
+    "experienceengine_mark_last_experience_helpful",
+    {
+      title: "ExperienceEngine Mark Last Experience Helpful",
+      description: "Guide the agent to mark the last injected experience as helpful."
+    },
+    async () => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text:
+              "Mark the last injected ExperienceEngine guidance as helpful. Confirm with the user if needed, then call the experienceengine_feedback_last tool with feedback=helped and summarize which nodes were updated."
+          }
+        }
+      ]
+    })
+  );
+
+  server.registerPrompt(
+    "experienceengine_mark_last_experience_harmful",
+    {
+      title: "ExperienceEngine Mark Last Experience Harmful",
+      description: "Guide the agent to mark the last injected experience as harmful."
+    },
+    async () => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text:
+              "Mark the last injected ExperienceEngine guidance as harmful. Confirm with the user if needed, then call the experienceengine_feedback_last tool with feedback=harmed and summarize which nodes were updated."
+          }
+        }
+      ]
+    })
   );
 
   server.registerTool(

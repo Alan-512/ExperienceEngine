@@ -55,6 +55,13 @@ const getRegisteredResourceTemplate = (server: ReturnType<typeof createCodexMcpS
     }
   )._registeredResourceTemplates[name];
 
+const getRegisteredPrompt = (server: ReturnType<typeof createCodexMcpServer>, name: string) =>
+  (
+    server as unknown as {
+      _registeredPrompts: Record<string, { callback: (args: unknown) => Promise<unknown> }>;
+    }
+  )._registeredPrompts[name];
+
 const seedStrategyNode = (nodeRepo: NodeRepository, cwd: string, timestamp: string, id: string): void => {
   const scope = resolveScope(cwd);
   nodeRepo.upsert({
@@ -366,5 +373,39 @@ describe("Codex MCP behavior loop", () => {
 
     const node = nodeRepo.getById("node_codex_mcp_feedback");
     expect(node?.helped_count).toBe(1);
+  });
+
+  it("registers MCP prompts for review and control workflows", async () => {
+    const server = createCodexMcpServer();
+    const showLastPrompt = getRegisteredPrompt(server, "experienceengine_show_last_intervention");
+    const recentPrompt = getRegisteredPrompt(server, "experienceengine_review_recent_injected");
+    const pausePrompt = getRegisteredPrompt(server, "experienceengine_pause_current_project");
+    const harmfulPrompt = getRegisteredPrompt(server, "experienceengine_mark_last_experience_harmful");
+
+    const showLast = (await showLastPrompt.callback({})) as {
+      messages: Array<{ role: string; content: { type: string; text?: string; uri?: string } }>;
+    };
+    const recent = (await recentPrompt.callback({ limit: "3" })) as {
+      messages: Array<{ role: string; content: { type: string; text?: string; uri?: string } }>;
+    };
+    const pause = (await pausePrompt.callback({ cwd: "/repo" })) as {
+      messages: Array<{ role: string; content: { type: string; text?: string } }>;
+    };
+    const harmful = (await harmfulPrompt.callback({})) as {
+      messages: Array<{ role: string; content: { type: string; text?: string } }>;
+    };
+
+    expect(showLast.messages[0].content.text).toContain("Summarize whether guidance was injected");
+    expect(showLast.messages[1].content).toMatchObject({
+      type: "resource_link",
+      uri: "experienceengine://last"
+    });
+    expect(recent.messages[1].content).toMatchObject({
+      type: "resource_link",
+      uri: "experienceengine://recent/injected/3"
+    });
+    expect(pause.messages[0].content.text).toContain("experienceengine_disable_scope");
+    expect(pause.messages[0].content.text).toContain("/repo");
+    expect(harmful.messages[0].content.text).toContain("feedback=harmed");
   });
 });
