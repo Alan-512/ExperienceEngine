@@ -4,8 +4,13 @@ import { z } from "zod";
 import { loadConfig } from "../../config/load-config.js";
 import { resolveExperienceEnginePaths } from "../../config/path-resolver.js";
 import { ExperienceInteractionService, type FeedbackValue } from "../../interaction/service.js";
+import {
+  ExperienceOperationalService,
+  type ExperienceAdapter
+} from "../../interaction/operational-service.js";
 import { ExperienceRuntimeService } from "../../runtime/service.js";
 import type { ExperienceNodeType, ExperienceState, ToolEventStatus } from "../../types/domain.js";
+import { fetchLatestGitHubReleaseStatus } from "../../version/remote-release.js";
 
 type CodexLookupArgs = {
   cwd?: string;
@@ -33,6 +38,7 @@ type CodexFinalizeArgs = {
 type CodexServerOptions = {
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
+  fetchImpl?: typeof fetch;
 };
 
 type CodexRecentMode = "all" | "injected";
@@ -42,6 +48,7 @@ type CodexScopeArgs = {
 
 const NODE_STATES: ExperienceState[] = ["candidate", "active", "cooling", "retired"];
 const NODE_TYPES: ExperienceNodeType[] = ["strategy", "warning"];
+const EXPERIENCE_ADAPTERS = ["openclaw", "claude-code", "codex"] as const;
 
 const createCodexRuntime = (options: CodexServerOptions = {}): ExperienceRuntimeService => {
   const paths = resolveExperienceEnginePaths({
@@ -87,6 +94,22 @@ const createCodexInteractionService = (
       }
     )
   );
+};
+
+const createCodexOperationalService = (
+  options: CodexServerOptions = {}
+): ExperienceOperationalService => {
+  if (!options.fetchImpl) {
+    return new ExperienceOperationalService();
+  }
+
+  return new ExperienceOperationalService({
+    fetchLatestGitHubReleaseStatus: (args = {}) =>
+      fetchLatestGitHubReleaseStatus({
+        ...args,
+        fetchImpl: options.fetchImpl
+      })
+  });
 };
 
 const toTextToolResult = (result: unknown) => ({
@@ -149,6 +172,14 @@ const parseNodeType = (value: string): ExperienceNodeType => {
   }
 
   throw new Error(`Unsupported node type: ${value}`);
+};
+
+const parseAdapter = (value: string): ExperienceAdapter => {
+  if (EXPERIENCE_ADAPTERS.includes(value as ExperienceAdapter)) {
+    return value as ExperienceAdapter;
+  }
+
+  throw new Error(`Unsupported adapter: ${value}`);
 };
 
 const createJsonResourceLink = (uri: string, name: string, description: string) => ({
@@ -284,10 +315,51 @@ export const lookupCodexExperienceHints = async (
 export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
   const behaviorLoop = createCodexBehaviorLoop(options);
   const interactionSurface = createCodexInteractionSurface(options);
+  const operationalSurface = createCodexOperationalService(options);
   const server = new McpServer({
     name: "experienceengine",
     version: "0.1.0"
   });
+
+  server.registerResource(
+    "experienceengine_doctor",
+    new ResourceTemplate("experienceengine://doctor/{adapter}", {
+      list: undefined,
+      complete: {
+        adapter: () => [...EXPERIENCE_ADAPTERS]
+      }
+    }),
+    {
+      title: "ExperienceEngine Doctor",
+      description: "Structured ExperienceEngine adapter health and installation state.",
+      mimeType: "application/json"
+    },
+    async (uri, variables) =>
+      toJsonResourceResult(
+        uri.toString(),
+        await operationalSurface.inspectDoctor(parseAdapter(String(variables.adapter)))
+      )
+  );
+
+  server.registerResource(
+    "experienceengine_updates_latest",
+    new ResourceTemplate("experienceengine://updates/latest/{adapter}", {
+      list: undefined,
+      complete: {
+        adapter: () => [...EXPERIENCE_ADAPTERS]
+      }
+    }),
+    {
+      title: "ExperienceEngine Latest Update State",
+      description: "Latest release/update status for an ExperienceEngine adapter context.",
+      mimeType: "application/json"
+    },
+    async (uri, variables) =>
+      toJsonResourceResult(
+        uri.toString(),
+        await operationalSurface.checkUpdate(parseAdapter(String(variables.adapter)))
+      )
+  );
 
   server.registerResource(
     "experienceengine_last",
@@ -569,6 +641,38 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
         }
       ]
     })
+  );
+
+  server.registerTool(
+    "experienceengine_doctor",
+    {
+      title: "ExperienceEngine Doctor",
+      description: "Inspect structured ExperienceEngine adapter health and installation state.",
+      inputSchema: z.object({
+        adapter: z.enum(EXPERIENCE_ADAPTERS)
+      }),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false
+      }
+    },
+    async ({ adapter }) => toTextToolResult(await operationalSurface.inspectDoctor(adapter))
+  );
+
+  server.registerTool(
+    "experienceengine_check_update",
+    {
+      title: "ExperienceEngine Check Update",
+      description: "Check structured ExperienceEngine release/update state for an adapter context.",
+      inputSchema: z.object({
+        adapter: z.enum(EXPERIENCE_ADAPTERS)
+      }),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: true
+      }
+    },
+    async ({ adapter }) => toTextToolResult(await operationalSurface.checkUpdate(adapter))
   );
 
   server.registerTool(

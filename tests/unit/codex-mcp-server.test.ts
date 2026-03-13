@@ -408,4 +408,62 @@ describe("Codex MCP behavior loop", () => {
     expect(pause.messages[0].content.text).toContain("/repo");
     expect(harmful.messages[0].content.text).toContain("feedback=harmed");
   });
+
+  it("registers operational MCP resources and read-only tools", async () => {
+    const fetchImpl = async () =>
+      new Response(
+        JSON.stringify({
+          tag_name: "v0.2.0",
+          html_url: "https://github.com/Alan-512/ExperienceEngine/releases/tag/v0.2.0",
+          published_at: "2026-03-13T00:00:00Z"
+        }),
+        { status: 200 }
+      );
+
+    const server = createCodexMcpServer({ fetchImpl });
+    const doctorResource = getRegisteredResourceTemplate(server, "experienceengine_doctor");
+    const updateResource = getRegisteredResourceTemplate(server, "experienceengine_updates_latest");
+    const doctorTool = getRegisteredTool(server, "experienceengine_doctor");
+    const updateTool = getRegisteredTool(server, "experienceengine_check_update");
+
+    const doctorPayload = await doctorResource.readCallback(
+      new URL("experienceengine://doctor/codex"),
+      { adapter: "codex" },
+      {}
+    );
+    const updatePayload = await updateResource.readCallback(
+      new URL("experienceengine://updates/latest/codex"),
+      { adapter: "codex" },
+      {}
+    );
+    const doctorToolPayload = parseTextPayload<{ adapter: string }>(
+      (await doctorTool.handler({ adapter: "codex" })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+    const updateToolPayload = parseTextPayload<{ adapter: string; remote: { latestVersion: string | null } }>(
+      (await updateTool.handler({ adapter: "codex" })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+
+    expect(JSON.parse((doctorPayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({
+      adapter: "codex"
+    });
+    expect(JSON.parse((updatePayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({
+      adapter: "codex",
+      remote: {
+        latestVersion: "0.2.0"
+      }
+    });
+    expect(doctorToolPayload).toMatchObject({
+      adapter: "codex"
+    });
+    expect(updateToolPayload).toMatchObject({
+      adapter: "codex",
+      remote: {
+        latestVersion: "0.2.0"
+      }
+    });
+  });
 });
