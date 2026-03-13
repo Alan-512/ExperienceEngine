@@ -150,6 +150,7 @@ Useful fallback commands:
 ```bash
 ee inspect --last
 ee inspect recent injected 10
+ee inspect backups
 ee inspect active
 ee inspect node <id>
 ee inspect state retired
@@ -160,6 +161,10 @@ ee disable scope
 ee enable scope
 ee cool node <id>
 ee retire node <id>
+ee backup
+ee export
+ee import <snapshot-path>
+ee rollback <backup-id>
 ```
 
 ## Doctor, Repair, and Upgrade
@@ -221,6 +226,13 @@ Use backup when you want a restorable checkpoint of current ExperienceEngine sta
 
 In an MCP-capable host, ask the agent to create a backup. The agent should first show you a plan and only execute after you confirm.
 
+CLI fallback:
+
+```bash
+ee backup
+ee inspect backups
+```
+
 ### Export
 
 Use export when you want a portable snapshot of ExperienceEngine-managed state that can later be imported.
@@ -229,17 +241,35 @@ This is useful for:
 - moving to another machine
 - preserving a known-good state before larger experiments
 
+CLI fallback:
+
+```bash
+ee export
+```
+
 ### Import
 
 Import restores a valid ExperienceEngine snapshot directory.
 
 Before import overwrites current ExperienceEngine state, the system creates a safeguard backup automatically.
 
+CLI fallback:
+
+```bash
+ee import <snapshot-path>
+```
+
 ### Rollback
 
 Rollback restores one of the managed backups.
 
 Before rollback overwrites current ExperienceEngine state, the system also creates a safeguard backup automatically.
+
+CLI fallback:
+
+```bash
+ee rollback <backup-id>
+```
 
 ## Recommended Safe Workflow
 

@@ -1,5 +1,6 @@
 import { loadConfig } from "../../config/load-config.js";
 import { ExperienceInteractionService } from "../../interaction/service.js";
+import { ExperienceStateArtifactService } from "../../interaction/state-artifact-service.js";
 import type { ExperienceNode } from "../../types/domain.js";
 
 const NODE_STATES: ExperienceNode["state"][] = ["candidate", "active", "cooling", "retired"];
@@ -92,6 +93,27 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
         outcome: record.outcome,
         created_at: record.createdAt,
         summary: record.summary
+      }))
+    );
+    return;
+  }
+
+  if (target === "backups") {
+    const artifacts = new ExperienceStateArtifactService().listBackups();
+    if (!artifacts.length) {
+      console.log("No ExperienceEngine backups stored yet.");
+      return;
+    }
+
+    console.table(
+      artifacts.map((artifact) => ({
+        id: artifact.id,
+        kind: artifact.kind,
+        created_at: artifact.createdAt,
+        sqlite: artifact.sqliteIncluded,
+        settings: artifact.settingsIncluded,
+        adapters: artifact.installStates.join(","),
+        path: artifact.path
       }))
     );
     return;

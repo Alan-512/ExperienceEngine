@@ -3,10 +3,14 @@ import { runClaudeHookCommand } from "./commands/claude-hook.js";
 import { runCoolCommand } from "./commands/cool.js";
 import { runConfigCommand } from "./commands/config.js";
 import { runCodexMcpServerCommand } from "./commands/codex-mcp-server.js";
+import { runBackupCommand } from "./commands/backup.js";
 import { runDoctorCommand } from "./commands/doctor.js";
+import { runExportCommand } from "./commands/export.js";
+import { runImportCommand } from "./commands/import.js";
 import { runInstallCommand } from "./commands/install.js";
 import { runMcpServerCommand } from "./commands/mcp-server.js";
 import { runRepairCommand } from "./commands/repair.js";
+import { runRollbackCommand } from "./commands/rollback.js";
 import { runRetireCommand } from "./commands/retire.js";
 import { runUpgradeCommand } from "./commands/upgrade.js";
 import { runDisableCommand } from "./commands/disable.js";
@@ -22,6 +26,9 @@ const main = async (): Promise<void> => {
   switch (command) {
     case "install":
       runInstallCommand(args[0]);
+      break;
+    case "backup":
+      runBackupCommand();
       break;
     case "claude-hook":
       await runClaudeHookCommand();
@@ -40,6 +47,15 @@ const main = async (): Promise<void> => {
       break;
     case "repair":
       runRepairCommand(args[0]);
+      break;
+    case "export":
+      runExportCommand();
+      break;
+    case "import":
+      runImportCommand(args[0]);
+      break;
+    case "rollback":
+      runRollbackCommand(args[0]);
       break;
     case "upgrade":
       runUpgradeCommand(args[0]);
@@ -75,6 +91,7 @@ const main = async (): Promise<void> => {
     default:
       console.log(
         "Usage: ee <install openclaw|claude-code|codex|upgrade openclaw|claude-code|codex|repair openclaw|claude-hook|codex-mcp-server|doctor [claude-code|codex]|stats|inspect|feedback|disable|enable|cool|retire|remember>"
+        + " | backup|export|import <snapshot-path>|rollback <backup-id>"
         + " | mcp-server"
         + " | config <get|set> notices.inline [true|false]"
       );

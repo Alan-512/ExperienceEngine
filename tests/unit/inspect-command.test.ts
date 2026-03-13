@@ -9,6 +9,7 @@ import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
 import { InputRecordRepository } from "../../src/store/sqlite/repositories/input-record-repo.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
 import { nowIso } from "../../src/utils/clock.js";
+import { ExperienceStateArtifactService } from "../../src/interaction/state-artifact-service.js";
 import type { ExperienceInputRecord, ExperienceNode } from "../../src/types/domain.js";
 
 const tempDirs: string[] = [];
@@ -316,6 +317,37 @@ describe("inspect command", () => {
         id: "node_warning",
         type: "warning",
         hint: "Warning node hint"
+      })
+    ]);
+  });
+
+  it("lists managed backups", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+
+    const service = new ExperienceStateArtifactService({
+      now: () => "2026-03-13T06:30:00.000Z",
+      idFactory: (() => {
+        let count = 0;
+        return () => `token-${++count}`;
+      })()
+    });
+    const plan = service.planOperation({ operation: "backup" });
+    service.executePlannedOperation({
+      planId: plan.planId,
+      confirmationToken: plan.confirmationToken
+    });
+
+    runInspectCommand("backups");
+
+    expect(consoleTableSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        id: expect.stringMatching(/^backup-/),
+        kind: "backup",
+        sqlite: true,
+        settings: false
       })
     ]);
   });
