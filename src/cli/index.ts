@@ -9,6 +9,7 @@ import { runRepairCommand } from "./commands/repair.js";
 import { runRetireCommand } from "./commands/retire.js";
 import { runUpgradeCommand } from "./commands/upgrade.js";
 import { runDisableCommand } from "./commands/disable.js";
+import { runEnableCommand } from "./commands/enable.js";
 import { runFeedbackCommand } from "./commands/feedback.js";
 import { runInspectCommand } from "./commands/inspect.js";
 import { runRememberCommand } from "./commands/remember.js";
@@ -51,6 +52,9 @@ const main = async (): Promise<void> => {
     case "disable":
       runDisableCommand(args[0], args[1]);
       break;
+    case "enable":
+      runEnableCommand(args[0]);
+      break;
     case "cool":
       runCoolCommand(args[0], args[1]);
       break;
@@ -62,7 +66,7 @@ const main = async (): Promise<void> => {
       break;
     default:
       console.log(
-        "Usage: ee <install openclaw|claude-code|codex|upgrade openclaw|claude-code|codex|repair openclaw|claude-hook|codex-mcp-server|doctor [claude-code|codex]|stats|inspect|feedback|disable|cool|retire|remember>"
+        "Usage: ee <install openclaw|claude-code|codex|upgrade openclaw|claude-code|codex|repair openclaw|claude-hook|codex-mcp-server|doctor [claude-code|codex]|stats|inspect|feedback|disable|enable|cool|retire|remember>"
         + " | config <get|set> notices.inline [true|false]"
       );
   }
