@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -8,6 +8,7 @@ import {
   createCodexMcpServer
 } from "../../src/adapters/codex/mcp-server.js";
 import { loadConfig } from "../../src/config/load-config.js";
+import { ExperienceStateArtifactService } from "../../src/interaction/state-artifact-service.js";
 import { resolveScope } from "../../src/input/scope-resolver.js";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
@@ -572,5 +573,63 @@ describe("Codex MCP behavior loop", () => {
 
     expect(promptPayload.messages[0].content.text).toContain("experienceengine_plan_repair");
     expect(promptPayload.messages[0].content.text).toContain("experienceengine_execute_planned_operation");
+  });
+
+  it("registers backup inventory resources and state-operation MCP tools", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    mkdirSync(join(env.EXPERIENCE_ENGINE_HOME, "adapters", "codex"), { recursive: true });
+    writeFileSync(
+      join(env.EXPERIENCE_ENGINE_HOME, "adapters", "codex", "install.json"),
+      `${JSON.stringify({ adapter: "codex", installedVersion: "0.1.0" }, null, 2)}\n`,
+      "utf8"
+    );
+
+    const server = createCodexMcpServer({
+      homeDir,
+      env,
+      stateArtifactService: new ExperienceStateArtifactService({
+        env,
+        homeDir,
+        now: () => "2026-03-13T06:40:00.000Z",
+        idFactory: (() => {
+          let count = 0;
+          return () => `artifact-${++count}`;
+        })()
+      })
+    });
+    const planBackupTool = getRegisteredTool(server, "experienceengine_plan_backup");
+    const executeStateTool = getRegisteredTool(server, "experienceengine_execute_planned_state_operation");
+    const backupsResource = getRegisteredResource(server, "experienceengine://backups");
+    const prompt = getRegisteredPrompt(server, "experienceengine_prepare_state_operation");
+
+    const planPayload = parseTextPayload<{
+      planId: string;
+      confirmationToken: string;
+      operation: string;
+    }>((await planBackupTool.handler({})) as {
+      content: Array<{ type: string; text?: string }>;
+    });
+    await executeStateTool.handler({
+      planId: planPayload.planId,
+      confirmationToken: planPayload.confirmationToken
+    });
+
+    const backupsPayload = await backupsResource.readCallback(new URL("experienceengine://backups"), {});
+    const promptPayload = (await prompt.callback({
+      operation: "rollback",
+      backupId: "backup-1"
+    })) as {
+      messages: Array<{ role: string; content: { type: string; text?: string } }>;
+    };
+
+    expect(
+      JSON.parse((backupsPayload as { contents: Array<{ text: string }> }).contents[0].text)
+    ).toHaveLength(1);
+    expect(promptPayload.messages[0].content.text).toContain("experienceengine_plan_rollback");
+    expect(promptPayload.messages[0].content.text).toContain("experienceengine_execute_planned_state_operation");
   });
 });

@@ -13,6 +13,7 @@ import {
   type HighImpactOperation,
   type OperationalActionsDeps,
 } from "../../interaction/operational-actions-service.js";
+import { ExperienceStateArtifactService } from "../../interaction/state-artifact-service.js";
 import { ExperienceRuntimeService } from "../../runtime/service.js";
 import type { ExperienceNodeType, ExperienceState, ToolEventStatus } from "../../types/domain.js";
 import { fetchLatestGitHubReleaseStatus } from "../../version/remote-release.js";
@@ -46,6 +47,7 @@ type CodexServerOptions = {
   fetchImpl?: typeof fetch;
   operationalActionsDeps?: OperationalActionsDeps;
   operationalActionsService?: ExperienceOperationalActionsService;
+  stateArtifactService?: ExperienceStateArtifactService;
 };
 
 type CodexRecentMode = "all" | "injected";
@@ -124,6 +126,15 @@ const createCodexOperationalActionsService = (
   options: CodexServerOptions = {}
 ): ExperienceOperationalActionsService =>
   options.operationalActionsService ?? new ExperienceOperationalActionsService(options.operationalActionsDeps);
+
+const createCodexStateArtifactService = (
+  options: CodexServerOptions = {}
+): ExperienceStateArtifactService =>
+  options.stateArtifactService ??
+  new ExperienceStateArtifactService({
+    env: options.env ?? process.env,
+    homeDir: options.homeDir
+  });
 
 const toTextToolResult = (result: unknown) => ({
   content: [
@@ -338,6 +349,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
   const interactionSurface = createCodexInteractionSurface(options);
   const operationalSurface = createCodexOperationalService(options);
   const operationalActions = createCodexOperationalActionsService(options);
+  const stateArtifacts = createCodexStateArtifactService(options);
   const server = new McpServer({
     name: "experienceengine",
     version: "0.1.0"
@@ -381,6 +393,17 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
         uri.toString(),
         await operationalSurface.checkUpdate(parseAdapter(String(variables.adapter)))
       )
+  );
+
+  server.registerResource(
+    "experienceengine_backups",
+    "experienceengine://backups",
+    {
+      title: "ExperienceEngine Backup Inventory",
+      description: "Managed ExperienceEngine backups available for rollback or export review.",
+      mimeType: "application/json"
+    },
+    async (uri) => toJsonResourceResult(uri.toString(), stateArtifacts.listBackups())
   );
 
   server.registerResource(
@@ -485,6 +508,48 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
           nodeType: parseNodeType(String(variables.type))
         })
       )
+  );
+
+  server.registerPrompt(
+    "experienceengine_prepare_state_operation",
+    {
+      title: "ExperienceEngine Prepare State Operation",
+      description: "Review a backup, export, import, or rollback plan before execution.",
+      argsSchema: {
+        operation: z.enum(["backup", "export", "import", "rollback"]),
+        backupId: z.string().optional(),
+        importPath: z.string().optional()
+      }
+    },
+    async ({ operation, backupId, importPath }) => {
+      const planTool =
+        operation === "backup"
+          ? "experienceengine_plan_backup"
+          : operation === "export"
+            ? "experienceengine_plan_export"
+            : operation === "import"
+              ? "experienceengine_plan_import"
+              : "experienceengine_plan_rollback";
+      const suffix =
+        operation === "rollback"
+          ? ` with backupId=${backupId ?? "<backup-id>"}`
+          : operation === "import"
+            ? ` with importPath=${importPath ?? "<snapshot-path>"}`
+            : "";
+
+      return {
+        messages: [
+          {
+            role: "user",
+            content: {
+              type: "text",
+              text:
+                `First call ${planTool}${suffix}. Review the returned summary, effects, and artifact path with the user. Only if the user explicitly confirms should you call experienceengine_execute_planned_state_operation with the returned planId and confirmationToken.`
+            }
+          }
+        ]
+      };
+    }
   );
 
   server.registerPrompt(
@@ -687,6 +752,67 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
         }
       ]
     })
+  );
+
+  server.registerTool(
+    "experienceengine_plan_backup",
+    {
+      title: "ExperienceEngine Plan Backup",
+      description: "Create a structured plan for backing up ExperienceEngine-managed state."
+    },
+    async () => toStructuredToolResult(stateArtifacts.planOperation({ operation: "backup" }))
+  );
+
+  server.registerTool(
+    "experienceengine_plan_export",
+    {
+      title: "ExperienceEngine Plan Export",
+      description: "Create a structured plan for exporting ExperienceEngine-managed state."
+    },
+    async () => toStructuredToolResult(stateArtifacts.planOperation({ operation: "export" }))
+  );
+
+  server.registerTool(
+    "experienceengine_plan_import",
+    {
+      title: "ExperienceEngine Plan Import",
+      description: "Create a structured plan for importing an ExperienceEngine snapshot.",
+      inputSchema: z.object({
+        importPath: z.string().min(1)
+      })
+    },
+    async ({ importPath }) =>
+      toStructuredToolResult(stateArtifacts.planOperation({ operation: "import", importPath }))
+  );
+
+  server.registerTool(
+    "experienceengine_plan_rollback",
+    {
+      title: "ExperienceEngine Plan Rollback",
+      description: "Create a structured plan for rolling back ExperienceEngine state to a managed backup.",
+      inputSchema: z.object({
+        backupId: z.string().min(1)
+      })
+    },
+    async ({ backupId }) =>
+      toStructuredToolResult(stateArtifacts.planOperation({ operation: "rollback", backupId }))
+  );
+
+  server.registerTool(
+    "experienceengine_execute_planned_state_operation",
+    {
+      title: "ExperienceEngine Execute Planned State Operation",
+      description:
+        "Execute a previously planned ExperienceEngine backup, export, import, or rollback after explicit confirmation.",
+      inputSchema: z.object({
+        planId: z.string().min(1),
+        confirmationToken: z.string().min(1)
+      })
+    },
+    async ({ planId, confirmationToken }) =>
+      toStructuredToolResult(
+        stateArtifacts.executePlannedOperation({ planId, confirmationToken })
+      )
   );
 
   server.registerTool(
