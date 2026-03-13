@@ -115,12 +115,16 @@ export class InputRecordRepository {
     return row ? this.mapRecord(row) : undefined;
   }
 
-  listRecent(limit = 10): ExperienceInputRecord[] {
+  listRecent(options: { limit?: number; injectedOnly?: boolean } = {}): ExperienceInputRecord[] {
+    const limit = options.limit ?? 10;
+    const whereClause = options.injectedOnly ? "WHERE injected_node_ids_json != '[]'" : "";
+
     return this.db
       .prepare(
         `SELECT record_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary,
                 evidence_json, injected_node_ids_json, created_at
          FROM experience_input_records
+         ${whereClause}
          ORDER BY created_at DESC
          LIMIT ?`
       )

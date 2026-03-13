@@ -4,7 +4,30 @@ import { runMigrations } from "../../store/sqlite/migrations.js";
 import { InputRecordRepository } from "../../store/sqlite/repositories/input-record-repo.js";
 import { NodeRepository } from "../../store/sqlite/repositories/node-repo.js";
 
-export const runInspectCommand = (target?: string): void => {
+const parseRecentArgs = (arg1?: string, arg2?: string): { injectedOnly: boolean; limit: number } | null => {
+  const values = [arg1, arg2].filter((value): value is string => Boolean(value));
+  let injectedOnly = false;
+  let limit = 10;
+
+  for (const value of values) {
+    if (value === "injected") {
+      injectedOnly = true;
+      continue;
+    }
+
+    const parsed = Number(value);
+    if (Number.isInteger(parsed) && parsed > 0) {
+      limit = parsed;
+      continue;
+    }
+
+    return null;
+  }
+
+  return { injectedOnly, limit };
+};
+
+export const runInspectCommand = (target?: string, arg1?: string, arg2?: string): void => {
   const db = openDatabase(loadConfig());
   runMigrations(db);
   const nodeRepo = new NodeRepository(db);
@@ -49,7 +72,16 @@ export const runInspectCommand = (target?: string): void => {
   }
 
   if (target === "recent") {
-    const records = inputRepo.listRecent();
+    const parsed = parseRecentArgs(arg1, arg2);
+    if (!parsed) {
+      console.log("Usage: ee inspect recent [injected] [limit]");
+      return;
+    }
+
+    const records = inputRepo.listRecent({
+      injectedOnly: parsed.injectedOnly,
+      limit: parsed.limit
+    });
     if (!records.length) {
       console.log("No experience input records recorded yet.");
       return;

@@ -187,6 +187,48 @@ describe("inspect command", () => {
     ]);
   });
 
+  it("filters recent history to injected turns and respects a custom limit", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+
+    const inputRepo = new InputRecordRepository(db);
+    inputRepo.upsert(
+      makeRecord({
+        record_id: "input_recent_a",
+        session_id: "session_recent_a",
+        injected_node_ids: ["node_inspect"],
+        created_at: "2026-03-13T03:00:00.000Z"
+      })
+    );
+    inputRepo.upsert(
+      makeRecord({
+        record_id: "input_recent_b",
+        session_id: "session_recent_b",
+        injected_node_ids: [],
+        created_at: "2026-03-13T02:00:00.000Z"
+      })
+    );
+    inputRepo.upsert(
+      makeRecord({
+        record_id: "input_recent_c",
+        session_id: "session_recent_c",
+        injected_node_ids: ["node_inspect"],
+        created_at: "2026-03-13T01:00:00.000Z"
+      })
+    );
+
+    runInspectCommand("recent", "injected", "1");
+
+    expect(consoleTableSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        session: "session_recent_a",
+        intervention: "inject"
+      })
+    ]);
+  });
+
   it("prints a single node detail view", () => {
     const home = makeTempDir();
     process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");

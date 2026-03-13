@@ -47,7 +47,11 @@ const main = async (): Promise<void> => {
       runFeedbackCommand(args[0], args[1], args[2]);
       break;
     case "inspect":
-      runInspectCommand(args[0] === "node" && args[1] ? `node:${args[1]}` : args[0]);
+      runInspectCommand(
+        args[0] === "node" && args[1] ? `node:${args[1]}` : args[0],
+        args[0] === "node" ? args[2] : args[1],
+        args[0] === "node" ? args[3] : args[2]
+      );
       break;
     case "disable":
       runDisableCommand(args[0], args[1]);
