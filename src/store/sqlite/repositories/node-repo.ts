@@ -4,6 +4,66 @@ import type { ExperienceNode } from "../../../types/domain.js";
 export class NodeRepository {
   constructor(private readonly db: DatabaseSync) {}
 
+  private mapNode(row: {
+    id: string;
+    node_type: ExperienceNode["node_type"];
+    scope_id: string;
+    task_type: ExperienceNode["task_type"];
+    trigger_pattern: string;
+    applicability_notes: string | null;
+    env_signature: string | null;
+    compact_hint: string;
+    goal: string | null;
+    recommended_steps_json: string | null;
+    avoid_steps_json: string | null;
+    fallback_steps_json: string | null;
+    success_signal: string;
+    stop_condition: string | null;
+    escalation_condition: string | null;
+    evidence_summary: string;
+    source_kind: ExperienceNode["source_kind"];
+    state: ExperienceNode["state"];
+    usage_count: number;
+    helped_count: number;
+    harmed_count: number;
+    support_count: number;
+    last_used_at: string | null;
+    last_helped_at: string | null;
+    last_harmed_at: string | null;
+    created_at: string;
+    updated_at: string;
+  }): ExperienceNode {
+    return {
+      id: row.id,
+      node_type: row.node_type,
+      scope_id: row.scope_id,
+      task_type: row.task_type,
+      trigger_pattern: row.trigger_pattern,
+      applicability_notes: row.applicability_notes ?? undefined,
+      env_signature: row.env_signature ?? undefined,
+      compact_hint: row.compact_hint,
+      goal: row.goal ?? undefined,
+      recommended_steps: JSON.parse(row.recommended_steps_json ?? "[]") as string[],
+      avoid_steps: JSON.parse(row.avoid_steps_json ?? "[]") as string[],
+      fallback_steps: JSON.parse(row.fallback_steps_json ?? "[]") as string[],
+      success_signal: row.success_signal,
+      stop_condition: row.stop_condition ?? undefined,
+      escalation_condition: row.escalation_condition ?? undefined,
+      evidence_summary: row.evidence_summary,
+      source_kind: row.source_kind,
+      state: row.state,
+      usage_count: row.usage_count,
+      helped_count: row.helped_count,
+      harmed_count: row.harmed_count,
+      support_count: row.support_count,
+      last_used_at: row.last_used_at ?? undefined,
+      last_helped_at: row.last_helped_at ?? undefined,
+      last_harmed_at: row.last_harmed_at ?? undefined,
+      created_at: row.created_at,
+      updated_at: row.updated_at
+    };
+  }
+
   upsert(node: ExperienceNode): ExperienceNode {
     const payload = {
       id: node.id,
@@ -74,19 +134,24 @@ export class NodeRepository {
   }
 
   listAll(): ExperienceNode[] {
-    return this.db.prepare("SELECT * FROM experience_nodes ORDER BY updated_at DESC").all() as unknown as ExperienceNode[];
+    return this.db
+      .prepare("SELECT * FROM experience_nodes ORDER BY updated_at DESC")
+      .all()
+      .map((row) => this.mapNode(row as Parameters<typeof this.mapNode>[0]));
   }
 
   listActive(): ExperienceNode[] {
     return this.db
       .prepare("SELECT * FROM experience_nodes WHERE state = 'active' ORDER BY updated_at DESC")
-      .all() as unknown as ExperienceNode[];
+      .all()
+      .map((row) => this.mapNode(row as Parameters<typeof this.mapNode>[0]));
   }
 
   getById(id: string): ExperienceNode | undefined {
-    return this.db.prepare("SELECT * FROM experience_nodes WHERE id = ? LIMIT 1").get(id) as unknown as
-      | ExperienceNode
+    const row = this.db.prepare("SELECT * FROM experience_nodes WHERE id = ? LIMIT 1").get(id) as
+      | Parameters<typeof this.mapNode>[0]
       | undefined;
+    return row ? this.mapNode(row) : undefined;
   }
 
   listByIds(ids: string[]): ExperienceNode[] {
@@ -97,7 +162,8 @@ export class NodeRepository {
     const placeholders = ids.map(() => "?").join(", ");
     return this.db
       .prepare(`SELECT * FROM experience_nodes WHERE id IN (${placeholders}) ORDER BY updated_at DESC`)
-      .all(...ids) as unknown as ExperienceNode[];
+      .all(...ids)
+      .map((row) => this.mapNode(row as Parameters<typeof this.mapNode>[0]));
   }
 
   updateState(id: string, state: ExperienceNode["state"]): ExperienceNode | undefined {

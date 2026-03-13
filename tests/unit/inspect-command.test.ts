@@ -143,4 +143,84 @@ describe("inspect command", () => {
       })
     ]);
   });
+
+  it("prints recent history as a compact review table", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+
+    const inputRepo = new InputRecordRepository(db);
+    inputRepo.upsert(
+      makeRecord({
+        record_id: "input_recent_1",
+        session_id: "session_recent_1",
+        injected_node_ids: ["node_inspect"],
+        created_at: "2026-03-13T01:00:00.000Z"
+      })
+    );
+    inputRepo.upsert(
+      makeRecord({
+        record_id: "input_recent_2",
+        session_id: "session_recent_2",
+        injected_node_ids: [],
+        outcome_signal: "failure",
+        created_at: "2026-03-13T00:00:00.000Z"
+      })
+    );
+
+    runInspectCommand("recent");
+
+    expect(consoleTableSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        session: "session_recent_1",
+        task: "test_debug",
+        intervention: "inject",
+        outcome: "success"
+      }),
+      expect.objectContaining({
+        session: "session_recent_2",
+        task: "test_debug",
+        intervention: "skip",
+        outcome: "failure"
+      })
+    ]);
+  });
+
+  it("prints a single node detail view", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+
+    const nodeRepo = new NodeRepository(db);
+    nodeRepo.upsert(
+      makeNode({
+        recommended_steps: ["Run the failing test", "Apply the minimal fix"]
+      })
+    );
+
+    runInspectCommand("node:node_inspect");
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Node: node_inspect"],
+        ["Type: strategy"],
+        ["Task type: test_debug"],
+        ["State: active"],
+        [`Scope: ${resolveScope("/repo").scope_id}`],
+        ["Helped: 1"],
+        ["Harmed: 0"],
+        ["Used: 2"],
+        ["Hint: Run the failing auth test before editing and verify after the fix."],
+        ["Goal: Stabilize the auth test"],
+        ["Applicability: Stay in the same repo scope"],
+        ["Success signal: The test passes"],
+        ["Evidence: Previously solved the same auth test failure."],
+        ["Recommended steps:"],
+        ["- Run the failing test"],
+        ["- Apply the minimal fix"]
+      ])
+    );
+  });
 });
