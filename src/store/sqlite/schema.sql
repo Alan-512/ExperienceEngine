@@ -38,7 +38,12 @@ CREATE TABLE IF NOT EXISTS experience_nodes (
   stop_condition TEXT,
   escalation_condition TEXT,
   evidence_summary TEXT NOT NULL,
+  retrieval_text TEXT,
+  embedding_json TEXT,
   source_kind TEXT NOT NULL,
+  origin_record_ids_json TEXT NOT NULL DEFAULT '[]',
+  helped_record_ids_json TEXT NOT NULL DEFAULT '[]',
+  harmed_record_ids_json TEXT NOT NULL DEFAULT '[]',
   state TEXT NOT NULL,
   usage_count INTEGER NOT NULL DEFAULT 0,
   helped_count INTEGER NOT NULL DEFAULT 0,
@@ -76,4 +81,3 @@ CREATE TABLE IF NOT EXISTS scope_task_stats (
   updated_at TEXT NOT NULL,
   PRIMARY KEY (scope_id, task_type)
 );
-

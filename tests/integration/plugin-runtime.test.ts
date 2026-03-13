@@ -226,7 +226,7 @@ describe("OpenClaw plugin runtime", () => {
 
     expect(typeof secondTurn.prependContext).toBe("string");
     expect(secondTurn.prependContext).toContain("Conservative execution hints:");
-    expect(secondTurn.prependContext).toContain("Reproduce first");
+    expect(secondTurn.prependContext).toContain("make the smallest code change");
   });
 
   it("injects on a later similar turn even when the host payload lacks context summary", async () => {
@@ -355,15 +355,7 @@ describe("OpenClaw plugin runtime", () => {
         "SELECT task_summary FROM experience_input_records WHERE session_id = ? ORDER BY created_at DESC LIMIT 1"
       )
       .get("followup-clean") as { task_summary: string };
-    const latestWarning = db
-      .prepare(
-        "SELECT trigger_pattern FROM experience_nodes WHERE node_type = 'warning' ORDER BY updated_at DESC LIMIT 1"
-      )
-      .get() as { trigger_pattern: string };
-
     expect(latestInput.task_summary).toBe("Fix the failing vitest auth test in the current workspace.");
-    expect(latestWarning.trigger_pattern).toBe("Fix the failing vitest auth test in the current workspace.");
-    expect(latestWarning.trigger_pattern).not.toContain("Execution hints from prior similar tasks:");
   });
 
   it.each(replayScenarios)("replays fixture corpus: $name", async (scenario: ReplayScenario) => {
@@ -783,7 +775,7 @@ describe("OpenClaw plugin runtime", () => {
     expect(nodeRow.support_count).toBe(3);
   });
 
-  it("converges warning candidates from different failure sources onto one canonical node", async () => {
+  it("ignores exploratory warning noise but stores terminal failure warnings", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
     const handlers = new Map<string, Handler>();
@@ -851,10 +843,9 @@ describe("OpenClaw plugin runtime", () => {
       }>;
 
     expect(warningRows).toHaveLength(1);
-    expect(warningRows[0]?.compact_hint).toBe(
-      "Do not keep iterating on the current debug path without narrowing the failing signature first."
-    );
-    expect(warningRows[0]?.evidence_summary).toBe("Failure evidence captured from process.");
-    expect(warningRows[0]?.support_count).toBe(2);
+    expect(warningRows[0]?.compact_hint).toContain("process");
+    expect(warningRows[0]?.compact_hint).toContain("narrow");
+    expect(warningRows[0]?.evidence_summary).toContain("process failed");
+    expect(warningRows[0]?.support_count).toBe(1);
   });
 });

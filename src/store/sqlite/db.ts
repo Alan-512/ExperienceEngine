@@ -31,8 +31,38 @@ export const openDatabase = (config: ExperienceEngineConfig): DatabaseSync => {
   return new DatabaseSync(dbPath);
 };
 
+const columnExists = (db: DatabaseSync, table: string, column: string): boolean => {
+  const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
+  return rows.some((row) => row.name === column);
+};
+
+const ensureColumn = (db: DatabaseSync, table: string, column: string, definition: string): void => {
+  if (!columnExists(db, table, column)) {
+    db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+  }
+};
+
 export const bootstrapDatabase = (db: DatabaseSync): void => {
   const schemaPath = resolveSQLiteSchemaPath(moduleDir);
   const schema = readFileSync(schemaPath, "utf8");
   db.exec(schema);
+
+  ensureColumn(db, "experience_nodes", "retrieval_text", "TEXT");
+  ensureColumn(db, "experience_nodes", "embedding_json", "TEXT");
+  ensureColumn(db, "experience_nodes", "origin_record_ids_json", "TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn(db, "experience_nodes", "helped_record_ids_json", "TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn(db, "experience_nodes", "harmed_record_ids_json", "TEXT NOT NULL DEFAULT '[]'");
+};
+
+export const withTransaction = <T>(db: DatabaseSync, operation: () => T): T => {
+  db.exec("BEGIN IMMEDIATE");
+
+  try {
+    const result = operation();
+    db.exec("COMMIT");
+    return result;
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
 };

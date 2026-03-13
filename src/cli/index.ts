@@ -86,7 +86,7 @@ const main = async (): Promise<void> => {
       runRetireCommand(args[0], args[1]);
       break;
     case "remember":
-      runRememberCommand(args.join(" ").trim());
+      runRememberCommand(args);
       break;
     default:
       console.log(

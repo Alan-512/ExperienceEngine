@@ -46,12 +46,19 @@ const seedStrategyNode = (nodeRepo: NodeRepository, cwd: string, timestamp: stri
     stop_condition: undefined,
     escalation_condition: undefined,
     evidence_summary: "Recovered the same failing auth test in a prior task.",
+    retrieval_text: "Fix the failing auth test\nRun the failing auth test before editing and verify after the fix.",
     source_kind: "system_derived",
+    origin_record_ids: ["input_origin"],
+    helped_record_ids: ["input_helped"],
+    harmed_record_ids: ["input_harmed"],
     state: "active",
     usage_count: 0,
     helped_count: 0,
     harmed_count: 0,
     support_count: 1,
+    last_used_at: undefined,
+    last_helped_at: undefined,
+    last_harmed_at: undefined,
     created_at: timestamp,
     updated_at: timestamp
   });
@@ -74,12 +81,16 @@ describe("ExperienceInteractionService", () => {
     expect(active[0]).toMatchObject({
       id: "node_interaction_detail",
       type: "strategy",
-      state: "active"
+      state: "active",
+      sourceKind: "system_derived"
     });
     expect(detail).toMatchObject({
       id: "node_interaction_detail",
       scopeId: resolveScope("/repo").scope_id,
-      recommendedSteps: ["Run the failing test", "Apply the minimal fix", "Re-run the test"]
+      recommendedSteps: ["Run the failing test", "Apply the minimal fix", "Re-run the test"],
+      originRecordIds: ["input_origin"],
+      helpedRecordIds: ["input_helped"],
+      harmedRecordIds: ["input_harmed"]
     });
   });
 
@@ -146,6 +157,33 @@ describe("ExperienceInteractionService", () => {
       status: "updated",
       nodeId: "node_interaction_lifecycle",
       state: "retired"
+    });
+  });
+
+  it("persists user-authored experiences through the shared interaction service", () => {
+    const homeDir = makeTempDir();
+    const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });
+    const service = new ExperienceInteractionService(config);
+
+    const created = service.rememberExperience({
+      cwd: "/repo",
+      triggerPattern: "When the auth test fails after a refactor",
+      hint: "Run the auth test before refactoring more files and rerun it after each slice.",
+      taskType: "refactor",
+      nodeType: "strategy",
+      goal: "Keep the auth flow stable during refactors"
+    });
+
+    expect(created.status).toBe("created");
+    if (created.status !== "created") {
+      return;
+    }
+
+    expect(created.node.sourceKind).toBe("user_authored_candidate_promoted");
+    expect(created.node.originRecordIds[0]).toMatch(/^manual_origin_/);
+    expect(service.inspectNode(created.node.id)).toMatchObject({
+      sourceKind: "user_authored_candidate_promoted",
+      taskType: "refactor"
     });
   });
 });

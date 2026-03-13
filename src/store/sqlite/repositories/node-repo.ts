@@ -21,7 +21,12 @@ export class NodeRepository {
     stop_condition: string | null;
     escalation_condition: string | null;
     evidence_summary: string;
+    retrieval_text: string | null;
+    embedding_json: string | null;
     source_kind: ExperienceNode["source_kind"];
+    origin_record_ids_json: string;
+    helped_record_ids_json: string;
+    harmed_record_ids_json: string;
     state: ExperienceNode["state"];
     usage_count: number;
     helped_count: number;
@@ -50,7 +55,12 @@ export class NodeRepository {
       stop_condition: row.stop_condition ?? undefined,
       escalation_condition: row.escalation_condition ?? undefined,
       evidence_summary: row.evidence_summary,
+      retrieval_text: row.retrieval_text ?? undefined,
+      embedding: row.embedding_json ? (JSON.parse(row.embedding_json) as number[]) : undefined,
       source_kind: row.source_kind,
+      origin_record_ids: JSON.parse(row.origin_record_ids_json) as string[],
+      helped_record_ids: JSON.parse(row.helped_record_ids_json) as string[],
+      harmed_record_ids: JSON.parse(row.harmed_record_ids_json) as string[],
       state: row.state,
       usage_count: row.usage_count,
       helped_count: row.helped_count,
@@ -82,7 +92,12 @@ export class NodeRepository {
       stop_condition: node.stop_condition ?? null,
       escalation_condition: node.escalation_condition ?? null,
       evidence_summary: node.evidence_summary,
+      retrieval_text: node.retrieval_text ?? null,
+      embedding_json: node.embedding ? JSON.stringify(node.embedding) : null,
       source_kind: node.source_kind,
+      origin_record_ids_json: JSON.stringify(node.origin_record_ids ?? []),
+      helped_record_ids_json: JSON.stringify(node.helped_record_ids ?? []),
+      harmed_record_ids_json: JSON.stringify(node.harmed_record_ids ?? []),
       state: node.state,
       usage_count: node.usage_count,
       helped_count: node.helped_count,
@@ -99,11 +114,13 @@ export class NodeRepository {
       .prepare(
         `INSERT INTO experience_nodes
           (id, node_type, scope_id, task_type, trigger_pattern, applicability_notes, env_signature, compact_hint, goal, recommended_steps_json,
-           avoid_steps_json, fallback_steps_json, success_signal, stop_condition, escalation_condition, evidence_summary, source_kind, state,
+           avoid_steps_json, fallback_steps_json, success_signal, stop_condition, escalation_condition, evidence_summary, retrieval_text, embedding_json, source_kind,
+           origin_record_ids_json, helped_record_ids_json, harmed_record_ids_json, state,
            usage_count, helped_count, harmed_count, support_count, last_used_at, last_helped_at, last_harmed_at, created_at, updated_at)
          VALUES
          (@id, @node_type, @scope_id, @task_type, @trigger_pattern, @applicability_notes, @env_signature, @compact_hint, @goal, @recommended_steps_json,
-           @avoid_steps_json, @fallback_steps_json, @success_signal, @stop_condition, @escalation_condition, @evidence_summary, @source_kind, @state,
+           @avoid_steps_json, @fallback_steps_json, @success_signal, @stop_condition, @escalation_condition, @evidence_summary, @retrieval_text, @embedding_json, @source_kind,
+           @origin_record_ids_json, @helped_record_ids_json, @harmed_record_ids_json, @state,
            @usage_count, @helped_count, @harmed_count, @support_count, @last_used_at, @last_helped_at, @last_harmed_at, @created_at, @updated_at)
          ON CONFLICT(id) DO UPDATE SET
           trigger_pattern = excluded.trigger_pattern,
@@ -118,7 +135,12 @@ export class NodeRepository {
           stop_condition = excluded.stop_condition,
           escalation_condition = excluded.escalation_condition,
           evidence_summary = excluded.evidence_summary,
+          retrieval_text = excluded.retrieval_text,
+          embedding_json = excluded.embedding_json,
           source_kind = excluded.source_kind,
+          origin_record_ids_json = excluded.origin_record_ids_json,
+          helped_record_ids_json = excluded.helped_record_ids_json,
+          harmed_record_ids_json = excluded.harmed_record_ids_json,
           state = excluded.state,
           usage_count = excluded.usage_count,
           helped_count = excluded.helped_count,

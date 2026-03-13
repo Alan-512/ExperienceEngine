@@ -47,7 +47,7 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
     if (record.injectedNodes.length) {
       console.log("Injected nodes:");
       for (const node of record.injectedNodes) {
-        console.log(`- ${node.id} ${node.type} ${node.state}`);
+        console.log(`- ${node.id} ${node.type} ${node.state} ${node.sourceKind}`);
       }
     }
 
@@ -140,6 +140,7 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
       nodes.map((node) => ({
         id: node.id,
         type: node.type,
+        source: node.sourceKind,
         task: node.taskType,
         state: node.state,
         helped: node.helped,
@@ -167,6 +168,7 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
       nodes.map((node) => ({
         id: node.id,
         type: node.type,
+        source: node.sourceKind,
         task: node.taskType,
         state: node.state,
         helped: node.helped,
@@ -188,6 +190,7 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
 
     console.log(`Node: ${node.id}`);
     console.log(`Type: ${node.type}`);
+    console.log(`Source: ${node.sourceKind}`);
     console.log(`Task type: ${node.taskType}`);
     console.log(`State: ${node.state}`);
     console.log(`Scope: ${node.scopeId}`);
@@ -203,6 +206,15 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
     }
     console.log(`Success signal: ${node.successSignal}`);
     console.log(`Evidence: ${node.evidence}`);
+    if (node.originRecordIds.length) {
+      console.log(`Origin records: ${node.originRecordIds.join(", ")}`);
+    }
+    if (node.helpedRecordIds.length) {
+      console.log(`Helped records: ${node.helpedRecordIds.join(", ")}`);
+    }
+    if (node.harmedRecordIds.length) {
+      console.log(`Harmed records: ${node.harmedRecordIds.join(", ")}`);
+    }
     if (node.recommendedSteps.length) {
       console.log("Recommended steps:");
       for (const step of node.recommendedSteps) {
@@ -222,6 +234,7 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
     rows.map((node) => ({
       id: node.id,
       type: node.type,
+      source: node.sourceKind,
       task: node.taskType,
       state: node.state,
       helped: node.helped,

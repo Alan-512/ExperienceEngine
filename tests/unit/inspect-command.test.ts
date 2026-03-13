@@ -40,12 +40,19 @@ const makeNode = (overrides: Partial<ExperienceNode> = {}): ExperienceNode => ({
   stop_condition: undefined,
   escalation_condition: undefined,
   evidence_summary: "Previously solved the same auth test failure.",
+  retrieval_text: "Fix the failing auth test\nRun the failing auth test before editing and verify after the fix.",
   source_kind: "system_derived",
+  origin_record_ids: ["input_origin"],
+  helped_record_ids: ["input_helped"],
+  harmed_record_ids: ["input_harmed"],
   state: "active",
   usage_count: 2,
   helped_count: 1,
   harmed_count: 0,
   support_count: 1,
+  last_used_at: undefined,
+  last_helped_at: undefined,
+  last_harmed_at: undefined,
   created_at: "2026-03-12T00:00:00.000Z",
   updated_at: "2026-03-12T00:00:00.000Z",
   ...overrides
@@ -104,7 +111,7 @@ describe("inspect command", () => {
         ["Task type: test_debug"],
         ["Intervention: inject"],
         ["Injected nodes:"],
-        ["- node_inspect strategy active"],
+        ["- node_inspect strategy active system_derived"],
         ["Hints:"],
         ["- Run the failing auth test before editing and verify after the fix."],
         ["Evidence:"],
@@ -136,6 +143,7 @@ describe("inspect command", () => {
       expect.objectContaining({
         id: "node_inspect",
         type: "strategy",
+        source: "system_derived",
         task: "test_debug",
         state: "active",
         helped: 1,
@@ -249,6 +257,7 @@ describe("inspect command", () => {
       expect.arrayContaining([
         ["Node: node_inspect"],
         ["Type: strategy"],
+        ["Source: system_derived"],
         ["Task type: test_debug"],
         ["State: active"],
         [`Scope: ${resolveScope("/repo").scope_id}`],
@@ -260,6 +269,9 @@ describe("inspect command", () => {
         ["Applicability: Stay in the same repo scope"],
         ["Success signal: The test passes"],
         ["Evidence: Previously solved the same auth test failure."],
+        ["Origin records: input_origin"],
+        ["Helped records: input_helped"],
+        ["Harmed records: input_harmed"],
         ["Recommended steps:"],
         ["- Run the failing test"],
         ["- Apply the minimal fix"]
@@ -288,6 +300,7 @@ describe("inspect command", () => {
     expect(consoleTableSpy).toHaveBeenCalledWith([
       expect.objectContaining({
         id: "node_cooling",
+        source: "system_derived",
         state: "cooling",
         hint: "Cooling node hint"
       })
@@ -316,6 +329,7 @@ describe("inspect command", () => {
       expect.objectContaining({
         id: "node_warning",
         type: "warning",
+        source: "system_derived",
         hint: "Warning node hint"
       })
     ]);

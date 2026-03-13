@@ -1,15 +1,29 @@
 import type { ExperienceNode } from "../../types/domain.js";
 import { embedText } from "./embeddings.js";
+import { openVectorStore } from "./lancedb.js";
 
 export class NodeIndex {
   private readonly index = new Map<string, number[]>();
+  private readonly store = openVectorStore();
 
-  async upsert(node: ExperienceNode): Promise<void> {
-    this.index.set(node.id, await embedText(`${node.trigger_pattern} ${node.compact_hint}`));
+  upsert(node: ExperienceNode): void {
+    const embedding = node.embedding ?? embedText(node.retrieval_text ?? `${node.trigger_pattern} ${node.compact_hint}`);
+    this.index.set(node.id, embedding);
+  }
+
+  query(summary: string, limit = 8): Array<{ id: string; score: number }> {
+    const queryEmbedding = embedText(summary);
+    return this.store.query(
+      [...this.index.entries()].map(([id, embedding]) => ({
+        id,
+        embedding
+      })),
+      queryEmbedding,
+      limit
+    );
   }
 
   get size(): number {
     return this.index.size;
   }
 }
-

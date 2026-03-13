@@ -82,12 +82,19 @@ const seedStrategyNode = (nodeRepo: NodeRepository, cwd: string, timestamp: stri
     stop_condition: undefined,
     escalation_condition: undefined,
     evidence_summary: "Recovered the same failing auth test in a prior task.",
+    retrieval_text: "Fix the failing auth test\nRun the failing auth test before editing and verify after the fix.",
     source_kind: "system_derived",
+    origin_record_ids: ["input_origin"],
+    helped_record_ids: ["input_helped"],
+    harmed_record_ids: ["input_harmed"],
     state: "candidate",
     usage_count: 0,
     helped_count: 0,
     harmed_count: 0,
     support_count: 1,
+    last_used_at: undefined,
+    last_helped_at: undefined,
+    last_harmed_at: undefined,
     created_at: timestamp,
     updated_at: timestamp
   });
@@ -258,6 +265,7 @@ describe("Codex MCP behavior loop", () => {
 
     expect(last?.sessionId).toBe("codex-surface-view");
     expect(last?.intervention).toBe("inject");
+    expect(last?.injectedNodes[0]?.sourceKind).toBe("system_derived");
     expect(recent).toHaveLength(1);
     expect(candidateNodes.map((entry) => entry.id)).toContain("node_codex_surface_view");
     expect(node?.id).toBe("node_codex_surface_view");
@@ -313,7 +321,9 @@ describe("Codex MCP behavior loop", () => {
     expect(JSON.parse((recentPayload as { contents: Array<{ text: string }> }).contents[0].text)).toHaveLength(1);
     expect(JSON.parse((nodePayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({
       id: "node_codex_resource_view",
-      type: "strategy"
+      type: "strategy",
+      sourceKind: "system_derived",
+      originRecordIds: ["input_origin"]
     });
   });
 
@@ -382,6 +392,7 @@ describe("Codex MCP behavior loop", () => {
     const recentPrompt = getRegisteredPrompt(server, "experienceengine_review_recent_injected");
     const pausePrompt = getRegisteredPrompt(server, "experienceengine_pause_current_project");
     const harmfulPrompt = getRegisteredPrompt(server, "experienceengine_mark_last_experience_harmful");
+    const rememberPrompt = getRegisteredPrompt(server, "experienceengine_author_manual_experience");
 
     const showLast = (await showLastPrompt.callback({})) as {
       messages: Array<{ role: string; content: { type: string; text?: string; uri?: string } }>;
@@ -393,6 +404,12 @@ describe("Codex MCP behavior loop", () => {
       messages: Array<{ role: string; content: { type: string; text?: string } }>;
     };
     const harmful = (await harmfulPrompt.callback({})) as {
+      messages: Array<{ role: string; content: { type: string; text?: string } }>;
+    };
+    const remember = (await rememberPrompt.callback({
+      triggerPattern: "When the auth test fails after a refactor",
+      hint: "Run the auth test after each refactor slice."
+    })) as {
       messages: Array<{ role: string; content: { type: string; text?: string } }>;
     };
 
@@ -408,6 +425,7 @@ describe("Codex MCP behavior loop", () => {
     expect(pause.messages[0].content.text).toContain("experienceengine_disable_scope");
     expect(pause.messages[0].content.text).toContain("/repo");
     expect(harmful.messages[0].content.text).toContain("feedback=harmed");
+    expect(remember.messages[0].content.text).toContain("experienceengine_remember");
   });
 
   it("registers operational MCP resources and read-only tools", async () => {
@@ -501,6 +519,37 @@ describe("Codex MCP behavior loop", () => {
       state: "retired"
     });
     expect(nodeRepo.getById("node_codex_lifecycle")?.state).toBe("retired");
+  });
+
+  it("registers a manual authoring MCP tool", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+    const server = createCodexMcpServer({ homeDir, env });
+    const rememberTool = getRegisteredTool(server, "experienceengine_remember");
+
+    const rememberPayload = parseTextPayload<{
+      status: string;
+      node?: { sourceKind: string; taskType: string; hint: string };
+    }>(
+      (await rememberTool.handler({
+        cwd: "/repo",
+        triggerPattern: "When the auth test fails after a refactor",
+        hint: "Run the auth test after each refactor slice.",
+        taskType: "refactor",
+        nodeType: "strategy"
+      })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+
+    expect(rememberPayload).toMatchObject({
+      status: "created",
+      node: {
+        sourceKind: "user_authored_candidate_promoted",
+        taskType: "refactor",
+        hint: "Run the auth test after each refactor slice."
+      }
+    });
   });
 
   it("registers plan-and-confirm MCP tools for high-impact operations", async () => {

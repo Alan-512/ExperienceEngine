@@ -138,7 +138,11 @@ export const cleanupHistoricalWarningVariants = (
       stop_condition: primary.stop_condition,
       escalation_condition: primary.escalation_condition,
       evidence_summary: primary.evidence_summary,
+      retrieval_text: [chooseCanonicalTriggerPattern(group), canonicalWarningHint, primary.evidence_summary].join("\n"),
       source_kind: primary.source_kind,
+      origin_record_ids_json: "[]",
+      helped_record_ids_json: "[]",
+      harmed_record_ids_json: "[]",
       state: chooseState(group),
       usage_count: group.reduce((sum, row) => sum + row.usage_count, 0),
       helped_count: group.reduce((sum, row) => sum + row.helped_count, 0),
@@ -165,12 +169,14 @@ export const cleanupHistoricalWarningVariants = (
       `INSERT INTO experience_nodes
         (id, node_type, scope_id, task_type, trigger_pattern, applicability_notes, env_signature, compact_hint, goal,
          recommended_steps_json, avoid_steps_json, fallback_steps_json, success_signal, stop_condition, escalation_condition,
-         evidence_summary, source_kind, state, usage_count, helped_count, harmed_count, support_count, last_used_at,
+         evidence_summary, retrieval_text, source_kind, origin_record_ids_json, helped_record_ids_json, harmed_record_ids_json,
+         state, usage_count, helped_count, harmed_count, support_count, last_used_at,
          last_helped_at, last_harmed_at, created_at, updated_at)
        VALUES
         (@id, @node_type, @scope_id, @task_type, @trigger_pattern, @applicability_notes, @env_signature, @compact_hint, @goal,
          @recommended_steps_json, @avoid_steps_json, @fallback_steps_json, @success_signal, @stop_condition, @escalation_condition,
-         @evidence_summary, @source_kind, @state, @usage_count, @helped_count, @harmed_count, @support_count, @last_used_at,
+         @evidence_summary, @retrieval_text, @source_kind, @origin_record_ids_json, @helped_record_ids_json, @harmed_record_ids_json,
+         @state, @usage_count, @helped_count, @harmed_count, @support_count, @last_used_at,
          @last_helped_at, @last_harmed_at, @created_at, @updated_at)
        ON CONFLICT(id) DO UPDATE SET
         trigger_pattern = excluded.trigger_pattern,
@@ -185,7 +191,11 @@ export const cleanupHistoricalWarningVariants = (
         stop_condition = excluded.stop_condition,
         escalation_condition = excluded.escalation_condition,
         evidence_summary = excluded.evidence_summary,
+        retrieval_text = excluded.retrieval_text,
         source_kind = excluded.source_kind,
+        origin_record_ids_json = excluded.origin_record_ids_json,
+        helped_record_ids_json = excluded.helped_record_ids_json,
+        harmed_record_ids_json = excluded.harmed_record_ids_json,
         state = excluded.state,
         usage_count = excluded.usage_count,
         helped_count = excluded.helped_count,

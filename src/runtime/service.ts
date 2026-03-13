@@ -22,7 +22,7 @@ import type {
   OpenClawLogger
 } from "../types/plugin.js";
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
-import { bootstrapDatabase, openDatabase } from "../store/sqlite/db.js";
+import { bootstrapDatabase, openDatabase, withTransaction } from "../store/sqlite/db.js";
 import { CandidateRepository } from "../store/sqlite/repositories/candidate-repo.js";
 import { InputRecordRepository } from "../store/sqlite/repositories/input-record-repo.js";
 import { NodeRepository } from "../store/sqlite/repositories/node-repo.js";
@@ -31,6 +31,7 @@ import { StatsRepository } from "../store/sqlite/repositories/stats-repo.js";
 import { RuntimeCaptureWriter } from "../plugin/runtime-capture.js";
 import { normalizeToolResult } from "../plugin/hooks/tool-result-persist.js";
 import { extractToolResultsFromPayload } from "../plugin/runtime-helpers.js";
+import { embedText } from "../store/vector/embeddings.js";
 
 type SessionState = {
   context?: HostPromptContext;
@@ -59,7 +60,21 @@ const toInputRecord = (input: ExperienceInput, sessionId?: string): ExperienceIn
   created_at: nowIso()
 });
 
-const candidateToNode = (candidate: ExperienceCandidate, existing?: ExperienceNode): ExperienceNode => {
+const mergeIds = (existing: string[] | undefined, next: string[]): string[] => {
+  const merged = new Set([...(existing ?? []), ...next]);
+  return [...merged];
+};
+
+const buildRetrievalText = (candidate: ExperienceCandidate): string =>
+  [candidate.trigger_pattern, candidate.compact_hint, candidate.goal, candidate.evidence_summary]
+    .filter(Boolean)
+    .join("\n");
+
+const candidateToNode = (
+  candidate: ExperienceCandidate,
+  originRecordId: string,
+  existing?: ExperienceNode
+): ExperienceNode => {
   const timestamp = nowIso();
   const id = stableId(
     "node",
@@ -69,6 +84,11 @@ const candidateToNode = (candidate: ExperienceCandidate, existing?: ExperienceNo
   return {
     id,
     ...candidate,
+    retrieval_text: buildRetrievalText(candidate),
+    embedding: embedText(buildRetrievalText(candidate)),
+    origin_record_ids: mergeIds(existing?.origin_record_ids, [originRecordId]),
+    helped_record_ids: existing?.helped_record_ids ?? [],
+    harmed_record_ids: existing?.harmed_record_ids ?? [],
     state: existing?.state ?? "candidate",
     usage_count: existing?.usage_count ?? 0,
     helped_count: existing?.helped_count ?? 0,
@@ -103,6 +123,7 @@ const buildToolEventKey = (toolEvent: ToolEvent, toolCallId?: string): string =>
   ].join(":");
 
 export class ExperienceRuntimeService implements ExperiencePlugin {
+  private readonly db;
   private readonly logger: OpenClawLogger;
   private readonly sessions = new Map<string, SessionState>();
   private readonly orphanToolEvents = new Map<string, ToolEvent>();
@@ -118,13 +139,13 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     logger?: OpenClawLogger
   ) {
     this.logger = logger ?? {};
-    const db = openDatabase(config);
-    bootstrapDatabase(db);
-    this.scopeRepo = new ScopeRepository(db);
-    this.inputRepo = new InputRecordRepository(db);
-    this.nodeRepo = new NodeRepository(db);
-    this.candidateRepo = new CandidateRepository(db);
-    this.statsRepo = new StatsRepository(db);
+    this.db = openDatabase(config);
+    bootstrapDatabase(this.db);
+    this.scopeRepo = new ScopeRepository(this.db);
+    this.inputRepo = new InputRecordRepository(this.db);
+    this.nodeRepo = new NodeRepository(this.db);
+    this.candidateRepo = new CandidateRepository(this.db);
+    this.statsRepo = new StatsRepository(this.db);
     this.captureWriter = new RuntimeCaptureWriter(config, this.logger);
   }
 
@@ -169,9 +190,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     }
   }
 
-  private finalizeInput(context: HostPromptContext): ExperienceInput {
-    const sessionId = context.sessionId ?? "global";
-    const session = this.getSession(sessionId);
+  private buildFinalizedInput(context: HostPromptContext, session: SessionState): ExperienceInput {
     const mergedContext = mergeContext(session.context, context);
     const injectedNodeIds =
       session.injectedNodeIds.length > 0 ? session.injectedNodeIds : mergedContext.injectedNodeIds ?? [];
@@ -182,14 +201,23 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       },
       session.toolEvents
     );
+    return input;
+  }
 
-    const resolvedScope = resolveScope(mergedContext.cwd);
+  private persistFinalizedInput(
+    input: ExperienceInput,
+    sessionId: string,
+    session: SessionState
+  ): ExperienceInputRecord {
+    const resolvedScope = resolveScope(session.context?.cwd);
     const existingScope = this.scopeRepo.getById(resolvedScope.scope_id);
     this.scopeRepo.upsert({
       ...resolvedScope,
       is_disabled: existingScope?.is_disabled ?? resolvedScope.is_disabled
     });
-    this.inputRepo.upsert(toInputRecord(input, sessionId));
+
+    const record = toInputRecord(input, sessionId);
+    this.inputRepo.upsert(record);
 
     if (input.task_type !== "unknown") {
       const currentStats =
@@ -197,10 +225,10 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       this.statsRepo.upsert(updateStats(currentStats, input.outcome_signal, input.injected_node_ids.length > 0));
     }
 
-    return input;
+    return record;
   }
 
-  private persistCandidates(input: ExperienceInput): void {
+  private persistCandidates(input: ExperienceInput, originRecordId: string): void {
     const analysis = analyzeExperience(input);
     for (const candidate of analysis.accepted) {
       const candidateId = stableId(
@@ -208,11 +236,11 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
         [candidate.scope_id, candidate.task_type, candidate.node_type, candidate.compact_hint].join(":")
       );
       const existing = this.nodeRepo.getById(candidateId);
-      this.nodeRepo.upsert(candidateToNode(candidate, existing));
+      this.nodeRepo.upsert(candidateToNode(candidate, originRecordId, existing));
     }
   }
 
-  private updateInjectedNodes(input: ExperienceInput): void {
+  private updateInjectedNodes(input: ExperienceInput, attributionRecordId: string): void {
     if (!input.injected_node_ids.length) {
       return;
     }
@@ -221,7 +249,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       .map((id) => this.nodeRepo.getById(id))
       .filter((node): node is ExperienceNode => Boolean(node));
 
-    for (const node of applyFeedback(input, touched)) {
+    for (const node of applyFeedback(input, touched, attributionRecordId)) {
       this.nodeRepo.upsert(node);
     }
   }
@@ -260,8 +288,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
 
     const stats =
       input.task_type !== "unknown" ? this.statsRepo.get(input.scope_id, input.task_type) : undefined;
-    const nodes =
-      input.task_type !== "unknown" ? this.candidateRepo.listByScopeAndTask(input.scope_id, input.task_type) : [];
+    const nodes = input.task_type !== "unknown" ? this.candidateRepo.listByScope(input.scope_id) : [];
     const decision = decideIntervention(input, nodes, stats, this.config.triggerThreshold, this.config.maxHints);
 
     session.injectedNodeIds = decision.selected.map((node) => node.id);
@@ -310,9 +337,13 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
 
   async finalizeTask(context: HostPromptContext) {
     const sessionId = context.sessionId ?? "global";
-    const input = this.finalizeInput(context);
-    this.persistCandidates(input);
-    this.updateInjectedNodes(input);
+    const session = this.getSession(sessionId);
+    const input = this.buildFinalizedInput(context, session);
+    withTransaction(this.db, () => {
+      const record = this.persistFinalizedInput(input, sessionId, session);
+      this.persistCandidates(input, record.record_id);
+      this.updateInjectedNodes(input, record.record_id);
+    });
     this.sessions.delete(sessionId);
 
     this.logger.info?.("experienceengine.finalize", {

@@ -39,7 +39,13 @@ const node = (overrides: Partial<ExperienceNode>): ExperienceNode => ({
   compact_hint: "Do not keep iterating on the current debug path without narrowing the failing signature first.",
   success_signal: "A narrowed reproduction or a different evidence-backed fix path is identified.",
   evidence_summary: "Failure evidence captured from exec.",
+  retrieval_text:
+    "Execution hints from prior similar tasks: - Reproduce first, then validate the fix with exec before moving on. [Thu 2026-03-12 09:24 GMT+8] Fix the failing vitest auth test. Start...\nDo not keep iterating on the current debug path without narrowing the failing signature first.",
+  embedding: [0.1, -0.2, 0.3],
   source_kind: "system_derived",
+  origin_record_ids: ["input_origin"],
+  helped_record_ids: ["input_helped"],
+  harmed_record_ids: ["input_harmed"],
   state: "active",
   usage_count: 3,
   helped_count: 2,
@@ -70,9 +76,14 @@ describe("NodeRepository", () => {
 
     expect(stored?.trigger_pattern).toBe("Fix the failing vitest auth test in the current workspace.");
     expect(stored?.evidence_summary).toBe("Failure evidence captured from read.");
+    expect(stored?.retrieval_text).toContain("Do not keep iterating on the current debug path");
+    expect(stored?.embedding).toEqual([0.1, -0.2, 0.3]);
     expect(stored?.usage_count).toBe(3);
     expect(stored?.helped_count).toBe(2);
     expect(stored?.harmed_count).toBe(1);
+    expect(stored?.origin_record_ids).toEqual(["input_origin"]);
+    expect(stored?.helped_record_ids).toEqual(["input_helped"]);
+    expect(stored?.harmed_record_ids).toEqual(["input_harmed"]);
     expect(stored?.last_used_at).toBe("2026-03-12T02:00:00.000Z");
     expect(stored?.last_helped_at).toBe("2026-03-12T01:59:00.000Z");
     expect(stored?.last_harmed_at).toBe("2026-03-12T01:58:00.000Z");

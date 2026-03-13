@@ -1,8 +1,9 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import { resolveSQLiteSchemaPath } from "../../src/store/sqlite/db.js";
+import { bootstrapDatabase, resolveSQLiteSchemaPath } from "../../src/store/sqlite/db.js";
 
 const tempDirs: string[] = [];
 
@@ -51,5 +52,56 @@ describe("resolveSQLiteSchemaPath", () => {
     expect(() => resolveSQLiteSchemaPath(moduleDir)).toThrowError(
       /Unable to locate ExperienceEngine SQLite schema/
     );
+  });
+});
+
+describe("bootstrapDatabase", () => {
+  it("adds new provenance columns to an existing experience_nodes table", () => {
+    const runtimeDir = makeTempDir();
+    const dbPath = join(runtimeDir, "experienceengine.db");
+    const db = new DatabaseSync(dbPath);
+
+    db.exec(`
+      CREATE TABLE experience_nodes (
+        id TEXT PRIMARY KEY,
+        node_type TEXT NOT NULL,
+        scope_id TEXT NOT NULL,
+        task_type TEXT NOT NULL,
+        trigger_pattern TEXT NOT NULL,
+        applicability_notes TEXT,
+        env_signature TEXT,
+        compact_hint TEXT NOT NULL,
+        goal TEXT,
+        recommended_steps_json TEXT,
+        avoid_steps_json TEXT,
+        fallback_steps_json TEXT,
+        success_signal TEXT NOT NULL,
+        stop_condition TEXT,
+        escalation_condition TEXT,
+        evidence_summary TEXT NOT NULL,
+        source_kind TEXT NOT NULL,
+        state TEXT NOT NULL,
+        usage_count INTEGER NOT NULL DEFAULT 0,
+        helped_count INTEGER NOT NULL DEFAULT 0,
+        harmed_count INTEGER NOT NULL DEFAULT 0,
+        support_count INTEGER NOT NULL DEFAULT 1,
+        last_used_at TEXT,
+        last_helped_at TEXT,
+        last_harmed_at TEXT,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+
+    bootstrapDatabase(db);
+
+    const columns = db.prepare("PRAGMA table_info(experience_nodes)").all() as Array<{ name: string }>;
+    const columnNames = columns.map((column) => column.name);
+
+    expect(columnNames).toContain("retrieval_text");
+    expect(columnNames).toContain("embedding_json");
+    expect(columnNames).toContain("origin_record_ids_json");
+    expect(columnNames).toContain("helped_record_ids_json");
+    expect(columnNames).toContain("harmed_record_ids_json");
   });
 });

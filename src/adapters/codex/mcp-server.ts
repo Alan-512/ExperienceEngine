@@ -3,7 +3,11 @@ import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js"
 import { z } from "zod";
 import { loadConfig } from "../../config/load-config.js";
 import { resolveExperienceEnginePaths } from "../../config/path-resolver.js";
-import { ExperienceInteractionService, type FeedbackValue } from "../../interaction/service.js";
+import {
+  ExperienceInteractionService,
+  type FeedbackValue,
+  type RememberExperienceInput
+} from "../../interaction/service.js";
 import {
   ExperienceOperationalService,
   type ExperienceAdapter
@@ -332,6 +336,10 @@ export const createCodexInteractionSurface = (options: CodexServerOptions = {}) 
 
     async retireNode(args: { nodeId: string }) {
       return interaction.retireNode(args.nodeId);
+    },
+
+    async rememberExperience(args: RememberExperienceInput) {
+      return interaction.rememberExperience(args);
     }
   };
 };
@@ -754,6 +762,36 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
     })
   );
 
+  server.registerPrompt(
+    "experienceengine_author_manual_experience",
+    {
+      title: "ExperienceEngine Author Manual Experience",
+      description: "Guide the agent to create a manual ExperienceEngine node from explicit user guidance.",
+      argsSchema: {
+        triggerPattern: z.string().optional(),
+        hint: z.string().optional(),
+        taskType: z.enum(["bug_fix", "build_debug", "test_debug", "integration_fix", "feature_add", "refactor", "performance", "general"]).optional(),
+        nodeType: z.enum(["strategy", "warning"]).optional()
+      }
+    },
+    async ({ triggerPattern, hint, taskType, nodeType }) => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text:
+              "Capture a manual ExperienceEngine node from the user's explicit guidance. Confirm the trigger pattern, hint, task family, and node type, then call experienceengine_remember."
+              + (triggerPattern ? ` Trigger pattern: ${triggerPattern}.` : "")
+              + (hint ? ` Hint: ${hint}.` : "")
+              + (taskType ? ` Task type: ${taskType}.` : "")
+              + (nodeType ? ` Node type: ${nodeType}.` : "")
+          }
+        }
+      ]
+    })
+  );
+
   server.registerTool(
     "experienceengine_plan_backup",
     {
@@ -1070,6 +1108,29 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
       })
     },
     async ({ nodeId }) => toStructuredToolResult(await interactionSurface.retireNode({ nodeId }))
+  );
+
+  server.registerTool(
+    "experienceengine_remember",
+    {
+      title: "ExperienceEngine Remember",
+      description: "Persist a user-authored ExperienceEngine node for later retrieval and inspection.",
+      inputSchema: z.object({
+        cwd: z.string().optional(),
+        triggerPattern: z.string().min(1),
+        hint: z.string().min(1),
+        taskType: z
+          .enum(["bug_fix", "build_debug", "test_debug", "integration_fix", "feature_add", "refactor", "performance", "general"])
+          .optional(),
+        nodeType: z.enum(["strategy", "warning"]).optional(),
+        goal: z.string().optional(),
+        applicability: z.string().optional(),
+        successSignal: z.string().optional(),
+        recommendedSteps: z.array(z.string()).optional(),
+        avoidSteps: z.array(z.string()).optional()
+      })
+    },
+    async (args) => toStructuredToolResult(await interactionSurface.rememberExperience(args))
   );
 
   return server;

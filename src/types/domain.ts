@@ -1,4 +1,12 @@
-export type TaskType = "bug_fix" | "build_debug" | "test_debug" | "integration_fix";
+export type TaskType =
+  | "bug_fix"
+  | "build_debug"
+  | "test_debug"
+  | "integration_fix"
+  | "feature_add"
+  | "refactor"
+  | "performance"
+  | "general";
 export type ResolvedTaskType = TaskType | "unknown";
 
 export type ExperienceState = "candidate" | "active" | "cooling" | "retired";
@@ -69,7 +77,12 @@ export type ExperienceNode = {
   stop_condition?: string;
   escalation_condition?: string;
   evidence_summary: string;
+  retrieval_text?: string;
+  embedding?: number[];
   source_kind: "system_derived" | "user_authored_candidate_promoted";
+  origin_record_ids: string[];
+  helped_record_ids: string[];
+  harmed_record_ids: string[];
   state: ExperienceState;
   usage_count: number;
   helped_count: number;
@@ -115,10 +128,12 @@ export type ExperienceCandidate = Omit<
   | "helped_count"
   | "harmed_count"
   | "support_count"
+  | "origin_record_ids"
+  | "helped_record_ids"
+  | "harmed_record_ids"
   | "last_used_at"
   | "last_helped_at"
   | "last_harmed_at"
   | "created_at"
   | "updated_at"
 >;
-

@@ -6,8 +6,11 @@ describe("resolveTaskType", () => {
     expect(resolveTaskType("Fix the failing vitest assertion in auth flow")).toBe("test_debug");
   });
 
-  it("returns unknown when no pattern matches", () => {
-    expect(resolveTaskType("Refine the roadmap copy")).toBe("unknown");
+  it("detects refactor tasks", () => {
+    expect(resolveTaskType("Refactor the auth service to remove duplicated branching")).toBe("refactor");
+  });
+
+  it("falls back to general when no specialized matcher applies", () => {
+    expect(resolveTaskType("Refine the roadmap copy")).toBe("general");
   });
 });
-
