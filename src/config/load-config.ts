@@ -36,7 +36,21 @@ export const loadConfig = (
       : overrides.maxHints ?? defaultConfig.maxHints,
     triggerThreshold: env.EXPERIENCE_ENGINE_TRIGGER_THRESHOLD
       ? Number(env.EXPERIENCE_ENGINE_TRIGGER_THRESHOLD)
-      : overrides.triggerThreshold ?? defaultConfig.triggerThreshold
+      : overrides.triggerThreshold ?? defaultConfig.triggerThreshold,
+    distillerProfile:
+      (env.EXPERIENCE_ENGINE_DISTILLER_PROFILE as ExperienceEngineConfig["distillerProfile"] | undefined) ??
+      overrides.distillerProfile ??
+      defaultConfig.distillerProfile,
+    distillationMaxRetries: env.EXPERIENCE_ENGINE_DISTILLATION_MAX_RETRIES
+      ? Number(env.EXPERIENCE_ENGINE_DISTILLATION_MAX_RETRIES)
+      : overrides.distillationMaxRetries ?? defaultConfig.distillationMaxRetries,
+    distillationBatchSize: env.EXPERIENCE_ENGINE_DISTILLATION_BATCH_SIZE
+      ? Number(env.EXPERIENCE_ENGINE_DISTILLATION_BATCH_SIZE)
+      : overrides.distillationBatchSize ?? defaultConfig.distillationBatchSize,
+    distillationAutoDrain:
+      env.EXPERIENCE_ENGINE_DISTILLATION_AUTO_DRAIN !== undefined
+        ? env.EXPERIENCE_ENGINE_DISTILLATION_AUTO_DRAIN === "true"
+        : overrides.distillationAutoDrain ?? defaultConfig.distillationAutoDrain
   });
 
   return parsed;

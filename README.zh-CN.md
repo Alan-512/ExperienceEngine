@@ -6,6 +6,10 @@ ExperienceEngine 是一个面向编程 Agent 的本地经验介入层。
 
 它会从真实编码任务中学习简短、任务相关的经验，在后续相似任务中注入这些经验，并记录这次介入到底是帮到了还是干扰了结果。
 
+当前经验内核的验证基线：
+- `OpenClaw` 是 candidate 捕获、异步提炼、注入、反馈、退役的主验证宿主。
+- `Claude Code` 和 `Codex` 继续作为受支持的产品宿主，复用 ExperienceEngine 的共享交互面。
+
 当前已验证的宿主：
 - `OpenClaw`：runtime / plugin 集成
 - `Claude Code`：hooks + MCP 交互
@@ -29,6 +33,7 @@ ExperienceEngine 不是通用记忆库，也不是 context engine 的替代品�
 - OpenClaw 真实 runtime 集成
 - Claude Code 真实 runtime 集成
 - Codex 真实 runtime 集成
+- OpenClaw-first 的经验内核验证路径
 - 基于 MCP 的 `Resources / Prompts / Tools` 主交互面
 - `inspect / feedback / 管理 / install / repair / upgrade` 的 CLI fallback
 - 以下高影响操作的 MCP `plan + confirm` 流程：

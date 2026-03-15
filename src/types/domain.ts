@@ -14,6 +14,8 @@ export type ExperienceNodeType = "strategy" | "warning";
 export type InjectionMode = "skip" | "inject_conservative" | "inject";
 export type OutcomeSignal = "success" | "failure" | "unknown";
 export type ToolEventStatus = "success" | "failure" | "unknown";
+export type CandidateLifecycleState = "pending" | "distilled" | "failed" | "discarded";
+export type DistillationJobState = "pending" | "processing" | "succeeded" | "failed" | "discarded";
 
 export type Scope = {
   scope_id: string;
@@ -120,7 +122,7 @@ export type ScopeTaskStats = {
   updated_at: string;
 };
 
-export type ExperienceCandidate = Omit<
+export type ExperienceCandidateDraft = Omit<
   ExperienceNode,
   | "id"
   | "state"
@@ -137,3 +139,42 @@ export type ExperienceCandidate = Omit<
   | "created_at"
   | "updated_at"
 >;
+
+export type CandidateSourceSignal = {
+  task_summary: string;
+  context_summary?: string;
+  outcome_signal: OutcomeSignal;
+  tool_events: ToolEvent[];
+  evidence: string[];
+};
+
+export type ExperienceCandidate = ExperienceCandidateDraft & {
+  id: string;
+  source_record_id: string;
+  source_context_summary?: string;
+  source_outcome_signal: OutcomeSignal;
+  source_signal: CandidateSourceSignal;
+  lifecycle_state: CandidateLifecycleState;
+  retry_count: number;
+  distilled_node_id?: string;
+  last_error?: string;
+  created_at: string;
+  updated_at: string;
+  distilled_at?: string;
+  discarded_at?: string;
+  last_failed_at?: string;
+};
+
+export type DistillationJob = {
+  id: string;
+  candidate_id: string;
+  status: DistillationJobState;
+  extractor_profile: string;
+  retry_count: number;
+  last_error?: string;
+  created_at: string;
+  updated_at: string;
+  started_at?: string;
+  finished_at?: string;
+  discarded_at?: string;
+};

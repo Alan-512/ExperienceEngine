@@ -1,8 +1,8 @@
-import type { ExperienceCandidate } from "../types/domain.js";
+import type { ExperienceCandidateDraft } from "../types/domain.js";
 
-export const dedupeCandidates = (candidates: ExperienceCandidate[]): ExperienceCandidate[] => {
+export const dedupeCandidates = (candidates: ExperienceCandidateDraft[]): ExperienceCandidateDraft[] => {
   const seen = new Set<string>();
-  const deduped: ExperienceCandidate[] = [];
+  const deduped: ExperienceCandidateDraft[] = [];
 
   for (const candidate of candidates) {
     const key = `${candidate.scope_id}:${candidate.task_type}:${candidate.node_type}:${candidate.compact_hint.toLowerCase()}`;
@@ -16,4 +16,3 @@ export const dedupeCandidates = (candidates: ExperienceCandidate[]): ExperienceC
 
   return deduped;
 };
-

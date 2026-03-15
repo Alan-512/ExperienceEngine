@@ -11,6 +11,22 @@ In practice, this means:
 - noisy or harmful prior patterns can be cooled or retired
 - the system gradually learns which guidance is actually useful
 
+## Core Learning Baseline
+
+ExperienceEngine currently treats `OpenClaw` as the primary baseline host for validating the learning core:
+
+- candidate capture
+- async distillation
+- injection quality
+- feedback attribution
+- retirement behavior
+
+`Claude Code` and `Codex` remain supported product hosts. They continue to reuse ExperienceEngine's shared interaction/runtime surfaces, but they are not the equal-weight baseline for the first strict learning validation loop.
+
+The baseline acceptance checklist lives at:
+
+- [docs/development/openclaw-core-validation-checklist.md](development/openclaw-core-validation-checklist.md)
+
 ## What You See As a User
 
 Most of the time ExperienceEngine stays quiet.

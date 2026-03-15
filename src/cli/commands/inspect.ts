@@ -119,6 +119,20 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
     return;
   }
 
+  if (target === "learning") {
+    const summary = interaction.inspectLearningSummary();
+    console.log("Candidate lifecycle:");
+    console.table(summary.candidates);
+    console.log("Distillation jobs:");
+    console.table(summary.jobs);
+    console.log("Formal nodes:");
+    console.table(summary.nodes);
+    if (summary.latestRecordCreatedAt) {
+      console.log(`Latest task record: ${summary.latestRecordCreatedAt}`);
+    }
+    return;
+  }
+
   if (target === "node") {
     console.log("Usage: ee inspect node <id>");
     return;

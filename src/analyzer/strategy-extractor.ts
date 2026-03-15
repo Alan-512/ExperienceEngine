@@ -1,5 +1,5 @@
 import { buildExtractionEvidence, summarizeOverlap, summarizeTaskFamily } from "./extraction-evidence.js";
-import type { ExperienceCandidate, ExperienceInput, TaskType } from "../types/domain.js";
+import type { ExperienceCandidateDraft, ExperienceInput, TaskType } from "../types/domain.js";
 
 const DEFAULT_VERIFICATION_TOOL = "the same verification check";
 
@@ -47,7 +47,7 @@ const buildRecommendedSteps = (
   return steps;
 };
 
-export const extractStrategies = (input: ExperienceInput): ExperienceCandidate[] => {
+export const extractStrategies = (input: ExperienceInput): ExperienceCandidateDraft[] => {
   if (input.task_type === "unknown" || input.outcome_signal !== "success") {
     return [];
   }

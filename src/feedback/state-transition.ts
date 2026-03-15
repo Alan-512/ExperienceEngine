@@ -13,6 +13,5 @@ export const transitionState = (node: ExperienceNode): ExperienceNode["state"] =
     return "active";
   }
 
-  return "candidate";
+  return "active";
 };
-

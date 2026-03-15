@@ -8,11 +8,13 @@ import { renderInlineNotice } from "../controller/inline-notice.js";
 import { nowIso } from "../utils/clock.js";
 import { createId, stableId } from "../utils/ids.js";
 import type {
+  CandidateSourceSignal,
+  DistillationJob,
   ExperienceCandidate,
+  ExperienceCandidateDraft,
   ExperienceInput,
   ExperienceInputRecord,
   ExperienceNode,
-  ScopeTaskStats,
   ToolEvent
 } from "../types/domain.js";
 import type {
@@ -23,7 +25,9 @@ import type {
 } from "../types/plugin.js";
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import { bootstrapDatabase, openDatabase, withTransaction } from "../store/sqlite/db.js";
+import { DistillationQueueWorker } from "../distillation/queue-worker.js";
 import { CandidateRepository } from "../store/sqlite/repositories/candidate-repo.js";
+import { DistillationJobRepository } from "../store/sqlite/repositories/distillation-job-repo.js";
 import { InputRecordRepository } from "../store/sqlite/repositories/input-record-repo.js";
 import { NodeRepository } from "../store/sqlite/repositories/node-repo.js";
 import { ScopeRepository } from "../store/sqlite/repositories/scope-repo.js";
@@ -31,7 +35,6 @@ import { StatsRepository } from "../store/sqlite/repositories/stats-repo.js";
 import { RuntimeCaptureWriter } from "../plugin/runtime-capture.js";
 import { normalizeToolResult } from "../plugin/hooks/tool-result-persist.js";
 import { extractToolResultsFromPayload } from "../plugin/runtime-helpers.js";
-import { embedText } from "../store/vector/embeddings.js";
 
 type SessionState = {
   context?: HostPromptContext;
@@ -60,44 +63,52 @@ const toInputRecord = (input: ExperienceInput, sessionId?: string): ExperienceIn
   created_at: nowIso()
 });
 
-const mergeIds = (existing: string[] | undefined, next: string[]): string[] => {
-  const merged = new Set([...(existing ?? []), ...next]);
-  return [...merged];
-};
+const buildCandidateSourceSignal = (input: ExperienceInput): CandidateSourceSignal => ({
+  task_summary: input.task_summary,
+  context_summary: input.context_summary,
+  outcome_signal: input.outcome_signal,
+  tool_events: input.tool_events,
+  evidence: toEvidence(input)
+});
 
-const buildRetrievalText = (candidate: ExperienceCandidate): string =>
-  [candidate.trigger_pattern, candidate.compact_hint, candidate.goal, candidate.evidence_summary]
-    .filter(Boolean)
-    .join("\n");
-
-const candidateToNode = (
-  candidate: ExperienceCandidate,
-  originRecordId: string,
-  existing?: ExperienceNode
-): ExperienceNode => {
+const draftToCandidate = (
+  draft: ExperienceCandidateDraft,
+  input: ExperienceInput,
+  originRecordId: string
+): ExperienceCandidate => {
   const timestamp = nowIso();
-  const id = stableId(
-    "node",
-    [candidate.scope_id, candidate.task_type, candidate.node_type, candidate.compact_hint].join(":")
+  const candidateId = stableId(
+    "candidate",
+    [draft.scope_id, draft.task_type, draft.node_type, draft.compact_hint, originRecordId].join(":")
   );
 
   return {
-    id,
-    ...candidate,
-    retrieval_text: buildRetrievalText(candidate),
-    embedding: embedText(buildRetrievalText(candidate)),
-    origin_record_ids: mergeIds(existing?.origin_record_ids, [originRecordId]),
-    helped_record_ids: existing?.helped_record_ids ?? [],
-    harmed_record_ids: existing?.harmed_record_ids ?? [],
-    state: existing?.state ?? "candidate",
-    usage_count: existing?.usage_count ?? 0,
-    helped_count: existing?.helped_count ?? 0,
-    harmed_count: existing?.harmed_count ?? 0,
-    support_count: (existing?.support_count ?? 0) + 1,
-    created_at: existing?.created_at ?? timestamp,
-    last_used_at: existing?.last_used_at,
-    last_helped_at: existing?.last_helped_at,
-    last_harmed_at: existing?.last_harmed_at,
+    id: candidateId,
+    ...draft,
+    source_record_id: originRecordId,
+    source_context_summary: input.context_summary,
+    source_outcome_signal: input.outcome_signal,
+    source_signal: buildCandidateSourceSignal(input),
+    lifecycle_state: "pending",
+    retry_count: 0,
+    created_at: timestamp,
+    updated_at: timestamp
+  };
+};
+
+const candidateToInitialJob = (
+  candidate: ExperienceCandidate,
+  extractorProfile: string
+): DistillationJob => {
+  const timestamp = nowIso();
+
+  return {
+    id: stableId("distill", candidate.id),
+    candidate_id: candidate.id,
+    status: "pending",
+    extractor_profile: extractorProfile,
+    retry_count: candidate.retry_count,
+    created_at: timestamp,
     updated_at: timestamp
   };
 };
@@ -131,7 +142,9 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly inputRepo;
   private readonly nodeRepo;
   private readonly candidateRepo;
+  private readonly jobRepo;
   private readonly statsRepo;
+  private readonly distillationWorker;
   readonly captureWriter;
 
   constructor(
@@ -145,7 +158,14 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     this.inputRepo = new InputRecordRepository(this.db);
     this.nodeRepo = new NodeRepository(this.db);
     this.candidateRepo = new CandidateRepository(this.db);
+    this.jobRepo = new DistillationJobRepository(this.db);
     this.statsRepo = new StatsRepository(this.db);
+    this.distillationWorker = new DistillationQueueWorker(
+      config,
+      this.candidateRepo,
+      this.jobRepo,
+      this.nodeRepo
+    );
     this.captureWriter = new RuntimeCaptureWriter(config, this.logger);
   }
 
@@ -228,16 +248,14 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     return record;
   }
 
-  private persistCandidates(input: ExperienceInput, originRecordId: string): void {
+  private persistCandidates(input: ExperienceInput, originRecordId: string): ExperienceCandidate[] {
     const analysis = analyzeExperience(input);
-    for (const candidate of analysis.accepted) {
-      const candidateId = stableId(
-        "node",
-        [candidate.scope_id, candidate.task_type, candidate.node_type, candidate.compact_hint].join(":")
-      );
-      const existing = this.nodeRepo.getById(candidateId);
-      this.nodeRepo.upsert(candidateToNode(candidate, originRecordId, existing));
+    const persistedCandidates = analysis.accepted.map((draft) => draftToCandidate(draft, input, originRecordId));
+    for (const candidate of persistedCandidates) {
+      this.candidateRepo.upsert(candidate);
+      this.jobRepo.upsert(candidateToInitialJob(candidate, this.config.distillerProfile));
     }
+    return persistedCandidates;
   }
 
   private updateInjectedNodes(input: ExperienceInput, attributionRecordId: string): void {
@@ -288,7 +306,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
 
     const stats =
       input.task_type !== "unknown" ? this.statsRepo.get(input.scope_id, input.task_type) : undefined;
-    const nodes = input.task_type !== "unknown" ? this.candidateRepo.listByScope(input.scope_id) : [];
+    const nodes = input.task_type !== "unknown" ? this.nodeRepo.listInjectableByScope(input.scope_id) : [];
     const decision = decideIntervention(input, nodes, stats, this.config.triggerThreshold, this.config.maxHints);
 
     session.injectedNodeIds = decision.selected.map((node) => node.id);
@@ -346,6 +364,15 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     });
     this.sessions.delete(sessionId);
 
+    if (this.config.distillationAutoDrain) {
+      void this.distillationWorker.drain().catch((error) => {
+        this.logger.error?.("experienceengine.distillation_drain_failed", {
+          sessionId,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      });
+    }
+
     this.logger.info?.("experienceengine.finalize", {
       sessionId,
       taskType: input.task_type,
@@ -353,5 +380,9 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     });
 
     return input;
+  }
+
+  async drainDistillationQueue(limit?: number): Promise<number> {
+    return this.distillationWorker.drain(limit);
   }
 }

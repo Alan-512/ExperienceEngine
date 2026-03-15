@@ -1,4 +1,4 @@
-import type { ExperienceCandidate } from "../types/domain.js";
+import type { ExperienceCandidateDraft } from "../types/domain.js";
 import { normalizeWhitespace, toSentence, truncate } from "../utils/text.js";
 
 const cleanList = (items?: string[]): string[] | undefined => {
@@ -10,7 +10,7 @@ const cleanList = (items?: string[]): string[] | undefined => {
   return normalized.length ? normalized : undefined;
 };
 
-export const normalizeCandidate = (candidate: ExperienceCandidate): ExperienceCandidate => ({
+export const normalizeCandidate = (candidate: ExperienceCandidateDraft): ExperienceCandidateDraft => ({
   ...candidate,
   trigger_pattern: truncate(normalizeWhitespace(candidate.trigger_pattern), 180),
   compact_hint: truncate(toSentence(candidate.compact_hint), 220),
@@ -23,4 +23,3 @@ export const normalizeCandidate = (candidate: ExperienceCandidate): ExperienceCa
   avoid_steps: cleanList(candidate.avoid_steps),
   fallback_steps: cleanList(candidate.fallback_steps)
 });
-

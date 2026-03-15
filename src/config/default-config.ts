@@ -8,5 +8,9 @@ export const defaultConfig: ExperienceEngineConfig = {
   captureRawPayloads: false,
   captureDir: "./data/runtime-captures",
   maxHints: 3,
-  triggerThreshold: 0.6
+  triggerThreshold: 0.6,
+  distillerProfile: "balanced",
+  distillationMaxRetries: 2,
+  distillationBatchSize: 5,
+  distillationAutoDrain: true
 };

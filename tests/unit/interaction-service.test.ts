@@ -160,30 +160,4 @@ describe("ExperienceInteractionService", () => {
     });
   });
 
-  it("persists user-authored experiences through the shared interaction service", () => {
-    const homeDir = makeTempDir();
-    const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });
-    const service = new ExperienceInteractionService(config);
-
-    const created = service.rememberExperience({
-      cwd: "/repo",
-      triggerPattern: "When the auth test fails after a refactor",
-      hint: "Run the auth test before refactoring more files and rerun it after each slice.",
-      taskType: "refactor",
-      nodeType: "strategy",
-      goal: "Keep the auth flow stable during refactors"
-    });
-
-    expect(created.status).toBe("created");
-    if (created.status !== "created") {
-      return;
-    }
-
-    expect(created.node.sourceKind).toBe("user_authored_candidate_promoted");
-    expect(created.node.originRecordIds[0]).toMatch(/^manual_origin_/);
-    expect(service.inspectNode(created.node.id)).toMatchObject({
-      sourceKind: "user_authored_candidate_promoted",
-      taskType: "refactor"
-    });
-  });
 });

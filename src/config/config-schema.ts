@@ -8,7 +8,11 @@ export const configSchema = z.object({
   captureRawPayloads: z.boolean().default(false),
   captureDir: z.string().default("./data/runtime-captures"),
   maxHints: z.number().int().min(1).max(3).default(3),
-  triggerThreshold: z.number().min(0).max(1).default(0.6)
+  triggerThreshold: z.number().min(0).max(1).default(0.6),
+  distillerProfile: z.enum(["balanced", "high_quality"]).default("balanced"),
+  distillationMaxRetries: z.number().int().min(0).max(10).default(2),
+  distillationBatchSize: z.number().int().min(1).max(20).default(5),
+  distillationAutoDrain: z.boolean().default(true)
 });
 
 export type ExperienceEngineConfig = z.infer<typeof configSchema>;
@@ -53,6 +57,27 @@ export const pluginConfigJsonSchema = {
       minimum: 0,
       maximum: 1,
       description: "Trigger threshold for intervention gating."
+    },
+    distillerProfile: {
+      type: "string",
+      enum: ["balanced", "high_quality"],
+      description: "Extractor profile used for asynchronous experience distillation."
+    },
+    distillationMaxRetries: {
+      type: "integer",
+      minimum: 0,
+      maximum: 10,
+      description: "Maximum retry count before a candidate is discarded."
+    },
+    distillationBatchSize: {
+      type: "integer",
+      minimum: 1,
+      maximum: 20,
+      description: "Maximum number of distillation jobs drained in one worker pass."
+    },
+    distillationAutoDrain: {
+      type: "boolean",
+      description: "Automatically drain asynchronous distillation jobs after finalize."
     }
   }
 } as const;
@@ -84,5 +109,17 @@ export const pluginUiHints = {
   },
   triggerThreshold: {
     label: "Trigger Threshold"
+  },
+  distillerProfile: {
+    label: "Distiller Profile"
+  },
+  distillationMaxRetries: {
+    label: "Distillation Max Retries"
+  },
+  distillationBatchSize: {
+    label: "Distillation Batch Size"
+  },
+  distillationAutoDrain: {
+    label: "Distillation Auto Drain"
   }
 } as const;

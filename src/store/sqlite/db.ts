@@ -52,6 +52,22 @@ export const bootstrapDatabase = (db: DatabaseSync): void => {
   ensureColumn(db, "experience_nodes", "origin_record_ids_json", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "experience_nodes", "helped_record_ids_json", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "experience_nodes", "harmed_record_ids_json", "TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn(db, "experience_candidates", "source_context_summary", "TEXT");
+  ensureColumn(db, "experience_candidates", "source_outcome_signal", "TEXT NOT NULL DEFAULT 'unknown'");
+  ensureColumn(db, "experience_candidates", "source_signal_json", "TEXT NOT NULL DEFAULT '{}'");
+  ensureColumn(db, "experience_candidates", "lifecycle_state", "TEXT NOT NULL DEFAULT 'pending'");
+  ensureColumn(db, "experience_candidates", "retry_count", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "experience_candidates", "distilled_node_id", "TEXT");
+  ensureColumn(db, "experience_candidates", "last_error", "TEXT");
+  ensureColumn(db, "experience_candidates", "distilled_at", "TEXT");
+  ensureColumn(db, "experience_candidates", "discarded_at", "TEXT");
+  ensureColumn(db, "experience_candidates", "last_failed_at", "TEXT");
+  ensureColumn(db, "distillation_jobs", "extractor_profile", "TEXT NOT NULL DEFAULT 'balanced'");
+  ensureColumn(db, "distillation_jobs", "retry_count", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "distillation_jobs", "last_error", "TEXT");
+  ensureColumn(db, "distillation_jobs", "started_at", "TEXT");
+  ensureColumn(db, "distillation_jobs", "finished_at", "TEXT");
+  ensureColumn(db, "distillation_jobs", "discarded_at", "TEXT");
 };
 
 export const withTransaction = <T>(db: DatabaseSync, operation: () => T): T => {

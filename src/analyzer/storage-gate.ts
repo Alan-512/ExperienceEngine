@@ -1,6 +1,6 @@
-import type { ExperienceCandidate, ExperienceInput } from "../types/domain.js";
+import type { ExperienceCandidateDraft, ExperienceInput } from "../types/domain.js";
 
-export const shouldStoreCandidate = (candidate: ExperienceCandidate, input: ExperienceInput): boolean => {
+export const shouldStoreCandidate = (candidate: ExperienceCandidateDraft, input: ExperienceInput): boolean => {
   if (input.task_type === "unknown") {
     return false;
   }
@@ -15,4 +15,3 @@ export const shouldStoreCandidate = (candidate: ExperienceCandidate, input: Expe
 
   return true;
 };
-

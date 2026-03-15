@@ -56,6 +56,54 @@ CREATE TABLE IF NOT EXISTS experience_nodes (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS experience_candidates (
+  id TEXT PRIMARY KEY,
+  source_record_id TEXT NOT NULL,
+  scope_id TEXT NOT NULL,
+  task_type TEXT NOT NULL,
+  node_type TEXT NOT NULL,
+  trigger_pattern TEXT NOT NULL,
+  applicability_notes TEXT,
+  env_signature TEXT,
+  compact_hint TEXT NOT NULL,
+  goal TEXT,
+  recommended_steps_json TEXT,
+  avoid_steps_json TEXT,
+  fallback_steps_json TEXT,
+  success_signal TEXT NOT NULL,
+  stop_condition TEXT,
+  escalation_condition TEXT,
+  evidence_summary TEXT NOT NULL,
+  retrieval_text TEXT,
+  source_kind TEXT NOT NULL,
+  source_context_summary TEXT,
+  source_outcome_signal TEXT NOT NULL,
+  source_signal_json TEXT NOT NULL,
+  lifecycle_state TEXT NOT NULL,
+  retry_count INTEGER NOT NULL DEFAULT 0,
+  distilled_node_id TEXT,
+  last_error TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  distilled_at TEXT,
+  discarded_at TEXT,
+  last_failed_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS distillation_jobs (
+  id TEXT PRIMARY KEY,
+  candidate_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  extractor_profile TEXT NOT NULL,
+  retry_count INTEGER NOT NULL DEFAULT 0,
+  last_error TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  started_at TEXT,
+  finished_at TEXT,
+  discarded_at TEXT
+);
+
 CREATE TABLE IF NOT EXISTS injection_events (
   injection_id TEXT PRIMARY KEY,
   scope_id TEXT NOT NULL,

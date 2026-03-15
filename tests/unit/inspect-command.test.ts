@@ -6,11 +6,13 @@ import { runInspectCommand } from "../../src/cli/commands/inspect.js";
 import { loadConfig } from "../../src/config/load-config.js";
 import { resolveScope } from "../../src/input/scope-resolver.js";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
+import { CandidateRepository } from "../../src/store/sqlite/repositories/candidate-repo.js";
+import { DistillationJobRepository } from "../../src/store/sqlite/repositories/distillation-job-repo.js";
 import { InputRecordRepository } from "../../src/store/sqlite/repositories/input-record-repo.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
 import { nowIso } from "../../src/utils/clock.js";
 import { ExperienceStateArtifactService } from "../../src/interaction/state-artifact-service.js";
-import type { ExperienceInputRecord, ExperienceNode } from "../../src/types/domain.js";
+import type { DistillationJob, ExperienceCandidate, ExperienceInputRecord, ExperienceNode } from "../../src/types/domain.js";
 
 const tempDirs: string[] = [];
 const originalHome = process.env.EXPERIENCE_ENGINE_HOME;
@@ -69,6 +71,46 @@ const makeRecord = (overrides: Partial<ExperienceInputRecord> = {}): ExperienceI
   evidence: ["Bash: success: auth test now passes"],
   injected_node_ids: ["node_inspect"],
   created_at: nowIso(),
+  ...overrides
+});
+
+const makeCandidate = (overrides: Partial<ExperienceCandidate> = {}): ExperienceCandidate => ({
+  id: "candidate_inspect",
+  source_record_id: "input_1",
+  scope_id: resolveScope("/repo").scope_id,
+  task_type: "test_debug",
+  node_type: "strategy",
+  trigger_pattern: "Fix the failing auth test",
+  compact_hint: "Use vitest as the terminal verification loop.",
+  goal: "Keep the auth test in a narrow loop.",
+  success_signal: "vitest passes",
+  evidence_summary: "Terminal sequence: vitest passed.",
+  retrieval_text: "Fix the failing auth test\nvitest passed",
+  source_kind: "system_derived",
+  source_outcome_signal: "success",
+  source_context_summary: "Auth test failure in the current repo",
+  source_signal: {
+    task_summary: "Fix the failing auth test",
+    context_summary: "Auth test failure in the current repo",
+    outcome_signal: "success",
+    tool_events: [],
+    evidence: ["vitest: success: auth test now passes"]
+  },
+  lifecycle_state: "pending",
+  retry_count: 0,
+  created_at: "2026-03-13T01:00:00.000Z",
+  updated_at: "2026-03-13T01:00:00.000Z",
+  ...overrides
+});
+
+const makeJob = (overrides: Partial<DistillationJob> = {}): DistillationJob => ({
+  id: "job_inspect",
+  candidate_id: "candidate_inspect",
+  status: "pending",
+  extractor_profile: "balanced",
+  retry_count: 0,
+  created_at: "2026-03-13T01:00:00.000Z",
+  updated_at: "2026-03-13T01:00:00.000Z",
   ...overrides
 });
 
@@ -333,6 +375,30 @@ describe("inspect command", () => {
         hint: "Warning node hint"
       })
     ]);
+  });
+
+  it("prints learning pipeline summary", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+
+    new CandidateRepository(db).upsert(makeCandidate());
+    new DistillationJobRepository(db).upsert(makeJob({ status: "failed", retry_count: 1, last_error: "timeout" }));
+    new NodeRepository(db).upsert(makeNode({ state: "active" }));
+
+    runInspectCommand("learning");
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([["Candidate lifecycle:"], ["Distillation jobs:"], ["Formal nodes:"]])
+    );
+    expect(consoleTableSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        [expect.objectContaining({ pending: 1, distilled: 0, failed: 0, discarded: 0 })],
+        [expect.objectContaining({ pending: 0, processing: 0, succeeded: 0, failed: 1, discarded: 0 })],
+        [expect.objectContaining({ active: 1, cooling: 0, retired: 0 })]
+      ])
+    );
   });
 
   it("lists managed backups", () => {

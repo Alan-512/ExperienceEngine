@@ -1,19 +1,20 @@
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import { resolveScope } from "../input/scope-resolver.js";
 import { bootstrapDatabase, openDatabase } from "../store/sqlite/db.js";
+import { CandidateRepository } from "../store/sqlite/repositories/candidate-repo.js";
+import { DistillationJobRepository } from "../store/sqlite/repositories/distillation-job-repo.js";
 import { InputRecordRepository } from "../store/sqlite/repositories/input-record-repo.js";
 import { NodeRepository } from "../store/sqlite/repositories/node-repo.js";
 import { ScopeRepository } from "../store/sqlite/repositories/scope-repo.js";
 import type {
+  CandidateLifecycleState,
+  DistillationJobState,
   ExperienceInputRecord,
   ExperienceNode,
   ExperienceNodeType,
-  ExperienceState,
-  TaskType
+  ExperienceState
 } from "../types/domain.js";
 import { nowIso } from "../utils/clock.js";
-import { stableId } from "../utils/ids.js";
-import { embedText } from "../store/vector/embeddings.js";
 
 export type ExperienceNodeSummary = {
   id: string;
@@ -95,28 +96,12 @@ export type NodeLifecycleResult =
       nodeId: string;
     };
 
-export type RememberExperienceInput = {
-  cwd?: string;
-  triggerPattern: string;
-  hint: string;
-  taskType?: TaskType;
-  nodeType?: ExperienceNode["node_type"];
-  goal?: string;
-  applicability?: string;
-  successSignal?: string;
-  recommendedSteps?: string[];
-  avoidSteps?: string[];
+export type ExperienceLearningSummary = {
+  candidates: Record<CandidateLifecycleState, number>;
+  jobs: Record<DistillationJobState, number>;
+  nodes: Record<ExperienceState, number>;
+  latestRecordCreatedAt?: string;
 };
-
-export type RememberExperienceResult =
-  | {
-      status: "created";
-      node: ExperienceNodeDetail;
-    }
-  | {
-      status: "invalid";
-      errors: string[];
-    };
 
 const toNodeSummary = (node: ExperienceNode): ExperienceNodeSummary => ({
   id: node.id,
@@ -157,39 +142,11 @@ const applyNodeFeedback = (node: ExperienceNode, feedback: FeedbackValue): Exper
   };
 };
 
-const DEFAULT_STRATEGY_SUCCESS_SIGNAL = "The same verification loop completes cleanly for the targeted task.";
-const DEFAULT_WARNING_SUCCESS_SIGNAL = "A narrower reproduction or a different evidence-backed path is identified.";
-
-const normalizeList = (items: string[] | undefined): string[] | undefined => {
-  const normalized = (items ?? []).map((item) => item.trim()).filter(Boolean);
-  return normalized.length ? normalized : undefined;
-};
-
-const validateRememberInput = (input: RememberExperienceInput): string[] => {
-  const errors: string[] = [];
-
-  if (!input.triggerPattern.trim()) {
-    errors.push("triggerPattern is required.");
-  }
-
-  if (input.triggerPattern.trim().length < 12) {
-    errors.push("triggerPattern must be at least 12 characters.");
-  }
-
-  if (!input.hint.trim()) {
-    errors.push("hint is required.");
-  }
-
-  if (input.hint.trim().length < 16) {
-    errors.push("hint must be at least 16 characters.");
-  }
-
-  return errors;
-};
-
 export class ExperienceInteractionService {
   private readonly inputRepo;
   private readonly nodeRepo;
+  private readonly candidateRepo;
+  private readonly jobRepo;
   private readonly scopeRepo;
 
   constructor(config: ExperienceEngineConfig) {
@@ -197,6 +154,8 @@ export class ExperienceInteractionService {
     bootstrapDatabase(db);
     this.inputRepo = new InputRecordRepository(db);
     this.nodeRepo = new NodeRepository(db);
+    this.candidateRepo = new CandidateRepository(db);
+    this.jobRepo = new DistillationJobRepository(db);
     this.scopeRepo = new ScopeRepository(db);
   }
 
@@ -251,6 +210,26 @@ export class ExperienceInteractionService {
 
   listNodesByType(nodeType: ExperienceNodeType): ExperienceNodeSummary[] {
     return this.nodeRepo.listByType(nodeType).map(toNodeSummary);
+  }
+
+  inspectLearningSummary(): ExperienceLearningSummary {
+    const candidateStates: CandidateLifecycleState[] = ["pending", "distilled", "failed", "discarded"];
+    const jobStates: DistillationJobState[] = ["pending", "processing", "succeeded", "failed", "discarded"];
+    const nodeStates: ExperienceState[] = ["candidate", "active", "cooling", "retired"];
+    const latestRecord = this.inputRepo.getLatest();
+
+    return {
+      candidates: Object.fromEntries(
+        candidateStates.map((state) => [state, this.candidateRepo.listByLifecycleState(state).length])
+      ) as Record<CandidateLifecycleState, number>,
+      jobs: Object.fromEntries(
+        jobStates.map((state) => [state, this.jobRepo.listByStatus(state).length])
+      ) as Record<DistillationJobState, number>,
+      nodes: Object.fromEntries(
+        nodeStates.map((state) => [state, this.nodeRepo.listByState(state).length])
+      ) as Record<ExperienceState, number>,
+      latestRecordCreatedAt: latestRecord?.created_at
+    };
   }
 
   feedbackLast(feedback: FeedbackValue): FeedbackResult {
@@ -313,92 +292,6 @@ export class ExperienceInteractionService {
 
   retireNode(nodeId: string): NodeLifecycleResult {
     return this.setNodeState(nodeId, "retired");
-  }
-
-  rememberExperience(input: RememberExperienceInput): RememberExperienceResult {
-    const errors = validateRememberInput(input);
-    if (errors.length) {
-      return {
-        status: "invalid",
-        errors
-      };
-    }
-
-    const scope = resolveScope(input.cwd);
-    const timestamp = nowIso();
-    const nodeType = input.nodeType ?? "strategy";
-    const taskType = input.taskType ?? "general";
-    const successSignal =
-      input.successSignal?.trim() ||
-      (nodeType === "warning" ? DEFAULT_WARNING_SUCCESS_SIGNAL : DEFAULT_STRATEGY_SUCCESS_SIGNAL);
-    const originRecordId = stableId(
-      "manual_origin",
-      [scope.scope_id, taskType, nodeType, input.triggerPattern.trim(), input.hint.trim()].join(":")
-    );
-    const node: ExperienceNode = {
-      id: stableId(
-        "node",
-        [scope.scope_id, taskType, nodeType, input.triggerPattern.trim(), input.hint.trim()].join(":")
-      ),
-      node_type: nodeType,
-      scope_id: scope.scope_id,
-      task_type: taskType,
-      trigger_pattern: input.triggerPattern.trim(),
-      applicability_notes: input.applicability?.trim() || undefined,
-      env_signature: undefined,
-      compact_hint: input.hint.trim(),
-      goal: input.goal?.trim() || undefined,
-      recommended_steps: nodeType === "strategy" ? normalizeList(input.recommendedSteps) : undefined,
-      avoid_steps: nodeType === "warning" ? normalizeList(input.avoidSteps) : undefined,
-      fallback_steps: undefined,
-      success_signal: successSignal,
-      stop_condition: undefined,
-      escalation_condition: undefined,
-      evidence_summary: "Manually authored experience.",
-      retrieval_text: [
-        input.triggerPattern.trim(),
-        input.hint.trim(),
-        input.goal?.trim(),
-        input.applicability?.trim()
-      ]
-        .filter(Boolean)
-        .join("\n"),
-      embedding: embedText(
-        [
-          input.triggerPattern.trim(),
-          input.hint.trim(),
-          input.goal?.trim(),
-          input.applicability?.trim()
-        ]
-          .filter(Boolean)
-          .join("\n")
-      ),
-      source_kind: "user_authored_candidate_promoted",
-      origin_record_ids: [originRecordId],
-      helped_record_ids: [],
-      harmed_record_ids: [],
-      state: "active",
-      usage_count: 0,
-      helped_count: 0,
-      harmed_count: 0,
-      support_count: 1,
-      last_used_at: undefined,
-      last_helped_at: undefined,
-      last_harmed_at: undefined,
-      created_at: timestamp,
-      updated_at: timestamp
-    };
-
-    this.scopeRepo.upsert({
-      ...scope,
-      is_disabled: this.scopeRepo.getById(scope.scope_id)?.is_disabled ?? false
-    });
-    this.nodeRepo.upsert(node);
-
-    return {
-      status: "created",
-      node: toNodeDetail(node)
-    };
   }
 
   private setScopeDisabled(cwd: string | undefined, disabled: boolean): ScopeToggleResult {

@@ -17,6 +17,22 @@ const makeTempDir = (): string => {
   return dir;
 };
 
+const waitFor = async (assertion: () => void, attempts = 25, delayMs = 20): Promise<void> => {
+  let lastError: unknown;
+
+  for (let attempt = 0; attempt < attempts; attempt += 1) {
+    try {
+      assertion();
+      return;
+    } catch (error) {
+      lastError = error;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+
+  throw lastError instanceof Error ? lastError : new Error(String(lastError));
+};
+
 afterEach(() => {
   while (tempDirs.length) {
     const dir = tempDirs.pop();
@@ -73,26 +89,28 @@ describe("OpenClaw plugin runtime", () => {
     });
 
     const db = new DatabaseSync(sqlitePath);
-    const inputCount = db.prepare("SELECT COUNT(*) AS count FROM experience_input_records").get() as { count: number };
-    const nodeCount = db.prepare("SELECT COUNT(*) AS count FROM experience_nodes").get() as { count: number };
-    const statsRow = db
-      .prepare(
-        "SELECT total_tasks, success_tasks, failed_tasks, injected_tasks FROM scope_task_stats LIMIT 1"
-      )
-      .get() as {
-        total_tasks: number;
-        success_tasks: number;
-        failed_tasks: number;
-        injected_tasks: number;
-      };
+    await waitFor(() => {
+      const inputCount = db.prepare("SELECT COUNT(*) AS count FROM experience_input_records").get() as { count: number };
+      const nodeCount = db.prepare("SELECT COUNT(*) AS count FROM experience_nodes").get() as { count: number };
+      const statsRow = db
+        .prepare(
+          "SELECT total_tasks, success_tasks, failed_tasks, injected_tasks FROM scope_task_stats LIMIT 1"
+        )
+        .get() as {
+          total_tasks: number;
+          success_tasks: number;
+          failed_tasks: number;
+          injected_tasks: number;
+        };
 
-    expect(inputCount.count).toBe(1);
-    expect(nodeCount.count).toBe(1);
-    expect(statsRow).toEqual({
-      total_tasks: 1,
-      success_tasks: 1,
-      failed_tasks: 0,
-      injected_tasks: 0
+      expect(inputCount.count).toBe(1);
+      expect(nodeCount.count).toBe(1);
+      expect(statsRow).toEqual({
+        total_tasks: 1,
+        success_tasks: 1,
+        failed_tasks: 0,
+        injected_tasks: 0
+      });
     });
   });
 
@@ -217,6 +235,12 @@ describe("OpenClaw plugin runtime", () => {
       message: { content: "Fix the failing vitest auth test" }
     });
 
+    const db = new DatabaseSync(sqlitePath);
+    await waitFor(() => {
+      const nodeCount = db.prepare("SELECT COUNT(*) AS count FROM experience_nodes").get() as { count: number };
+      expect(nodeCount.count).toBe(1);
+    });
+
     const secondTurn = (await beforePromptBuild?.({
       session: { key: "sess_2" },
       workspace: { cwd: "/tmp/repo" },
@@ -225,7 +249,7 @@ describe("OpenClaw plugin runtime", () => {
     })) as Record<string, unknown>;
 
     expect(typeof secondTurn.prependContext).toBe("string");
-    expect(secondTurn.prependContext).toContain("Conservative execution hints:");
+    expect(String(secondTurn.prependContext).toLowerCase()).toContain("execution hints");
     expect(secondTurn.prependContext).toContain("make the smallest code change");
   });
 
@@ -267,6 +291,12 @@ describe("OpenClaw plugin runtime", () => {
       message: { content: "Fix the failing vitest auth test by checking the current workspace" }
     });
 
+    const db = new DatabaseSync(sqlitePath);
+    await waitFor(() => {
+      const nodeCount = db.prepare("SELECT COUNT(*) AS count FROM experience_nodes").get() as { count: number };
+      expect(nodeCount.count).toBe(1);
+    });
+
     const secondTurn = (await beforePromptBuild?.({
       session: { key: "replay-no-context" },
       workspace: { cwd: "/tmp/repo" },
@@ -274,7 +304,7 @@ describe("OpenClaw plugin runtime", () => {
     })) as Record<string, unknown>;
 
     expect(typeof secondTurn.prependContext).toBe("string");
-    expect(secondTurn.prependContext).toContain("Conservative execution hints:");
+    expect(String(secondTurn.prependContext).toLowerCase()).toContain("execution hints");
   });
 
   it("does not persist injected hint blocks back into follow-up task summaries", async () => {
@@ -392,6 +422,12 @@ describe("OpenClaw plugin runtime", () => {
       structuredClone(scenario.finalizeContext)
     );
 
+    const db = new DatabaseSync(sqlitePath);
+    await waitFor(() => {
+      const nodeCount = db.prepare("SELECT COUNT(*) AS count FROM experience_nodes").get() as { count: number };
+      expect(nodeCount.count).toBeGreaterThanOrEqual(1);
+    });
+
     const replayPayload = structuredClone(scenario.replayPrompt);
     const replayResult = (await beforePromptBuild?.(
       replayPayload,
@@ -404,9 +440,9 @@ describe("OpenClaw plugin runtime", () => {
       expect(replayResult.prependContext, scenario.name).toBeTruthy();
       if (Array.isArray(scenario.replayPrompt.prependContext)) {
         expect(Array.isArray(replayResult.prependContext), scenario.name).toBe(true);
-        expect((replayResult.prependContext as unknown[])[0], scenario.name).toContain("execution hints");
+        expect(String((replayResult.prependContext as unknown[])[0]), scenario.name).toMatch(/execution hints/i);
       } else {
-        expect(String(replayResult.prependContext), scenario.name).toContain("execution hints");
+        expect(String(replayResult.prependContext), scenario.name).toMatch(/execution hints/i);
       }
     }
   });
@@ -580,12 +616,21 @@ describe("OpenClaw plugin runtime", () => {
         success_tasks: number;
       };
 
-    expect(JSON.parse(inputRow.evidence_json)).toContain("exec: success: /tmp/repo");
-    expect(inputRow.task_type).toBe("test_debug");
-    expect(nodeCount.count).toBe(1);
-    expect(statsRow).toEqual({
-      total_tasks: 1,
-      success_tasks: 1
+    await waitFor(() => {
+      expect(JSON.parse(inputRow.evidence_json)).toContain("exec: success: /tmp/repo");
+      expect(inputRow.task_type).toBe("test_debug");
+      const refreshedNodeCount = db.prepare("SELECT COUNT(*) AS count FROM experience_nodes").get() as { count: number };
+      const refreshedStatsRow = db
+        .prepare("SELECT total_tasks, success_tasks FROM scope_task_stats ORDER BY rowid DESC LIMIT 1")
+        .get() as {
+          total_tasks: number;
+          success_tasks: number;
+        };
+      expect(refreshedNodeCount.count).toBe(1);
+      expect(refreshedStatsRow).toEqual({
+        total_tasks: 1,
+        success_tasks: 1
+      });
     });
   });
 
@@ -627,6 +672,12 @@ describe("OpenClaw plugin runtime", () => {
       message: { content: "Fix the failing vitest auth test" }
     });
 
+    const db = new DatabaseSync(sqlitePath);
+    await waitFor(() => {
+      const nodeCount = db.prepare("SELECT COUNT(*) AS count FROM experience_nodes").get() as { count: number };
+      expect(nodeCount.count).toBe(1);
+    });
+
     await beforePromptBuild?.({
       session: { key: "helped-feedback" },
       workspace: { cwd: "/tmp/repo" },
@@ -642,6 +693,14 @@ describe("OpenClaw plugin runtime", () => {
       session: { key: "helped-feedback" },
       workspace: { cwd: "/tmp/repo" },
       message: { content: "Fix the failing vitest auth test" }
+    });
+
+    await waitFor(() => {
+      const nodeRow = db
+        .prepare("SELECT usage_count, helped_count FROM experience_nodes ORDER BY updated_at DESC LIMIT 1")
+        .get() as { usage_count: number; helped_count: number };
+      expect(nodeRow.usage_count).toBe(1);
+      expect(nodeRow.helped_count).toBe(1);
     });
 
     await beforePromptBuild?.({
@@ -661,28 +720,29 @@ describe("OpenClaw plugin runtime", () => {
       message: { content: "Fix the failing vitest auth test" }
     });
 
-    const db = new DatabaseSync(sqlitePath);
-    const nodeRow = db
-      .prepare(
-        "SELECT usage_count, helped_count, harmed_count, last_used_at, last_helped_at, last_harmed_at, state FROM experience_nodes ORDER BY updated_at DESC LIMIT 1"
-      )
-      .get() as {
-        usage_count: number;
-        helped_count: number;
-        harmed_count: number;
-        last_used_at: string | null;
-        last_helped_at: string | null;
-        last_harmed_at: string | null;
-        state: string;
-      };
+    await waitFor(() => {
+      const nodeRow = db
+        .prepare(
+          "SELECT usage_count, helped_count, harmed_count, last_used_at, last_helped_at, last_harmed_at, state FROM experience_nodes WHERE task_type = 'test_debug' AND node_type = 'strategy' LIMIT 1"
+        )
+        .get() as {
+          usage_count: number;
+          helped_count: number;
+          harmed_count: number;
+          last_used_at: string | null;
+          last_helped_at: string | null;
+          last_harmed_at: string | null;
+          state: string;
+        };
 
-    expect(nodeRow.usage_count).toBe(2);
-    expect(nodeRow.helped_count).toBe(1);
-    expect(nodeRow.harmed_count).toBe(1);
-    expect(nodeRow.last_used_at).toBeTruthy();
-    expect(nodeRow.last_helped_at).toBeTruthy();
-    expect(nodeRow.last_harmed_at).toBeTruthy();
-    expect(nodeRow.state).toBe("active");
+      expect(nodeRow.usage_count).toBe(2);
+      expect(nodeRow.helped_count).toBe(1);
+      expect(nodeRow.harmed_count).toBe(1);
+      expect(nodeRow.last_used_at).toBeTruthy();
+      expect(nodeRow.last_helped_at).toBeTruthy();
+      expect(nodeRow.last_harmed_at).toBeTruthy();
+      expect(nodeRow.state).toBe("active");
+    });
   });
 
   it("preserves prior feedback counters when a matching candidate is stored again", async () => {
@@ -723,6 +783,12 @@ describe("OpenClaw plugin runtime", () => {
       message: { content: "Fix the failing vitest auth test" }
     });
 
+    const db = new DatabaseSync(sqlitePath);
+    await waitFor(() => {
+      const nodeCount = db.prepare("SELECT COUNT(*) AS count FROM experience_nodes").get() as { count: number };
+      expect(nodeCount.count).toBe(1);
+    });
+
     await beforePromptBuild?.({
       session: { key: "helped-preserve" },
       workspace: { cwd: "/tmp/repo" },
@@ -738,6 +804,14 @@ describe("OpenClaw plugin runtime", () => {
       session: { key: "helped-preserve" },
       workspace: { cwd: "/tmp/repo" },
       message: { content: "Fix the failing vitest auth test" }
+    });
+
+    await waitFor(() => {
+      const nodeRow = db
+        .prepare("SELECT usage_count, helped_count FROM experience_nodes WHERE task_type = 'test_debug' AND node_type = 'strategy' LIMIT 1")
+        .get() as { usage_count: number; helped_count: number };
+      expect(nodeRow.usage_count).toBe(1);
+      expect(nodeRow.helped_count).toBe(1);
     });
 
     await beforePromptBuild?.({
@@ -757,22 +831,23 @@ describe("OpenClaw plugin runtime", () => {
       message: { content: "Fix the failing vitest auth test" }
     });
 
-    const db = new DatabaseSync(sqlitePath);
-    const nodeRow = db
-      .prepare(
-        "SELECT usage_count, helped_count, harmed_count, support_count FROM experience_nodes WHERE task_type = 'test_debug' AND node_type = 'strategy' LIMIT 1"
-      )
-      .get() as {
-        usage_count: number;
-        helped_count: number;
-        harmed_count: number;
-        support_count: number;
-      };
+    await waitFor(() => {
+      const nodeRow = db
+        .prepare(
+          "SELECT usage_count, helped_count, harmed_count, support_count FROM experience_nodes WHERE task_type = 'test_debug' AND node_type = 'strategy' LIMIT 1"
+        )
+        .get() as {
+          usage_count: number;
+          helped_count: number;
+          harmed_count: number;
+          support_count: number;
+        };
 
-    expect(nodeRow.usage_count).toBe(2);
-    expect(nodeRow.helped_count).toBe(2);
-    expect(nodeRow.harmed_count).toBe(0);
-    expect(nodeRow.support_count).toBe(3);
+      expect(nodeRow.usage_count).toBe(2);
+      expect(nodeRow.helped_count).toBe(2);
+      expect(nodeRow.harmed_count).toBe(0);
+      expect(nodeRow.support_count).toBe(3);
+    });
   });
 
   it("ignores exploratory warning noise but stores terminal failure warnings", async () => {

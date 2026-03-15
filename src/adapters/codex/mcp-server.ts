@@ -5,8 +5,7 @@ import { loadConfig } from "../../config/load-config.js";
 import { resolveExperienceEnginePaths } from "../../config/path-resolver.js";
 import {
   ExperienceInteractionService,
-  type FeedbackValue,
-  type RememberExperienceInput
+  type FeedbackValue
 } from "../../interaction/service.js";
 import {
   ExperienceOperationalService,
@@ -314,6 +313,10 @@ export const createCodexInteractionSurface = (options: CodexServerOptions = {}) 
       return interaction.listNodesByType(args.nodeType);
     },
 
+    async inspectLearningSummary() {
+      return interaction.inspectLearningSummary();
+    },
+
     async feedbackLast(args: { feedback: FeedbackValue }) {
       return interaction.feedbackLast(args.feedback);
     },
@@ -338,9 +341,6 @@ export const createCodexInteractionSurface = (options: CodexServerOptions = {}) 
       return interaction.retireNode(args.nodeId);
     },
 
-    async rememberExperience(args: RememberExperienceInput) {
-      return interaction.rememberExperience(args);
-    }
   };
 };
 
@@ -447,6 +447,17 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
           limit: parsePositiveLimit(String(variables.limit ?? "10"))
         })
       )
+  );
+
+  server.registerResource(
+    "experienceengine_learning_summary",
+    "experienceengine://learning/summary",
+    {
+      title: "ExperienceEngine Learning Summary",
+      description: "Candidate, distillation, and formal node counts across the learning pipeline.",
+      mimeType: "application/json"
+    },
+    async (uri) => toJsonResourceResult(uri.toString(), await interactionSurface.inspectLearningSummary())
   );
 
   server.registerResource(
@@ -756,36 +767,6 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
             type: "text",
             text:
               "Mark the last injected ExperienceEngine guidance as harmful. Confirm with the user if needed, then call the experienceengine_feedback_last tool with feedback=harmed and summarize which nodes were updated."
-          }
-        }
-      ]
-    })
-  );
-
-  server.registerPrompt(
-    "experienceengine_author_manual_experience",
-    {
-      title: "ExperienceEngine Author Manual Experience",
-      description: "Guide the agent to create a manual ExperienceEngine node from explicit user guidance.",
-      argsSchema: {
-        triggerPattern: z.string().optional(),
-        hint: z.string().optional(),
-        taskType: z.enum(["bug_fix", "build_debug", "test_debug", "integration_fix", "feature_add", "refactor", "performance", "general"]).optional(),
-        nodeType: z.enum(["strategy", "warning"]).optional()
-      }
-    },
-    async ({ triggerPattern, hint, taskType, nodeType }) => ({
-      messages: [
-        {
-          role: "user",
-          content: {
-            type: "text",
-            text:
-              "Capture a manual ExperienceEngine node from the user's explicit guidance. Confirm the trigger pattern, hint, task family, and node type, then call experienceengine_remember."
-              + (triggerPattern ? ` Trigger pattern: ${triggerPattern}.` : "")
-              + (hint ? ` Hint: ${hint}.` : "")
-              + (taskType ? ` Task type: ${taskType}.` : "")
-              + (nodeType ? ` Node type: ${nodeType}.` : "")
           }
         }
       ]
@@ -1108,29 +1089,6 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
       })
     },
     async ({ nodeId }) => toStructuredToolResult(await interactionSurface.retireNode({ nodeId }))
-  );
-
-  server.registerTool(
-    "experienceengine_remember",
-    {
-      title: "ExperienceEngine Remember",
-      description: "Persist a user-authored ExperienceEngine node for later retrieval and inspection.",
-      inputSchema: z.object({
-        cwd: z.string().optional(),
-        triggerPattern: z.string().min(1),
-        hint: z.string().min(1),
-        taskType: z
-          .enum(["bug_fix", "build_debug", "test_debug", "integration_fix", "feature_add", "refactor", "performance", "general"])
-          .optional(),
-        nodeType: z.enum(["strategy", "warning"]).optional(),
-        goal: z.string().optional(),
-        applicability: z.string().optional(),
-        successSignal: z.string().optional(),
-        recommendedSteps: z.array(z.string()).optional(),
-        avoidSteps: z.array(z.string()).optional()
-      })
-    },
-    async (args) => toStructuredToolResult(await interactionSurface.rememberExperience(args))
   );
 
   return server;

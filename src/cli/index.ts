@@ -17,7 +17,6 @@ import { runDisableCommand } from "./commands/disable.js";
 import { runEnableCommand } from "./commands/enable.js";
 import { runFeedbackCommand } from "./commands/feedback.js";
 import { runInspectCommand } from "./commands/inspect.js";
-import { runRememberCommand } from "./commands/remember.js";
 import { runStatsCommand } from "./commands/stats.js";
 
 const main = async (): Promise<void> => {
@@ -85,12 +84,9 @@ const main = async (): Promise<void> => {
     case "retire":
       runRetireCommand(args[0], args[1]);
       break;
-    case "remember":
-      runRememberCommand(args);
-      break;
     default:
       console.log(
-        "Usage: ee <install openclaw|claude-code|codex|upgrade openclaw|claude-code|codex|repair openclaw|claude-hook|codex-mcp-server|doctor [claude-code|codex]|stats|inspect|feedback|disable|enable|cool|retire|remember>"
+        "Usage: ee <install openclaw|claude-code|codex|upgrade openclaw|claude-code|codex|repair openclaw|claude-hook|codex-mcp-server|doctor [claude-code|codex]|stats|inspect|feedback|disable|enable|cool|retire>"
         + " | backup|export|import <snapshot-path>|rollback <backup-id>"
         + " | mcp-server"
         + " | config <get|set> notices.inline [true|false]"

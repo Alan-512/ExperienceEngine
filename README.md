@@ -6,6 +6,11 @@ ExperienceEngine is a local experience-intervention layer for coding agents.
 
 It learns short, task-specific guidance from real coding work, injects that guidance into later similar tasks, and records whether the intervention helped or harmed the outcome.
 
+Current core-learning baseline:
+- `OpenClaw` is the primary validation host for candidate capture, async distillation, injection, feedback, and retirement.
+- `Claude Code` and `Codex` remain supported product hosts and reuse shared ExperienceEngine interaction surfaces.
+- See [docs/development/openclaw-core-validation-checklist.md](docs/development/openclaw-core-validation-checklist.md) for the baseline acceptance flow.
+
 Current validated hosts:
 - `OpenClaw` for runtime/plugin integration
 - `Claude Code` for hooks + MCP interaction
@@ -29,6 +34,7 @@ What is already implemented and validated:
 - real runtime integration on OpenClaw
 - real runtime integration on Claude Code
 - real runtime integration on Codex
+- OpenClaw-first baseline for core learning validation
 - MCP-native interaction surface with `Resources`, `Prompts`, and `Tools`
 - CLI fallback for inspection, feedback, management, install, repair, and upgrade
 - MCP `plan + confirm` workflows for:

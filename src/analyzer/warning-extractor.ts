@@ -1,5 +1,5 @@
 import { buildExtractionEvidence, summarizeTaskFamily } from "./extraction-evidence.js";
-import type { ExperienceCandidate, ExperienceInput, TaskType } from "../types/domain.js";
+import type { ExperienceCandidateDraft, ExperienceInput, TaskType } from "../types/domain.js";
 
 const buildWarningHint = (taskType: TaskType, failureTool: string, failureSignature: string, familyLabel: string): string => {
   switch (taskType) {
@@ -28,7 +28,7 @@ const buildAvoidSteps = (failureTool: string, familyLabel: string): string[] => 
   `Avoid broad edits before isolating the failing ${familyLabel}.`
 ];
 
-export const extractWarnings = (input: ExperienceInput): ExperienceCandidate[] => {
+export const extractWarnings = (input: ExperienceInput): ExperienceCandidateDraft[] => {
   if (input.task_type === "unknown" || input.outcome_signal !== "failure") {
     return [];
   }

@@ -1,9 +1,8 @@
-import type { ExperienceCandidate, ExperienceInput } from "./domain.js";
+import type { ExperienceCandidateDraft, ExperienceInput } from "./domain.js";
 
 export type AnalyzerResult = {
-  accepted: ExperienceCandidate[];
-  rejected: ExperienceCandidate[];
+  accepted: ExperienceCandidateDraft[];
+  rejected: ExperienceCandidateDraft[];
   reasons: string[];
   source: ExperienceInput;
 };
-

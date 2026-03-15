@@ -1,5 +1,5 @@
 import type { AnalyzerResult } from "../types/analyzer.js";
-import type { ExperienceCandidate, ExperienceInput } from "../types/domain.js";
+import type { ExperienceCandidateDraft, ExperienceInput } from "../types/domain.js";
 import { dedupeCandidates } from "./node-deduper.js";
 import { normalizeCandidate } from "./node-normalizer.js";
 import { shouldStoreCandidate } from "./storage-gate.js";
@@ -10,8 +10,8 @@ export const analyzeExperience = (input: ExperienceInput): AnalyzerResult => {
   const rawCandidates = [...extractStrategies(input), ...extractWarnings(input)].map(normalizeCandidate);
   const candidates = dedupeCandidates(rawCandidates);
 
-  const accepted: ExperienceCandidate[] = [];
-  const rejected: ExperienceCandidate[] = [];
+  const accepted: ExperienceCandidateDraft[] = [];
+  const rejected: ExperienceCandidateDraft[] = [];
   const reasons: string[] = [];
 
   for (const candidate of candidates) {
@@ -25,4 +25,3 @@ export const analyzeExperience = (input: ExperienceInput): AnalyzerResult => {
 
   return { accepted, rejected, reasons, source: input };
 };
-

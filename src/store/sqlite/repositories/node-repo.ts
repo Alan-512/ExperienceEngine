@@ -202,6 +202,18 @@ export class NodeRepository {
       .map((row) => this.mapNode(row as Parameters<typeof this.mapNode>[0]));
   }
 
+  listInjectableByScope(scopeId: string): ExperienceNode[] {
+    return this.db
+      .prepare(
+        `SELECT * FROM experience_nodes
+         WHERE scope_id = ?
+           AND state IN ('active', 'cooling', 'candidate')
+         ORDER BY updated_at DESC`
+      )
+      .all(scopeId)
+      .map((row) => this.mapNode(row as Parameters<typeof this.mapNode>[0]));
+  }
+
   updateState(id: string, state: ExperienceNode["state"]): ExperienceNode | undefined {
     const node = this.getById(id);
     if (!node) {
