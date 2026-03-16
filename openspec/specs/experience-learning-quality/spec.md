@@ -1,7 +1,7 @@
 # experience-learning-quality Specification
 
 ## Purpose
-Raise ExperienceEngine's core learning quality so extracted experience, candidate retrieval, outcome attribution, and harm attribution reflect actual task evidence instead of placeholder heuristics.
+Raise ExperienceEngine's core learning quality so extracted experience, candidate retrieval, outcome attribution, harm attribution, and formal experience expression reflect actual task evidence instead of placeholder heuristics.
 
 ## Requirements
 
@@ -88,13 +88,15 @@ ExperienceEngine SHALL persist enough provenance and attribution metadata to exp
 - **WHEN** ExperienceEngine updates helped or harmed counters on a node
 - **THEN** it stores enough attribution detail to inspect the task records associated with that feedback later
 
-### Requirement: User-authored experience is a first-class capability
-ExperienceEngine SHALL support manually authored experience nodes through a real persistence flow rather than a scaffold placeholder.
+### Requirement: LLM-first distillation is the primary path for formal experience expression
+ExperienceEngine SHALL use an extractor-model distillation step as the default path for producing final experience wording once a candidate passes rule-based filtering.
 
-#### Scenario: CLI remember creates a persisted experience node
-- **WHEN** a user runs the supported remember workflow with valid experience content
-- **THEN** ExperienceEngine persists a user-authored node that can later participate in retrieval and inspection
+#### Scenario: Rules gate but do not author final experience text
+- **WHEN** a candidate passes the rule-based pre-filter
+- **THEN** ExperienceEngine sends it through the configured distillation model to produce the final compact hint and related structured fields
+- **AND** rule heuristics do not directly serve as the final experience wording in the primary path
 
-#### Scenario: User-authored provenance remains explicit
-- **WHEN** ExperienceEngine persists a manual experience node
-- **THEN** the node records user-authored provenance distinct from system-derived candidates
+#### Scenario: Distillation uses a model profile independent from the host's main execution loop
+- **WHEN** ExperienceEngine performs candidate distillation
+- **THEN** it selects a configured extractor profile suitable for distillation work
+- **AND** that profile remains conceptually separate from the host agent's main execution model

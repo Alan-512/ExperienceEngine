@@ -6,138 +6,117 @@ Define ExperienceEngine's long-term MCP-native interaction model across resource
 ## Requirements
 
 ### Requirement: ExperienceEngine uses MCP as its primary day-to-day interaction surface
-
 ExperienceEngine SHALL define its long-term user interaction model around MCP rather than around standalone CLI commands.
 
 #### Scenario: User inspects ExperienceEngine inside an agent session
-
 - **WHEN** a user asks an agent to inspect ExperienceEngine state or recent behavior
 - **THEN** the preferred interaction path is through ExperienceEngine MCP surfaces
 - **AND** the standalone CLI remains available as a fallback path
 
 #### Scenario: Users can inspect operational state inside an agent session
-
 - **WHEN** a user asks an agent to check ExperienceEngine installation health or update state
 - **THEN** ExperienceEngine exposes that read-only operational state through MCP resources or read-only tools
 - **AND** the standalone CLI remains available as fallback
 
 ### Requirement: ExperienceEngine separates Resources, Prompts, and Tools
-
 ExperienceEngine SHALL expose different interaction categories through MCP according to their semantics.
 
 #### Scenario: Read-only state is exposed as a resource
-
 - **WHEN** ExperienceEngine exposes recent records or node inventories
 - **THEN** those read-only views are modeled as MCP resources rather than mutation tools
 
 #### Scenario: User-controlled workflow entry is exposed as a prompt
-
 - **WHEN** ExperienceEngine exposes reusable review or management entry points
 - **THEN** those entry points are modeled as MCP prompts when the host supports them
 
 #### Scenario: Executable actions are exposed as tools
-
 - **WHEN** ExperienceEngine exposes feedback, control, or operational actions
 - **THEN** those actions are modeled as MCP tools
 
 #### Scenario: The first MCP inspect surface is exposed as resources
-
 - **WHEN** ExperienceEngine exposes last-turn, recent-turn, or node inventory inspection views
 - **THEN** those views are served as MCP resources
 - **AND** the resource payloads are structured so agents can consume them without scraping terminal output
 
 #### Scenario: The first low-risk control surface is exposed as tools
-
 - **WHEN** ExperienceEngine exposes feedback or scope enable/disable actions
 - **THEN** those actions are served as MCP tools
 - **AND** the tool outputs include structured results in addition to readable text
 
 #### Scenario: ExperienceEngine exposes review workflows as prompts
-
 - **WHEN** ExperienceEngine offers reusable last-intervention or warning-review workflows
 - **THEN** those workflows are exposed as MCP prompts
 - **AND** review prompts link to the relevant ExperienceEngine resources when possible
 
 #### Scenario: ExperienceEngine exposes light control workflows as prompts
-
 - **WHEN** ExperienceEngine offers pause/resume or last-feedback workflows
 - **THEN** those workflows are exposed as MCP prompts
 - **AND** the prompt text instructs the agent to confirm before calling the underlying control tool
 
 ### Requirement: ExperienceEngine MCP actions are risk-tiered
-
 ExperienceEngine SHALL classify MCP actions by risk so that high-impact operations are not treated the same as read-only inspection.
 
 #### Scenario: Read-only MCP actions require no special confirmation
-
 - **WHEN** an ExperienceEngine MCP action only reads state
 - **THEN** it is classified as a read-only action
 
 #### Scenario: High-impact MCP actions require stronger safeguards
-
 - **WHEN** an ExperienceEngine MCP action changes installation, repair, upgrade, import, or rollback state
 - **THEN** it is classified as high-impact
 - **AND** the design requires explicit confirmation and a planning or dry-run step before execution
 
 #### Scenario: Medium-risk node lifecycle controls are exposed as explicit tools
-
 - **WHEN** ExperienceEngine exposes node cooling or retirement controls
 - **THEN** those actions are exposed as MCP tools
 - **AND** they remain distinct from high-impact operational actions such as upgrade or rollback
 
 ### Requirement: Host adapters converge on a unified MCP-primary interaction contract
-
-ExperienceEngine SHALL expose the same MCP-primary interaction contract across hosts where host capabilities allow it.
+ExperienceEngine SHALL expose the same MCP-primary interaction contract across hosts where host capabilities allow it, while keeping OpenClaw as the baseline validation host for the core learning loop.
 
 #### Scenario: Claude Code reuses the shared ExperienceEngine MCP server
-
 - **WHEN** Claude Code needs ExperienceEngine interaction features such as inspect, prompts, or low-risk control tools
 - **THEN** it reuses the shared ExperienceEngine MCP server contract
 - **AND** it does not require a Claude-specific duplicate interaction server
 
-### Requirement: High-impact operational actions are exposed through plan-and-confirm MCP workflows
+#### Scenario: Codex reuses the shared MCP interaction contract without becoming the core learning baseline
+- **WHEN** Codex needs ExperienceEngine interaction features such as inspect, prompts, or low-risk control tools
+- **THEN** it reuses the shared ExperienceEngine MCP server contract
+- **AND** its interaction support does not by itself redefine the primary baseline host for core learning validation
 
+### Requirement: High-impact operational actions are exposed through plan-and-confirm MCP workflows
 ExperienceEngine SHALL expose supported high-impact operational actions through MCP only with explicit planning and confirmation semantics.
 
 #### Scenario: Install is planned before execution
-
 - **WHEN** an agent wants to install ExperienceEngine for a supported adapter through MCP
 - **THEN** it first obtains a structured install plan
 - **AND** the plan includes a confirmation token required for execution
 
 #### Scenario: Repair is blocked without confirmation
-
 - **WHEN** an agent attempts to run a high-impact repair action without a valid prior confirmation token
 - **THEN** ExperienceEngine rejects the action
 - **AND** instructs the caller to obtain a fresh plan first
 
 #### Scenario: Upgrade execution reuses canonical installer flows
-
 - **WHEN** an agent confirms an upgrade through MCP
 - **THEN** ExperienceEngine executes the same upgrade semantics used by the CLI fallback path
 
 ### Requirement: ExperienceEngine state lifecycle is exposed through managed backup and restore workflows
-
 ExperienceEngine SHALL expose backup, export, import, and rollback workflows over its own managed state using the same MCP plan-and-confirm safety model.
 
 #### Scenario: Backup inventory is available as read-only MCP state
-
 - **WHEN** an agent wants to inspect available ExperienceEngine backups
 - **THEN** ExperienceEngine exposes backup inventory through read-only MCP resources
 
 #### Scenario: Backup is planned before execution
-
 - **WHEN** an agent wants to create an ExperienceEngine backup through MCP
 - **THEN** it first obtains a structured backup plan
 - **AND** the plan includes a confirmation token required for execution
 
 #### Scenario: Rollback creates a safeguard backup
-
 - **WHEN** an agent confirms an ExperienceEngine rollback through MCP
 - **THEN** ExperienceEngine creates a safeguard backup of the current managed state before restoring the selected backup
 
 #### Scenario: Import restores a valid exported snapshot
-
 - **WHEN** an agent confirms an ExperienceEngine import through MCP with a valid snapshot path
 - **THEN** ExperienceEngine restores the managed state from that snapshot
 - **AND** it records the safeguard backup created before the restore
@@ -153,15 +132,3 @@ ExperienceEngine SHALL expose richer node provenance and attribution details thr
 #### Scenario: Last-intervention inspection can reference attributed records
 - **WHEN** an MCP client inspects the latest ExperienceEngine intervention
 - **THEN** the response can identify the originating record and attributed node details when available
-
-### Requirement: MCP surfaces support manual experience authoring workflows
-ExperienceEngine SHALL support user-authored experience through MCP-native workflows once the underlying authoring path is implemented.
-
-#### Scenario: MCP prompt guides a user-authored experience workflow
-- **WHEN** an MCP client requests a manual experience authoring workflow
-- **THEN** ExperienceEngine exposes a prompt that guides the agent through collecting the required authored experience fields
-
-#### Scenario: MCP tool persists a user-authored experience node
-- **WHEN** an MCP client executes the supported manual experience authoring tool with valid content
-- **THEN** ExperienceEngine persists a user-authored node
-- **AND** the tool response confirms the created node id and provenance

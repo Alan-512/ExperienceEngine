@@ -42,20 +42,28 @@ The system SHALL normalize supported OpenClaw payload shapes into a usable inter
 - **THEN** it records a tool event with name, status, and optional evidence fields
 
 ### Requirement: Experience Persistence
-The system SHALL persist minimal experience records after a task finalization signal.
+The system SHALL persist OpenClaw task outcomes into a candidate-first lifecycle and use OpenClaw as the baseline host for core learning validation.
 
-#### Scenario: Successful seed turn creates records
-- **GIVEN** a session with a supported task summary and a successful tool result
+#### Scenario: Successful or failed finalized turn creates candidate-side records first
+- **GIVEN** a session with a supported task summary and enough terminal evidence to build learning input
 - **WHEN** ExperienceEngine receives a finalize-capable event
-- **THEN** it writes an `experience_input_record`
-- **AND** it updates `scope_task_stats`
-- **AND** it stores at least one candidate experience node when analyzer thresholds are met
+- **THEN** it writes the finalized task input and outcome records needed for learning
+- **AND** it persists one or more `ExperienceCandidate` records when analyzer thresholds are met
+- **AND** it does not require a final `ExperienceNode` to be created synchronously in the finalize path
 
-#### Scenario: Unknown outcomes remain conservative
-- **GIVEN** a finalized task without enough evidence to infer success or failure
-- **WHEN** ExperienceEngine stores the task result
-- **THEN** the persisted `outcome_signal` remains `unknown`
-- **AND** later logic may treat the record more conservatively
+#### Scenario: OpenClaw remains the baseline host for core learning evaluation
+- **GIVEN** ExperienceEngine's multi-host product surface
+- **WHEN** candidate creation, async distillation, cold-start behavior, or lifecycle evaluation are validated for the core engine
+- **THEN** OpenClaw is treated as the primary baseline host for that validation
+- **AND** other hosts may reuse the resulting learning pipeline without redefining the baseline
+
+### Requirement: OpenClaw candidate lifecycle supports asynchronous distillation
+The system SHALL preserve enough OpenClaw task evidence to let candidate distillation complete asynchronously after the task has already ended.
+
+#### Scenario: Finalized OpenClaw task queues distillation work
+- **WHEN** an OpenClaw task produces a persisted candidate
+- **THEN** ExperienceEngine records distillation work for later asynchronous execution
+- **AND** the original task finalize flow is not blocked by waiting for final experience wording
 
 ### Requirement: Conservative Hint Injection
 The system SHALL inject hints only when a similar prior experience exists and the trigger conditions are met.
