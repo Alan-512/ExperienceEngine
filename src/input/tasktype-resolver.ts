@@ -1,5 +1,9 @@
 import type { ResolvedTaskType } from "../types/domain.js";
-import { normalizeWhitespace } from "../utils/text.js";
+import {
+  normalizeWhitespace,
+  stripInlineCodeSpans,
+  stripShellLikeTaskCommands
+} from "../utils/text.js";
 
 const MATCHERS: Array<[ResolvedTaskType, RegExp]> = [
   ["test_debug", /\b(test|vitest|jest|playwright|failing spec|assert(?:ion)?)\b/i],
@@ -12,7 +16,7 @@ const MATCHERS: Array<[ResolvedTaskType, RegExp]> = [
 ];
 
 export const resolveTaskType = (summary: string): ResolvedTaskType => {
-  const text = normalizeWhitespace(summary);
+  const text = normalizeWhitespace(stripShellLikeTaskCommands(stripInlineCodeSpans(summary)));
   if (!text) {
     return "unknown";
   }

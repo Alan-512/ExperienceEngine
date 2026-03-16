@@ -27,7 +27,7 @@ export const decideIntervention = (
   maxHints = 3
 ): InterventionDecision => {
   const candidates = retrieveCandidates(input, nodes);
-  const ranked = rankNodes(input.task_summary, candidates);
+  const ranked = rankNodes(input.task_summary, candidates, input.task_type);
 
   if (!ranked.length) {
     return { mode: "skip", selected: [] };

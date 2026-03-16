@@ -93,4 +93,65 @@ describe("retrieveCandidates", () => {
     expect(candidates.map((entry) => entry.id)).toContain("test-debug-node");
     expect(candidates.map((entry) => entry.id)).not.toContain("far-family-node");
   });
+
+  it("downranks low-specificity legacy hints below more specific distilled nodes", () => {
+    const candidates = retrieveCandidates(
+      input({
+        task_type: "test_debug",
+        task_summary: "Reproduce the failing auth baseline test and rerun it after the smallest fix"
+      }),
+      [
+        node({
+          id: "legacy-generic",
+          compact_hint: "Reproduce first, then validate the fix with exec before moving on.",
+          helped_count: 5,
+          support_count: 4
+        }),
+        node({
+          id: "specific-distilled",
+          compact_hint:
+            "Reproduce the failing auth baseline test with exec, make the smallest matching change, then rerun exec.",
+          trigger_pattern: "Repair the openclaw baseline auth test regression in this repo",
+          helped_count: 1,
+          support_count: 1,
+          recommended_steps: [
+            "Run the focused baseline test once to reproduce.",
+            "Make the smallest auth change that matches the failure.",
+            "Rerun the focused baseline test."
+          ]
+        })
+      ]
+    );
+
+    expect(candidates[0]?.id).toBe("specific-distilled");
+    expect(candidates.map((entry) => entry.id)).toContain("legacy-generic");
+  });
+
+  it("does not let general verification tasks pull in unrelated debug-family fallback nodes", () => {
+    const candidates = retrieveCandidates(
+      input({
+        task_type: "general",
+        task_summary:
+          "This is a read-only repository verification task. Run pwd and confirm package.json exists before reporting the repo root."
+      }),
+      [
+        node({
+          id: "general-node",
+          task_type: "general",
+          trigger_pattern: "Verify the repository root and report whether package.json exists",
+          compact_hint: "Use exec as the verification loop for this coding task, keep the change narrow, and rerun it before moving on."
+        }),
+        node({
+          id: "debug-fallback",
+          task_type: "test_debug",
+          compact_hint: "Reproduce first, then validate the fix with exec before moving on.",
+          helped_count: 20,
+          support_count: 10
+        })
+      ]
+    );
+
+    expect(candidates.map((entry) => entry.id)).toContain("general-node");
+    expect(candidates.map((entry) => entry.id)).not.toContain("debug-fallback");
+  });
 });

@@ -40,3 +40,63 @@ export const stripLeadingExperienceInjection = (value: string): string => {
 
 export const stripLeadingTimestampTag = (value: string): string =>
   normalizeWhitespace(value).replace(/^\[[^\]]+\]\s*/, "");
+
+export const stripInlineCodeSpans = (value: string): string =>
+  normalizeWhitespace(
+    value
+      .replace(/```[\s\S]*?```/g, " ")
+      .replace(/`[^`]*`/g, " ")
+  );
+
+const SHELL_COMMAND_TOKENS = [
+  "cd",
+  "pwd",
+  "ls",
+  "cat",
+  "echo",
+  "test",
+  "pnpm",
+  "npm",
+  "yarn",
+  "bun",
+  "node",
+  "tsc",
+  "vite",
+  "webpack",
+  "vitest",
+  "jest",
+  "playwright",
+  "git",
+  "rg",
+  "grep",
+  "sqlite3"
+];
+
+const shellLikePatterns = [
+  /&&|\|\||\||;/,
+  /\s-[a-zA-Z]/,
+  /\/[A-Za-z0-9._/-]+/,
+  /\b[A-Za-z0-9_-]+\.(ts|tsx|js|jsx|json|md|sql|sh)\b/i
+];
+
+const looksShellLikeClause = (value: string): boolean => {
+  const normalized = normalizeWhitespace(value);
+  if (!normalized) {
+    return false;
+  }
+
+  const lower = normalized.toLowerCase();
+  if (SHELL_COMMAND_TOKENS.some((token) => new RegExp(`\\b${token}\\b`, "i").test(lower))) {
+    return true;
+  }
+
+  return shellLikePatterns.some((pattern) => pattern.test(normalized));
+};
+
+export const stripShellLikeTaskCommands = (value: string): string =>
+  normalizeWhitespace(
+    value.replace(
+      /\b(?:first run|run|then run|next run)\s+([^.!?]+)([.!?])/gi,
+      (match, clause, punctuation) => (looksShellLikeClause(clause) ? punctuation : match)
+    )
+  );

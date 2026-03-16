@@ -135,4 +135,71 @@ describe("decideIntervention", () => {
     expect(decision.selected.map((entry) => entry.id)).toEqual(["warning"]);
     expect(decision.text).toContain("Narrow the failure signature first.");
   });
+
+  it("keeps specific distilled strategy nodes ahead of legacy generic strategies", () => {
+    const decision = decideIntervention(
+      input,
+      [
+        node({
+          id: "legacy-generic",
+          compact_hint: "Reproduce first, then validate the fix with exec before moving on.",
+          helped_count: 21,
+          support_count: 12
+        }),
+        node({
+          id: "specific-distilled",
+          compact_hint:
+            "Reproduce the failing auth baseline test with exec, make the smallest matching code change, then rerun exec.",
+          trigger_pattern: "Repair the failing auth baseline test in the current workspace",
+          helped_count: 1,
+          support_count: 1,
+          recommended_steps: [
+            "Run the focused baseline test once to reproduce.",
+            "Make the smallest matching change.",
+            "Rerun the focused baseline test."
+          ]
+        })
+      ],
+      stats,
+      0.6,
+      3
+    );
+
+    expect(decision.mode).toBe("inject");
+    expect(decision.selected[0]?.id).toBe("specific-distilled");
+  });
+
+  it("prefers exact task-family strategies over general fallback nodes", () => {
+    const decision = decideIntervention(
+      input,
+      [
+        node({
+          id: "general-fallback",
+          task_type: "general",
+          compact_hint:
+            "Use exec as the verification loop for this coding task, keep the change narrow, and rerun it before moving on.",
+          helped_count: 4,
+          support_count: 4
+        }),
+        node({
+          id: "exact-test-node",
+          task_type: "test_debug",
+          compact_hint:
+            "Reproduce the failing test with exec, make the smallest code change that matches the failure, then rerun exec.",
+          trigger_pattern: "Repair the failing auth baseline test in the current workspace",
+          recommended_steps: [
+            "Run the focused baseline test once to reproduce.",
+            "Make the smallest matching change.",
+            "Rerun the focused baseline test."
+          ]
+        })
+      ],
+      stats,
+      0.6,
+      3
+    );
+
+    expect(decision.mode).toBe("inject");
+    expect(decision.selected[0]?.id).toBe("exact-test-node");
+  });
 });

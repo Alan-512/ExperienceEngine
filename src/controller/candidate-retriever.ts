@@ -1,6 +1,7 @@
 import type { ExperienceInput, ExperienceNode, TaskType } from "../types/domain.js";
 import { embedText } from "../store/vector/embeddings.js";
 import { openVectorStore } from "../store/vector/lancedb.js";
+import { tokenize } from "../utils/text.js";
 
 const TASK_FAMILY_PROXIMITY: Record<TaskType, Partial<Record<TaskType, number>>> = {
   bug_fix: {
@@ -62,6 +63,30 @@ const TASK_FAMILY_PROXIMITY: Record<TaskType, Partial<Record<TaskType, number>>>
 const isInjectableState = (node: ExperienceNode): boolean =>
   node.state === "active" || node.state === "cooling" || node.state === "candidate";
 
+const LEGACY_GENERIC_HINT_PATTERNS = [
+  /^reproduce first, then validate the fix with /i,
+  /^do not keep iterating on the current debug path without narrowing the failing signature first\.?$/i
+];
+
+const isLegacyGenericNode = (node: ExperienceNode): boolean =>
+  LEGACY_GENERIC_HINT_PATTERNS.some((pattern) => pattern.test(node.compact_hint.trim()));
+
+const getSpecificityBonus = (node: ExperienceNode): number => {
+  const hintTokens = new Set(tokenize(node.compact_hint));
+  const triggerTokens = new Set(tokenize(node.trigger_pattern));
+  const lexicalBreadth = Math.min(12, hintTokens.size + Math.min(triggerTokens.size, 6));
+  const breadthScore = lexicalBreadth / 12;
+  const structuredBonus =
+    (node.recommended_steps?.length ?? 0) > 0 || (node.goal?.trim().length ?? 0) > 0 ? 0.08 : 0;
+
+  return breadthScore * 0.18 + structuredBonus;
+};
+
+const getFeedbackAdjustment = (node: ExperienceNode): number =>
+  Math.max(-0.12, Math.min(0.12, (node.helped_count - node.harmed_count) * 0.02));
+
+const getGenericPenalty = (node: ExperienceNode): number => (isLegacyGenericNode(node) ? 0.22 : 0);
+
 const getFamilyScore = (inputTaskType: TaskType, nodeTaskType: TaskType): number =>
   TASK_FAMILY_PROXIMITY[inputTaskType][nodeTaskType] ?? 0;
 
@@ -86,17 +111,18 @@ export const retrieveCandidates = (input: ExperienceInput, nodes: ExperienceNode
 
   const scoreById = new Map(semanticMatches.map((match) => [match.id, match.score]));
 
+  const minimumFamilyScore = inputTaskType === "general" ? 0.75 : 0.65;
+
   return scopeLocalNodes
     .map((node) => {
       const semanticScore = scoreById.get(node.id) ?? 0;
       const familyScore = getFamilyScore(inputTaskType, node.task_type);
-      const qualityScore = node.helped_count - node.harmed_count + node.support_count * 0.25;
-      const totalScore = semanticScore * 0.7 + familyScore * 0.25 + qualityScore * 0.01;
+      const qualityAdjustment =
+        getSpecificityBonus(node) + getFeedbackAdjustment(node) - getGenericPenalty(node);
+      const totalScore = semanticScore * 0.68 + familyScore * 0.22 + qualityAdjustment;
       return { node, semanticScore, familyScore, totalScore };
     })
-    .filter(
-      ({ semanticScore, familyScore }) => semanticScore >= 0.12 && familyScore >= 0.65
-    )
+    .filter(({ semanticScore, familyScore }) => semanticScore >= 0.12 && familyScore >= minimumFamilyScore)
     .sort((left, right) => right.totalScore - left.totalScore)
     .slice(0, 8)
     .map(({ node }) => node);
