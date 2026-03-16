@@ -65,6 +65,11 @@ ExperienceEngine SHALL support a conservative fallback path for coding tasks tha
 - **WHEN** a task resolves into the general coding family with sufficient evidence
 - **THEN** ExperienceEngine may still extract, retrieve, and inject conservative experience for that task
 
+#### Scenario: Inline command spans do not force specialized classification
+- **WHEN** a task summary contains specialized command keywords only inside inline code spans
+- **AND** the surrounding narrative does not express that specialized task family
+- **THEN** ExperienceEngine MUST ignore those code-span keywords for task-type matching
+
 ### Requirement: Finalize persistence is transactional
 ExperienceEngine SHALL persist finalize-time state changes atomically enough to avoid partial drift between input records, nodes, stats, and related audit records.
 
