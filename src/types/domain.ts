@@ -146,6 +146,10 @@ export type CandidateSourceSignal = {
   outcome_signal: OutcomeSignal;
   tool_events: ToolEvent[];
   evidence: string[];
+  failure_signature?: string;
+  retry_count: number;
+  correction_signals: string[];
+  tool_event_summary: string[];
 };
 
 export type ExperienceCandidate = ExperienceCandidateDraft & {

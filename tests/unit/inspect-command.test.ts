@@ -94,7 +94,11 @@ const makeCandidate = (overrides: Partial<ExperienceCandidate> = {}): Experience
     context_summary: "Auth test failure in the current repo",
     outcome_signal: "success",
     tool_events: [],
-    evidence: ["vitest: success: auth test now passes"]
+    evidence: ["vitest: success: auth test now passes"],
+    failure_signature: "Auth test assertion failed",
+    retry_count: 1,
+    correction_signals: ["apply_patch"],
+    tool_event_summary: ["failure: vitest failed: Auth test assertion failed", "success: vitest succeeded"]
   },
   lifecycle_state: "pending",
   retry_count: 0,

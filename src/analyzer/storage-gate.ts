@@ -1,7 +1,13 @@
 import type { ExperienceCandidateDraft, ExperienceInput } from "../types/domain.js";
+import { buildCandidateSignals } from "./candidate-signals.js";
 
 export const shouldStoreCandidate = (candidate: ExperienceCandidateDraft, input: ExperienceInput): boolean => {
   if (input.task_type === "unknown") {
+    return false;
+  }
+
+  const signals = buildCandidateSignals(input);
+  if (!signals.criticality || !signals.improvement_room || !signals.recoverable_path) {
     return false;
   }
 

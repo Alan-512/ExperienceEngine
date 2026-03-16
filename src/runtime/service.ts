@@ -1,4 +1,5 @@
 import { analyzeExperience } from "../analyzer/experience-analyzer.js";
+import { buildCandidateSignals } from "../analyzer/candidate-signals.js";
 import { applyFeedback } from "../feedback/feedback-manager.js";
 import { createEmptyStats, updateStats } from "../feedback/stats-updater.js";
 import { buildExperienceInput } from "../input/input-adapter.js";
@@ -63,13 +64,21 @@ const toInputRecord = (input: ExperienceInput, sessionId?: string): ExperienceIn
   created_at: nowIso()
 });
 
-const buildCandidateSourceSignal = (input: ExperienceInput): CandidateSourceSignal => ({
-  task_summary: input.task_summary,
-  context_summary: input.context_summary,
-  outcome_signal: input.outcome_signal,
-  tool_events: input.tool_events,
-  evidence: toEvidence(input)
-});
+const buildCandidateSourceSignal = (input: ExperienceInput): CandidateSourceSignal => {
+  const signals = buildCandidateSignals(input);
+
+  return {
+    task_summary: input.task_summary,
+    context_summary: input.context_summary,
+    outcome_signal: input.outcome_signal,
+    tool_events: input.tool_events,
+    evidence: toEvidence(input),
+    failure_signature: signals.failure_signature,
+    retry_count: signals.retry_count,
+    correction_signals: signals.correction_signals,
+    tool_event_summary: signals.tool_event_summary
+  };
+};
 
 const draftToCandidate = (
   draft: ExperienceCandidateDraft,

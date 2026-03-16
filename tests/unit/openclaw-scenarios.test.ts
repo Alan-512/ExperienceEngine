@@ -71,7 +71,11 @@ const candidate = (sourceRecordId: string, overrides: Partial<ExperienceCandidat
     task_summary: "Run the repo verification task",
     outcome_signal: "success",
     tool_events: [],
-    evidence: ["exec: success"]
+    evidence: ["exec: success"],
+    failure_signature: undefined,
+    retry_count: 0,
+    correction_signals: [],
+    tool_event_summary: []
   },
   lifecycle_state: "distilled",
   retry_count: 0,

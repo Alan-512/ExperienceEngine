@@ -65,7 +65,11 @@ const candidate = (overrides: Partial<ExperienceCandidate> = {}): ExperienceCand
         started_at: "2026-03-15T10:00:00.000Z"
       }
     ],
-    evidence: ["vitest: success: Auth spec now passes."]
+    evidence: ["vitest: success: Auth spec now passes."],
+    failure_signature: "Auth spec assertion failed",
+    retry_count: 1,
+    correction_signals: ["apply_patch"],
+    tool_event_summary: ["failure: vitest failed: Auth spec assertion failed", "success: vitest succeeded"]
   },
   lifecycle_state: "pending",
   retry_count: 0,

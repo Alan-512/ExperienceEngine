@@ -9,6 +9,14 @@ const baseInput = (overrides: Partial<ExperienceInput> = {}): ExperienceInput =>
   task_summary: "Fix the failing auth vitest in the workspace.",
   tool_events: [
     {
+      event_id: "tool-0",
+      tool_name: "vitest",
+      status: "failure",
+      error_signature: "Auth spec assertion failed.",
+      output_summary: "Auth spec failed.",
+      started_at: "2026-03-13T08:59:00.000Z"
+    },
+    {
       event_id: "tool-1",
       tool_name: "vitest",
       status: "success",
@@ -29,6 +37,14 @@ describe("analyzeExperience", () => {
         task_summary: "Fix the failing auth vitest in the workspace.",
         tool_events: [
           {
+            event_id: "tool-test-fail",
+            tool_name: "vitest",
+            status: "failure",
+            error_signature: "Auth spec assertion failed.",
+            output_summary: "Auth spec failed.",
+            started_at: "2026-03-13T08:59:00.000Z"
+          },
+          {
             event_id: "tool-test",
             tool_name: "vitest",
             status: "success",
@@ -44,6 +60,14 @@ describe("analyzeExperience", () => {
         task_type: "build_debug",
         task_summary: "Fix the broken TypeScript build for the API package.",
         tool_events: [
+          {
+            event_id: "tool-build-fail",
+            tool_name: "tsc",
+            status: "failure",
+            error_signature: "Cannot find module './auth/types'.",
+            output_summary: "Build failed with TS2307.",
+            started_at: "2026-03-13T08:59:00.000Z"
+          },
           {
             event_id: "tool-build",
             tool_name: "tsc",
@@ -71,6 +95,13 @@ describe("analyzeExperience", () => {
         outcome_signal: "failure",
         tool_events: [
           {
+            event_id: "tool-correction",
+            tool_name: "apply_patch",
+            status: "success",
+            output_summary: "Applied patch to adjust auth flow.",
+            started_at: "2026-03-13T08:58:00.000Z"
+          },
+          {
             event_id: "tool-test-fail",
             tool_name: "vitest",
             status: "failure",
@@ -88,6 +119,13 @@ describe("analyzeExperience", () => {
         task_summary: "Fix the broken API package build.",
         outcome_signal: "failure",
         tool_events: [
+          {
+            event_id: "tool-correction",
+            tool_name: "apply_patch",
+            status: "success",
+            output_summary: "Applied patch to adjust imports.",
+            started_at: "2026-03-13T08:58:00.000Z"
+          },
           {
             event_id: "tool-build-fail",
             tool_name: "tsc",
@@ -115,6 +153,13 @@ describe("analyzeExperience", () => {
         task_type: "general",
         task_summary: "Document the new release process for contributors.",
         tool_events: [
+          {
+            event_id: "tool-general-fail",
+            tool_name: "markdownlint",
+            status: "failure",
+            output_summary: "Documentation lint failed.",
+            started_at: "2026-03-13T08:59:00.000Z"
+          },
           {
             event_id: "tool-general",
             tool_name: "markdownlint",

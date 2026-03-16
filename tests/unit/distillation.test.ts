@@ -53,7 +53,11 @@ const makeCandidate = (overrides: Partial<ExperienceCandidate> = {}): Experience
     context_summary: "Auth test failure in the current repo.",
     outcome_signal: "success",
     tool_events: [],
-    evidence: ["vitest: success: Auth spec now passes."]
+    evidence: ["vitest: success: Auth spec now passes."],
+    failure_signature: "Auth spec assertion failure",
+    retry_count: 1,
+    correction_signals: ["apply_patch"],
+    tool_event_summary: ["failure: vitest failed: Auth spec assertion failure", "success: vitest succeeded"]
   },
   lifecycle_state: "pending",
   retry_count: 0,
@@ -93,9 +97,11 @@ describe("LlmDistiller", () => {
             message: {
               content: JSON.stringify({
                 compact_hint: "Re-run vitest before each auth fix and after the smallest code change.",
+                trigger_conditions: "When iterating on auth test fixes",
+                success_criteria: "vitest passes for the auth spec",
+                risk_level: "medium",
                 goal: "Preserve a tight auth verification loop.",
                 recommended_steps: ["Run vitest", "Change one auth seam", "Run vitest again"],
-                success_signal: "vitest passes for the auth spec",
                 evidence_summary: "Distilled from a vitest pass."
               })
             }
@@ -116,8 +122,40 @@ describe("LlmDistiller", () => {
     const result = await distiller.distill(makeCandidate());
 
     expect(fetchImpl).toHaveBeenCalledOnce();
+    const requestBody = JSON.parse((fetchImpl.mock.calls[0]?.[1] as { body: string }).body);
+    const payload = JSON.parse(requestBody.messages[1].content);
+    expect(payload.sourceSignal.tool_event_summary).toBeDefined();
     expect(result.compact_hint).toContain("Re-run vitest");
     expect(result.recommended_steps).toEqual(["Run vitest", "Change one auth seam", "Run vitest again"]);
+  });
+
+  it("rejects distillation output missing required OPD fields", async () => {
+    const { config } = makeDb();
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                compact_hint: "Re-run vitest after each change."
+              })
+            }
+          }
+        ]
+      })
+    });
+
+    const distiller = new LlmDistiller(config, {
+      env: {
+        EXPERIENCE_ENGINE_DISTILLER_MODEL: "gpt-test",
+        EXPERIENCE_ENGINE_DISTILLER_API_KEY: "secret",
+        EXPERIENCE_ENGINE_DISTILLER_BASE_URL: "https://example.test/v1/chat/completions"
+      },
+      fetchImpl: fetchImpl as unknown as typeof fetch
+    });
+
+    await expect(distiller.distill(makeCandidate())).rejects.toThrow("missing required fields");
   });
 });
 
@@ -170,5 +208,50 @@ describe("DistillationQueueWorker", () => {
     expect(candidateRepo.getById("candidate_distill_auth")?.lifecycle_state).toBe("discarded");
     expect(jobRepo.getById("job_distill_auth")?.status).toBe("discarded");
     expect(nodeRepo.listAll()).toHaveLength(0);
+  });
+
+  it("treats invalid distillation output as a retryable failure", async () => {
+    const { db, config } = makeDb();
+    const candidateRepo = new CandidateRepository(db);
+    const jobRepo = new DistillationJobRepository(db);
+    const nodeRepo = new NodeRepository(db);
+    candidateRepo.upsert(makeCandidate());
+    jobRepo.upsert(makeJob());
+
+    const worker = new DistillationQueueWorker(
+      {
+        ...config,
+        distillationMaxRetries: 0
+      },
+      candidateRepo,
+      jobRepo,
+      nodeRepo,
+      {
+        env: {
+          EXPERIENCE_ENGINE_DISTILLER_MODEL: "gpt-test",
+          EXPERIENCE_ENGINE_DISTILLER_API_KEY: "secret",
+          EXPERIENCE_ENGINE_DISTILLER_BASE_URL: "https://example.test/v1/chat/completions"
+        },
+        fetchImpl: vi.fn().mockResolvedValue({
+          ok: true,
+          json: async () => ({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    compact_hint: "Re-run vitest after each change."
+                  })
+                }
+              }
+            ]
+          })
+        }) as unknown as typeof fetch
+      }
+    );
+
+    await worker.drain();
+
+    expect(candidateRepo.getById("candidate_distill_auth")?.lifecycle_state).toBe("discarded");
+    expect(jobRepo.getById("job_distill_auth")?.status).toBe("discarded");
   });
 });

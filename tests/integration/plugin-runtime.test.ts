@@ -11,6 +11,45 @@ type Handler = (payload: unknown, context?: unknown) => unknown | Promise<unknow
 
 const tempDirs: string[] = [];
 
+const buildFailureToolResult = (toolResult: Record<string, unknown>): Record<string, unknown> => {
+  if ("sessionKey" in toolResult || "tool" in toolResult) {
+    return {
+      sessionKey: toolResult.sessionKey,
+      tool: (toolResult as { tool?: { name?: string; args?: unknown } }).tool ?? { name: "exec" },
+      result: { exitCode: 1, output: "Command failed" },
+      success: false
+    };
+  }
+
+  const message = toolResult.message as Record<string, unknown> | undefined;
+  const toolName =
+    (toolResult.toolName as string | undefined) ??
+    (message?.toolName as string | undefined) ??
+    (message?.name as string | undefined) ??
+    "exec";
+  const toolCallId = `fail_${String(toolResult.toolCallId ?? message?.toolCallId ?? "tool")}`;
+  const sessionId = toolResult.sessionId as string | undefined;
+
+  return {
+    ...(sessionId ? { sessionId } : {}),
+    toolName,
+    toolCallId,
+    message: {
+      role: "toolResult",
+      toolCallId,
+      toolName,
+      content: [{ type: "text", text: "Command failed" }],
+      details: {
+        status: "failed",
+        exitCode: 1,
+        aggregated: "Command failed"
+      },
+      isError: true
+    },
+    isSynthetic: false
+  };
+};
+
 const makeTempDir = (): string => {
   const dir = mkdtempSync(join(tmpdir(), "experienceengine-"));
   tempDirs.push(dir);
@@ -76,6 +115,12 @@ describe("OpenClaw plugin runtime", () => {
     };
 
     await beforePromptBuild?.(firstTurnPayload);
+    await persistToolResult?.({
+      sessionKey: "sess_1",
+      tool: { name: "pnpm test", args: ["auth"] },
+      result: { exitCode: 1, output: "auth tests failed" },
+      success: false
+    });
     await persistToolResult?.({
       sessionKey: "sess_1",
       tool: { name: "pnpm test", args: ["auth"] },
@@ -226,6 +271,12 @@ describe("OpenClaw plugin runtime", () => {
     await persistToolResult?.({
       sessionKey: "seed",
       tool: { name: "pnpm test" },
+      result: { exitCode: 1, output: "auth tests failed" },
+      success: false
+    });
+    await persistToolResult?.({
+      sessionKey: "seed",
+      tool: { name: "pnpm test" },
       result: { exitCode: 0, output: "auth tests passed" },
       success: true
     });
@@ -282,6 +333,12 @@ describe("OpenClaw plugin runtime", () => {
     await persistToolResult?.({
       sessionKey: "seed-no-context",
       tool: { name: "exec" },
+      result: { exitCode: 1, output: "Command failed" },
+      success: false
+    });
+    await persistToolResult?.({
+      sessionKey: "seed-no-context",
+      tool: { name: "exec" },
       result: { exitCode: 0, output: "/tmp/repo" },
       success: true
     });
@@ -332,6 +389,12 @@ describe("OpenClaw plugin runtime", () => {
       session: { key: "seed-clean" },
       workspace: { cwd: "/tmp/repo" },
       message: { content: "Fix the failing vitest auth test in the current workspace." }
+    });
+    await persistToolResult?.({
+      sessionKey: "seed-clean",
+      tool: { name: "exec" },
+      result: { exitCode: 1, output: "Command failed" },
+      success: false
     });
     await persistToolResult?.({
       sessionKey: "seed-clean",
@@ -413,9 +476,28 @@ describe("OpenClaw plugin runtime", () => {
       structuredClone(scenario.seedPrompt),
       structuredClone(scenario.seedPromptContext)
     );
+    const isRealRuntime = "message" in scenario.toolResult;
+    if (isRealRuntime && scenario.seedPromptContext?.sessionId) {
+      await persistToolResult?.({
+        sessionKey: scenario.seedPromptContext.sessionId,
+        tool: { name: "exec" },
+        result: { exitCode: 1, output: "Command failed" },
+        success: false
+      });
+    }
+    const toolContext = {
+      ...(scenario.toolResultContext ?? {}),
+      ...(scenario.seedPromptContext ?? {})
+    } as Record<string, unknown>;
+    if (!isRealRuntime) {
+      await persistToolResult?.(
+        buildFailureToolResult(structuredClone(scenario.toolResult) as Record<string, unknown>),
+        structuredClone(toolContext)
+      );
+    }
     await persistToolResult?.(
       structuredClone(scenario.toolResult),
-      structuredClone(scenario.toolResultContext)
+      structuredClone(toolContext)
     );
     await finalize?.(
       structuredClone(scenario.finalize),
@@ -541,6 +623,31 @@ describe("OpenClaw plugin runtime", () => {
     await handlers.get("tool_result_persist")?.(
       {
         toolName: "exec",
+        toolCallId: "call_real_fail",
+        message: {
+          role: "toolResult",
+          toolCallId: "call_real_fail",
+          toolName: "exec",
+          content: [{ type: "text", text: "Command failed" }],
+          details: {
+            status: "failed",
+            exitCode: 1,
+            aggregated: "Command failed"
+          },
+          isError: true
+        },
+        isSynthetic: false
+      },
+      {
+        agentId: "main",
+        toolName: "exec",
+        toolCallId: "call_real_fail"
+      }
+    );
+
+    await handlers.get("tool_result_persist")?.(
+      {
+        toolName: "exec",
         toolCallId: "call_real_1",
         message: {
           role: "toolResult",
@@ -569,6 +676,18 @@ describe("OpenClaw plugin runtime", () => {
           {
             role: "user",
             content: [{ type: "text", text: "Fix the failing vitest auth test by checking the current workspace" }]
+          },
+          {
+            role: "toolResult",
+            toolCallId: "call_real_fail",
+            toolName: "exec",
+            content: [{ type: "text", text: "Command failed" }],
+            details: {
+              status: "failed",
+              exitCode: 1,
+              aggregated: "Command failed"
+            },
+            isError: true
           },
           {
             role: "assistant",
@@ -659,6 +778,12 @@ describe("OpenClaw plugin runtime", () => {
       session: { key: "seed-feedback" },
       workspace: { cwd: "/tmp/repo" },
       message: { content: "Fix the failing vitest auth test" }
+    });
+    await persistToolResult?.({
+      sessionKey: "seed-feedback",
+      tool: { name: "exec" },
+      result: { exitCode: 1, output: "Command failed" },
+      success: false
     });
     await persistToolResult?.({
       sessionKey: "seed-feedback",
@@ -774,6 +899,12 @@ describe("OpenClaw plugin runtime", () => {
     await persistToolResult?.({
       sessionKey: "seed-preserve",
       tool: { name: "exec" },
+      result: { exitCode: 1, output: "Command failed" },
+      success: false
+    });
+    await persistToolResult?.({
+      sessionKey: "seed-preserve",
+      tool: { name: "exec" },
       result: { exitCode: 0, output: "/tmp/repo" },
       success: true
     });
@@ -793,6 +924,12 @@ describe("OpenClaw plugin runtime", () => {
       session: { key: "helped-preserve" },
       workspace: { cwd: "/tmp/repo" },
       message: { content: "Fix the failing vitest auth test" }
+    });
+    await persistToolResult?.({
+      sessionKey: "helped-preserve",
+      tool: { name: "exec" },
+      result: { exitCode: 1, output: "Command failed" },
+      success: false
     });
     await persistToolResult?.({
       sessionKey: "helped-preserve",
@@ -818,6 +955,12 @@ describe("OpenClaw plugin runtime", () => {
       session: { key: "helped-preserve-2" },
       workspace: { cwd: "/tmp/repo" },
       message: { content: "Fix the failing vitest auth test" }
+    });
+    await persistToolResult?.({
+      sessionKey: "helped-preserve-2",
+      tool: { name: "exec" },
+      result: { exitCode: 1, output: "Command failed" },
+      success: false
     });
     await persistToolResult?.({
       sessionKey: "helped-preserve-2",
@@ -892,6 +1035,12 @@ describe("OpenClaw plugin runtime", () => {
       session: { key: "warning-process" },
       workspace: { cwd: "/tmp/repo" },
       message: { content: "Fix the failing vitest auth test in the current workspace." }
+    });
+    await persistToolResult?.({
+      sessionKey: "warning-process",
+      tool: { name: "apply_patch" },
+      result: { exitCode: 0, output: "Applied patch to narrow the failure." },
+      success: true
     });
     await persistToolResult?.({
       sessionKey: "warning-process",

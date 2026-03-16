@@ -68,7 +68,11 @@ const candidate = (overrides: Partial<ExperienceCandidate> = {}): ExperienceCand
     context_summary: "Auth failure in current repo",
     outcome_signal: "success",
     tool_events: [],
-    evidence: ["vitest: auth spec passed"]
+    evidence: ["vitest: auth spec passed"],
+    failure_signature: "Auth spec assertion failed",
+    retry_count: 1,
+    correction_signals: ["apply_patch"],
+    tool_event_summary: ["failure: vitest failed: Auth spec assertion failed", "success: vitest succeeded"]
   },
   lifecycle_state: "distilled",
   retry_count: 1,

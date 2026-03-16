@@ -95,6 +95,12 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     await service.persistToolResult({
       sessionId: "candidate-session",
       toolName: "vitest",
+      outputSummary: "Auth tests failed",
+      status: "failure"
+    });
+    await service.persistToolResult({
+      sessionId: "candidate-session",
+      toolName: "vitest",
       outputSummary: "Auth tests passed",
       status: "success"
     });
