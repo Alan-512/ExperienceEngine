@@ -1,9 +1,11 @@
 import type { ExperienceCandidate, ExperienceCandidateDraft, ExperienceInput } from "../types/domain.js";
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import type { DistillationResult } from "./types.js";
+import { resolveDistillerEndpoint, type DistillerEndpoint } from "./host-llm.js";
 
 type DistillerRuntimeOptions = {
   env?: NodeJS.ProcessEnv;
+  homeDir?: string;
   fetchImpl?: typeof fetch;
 };
 
@@ -182,25 +184,68 @@ export class LlmDistiller {
     return this.options.fetchImpl ?? fetch;
   }
 
-  private get model(): string | undefined {
-    return this.env.EXPERIENCE_ENGINE_DISTILLER_MODEL;
+  private resolveEndpoint(): DistillerEndpoint | null {
+    return resolveDistillerEndpoint({ env: this.env, homeDir: this.options.homeDir });
   }
 
-  private get apiKey(): string | undefined {
-    return this.env.EXPERIENCE_ENGINE_DISTILLER_API_KEY;
+  private buildOpenAiUrl(baseUrl: string): string {
+    if (/\/chat\/completions\/?$/.test(baseUrl)) {
+      return baseUrl;
+    }
+    if (/\/v1\/?$/.test(baseUrl)) {
+      return `${baseUrl.replace(/\/$/, "")}/chat/completions`;
+    }
+    return `${baseUrl.replace(/\/$/, "")}/v1/chat/completions`;
   }
 
-  private get baseUrl(): string {
-    return this.env.EXPERIENCE_ENGINE_DISTILLER_BASE_URL ?? "https://api.openai.com/v1/chat/completions";
-  }
-
-  private shouldUseRemoteDistiller(): boolean {
-    return Boolean(this.model && this.apiKey);
+  private buildAnthropicUrl(baseUrl: string): string {
+    if (/\/v1\/messages\/?$/.test(baseUrl)) {
+      return baseUrl;
+    }
+    if (/\/v1\/?$/.test(baseUrl)) {
+      return `${baseUrl.replace(/\/$/, "")}/messages`;
+    }
+    return `${baseUrl.replace(/\/$/, "")}/v1/messages`;
   }
 
   async distill(candidate: ExperienceCandidate): Promise<DistillationResult> {
-    if (!this.shouldUseRemoteDistiller()) {
+    const endpoint = this.resolveEndpoint();
+    if (!endpoint) {
       return passthroughDistillation(candidate);
+    }
+
+    if (endpoint.kind === "anthropic") {
+      const response = await this.fetchImpl(this.buildAnthropicUrl(endpoint.baseUrl), {
+        method: "POST",
+        headers: endpoint.headers,
+        body: JSON.stringify({
+          model: endpoint.model,
+          max_tokens: 900,
+          system: DEFAULT_DISTILLER_SYSTEM_PROMPT,
+          messages: [{ role: "user", content: buildCandidatePayload(candidate) }],
+          temperature: this.config.distillerProfile === "high_quality" ? 0.3 : 0.1
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`Distillation request failed with ${response.status}`);
+      }
+
+      const payload = (await response.json()) as {
+        content?: Array<{ type: string; text?: string }>;
+        choices?: Array<{ message?: { content?: string } }>;
+      };
+      let text = payload.content?.find((entry) => entry.type === "text")?.text;
+      if (!text) {
+        text = payload.choices?.[0]?.message?.content;
+      }
+      if (!text) {
+        throw new Error("Distillation response did not include a message payload");
+      }
+
+      const parsed = JSON.parse(text) as Record<string, unknown>;
+      const validated = validateDistillationPayload(parsed);
+      return applyFallbacks(candidate, parsed, validated);
     }
 
     const messages: OpenAiMessage[] = [
@@ -208,14 +253,14 @@ export class LlmDistiller {
       { role: "user", content: buildCandidatePayload(candidate) }
     ];
 
-    const response = await this.fetchImpl(this.baseUrl, {
+    const response = await this.fetchImpl(this.buildOpenAiUrl(endpoint.baseUrl), {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${this.apiKey}`
+        ...endpoint.headers
       },
       body: JSON.stringify({
-        model: this.model,
+        model: endpoint.model,
         response_format: { type: "json_object" },
         messages,
         temperature: this.config.distillerProfile === "high_quality" ? 0.3 : 0.1

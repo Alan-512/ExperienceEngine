@@ -101,7 +101,7 @@ const mergeExperienceEngineHooks = (settings: ClaudeSettings, packageRoot: strin
   const command: ClaudeHookCommand = {
     type: "command",
     command: buildClaudeHookCommand(packageRoot),
-    timeout: 10
+    timeout: 30
   };
 
   upsertHookMatcher(next.hooks!, "UserPromptSubmit", undefined, command);
