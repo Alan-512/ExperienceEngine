@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import { resolveExperienceEnginePaths, resolveProductStateDir, type ResolvedPathInfo } from "../config/path-resolver.js";
 import {
@@ -7,6 +7,7 @@ import {
   buildOpenClawInfoCommand,
   buildOpenClawLoadPathsSetCommand,
   buildOpenClawPluginsConfigGetCommand,
+  type OpenClawInstallAction,
   parseOpenClawPluginEntryConfig,
   parseOpenClawPluginInfo,
   parseOpenClawPluginsConfig,
@@ -51,6 +52,35 @@ type HostState = {
   enabled?: boolean;
   configMatches: boolean;
   liveConfig?: Record<string, unknown>;
+};
+
+const inferOpenClawInstallAction = (
+  pluginsConfig: ReturnType<typeof readOpenClawPluginsConfig>,
+  packageRoot: string,
+  installPath: string
+): OpenClawInstallAction => {
+  const install = pluginsConfig?.installs?.experienceengine;
+  if (!install) {
+    return existsSync(installPath) ? "reinstall" : "install";
+  }
+
+  if (install.source === "npm") {
+    return "update";
+  }
+
+  const normalizedCurrentRoot = packageRoot.trim();
+  const normalizedSourcePath = install.sourcePath?.trim();
+  if (install.source === "path" || install.installPath || !normalizedSourcePath) {
+    return "reinstall";
+  }
+
+  return normalizedSourcePath === normalizedCurrentRoot ? "reinstall" : "reinstall";
+};
+
+const removeExistingOpenClawInstallPath = (installPath: string): void => {
+  if (existsSync(installPath)) {
+    rmSync(installPath, { recursive: true, force: true });
+  }
 };
 
 export type OpenClawInspection = ReturnType<typeof inspectOpenClawInstall>;
@@ -176,6 +206,24 @@ export const normalizeTreePermissions = (rootPath: string): void => {
   chmodSync(rootPath, 0o644);
 };
 
+const normalizeOpenClawPluginPermissions = (installPath: string): void => {
+  if (existsSync(installPath)) {
+    chmodSync(installPath, 0o755);
+  }
+
+  const pathsToNormalize = [
+    join(installPath, "src"),
+    join(installPath, "dist"),
+    join(installPath, "src", "plugin"),
+    join(installPath, "openclaw.plugin.json"),
+    join(installPath, "package.json")
+  ];
+
+  for (const path of pathsToNormalize) {
+    normalizeTreePermissions(path);
+  }
+};
+
 const cleanupOpenClawWarningSources = (
   paths: ResolvedPathInfo,
   runner?: OpenClawCommandRunner
@@ -192,7 +240,7 @@ const cleanupOpenClawWarningSources = (
   const installPath =
     parsed.config?.installs?.experienceengine?.installPath ??
     join(dirname(paths.compatibilityHome), "extensions", "experienceengine");
-  normalizeTreePermissions(installPath);
+  normalizeOpenClawPluginPermissions(installPath);
 };
 
 const readOpenClawPluginsConfig = (runner?: OpenClawCommandRunner) => {
@@ -220,9 +268,14 @@ export const installOpenClawAdapter = (options: InstallerOptions = {}): OpenClaw
   mkdirSync(dirname(paths.sqlitePath), { recursive: true });
 
   const existingPluginsConfig = readOpenClawPluginsConfig(options.runner);
-  const installMode =
-    existingPluginsConfig?.installs?.experienceengine?.installPath ? "update" : "install";
-  const commands = buildOpenClawInstallCommands(packageRoot, "experienceengine", installMode, pluginConfig);
+  const expectedInstallPath =
+    existingPluginsConfig?.installs?.experienceengine?.installPath ??
+    join(dirname(paths.compatibilityHome), "extensions", "experienceengine");
+  const installAction = inferOpenClawInstallAction(existingPluginsConfig, packageRoot, expectedInstallPath);
+  if (installAction === "reinstall") {
+    removeExistingOpenClawInstallPath(expectedInstallPath);
+  }
+  const commands = buildOpenClawInstallCommands(packageRoot, "experienceengine", installAction, pluginConfig);
   runOpenClawCommands(commands, options.runner);
   cleanupOpenClawWarningSources(paths, options.runner);
 
@@ -231,7 +284,12 @@ export const installOpenClawAdapter = (options: InstallerOptions = {}): OpenClaw
     installedAt: new Date().toISOString(),
     installedVersion,
     packageRoot,
-    installMode: installMode === "update" ? "updated-plugin" : "copied-plugin",
+    installMode:
+      installAction === "update"
+        ? "updated-plugin"
+        : installAction === "reinstall"
+          ? "reinstalled-plugin"
+          : "copied-plugin",
     hostWiring: {
       wired: true,
       restartRecommended: true

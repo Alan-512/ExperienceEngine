@@ -44,7 +44,7 @@ describe("OpenClaw CLI install wiring", () => {
     ]);
   });
 
-  it("builds an update command when the plugin already exists", () => {
+  it("builds an update command for npm installs", () => {
     const commands = buildOpenClawInstallCommands("/tmp/experienceengine", "experienceengine", "update", {
       dataDir: "/tmp/ee",
       sqlitePath: "/tmp/ee/sqlite/experienceengine.db",
@@ -56,6 +56,21 @@ describe("OpenClaw CLI install wiring", () => {
       "plugins",
       "update",
       "experienceengine"
+    ]);
+  });
+
+  it("builds a reinstall command for path installs", () => {
+    const commands = buildOpenClawInstallCommands("/tmp/experienceengine", "experienceengine", "reinstall", {
+      dataDir: "/tmp/ee",
+      sqlitePath: "/tmp/ee/sqlite/experienceengine.db",
+      captureDir: "/tmp/ee/captures"
+    });
+
+    expect([commands[0].bin, ...commands[0].args]).toEqual([
+      "openclaw",
+      "plugins",
+      "install",
+      "/tmp/experienceengine"
     ]);
   });
 });

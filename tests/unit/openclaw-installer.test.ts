@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -152,24 +152,57 @@ describe("OpenClaw installer", () => {
     expect(status.hostWiring.wired).toBe(false);
   });
 
-  it("updates an existing install instead of reinstalling it", () => {
+  it("reinstalls an existing path-based install from the current package root", () => {
     const homeDir = makeTempDir();
     const commands: string[] = [];
-    let pluginsReads = 0;
 
-    installOpenClawAdapter({
+    const report = installOpenClawAdapter({
       homeDir,
       runner(command) {
         const key = [command.bin, ...command.args].join(" ");
         commands.push(key);
         if (key === "openclaw config get plugins") {
-          pluginsReads += 1;
           return `{
   "load": {
     "paths": []
   },
   "installs": {
     "experienceengine": {
+      "source": "path",
+      "sourcePath": "/mnt/d/project/ExperienceEngine",
+      "installPath": "${join(homeDir, ".openclaw", "extensions", "experienceengine")}"
+    }
+  }
+}`;
+        }
+        return "";
+      }
+    });
+
+    expect(commands[1]).toBe(`openclaw plugins install ${report.packageRoot}`);
+    const payload = JSON.parse(readFileSync(report.paths.installStatePath, "utf8")) as {
+      installMode: string;
+    };
+    expect(payload.installMode).toBe("reinstalled-plugin");
+  });
+
+  it("updates an existing npm install via plugins update", () => {
+    const homeDir = makeTempDir();
+    const commands: string[] = [];
+
+    const report = installOpenClawAdapter({
+      homeDir,
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        commands.push(key);
+        if (key === "openclaw config get plugins") {
+          return `{
+  "load": {
+    "paths": []
+  },
+  "installs": {
+    "experienceengine": {
+      "source": "npm",
       "installPath": "${join(homeDir, ".openclaw", "extensions", "experienceengine")}"
     }
   }
@@ -180,5 +213,40 @@ describe("OpenClaw installer", () => {
     });
 
     expect(commands[1]).toBe("openclaw plugins update experienceengine");
+    const payload = JSON.parse(readFileSync(report.paths.installStatePath, "utf8")) as {
+      installMode: string;
+    };
+    expect(payload.installMode).toBe("updated-plugin");
+  });
+
+  it("reinstalls when the extension directory exists without install metadata", () => {
+    const homeDir = makeTempDir();
+    const commands: string[] = [];
+    const installPath = join(homeDir, ".openclaw", "extensions", "experienceengine");
+    mkdirSync(installPath, { recursive: true });
+
+    const report = installOpenClawAdapter({
+      homeDir,
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        commands.push(key);
+        if (key === "openclaw config get plugins") {
+          return `{
+  "load": {
+    "paths": []
+  },
+  "installs": {
+  }
+}`;
+        }
+        return "";
+      }
+    });
+
+    expect(commands[1]).toBe(`openclaw plugins install ${report.packageRoot}`);
+    const payload = JSON.parse(readFileSync(report.paths.installStatePath, "utf8")) as {
+      installMode: string;
+    };
+    expect(payload.installMode).toBe("reinstalled-plugin");
   });
 });

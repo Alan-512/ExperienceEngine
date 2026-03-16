@@ -16,6 +16,8 @@ export type OpenClawConfigPayload = {
   captureDir: string;
 };
 
+export type OpenClawInstallAction = "install" | "reinstall" | "update";
+
 export type OpenClawPluginInfo = {
   warnings: string[];
   name?: string;
@@ -58,37 +60,43 @@ export const resolveExperienceEnginePackageRoot = (): string =>
 export const buildOpenClawInstallCommands = (
   packageRoot: string,
   pluginId: string,
-  installMode: "install" | "update",
+  installAction: OpenClawInstallAction,
   pluginConfig: OpenClawConfigPayload
-): OpenClawCommand[] => [
-  {
-    bin: "openclaw",
-    args:
-      installMode === "update"
-        ? ["plugins", "update", pluginId]
-        : ["plugins", "install", packageRoot],
-    description:
-      installMode === "update"
-        ? "Update the existing ExperienceEngine plugin install in OpenClaw"
-        : "Install the ExperienceEngine package into OpenClaw"
-  },
-  {
-    bin: "openclaw",
-    args: ["plugins", "enable", pluginId],
-    description: "Enable the ExperienceEngine plugin in OpenClaw"
-  },
-  {
-    bin: "openclaw",
-    args: [
-      "config",
-      "set",
-      `plugins.entries.${pluginId}.config`,
-      JSON.stringify(pluginConfig),
-      "--json"
-    ],
-    description: "Write ExperienceEngine plugin config into OpenClaw"
-  }
-];
+): OpenClawCommand[] => {
+  const commands: OpenClawCommand[] = [
+    {
+      bin: "openclaw",
+      args:
+        installAction === "update"
+          ? ["plugins", "update", pluginId]
+          : ["plugins", "install", packageRoot],
+      description:
+        installAction === "update"
+          ? "Update the existing ExperienceEngine plugin install in OpenClaw"
+          : installAction === "reinstall"
+            ? "Reinstall the ExperienceEngine package into OpenClaw from the current package root"
+            : "Install the ExperienceEngine package into OpenClaw"
+    },
+    {
+      bin: "openclaw",
+      args: ["plugins", "enable", pluginId],
+      description: "Enable the ExperienceEngine plugin in OpenClaw"
+    },
+    {
+      bin: "openclaw",
+      args: [
+        "config",
+        "set",
+        `plugins.entries.${pluginId}.config`,
+        JSON.stringify(pluginConfig),
+        "--json"
+      ],
+      description: "Write ExperienceEngine plugin config into OpenClaw"
+    }
+  ];
+
+  return commands;
+};
 
 export const buildOpenClawInfoCommand = (pluginId: string): OpenClawCommand => ({
   bin: "openclaw",

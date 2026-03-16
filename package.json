@@ -9,7 +9,7 @@
   },
   "openclaw": {
     "extensions": [
-      "./src/plugin/openclaw-plugin.ts"
+      "./dist/plugin/openclaw-plugin.js"
     ]
   },
   "engines": {
