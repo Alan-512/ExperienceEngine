@@ -13,3 +13,4 @@ data/logs/*.jsonl
 .claude/
 .mcp.json
 internal-docs/
+artifacts/

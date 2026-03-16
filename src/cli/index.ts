@@ -5,6 +5,7 @@ import { runConfigCommand } from "./commands/config.js";
 import { runCodexMcpServerCommand } from "./commands/codex-mcp-server.js";
 import { runBackupCommand } from "./commands/backup.js";
 import { runDoctorCommand } from "./commands/doctor.js";
+import { runEvaluateCommand } from "./commands/evaluate.js";
 import { runExportCommand } from "./commands/export.js";
 import { runImportCommand } from "./commands/import.js";
 import { runInstallCommand } from "./commands/install.js";
@@ -40,6 +41,9 @@ const main = async (): Promise<void> => {
       break;
     case "doctor":
       await runDoctorCommand(args[0]);
+      break;
+    case "evaluate":
+      runEvaluateCommand(args[0], args.slice(1));
       break;
     case "config":
       runConfigCommand(args[0], args[1], args[2]);
@@ -88,6 +92,7 @@ const main = async (): Promise<void> => {
       console.log(
         "Usage: ee <install openclaw|claude-code|codex|upgrade openclaw|claude-code|codex|repair openclaw|claude-hook|codex-mcp-server|doctor [claude-code|codex]|stats|inspect|feedback|disable|enable|cool|retire>"
         + " | backup|export|import <snapshot-path>|rollback <backup-id>"
+        + " | evaluate openclaw-baseline [--lookback-hours N] [--output-dir PATH]"
         + " | mcp-server"
         + " | config <get|set> notices.inline [true|false]"
       );

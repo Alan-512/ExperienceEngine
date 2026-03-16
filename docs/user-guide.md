@@ -26,6 +26,7 @@ ExperienceEngine currently treats `OpenClaw` as the primary baseline host for va
 The baseline acceptance checklist lives at:
 
 - [docs/development/openclaw-core-validation-checklist.md](development/openclaw-core-validation-checklist.md)
+- [docs/development/openclaw-baseline-evaluation.md](development/openclaw-baseline-evaluation.md)
 
 ## What You See As a User
 

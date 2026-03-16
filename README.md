@@ -10,6 +10,7 @@ Current core-learning baseline:
 - `OpenClaw` is the primary validation host for candidate capture, async distillation, injection, feedback, and retirement.
 - `Claude Code` and `Codex` remain supported product hosts and reuse shared ExperienceEngine interaction surfaces.
 - See [docs/development/openclaw-core-validation-checklist.md](docs/development/openclaw-core-validation-checklist.md) for the baseline acceptance flow.
+- See [docs/development/openclaw-baseline-evaluation.md](docs/development/openclaw-baseline-evaluation.md) for the baseline snapshot workflow.
 
 Current validated hosts:
 - `OpenClaw` for runtime/plugin integration
@@ -107,6 +108,7 @@ The user guide includes:
 - MCP vs CLI fallback usage
 - backup / export / import / rollback workflows
 - troubleshooting notes for OpenClaw, Claude Code, and Codex
+- OpenClaw baseline evaluation workflow
 
 ## Validation
 
