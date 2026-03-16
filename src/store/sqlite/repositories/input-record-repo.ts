@@ -115,6 +115,34 @@ export class InputRecordRepository {
     return row ? this.mapRecord(row) : undefined;
   }
 
+  getLatestBySessionId(sessionId: string): ExperienceInputRecord | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT record_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary,
+                evidence_json, injected_node_ids_json, created_at
+         FROM experience_input_records
+         WHERE session_id = ?
+         ORDER BY created_at DESC
+         LIMIT 1`
+      )
+      .get(sessionId) as
+      | {
+          record_id: string;
+          scope_id: string;
+          session_id: string | null;
+          task_type: ExperienceInputRecord["task_type"];
+          task_summary: string;
+          outcome_signal: ExperienceInputRecord["outcome_signal"];
+          context_summary: string | null;
+          evidence_json: string;
+          injected_node_ids_json: string;
+          created_at: string;
+        }
+      | undefined;
+
+    return row ? this.mapRecord(row) : undefined;
+  }
+
   listRecent(options: { limit?: number; injectedOnly?: boolean } = {}): ExperienceInputRecord[] {
     const limit = options.limit ?? 10;
     const whereClause = options.injectedOnly ? "WHERE injected_node_ids_json != '[]'" : "";

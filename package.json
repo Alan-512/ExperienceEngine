@@ -22,6 +22,7 @@
     "build": "tsc -p tsconfig.build.json && node scripts/build/copy-sqlite-schema.mjs",
     "dev": "tsx watch src/cli/index.ts",
     "evaluate:openclaw-baseline": "tsx src/cli/index.ts evaluate openclaw-baseline",
+    "evaluate:openclaw-scenarios": "tsx src/cli/index.ts evaluate openclaw-scenarios --pack high-confidence",
     "maintenance:merge-warning-variants": "tsx scripts/maintenance/merge-warning-variants.ts",
     "runtime:promote-payload": "tsx scripts/openclaw/promote-runtime-payload.ts",
     "runtime:replay-fixture": "tsx scripts/openclaw/replay-runtime-fixture.ts",

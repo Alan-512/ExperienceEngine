@@ -13,6 +13,48 @@ describe("evaluate command", () => {
 
     expect(consoleLogSpy).toHaveBeenCalledWith(
       "Usage: ee evaluate openclaw-baseline [--lookback-hours N] [--output-dir PATH]"
+      + " | openclaw-scenarios --pack high-confidence [--repo-root PATH] [--output-dir PATH] [--dry-run]"
     );
+  });
+
+  it("routes the scenario target with parsed flags", () => {
+    const runScenarios = vi.fn(() => ({
+      outputDir: "/tmp/out",
+      jsonPath: "/tmp/out/scenario-results.json",
+      markdownPath: "/tmp/out/scenario-results.md",
+      report: {
+        generatedAt: "2026-03-16T10:00:00.000Z",
+        pack: "high-confidence" as const,
+        repoRoot: "/repo",
+        sqlitePath: "/tmp/db.sqlite",
+        captureDir: "/tmp/captures",
+        outputDir: "/tmp/out",
+        dryRun: true,
+        scenarios: [],
+        aggregate: {
+          total: 0,
+          recordsMatched: 0,
+          scenariosWithCandidates: 0,
+          scenariosWithDistilledCandidates: 0,
+          scenariosWithInjectedNodes: 0,
+          successfulRecords: 0,
+          failedRecords: 0,
+          unknownRecords: 0
+        }
+      }
+    }));
+
+    runEvaluateCommand(
+      "openclaw-scenarios",
+      ["--pack", "high-confidence", "--repo-root", "/repo", "--dry-run"],
+      { runScenarios }
+    );
+
+    expect(runScenarios).toHaveBeenCalledWith({
+      pack: "high-confidence",
+      repoRoot: "/repo",
+      outputDir: undefined,
+      dryRun: true
+    });
   });
 });

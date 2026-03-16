@@ -27,6 +27,7 @@ The baseline acceptance checklist lives at:
 
 - [docs/development/openclaw-core-validation-checklist.md](development/openclaw-core-validation-checklist.md)
 - [docs/development/openclaw-baseline-evaluation.md](development/openclaw-baseline-evaluation.md)
+- [docs/development/openclaw-high-confidence-scenarios.md](development/openclaw-high-confidence-scenarios.md)
 
 ## What You See As a User
 

@@ -176,4 +176,11 @@ export class CandidateRepository {
       .all(state)
       .map((row) => this.mapCandidate(row as CandidateRow));
   }
+
+  listBySourceRecordId(sourceRecordId: string): ExperienceCandidate[] {
+    return this.db
+      .prepare("SELECT * FROM experience_candidates WHERE source_record_id = ? ORDER BY updated_at DESC")
+      .all(sourceRecordId)
+      .map((row) => this.mapCandidate(row as CandidateRow));
+  }
 }

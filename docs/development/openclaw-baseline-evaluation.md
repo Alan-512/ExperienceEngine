@@ -2,6 +2,10 @@
 
 Use this workflow to generate a repeatable OpenClaw-first baseline snapshot for the v3 learning loop.
 
+If the baseline remains too cold to say anything meaningful about candidate creation or repeated-task intervention, use the higher-signal companion workflow:
+
+- [docs/development/openclaw-high-confidence-scenarios.md](openclaw-high-confidence-scenarios.md)
+
 ## Preconditions
 
 - `openclaw` CLI is installed and the gateway can load `experienceengine`

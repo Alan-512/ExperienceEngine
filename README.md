@@ -11,6 +11,7 @@ Current core-learning baseline:
 - `Claude Code` and `Codex` remain supported product hosts and reuse shared ExperienceEngine interaction surfaces.
 - See [docs/development/openclaw-core-validation-checklist.md](docs/development/openclaw-core-validation-checklist.md) for the baseline acceptance flow.
 - See [docs/development/openclaw-baseline-evaluation.md](docs/development/openclaw-baseline-evaluation.md) for the baseline snapshot workflow.
+- See [docs/development/openclaw-high-confidence-scenarios.md](docs/development/openclaw-high-confidence-scenarios.md) for repeatable high-confidence OpenClaw scenario runs.
 
 Current validated hosts:
 - `OpenClaw` for runtime/plugin integration
@@ -109,6 +110,7 @@ The user guide includes:
 - backup / export / import / rollback workflows
 - troubleshooting notes for OpenClaw, Claude Code, and Codex
 - OpenClaw baseline evaluation workflow
+- OpenClaw high-confidence scenario evaluation workflow
 
 ## Validation
 
