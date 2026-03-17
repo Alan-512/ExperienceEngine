@@ -32,6 +32,8 @@ afterEach(() => {
 
 const candidate = (overrides: Partial<ExperienceCandidate> = {}): ExperienceCandidate => ({
   id: "candidate_auth_fix",
+  task_run_id: "taskrun_auth_fix",
+  candidate_kind: "successful_fix",
   source_record_id: "input_auth_fix",
   scope_id: "scope_1",
   task_type: "test_debug",
@@ -52,6 +54,8 @@ const candidate = (overrides: Partial<ExperienceCandidate> = {}): ExperienceCand
   source_kind: "system_derived",
   source_context_summary: "Auth test failure in the current workspace.",
   source_outcome_signal: "success",
+  raw_summary: "Auth vitest failed once, then passed after a narrow edit.",
+  failure_signature: "Auth spec assertion failed",
   source_signal: {
     task_summary: "Fix the failing auth vitest",
     context_summary: "Auth test failure in the current workspace.",
@@ -108,6 +112,10 @@ describe("CandidateRepository", () => {
     const stored = repo.getById("candidate_auth_fix");
 
     expect(stored?.lifecycle_state).toBe("pending");
+    expect(stored?.task_run_id).toBe("taskrun_auth_fix");
+    expect(stored?.candidate_kind).toBe("successful_fix");
+    expect(stored?.raw_summary).toBe("Auth vitest failed once, then passed after a narrow edit.");
+    expect(stored?.failure_signature).toBe("Auth spec assertion failed");
     expect(stored?.source_record_id).toBe("input_auth_fix");
     expect(stored?.source_signal.task_summary).toBe("Fix the failing auth vitest");
     expect(stored?.source_signal.tool_events[0]?.tool_name).toBe("vitest");

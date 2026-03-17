@@ -9,11 +9,17 @@ import { InputRecordRepository } from "../../src/store/sqlite/repositories/input
 import { CandidateRepository } from "../../src/store/sqlite/repositories/candidate-repo.js";
 import { DistillationJobRepository } from "../../src/store/sqlite/repositories/distillation-job-repo.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
+import { OutcomeRecordRepository } from "../../src/store/sqlite/repositories/outcome-record-repo.js";
+import { ReviewEventRepository } from "../../src/store/sqlite/repositories/review-event-repo.js";
+import { TaskRunRepository } from "../../src/store/sqlite/repositories/task-run-repo.js";
 import type {
   DistillationJob,
   ExperienceCandidate,
   ExperienceInputRecord,
-  ExperienceNode
+  ExperienceNode,
+  OutcomeRecord,
+  ReviewEvent,
+  TaskRun
 } from "../../src/types/domain.js";
 
 const tempDirs: string[] = [];
@@ -140,6 +146,44 @@ const node = (overrides: Partial<ExperienceNode> = {}): ExperienceNode => ({
   ...overrides
 });
 
+const taskRun = (sessionId: string, overrides: Partial<TaskRun> = {}): TaskRun => ({
+  id: `taskrun-${sessionId}`,
+  host: "openclaw",
+  scope_id: "scope_repo",
+  session_id: sessionId,
+  task_type: "test_debug",
+  task_summary: "Repeated test debug verification",
+  prompt_excerpt: "Run the repo verification task",
+  context_summary: "repo validation",
+  started_at: "2026-03-16T10:00:00.000Z",
+  ended_at: "2026-03-16T10:00:05.000Z",
+  final_status: "success",
+  failure_signature: undefined,
+  created_at: "2026-03-16T10:00:00.000Z",
+  updated_at: "2026-03-16T10:00:05.000Z",
+  ...overrides
+});
+
+const outcome = (taskRunId: string, overrides: Partial<OutcomeRecord> = {}): OutcomeRecord => ({
+  id: `outcome-${taskRunId}`,
+  task_run_id: taskRunId,
+  outcome_signal: "success",
+  failure_signature: undefined,
+  summary: "Repeated test debug verification",
+  created_at: "2026-03-16T10:00:05.000Z",
+  ...overrides
+});
+
+const review = (taskRunId: string, overrides: Partial<ReviewEvent> = {}): ReviewEvent => ({
+  id: `review-${taskRunId}`,
+  node_id: "node-1",
+  task_run_id: taskRunId,
+  event_type: "mark_helped",
+  source: "user",
+  created_at: "2026-03-16T10:00:06.000Z",
+  ...overrides
+});
+
 afterEach(() => {
   while (tempDirs.length > 0) {
     rmSync(tempDirs.pop()!, { recursive: true, force: true });
@@ -170,16 +214,23 @@ describe("runOpenClawScenarioEvaluation", () => {
     const candidateRepo = new CandidateRepository(db);
     const jobRepo = new DistillationJobRepository(db);
     const nodeRepo = new NodeRepository(db);
+    const taskRunRepo = new TaskRunRepository(db);
+    const outcomeRepo = new OutcomeRecordRepository(db);
+    const reviewRepo = new ReviewEventRepository(db);
 
     const sessionId = "ee-openclaw-high-confidence-test-debug-a-2026-03-16T10-00-00-000Z";
     const sourceRecord = record(sessionId, {
       task_type: "test_debug",
       task_summary: "Repeated test debug verification"
     });
+    const persistedTaskRun = taskRun(sessionId);
     inputRepo.upsert(sourceRecord);
     candidateRepo.upsert(candidate(sourceRecord.record_id));
     jobRepo.upsert(job(`candidate-${sourceRecord.record_id}`));
     nodeRepo.upsert(node());
+    taskRunRepo.upsert(persistedTaskRun);
+    outcomeRepo.upsert(outcome(persistedTaskRun.id));
+    reviewRepo.upsert(review(persistedTaskRun.id));
 
     const result = runOpenClawScenarioEvaluation({
       env,
@@ -201,8 +252,14 @@ describe("runOpenClawScenarioEvaluation", () => {
     expect(matched?.candidates).toHaveLength(1);
     expect(matched?.jobs).toHaveLength(1);
     expect(matched?.injectedNodes[0]?.id).toBe("node-1");
+    expect(matched?.runtime?.taskRunId).toBe(persistedTaskRun.id);
+    expect(matched?.runtime?.outcomeIds).toEqual([`outcome-${persistedTaskRun.id}`]);
+    expect(matched?.runtime?.reviewCount).toBe(1);
     expect(result.report.aggregate.recordsMatched).toBe(1);
     expect(result.report.aggregate.scenariosWithCandidates).toBe(1);
+    expect(result.report.aggregate.scenariosWithTaskRuns).toBe(1);
+    expect(result.report.aggregate.scenariosWithOutcomes).toBe(1);
+    expect(result.report.aggregate.scenariosWithReviews).toBe(1);
     expect(result.baselineJsonPath).toBeTruthy();
   });
 });

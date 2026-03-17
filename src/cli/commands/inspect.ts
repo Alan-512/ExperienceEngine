@@ -127,6 +127,8 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
     console.table(summary.jobs);
     console.log("Formal nodes:");
     console.table(summary.nodes);
+    console.log("Runtime records:");
+    console.table(summary.runtime);
     if (summary.latestRecordCreatedAt) {
       console.log(`Latest task record: ${summary.latestRecordCreatedAt}`);
     }

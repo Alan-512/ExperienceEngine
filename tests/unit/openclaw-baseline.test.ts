@@ -9,11 +9,17 @@ import { CandidateRepository } from "../../src/store/sqlite/repositories/candida
 import { DistillationJobRepository } from "../../src/store/sqlite/repositories/distillation-job-repo.js";
 import { InputRecordRepository } from "../../src/store/sqlite/repositories/input-record-repo.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
+import { OutcomeRecordRepository } from "../../src/store/sqlite/repositories/outcome-record-repo.js";
+import { ReviewEventRepository } from "../../src/store/sqlite/repositories/review-event-repo.js";
+import { TaskRunRepository } from "../../src/store/sqlite/repositories/task-run-repo.js";
 import type {
   DistillationJob,
   ExperienceCandidate,
   ExperienceInputRecord,
-  ExperienceNode
+  ExperienceNode,
+  OutcomeRecord,
+  ReviewEvent,
+  TaskRun
 } from "../../src/types/domain.js";
 
 const tempDirs: string[] = [];
@@ -119,6 +125,44 @@ const node = (overrides: Partial<ExperienceNode> = {}): ExperienceNode => ({
   ...overrides
 });
 
+const taskRun = (overrides: Partial<TaskRun> = {}): TaskRun => ({
+  id: "taskrun_1",
+  host: "openclaw",
+  scope_id: "scope_1",
+  session_id: "session_1",
+  task_type: "test_debug",
+  task_summary: "Fix the failing auth test",
+  prompt_excerpt: "Fix the failing auth test",
+  context_summary: "Auth failure in current repo",
+  started_at: "2026-03-16T08:00:00.000Z",
+  ended_at: "2026-03-16T08:05:00.000Z",
+  final_status: "success",
+  failure_signature: "Auth spec assertion failed",
+  created_at: "2026-03-16T08:00:00.000Z",
+  updated_at: "2026-03-16T08:05:00.000Z",
+  ...overrides
+});
+
+const outcome = (overrides: Partial<OutcomeRecord> = {}): OutcomeRecord => ({
+  id: "outcome_1",
+  task_run_id: "taskrun_1",
+  outcome_signal: "success",
+  failure_signature: "Auth spec assertion failed",
+  summary: "Fix the failing auth test",
+  created_at: "2026-03-16T08:05:00.000Z",
+  ...overrides
+});
+
+const review = (overrides: Partial<ReviewEvent> = {}): ReviewEvent => ({
+  id: "review_1",
+  node_id: "node_1",
+  task_run_id: "taskrun_1",
+  event_type: "mark_helped",
+  source: "user",
+  created_at: "2026-03-16T08:06:00.000Z",
+  ...overrides
+});
+
 describe("OpenClaw baseline evaluation", () => {
   it("summarizes current persisted learning state", () => {
     const { db, config } = makeDb();
@@ -126,6 +170,9 @@ describe("OpenClaw baseline evaluation", () => {
     new CandidateRepository(db).upsert(candidate());
     new DistillationJobRepository(db).upsert(job());
     new NodeRepository(db).upsert(node());
+    new TaskRunRepository(db).upsert(taskRun());
+    new OutcomeRecordRepository(db).upsert(outcome());
+    new ReviewEventRepository(db).upsert(review());
 
     const summary = collectOpenClawBaselineSummary(db, config, {
       now: () => "2026-03-16T09:00:00.000Z"
@@ -138,9 +185,15 @@ describe("OpenClaw baseline evaluation", () => {
     expect(summary.distillationJobs.succeeded).toBe(1);
     expect(summary.nodes.active).toBe(1);
     expect(summary.nodes.totalHelpedCount).toBe(1);
+    expect(summary.runtime.taskRuns).toBe(1);
+    expect(summary.runtime.outcomes).toBe(1);
+    expect(summary.runtime.reviews).toBe(1);
     expect(summary.latest.recordId).toBe("record_1");
     expect(summary.latest.candidateId).toBe("candidate_1");
     expect(summary.latest.nodeId).toBe("node_1");
+    expect(summary.latest.taskRunId).toBe("taskrun_1");
+    expect(summary.latest.outcomeId).toBe("outcome_1");
+    expect(summary.latest.reviewEventId).toBe("review_1");
   });
 
   it("renders markdown snapshots for operators", () => {
@@ -155,5 +208,6 @@ describe("OpenClaw baseline evaluation", () => {
     expect(markdown).toContain("# OpenClaw Baseline Snapshot");
     expect(markdown).toContain("- Total: 1");
     expect(markdown).toContain("- Adapter: openclaw");
+    expect(markdown).toContain("## Runtime Records");
   });
 });

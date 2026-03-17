@@ -43,6 +43,10 @@ What is already implemented and validated:
   - install / repair / upgrade
   - backup / export / import / rollback
 
+Current governance surface:
+- CLI + MCP is the current minimal governance and review surface.
+- A full standalone review UI remains deferred for a later product phase.
+
 ## Quick Start
 
 From a source checkout:

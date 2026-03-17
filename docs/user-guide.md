@@ -90,6 +90,15 @@ That applies to:
 - import
 - rollback
 
+## Current Governance Surface
+
+Today, ExperienceEngine's minimal governance surface is:
+
+- MCP for in-session inspection and control
+- `ee` CLI for explicit fallback, maintenance, and operator workflows
+
+A dedicated standalone review UI is still deferred. The current product shape is intentionally CLI/MCP-first rather than UI-first.
+
 ## Host-Specific Setup
 
 Before installing any adapter, make sure the host CLI itself already works on this machine:

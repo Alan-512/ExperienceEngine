@@ -7,6 +7,7 @@ import { resolveScope } from "../../src/input/scope-resolver.js";
 import { ExperienceInteractionService } from "../../src/interaction/service.js";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
+import { ReviewEventRepository } from "../../src/store/sqlite/repositories/review-event-repo.js";
 import { ScopeRepository } from "../../src/store/sqlite/repositories/scope-repo.js";
 import { nowIso } from "../../src/utils/clock.js";
 
@@ -142,6 +143,7 @@ describe("ExperienceInteractionService", () => {
     const db = openDatabase(config);
     bootstrapDatabase(db);
     const nodeRepo = new NodeRepository(db);
+    const reviewRepo = new ReviewEventRepository(db);
     seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_interaction_lifecycle");
 
     const service = new ExperienceInteractionService(config);
@@ -158,6 +160,10 @@ describe("ExperienceInteractionService", () => {
       nodeId: "node_interaction_lifecycle",
       state: "retired"
     });
+    expect(reviewRepo.listByNodeId("node_interaction_lifecycle").map((event) => event.event_type)).toEqual([
+      "retire",
+      "cool"
+    ]);
   });
 
   it("lets explicit harmful feedback drive the node into cooling", () => {
@@ -166,6 +172,7 @@ describe("ExperienceInteractionService", () => {
     const db = openDatabase(config);
     bootstrapDatabase(db);
     const nodeRepo = new NodeRepository(db);
+    const reviewRepo = new ReviewEventRepository(db);
     seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_interaction_feedback");
     nodeRepo.upsert({
       ...nodeRepo.getById("node_interaction_feedback")!,
@@ -182,6 +189,8 @@ describe("ExperienceInteractionService", () => {
       helped_count: 1,
       harmed_count: 2
     });
+    expect(reviewRepo.listByNodeId("node_interaction_feedback")).toHaveLength(2);
+    expect(reviewRepo.listByNodeId("node_interaction_feedback").every((event) => event.event_type === "mark_harmed")).toBe(true);
   });
 
   it("does not automatically revive explicitly retired nodes through feedback", () => {

@@ -8,6 +8,9 @@ import { InputRecordRepository } from "../store/sqlite/repositories/input-record
 import { CandidateRepository } from "../store/sqlite/repositories/candidate-repo.js";
 import { DistillationJobRepository } from "../store/sqlite/repositories/distillation-job-repo.js";
 import { NodeRepository } from "../store/sqlite/repositories/node-repo.js";
+import { OutcomeRecordRepository } from "../store/sqlite/repositories/outcome-record-repo.js";
+import { ReviewEventRepository } from "../store/sqlite/repositories/review-event-repo.js";
+import { TaskRunRepository } from "../store/sqlite/repositories/task-run-repo.js";
 import { runOpenClawBaselineEvaluation, type OpenClawBaselineSummary } from "./openclaw-baseline.js";
 import type {
   DistillationJob,
@@ -69,6 +72,12 @@ export type OpenClawScenarioExecution = {
     state: ExperienceNode["state"];
     hint: string;
   }>;
+  runtime?: {
+    taskRunId?: string;
+    finalStatus?: string;
+    outcomeIds: string[];
+    reviewCount: number;
+  };
 };
 
 export type OpenClawScenarioReport = {
@@ -86,6 +95,9 @@ export type OpenClawScenarioReport = {
     scenariosWithCandidates: number;
     scenariosWithDistilledCandidates: number;
     scenariosWithInjectedNodes: number;
+    scenariosWithTaskRuns: number;
+    scenariosWithOutcomes: number;
+    scenariosWithReviews: number;
     successfulRecords: number;
     failedRecords: number;
     unknownRecords: number;
@@ -207,6 +219,9 @@ const collectScenarioExecution = (
     candidateRepo: CandidateRepository;
     jobRepo: DistillationJobRepository;
     nodeRepo: NodeRepository;
+    taskRunRepo: TaskRunRepository;
+    outcomeRepo: OutcomeRecordRepository;
+    reviewRepo: ReviewEventRepository;
   },
   rawPath?: string
 ): OpenClawScenarioExecution => {
@@ -214,6 +229,11 @@ const collectScenarioExecution = (
   const candidates = record ? repos.candidateRepo.listBySourceRecordId(record.record_id) : [];
   const jobs = candidates.flatMap((candidate) => repos.jobRepo.listByCandidateId(candidate.id));
   const injectedNodes = record ? repos.nodeRepo.listByIds(record.injected_node_ids) : [];
+  const taskRun = repos.taskRunRepo.getLatestBySessionId(sessionId);
+  const outcomes = taskRun ? repos.outcomeRepo.listByTaskRunId(taskRun.id) : [];
+  const reviews = injectedNodes.flatMap((node) =>
+    repos.reviewRepo.listByNodeId(node.id).filter((event) => !taskRun || event.task_run_id === taskRun.id)
+  );
 
   return {
     scenarioId: scenario.id,
@@ -253,7 +273,15 @@ const collectScenarioExecution = (
       id: node.id,
       state: node.state,
       hint: node.compact_hint
-    }))
+    })),
+    runtime: taskRun || outcomes.length > 0 || reviews.length > 0
+      ? {
+          taskRunId: taskRun?.id,
+          finalStatus: taskRun?.final_status,
+          outcomeIds: outcomes.map((outcome) => outcome.id),
+          reviewCount: reviews.length
+        }
+      : undefined
   };
 };
 
@@ -267,6 +295,9 @@ const aggregateScenarioResults = (
     scenario.candidates.some((candidate) => candidate.lifecycle === "distilled")
   ).length,
   scenariosWithInjectedNodes: scenarios.filter((scenario) => scenario.injectedNodes.length > 0).length,
+  scenariosWithTaskRuns: scenarios.filter((scenario) => Boolean(scenario.runtime?.taskRunId)).length,
+  scenariosWithOutcomes: scenarios.filter((scenario) => (scenario.runtime?.outcomeIds.length ?? 0) > 0).length,
+  scenariosWithReviews: scenarios.filter((scenario) => (scenario.runtime?.reviewCount ?? 0) > 0).length,
   successfulRecords: scenarios.filter((scenario) => scenario.record?.outcome === "success").length,
   failedRecords: scenarios.filter((scenario) => scenario.record?.outcome === "failure").length,
   unknownRecords: scenarios.filter((scenario) => scenario.record?.outcome === "unknown").length
@@ -290,6 +321,9 @@ export const renderOpenClawScenarioMarkdown = (report: OpenClawScenarioReport): 
     `- Scenarios with candidates: ${report.aggregate.scenariosWithCandidates}`,
     `- Scenarios with distilled candidates: ${report.aggregate.scenariosWithDistilledCandidates}`,
     `- Scenarios with injected nodes: ${report.aggregate.scenariosWithInjectedNodes}`,
+    `- Scenarios with task runs: ${report.aggregate.scenariosWithTaskRuns}`,
+    `- Scenarios with outcomes: ${report.aggregate.scenariosWithOutcomes}`,
+    `- Scenarios with reviews: ${report.aggregate.scenariosWithReviews}`,
     `- Successful records: ${report.aggregate.successfulRecords}`,
     `- Failed records: ${report.aggregate.failedRecords}`,
     `- Unknown records: ${report.aggregate.unknownRecords}`,
@@ -319,6 +353,9 @@ export const renderOpenClawScenarioMarkdown = (report: OpenClawScenarioReport): 
       lines.push("- Candidate count: 0");
       lines.push("- Distillation jobs: 0");
     }
+    lines.push(`- Task run id: ${scenario.runtime?.taskRunId ?? "n/a"}`);
+    lines.push(`- Outcome records: ${scenario.runtime?.outcomeIds.length ?? 0}`);
+    lines.push(`- Review events: ${scenario.runtime?.reviewCount ?? 0}`);
     lines.push("");
   }
 
@@ -372,7 +409,10 @@ export const runOpenClawScenarioEvaluation = (options: RunOptions = {}): OpenCla
     inputRepo: new InputRecordRepository(db),
     candidateRepo: new CandidateRepository(db),
     jobRepo: new DistillationJobRepository(db),
-    nodeRepo: new NodeRepository(db)
+    nodeRepo: new NodeRepository(db),
+    taskRunRepo: new TaskRunRepository(db),
+    outcomeRepo: new OutcomeRecordRepository(db),
+    reviewRepo: new ReviewEventRepository(db)
   };
 
   const scenarios = getOpenClawScenarioPack(pack, repoRoot);

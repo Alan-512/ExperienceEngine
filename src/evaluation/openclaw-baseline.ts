@@ -57,6 +57,11 @@ export type OpenClawBaselineSummary = {
     totalHelpedCount: number;
     totalHarmedCount: number;
   };
+  runtime: {
+    taskRuns: number;
+    outcomes: number;
+    reviews: number;
+  };
   latest: {
     recordId?: string;
     sessionId?: string;
@@ -66,6 +71,12 @@ export type OpenClawBaselineSummary = {
     candidateLifecycle?: string;
     nodeId?: string;
     nodeState?: string;
+    taskRunId?: string;
+    taskRunFinalStatus?: string;
+    outcomeId?: string;
+    outcomeSignal?: string;
+    reviewEventId?: string;
+    reviewEventType?: string;
   };
 };
 
@@ -154,6 +165,48 @@ const getLatestSnapshot = (db: DatabaseSync): OpenClawBaselineSummary["latest"] 
       }
     | undefined;
 
+  const latestTaskRun = db
+    .prepare(
+      `SELECT id, final_status
+       FROM task_runs
+       ORDER BY updated_at DESC
+       LIMIT 1`
+    )
+    .get() as
+    | {
+        id: string;
+        final_status: string;
+      }
+    | undefined;
+
+  const latestOutcome = db
+    .prepare(
+      `SELECT id, outcome_signal
+       FROM outcome_records
+       ORDER BY created_at DESC
+       LIMIT 1`
+    )
+    .get() as
+    | {
+        id: string;
+        outcome_signal: string;
+      }
+    | undefined;
+
+  const latestReview = db
+    .prepare(
+      `SELECT id, event_type
+       FROM review_events
+       ORDER BY created_at DESC
+       LIMIT 1`
+    )
+    .get() as
+    | {
+        id: string;
+        event_type: string;
+      }
+    | undefined;
+
   return {
     recordId: latestRecord?.record_id,
     sessionId: latestRecord?.session_id ?? undefined,
@@ -162,7 +215,13 @@ const getLatestSnapshot = (db: DatabaseSync): OpenClawBaselineSummary["latest"] 
     candidateId: latestCandidate?.id,
     candidateLifecycle: latestCandidate?.lifecycle_state,
     nodeId: latestNode?.id,
-    nodeState: latestNode?.state
+    nodeState: latestNode?.state,
+    taskRunId: latestTaskRun?.id,
+    taskRunFinalStatus: latestTaskRun?.final_status,
+    outcomeId: latestOutcome?.id,
+    outcomeSignal: latestOutcome?.outcome_signal,
+    reviewEventId: latestReview?.id,
+    reviewEventType: latestReview?.event_type
   };
 };
 
@@ -218,6 +277,9 @@ export const collectOpenClawBaselineSummary = (
       total_helped_count: number | null;
       total_harmed_count: number | null;
     };
+  const taskRunTotal = getCount(db, "task_runs", recordFilter);
+  const outcomeTotal = getCount(db, "outcome_records", recordFilter);
+  const reviewTotal = getCount(db, "review_events", recordFilter);
 
   return {
     generatedAt: options.now?.() ?? new Date().toISOString(),
@@ -268,6 +330,11 @@ export const collectOpenClawBaselineSummary = (
       withHarmedFeedback: nodeFeedbackStats.with_harmed_feedback ?? 0,
       totalHelpedCount: nodeFeedbackStats.total_helped_count ?? 0,
       totalHarmedCount: nodeFeedbackStats.total_harmed_count ?? 0
+    },
+    runtime: {
+      taskRuns: taskRunTotal,
+      outcomes: outcomeTotal,
+      reviews: reviewTotal
     },
     latest: getLatestSnapshot(db)
   };
@@ -332,6 +399,12 @@ export const renderOpenClawBaselineMarkdown = (
 - Total helped count: ${summary.nodes.totalHelpedCount}
 - Total harmed count: ${summary.nodes.totalHarmedCount}
 
+## Runtime Records
+
+- Task runs: ${summary.runtime.taskRuns}
+- Outcome records: ${summary.runtime.outcomes}
+- Review events: ${summary.runtime.reviews}
+
 ## Latest Activity
 
 - Record id: ${summary.latest.recordId ?? "n/a"}
@@ -342,6 +415,12 @@ export const renderOpenClawBaselineMarkdown = (
 - Candidate lifecycle: ${summary.latest.candidateLifecycle ?? "n/a"}
 - Node id: ${summary.latest.nodeId ?? "n/a"}
 - Node state: ${summary.latest.nodeState ?? "n/a"}
+- Task run id: ${summary.latest.taskRunId ?? "n/a"}
+- Task run final status: ${summary.latest.taskRunFinalStatus ?? "n/a"}
+- Outcome id: ${summary.latest.outcomeId ?? "n/a"}
+- Outcome signal: ${summary.latest.outcomeSignal ?? "n/a"}
+- Review event id: ${summary.latest.reviewEventId ?? "n/a"}
+- Review event type: ${summary.latest.reviewEventType ?? "n/a"}
 `;
 
 export const writeOpenClawBaselineArtifacts = (

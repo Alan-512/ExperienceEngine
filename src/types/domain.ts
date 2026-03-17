@@ -62,6 +62,41 @@ export type ExperienceInputRecord = {
   created_at: string;
 };
 
+export type TaskRun = {
+  id: string;
+  host: "openclaw" | "claude-code" | "codex";
+  scope_id: string;
+  session_id?: string;
+  task_type: ResolvedTaskType;
+  task_summary: string;
+  prompt_excerpt?: string;
+  context_summary?: string;
+  started_at: string;
+  ended_at?: string;
+  final_status: "success" | "failure" | "cancelled" | "unknown";
+  failure_signature?: string;
+  created_at: string;
+  updated_at: string;
+};
+
+export type OutcomeRecord = {
+  id: string;
+  task_run_id: string;
+  outcome_signal: OutcomeSignal;
+  failure_signature?: string;
+  summary: string;
+  created_at: string;
+};
+
+export type ReviewEvent = {
+  id: string;
+  node_id: string;
+  task_run_id?: string;
+  event_type: "mark_helped" | "mark_harmed" | "cool" | "retire";
+  source: "automatic" | "user";
+  created_at: string;
+};
+
 export type ExperienceNode = {
   id: string;
   node_type: ExperienceNodeType;
@@ -158,9 +193,13 @@ export type CandidateSourceSignal = {
 
 export type ExperienceCandidate = ExperienceCandidateDraft & {
   id: string;
+  task_run_id?: string;
+  candidate_kind?: "failure" | "correction" | "retry_pattern" | "successful_fix";
   source_record_id: string;
   source_context_summary?: string;
   source_outcome_signal: OutcomeSignal;
+  raw_summary?: string;
+  failure_signature?: string;
   source_signal: CandidateSourceSignal;
   lifecycle_state: CandidateLifecycleState;
   retry_count: number;

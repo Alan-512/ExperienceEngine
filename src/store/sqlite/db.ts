@@ -58,6 +58,10 @@ export const bootstrapDatabase = (db: DatabaseSync): void => {
   ensureColumn(db, "experience_nodes", "harmed_record_ids_json", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "experience_candidates", "source_context_summary", "TEXT");
   ensureColumn(db, "experience_candidates", "source_outcome_signal", "TEXT NOT NULL DEFAULT 'unknown'");
+  ensureColumn(db, "experience_candidates", "task_run_id", "TEXT");
+  ensureColumn(db, "experience_candidates", "candidate_kind", "TEXT");
+  ensureColumn(db, "experience_candidates", "raw_summary", "TEXT");
+  ensureColumn(db, "experience_candidates", "failure_signature", "TEXT");
   ensureColumn(db, "experience_candidates", "source_signal_json", "TEXT NOT NULL DEFAULT '{}'");
   ensureColumn(db, "experience_candidates", "lifecycle_state", "TEXT NOT NULL DEFAULT 'pending'");
   ensureColumn(db, "experience_candidates", "retry_count", "INTEGER NOT NULL DEFAULT 0");

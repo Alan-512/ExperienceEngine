@@ -10,9 +10,20 @@ import { CandidateRepository } from "../../src/store/sqlite/repositories/candida
 import { DistillationJobRepository } from "../../src/store/sqlite/repositories/distillation-job-repo.js";
 import { InputRecordRepository } from "../../src/store/sqlite/repositories/input-record-repo.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
+import { OutcomeRecordRepository } from "../../src/store/sqlite/repositories/outcome-record-repo.js";
+import { ReviewEventRepository } from "../../src/store/sqlite/repositories/review-event-repo.js";
+import { TaskRunRepository } from "../../src/store/sqlite/repositories/task-run-repo.js";
 import { nowIso } from "../../src/utils/clock.js";
 import { ExperienceStateArtifactService } from "../../src/interaction/state-artifact-service.js";
-import type { DistillationJob, ExperienceCandidate, ExperienceInputRecord, ExperienceNode } from "../../src/types/domain.js";
+import type {
+  DistillationJob,
+  ExperienceCandidate,
+  ExperienceInputRecord,
+  ExperienceNode,
+  OutcomeRecord,
+  ReviewEvent,
+  TaskRun
+} from "../../src/types/domain.js";
 
 const tempDirs: string[] = [];
 const originalHome = process.env.EXPERIENCE_ENGINE_HOME;
@@ -104,6 +115,44 @@ const makeCandidate = (overrides: Partial<ExperienceCandidate> = {}): Experience
   retry_count: 0,
   created_at: "2026-03-13T01:00:00.000Z",
   updated_at: "2026-03-13T01:00:00.000Z",
+  ...overrides
+});
+
+const makeTaskRun = (overrides: Partial<TaskRun> = {}): TaskRun => ({
+  id: "taskrun_inspect",
+  host: "codex",
+  scope_id: resolveScope("/repo").scope_id,
+  session_id: "session_last",
+  task_type: "test_debug",
+  task_summary: "Fix the failing auth test",
+  prompt_excerpt: "Fix the auth test",
+  context_summary: "Auth test failure in the current repo",
+  started_at: "2026-03-13T01:00:00.000Z",
+  ended_at: "2026-03-13T01:05:00.000Z",
+  final_status: "success",
+  failure_signature: "Auth test assertion failed",
+  created_at: "2026-03-13T01:00:00.000Z",
+  updated_at: "2026-03-13T01:05:00.000Z",
+  ...overrides
+});
+
+const makeOutcomeRecord = (overrides: Partial<OutcomeRecord> = {}): OutcomeRecord => ({
+  id: "outcome_inspect",
+  task_run_id: "taskrun_inspect",
+  outcome_signal: "success",
+  failure_signature: "Auth test assertion failed",
+  summary: "Fix the failing auth test",
+  created_at: "2026-03-13T01:05:00.000Z",
+  ...overrides
+});
+
+const makeReviewEvent = (overrides: Partial<ReviewEvent> = {}): ReviewEvent => ({
+  id: "review_inspect",
+  node_id: "node_inspect",
+  task_run_id: "taskrun_inspect",
+  event_type: "mark_helped",
+  source: "user",
+  created_at: "2026-03-13T01:06:00.000Z",
   ...overrides
 });
 
@@ -390,17 +439,21 @@ describe("inspect command", () => {
     new CandidateRepository(db).upsert(makeCandidate());
     new DistillationJobRepository(db).upsert(makeJob({ status: "failed", retry_count: 1, last_error: "timeout" }));
     new NodeRepository(db).upsert(makeNode({ state: "active" }));
+    new TaskRunRepository(db).upsert(makeTaskRun());
+    new OutcomeRecordRepository(db).upsert(makeOutcomeRecord());
+    new ReviewEventRepository(db).upsert(makeReviewEvent());
 
     runInspectCommand("learning");
 
     expect(consoleLogSpy.mock.calls).toEqual(
-      expect.arrayContaining([["Candidate lifecycle:"], ["Distillation jobs:"], ["Formal nodes:"]])
+      expect.arrayContaining([["Candidate lifecycle:"], ["Distillation jobs:"], ["Formal nodes:"], ["Runtime records:"]])
     );
     expect(consoleTableSpy.mock.calls).toEqual(
       expect.arrayContaining([
         [expect.objectContaining({ pending: 1, distilled: 0, failed: 0, discarded: 0 })],
         [expect.objectContaining({ pending: 0, processing: 0, succeeded: 0, failed: 1, discarded: 0 })],
-        [expect.objectContaining({ active: 1, cooling: 0, retired: 0 })]
+        [expect.objectContaining({ active: 1, cooling: 0, retired: 0 })],
+        [expect.objectContaining({ taskRuns: 1, outcomes: 1, reviews: 1 })]
       ])
     );
   });

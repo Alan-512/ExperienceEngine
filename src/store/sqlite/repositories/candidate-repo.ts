@@ -3,6 +3,8 @@ import type { ExperienceCandidate } from "../../../types/domain.js";
 
 type CandidateRow = {
   id: string;
+  task_run_id: string | null;
+  candidate_kind: string | null;
   source_record_id: string;
   scope_id: string;
   task_type: ExperienceCandidate["task_type"];
@@ -23,6 +25,8 @@ type CandidateRow = {
   source_kind: ExperienceCandidate["source_kind"];
   source_context_summary: string | null;
   source_outcome_signal: ExperienceCandidate["source_outcome_signal"];
+  raw_summary: string | null;
+  failure_signature: string | null;
   source_signal_json: string;
   lifecycle_state: ExperienceCandidate["lifecycle_state"];
   retry_count: number;
@@ -41,6 +45,8 @@ export class CandidateRepository {
   private mapCandidate(row: CandidateRow): ExperienceCandidate {
     return {
       id: row.id,
+      task_run_id: row.task_run_id ?? undefined,
+      candidate_kind: (row.candidate_kind as ExperienceCandidate["candidate_kind"]) ?? undefined,
       source_record_id: row.source_record_id,
       scope_id: row.scope_id,
       task_type: row.task_type,
@@ -61,6 +67,8 @@ export class CandidateRepository {
       source_kind: row.source_kind,
       source_context_summary: row.source_context_summary ?? undefined,
       source_outcome_signal: row.source_outcome_signal,
+      raw_summary: row.raw_summary ?? undefined,
+      failure_signature: row.failure_signature ?? undefined,
       source_signal: JSON.parse(row.source_signal_json) as ExperienceCandidate["source_signal"],
       lifecycle_state: row.lifecycle_state,
       retry_count: row.retry_count,
@@ -77,6 +85,8 @@ export class CandidateRepository {
   upsert(candidate: ExperienceCandidate): ExperienceCandidate {
     const payload = {
       id: candidate.id,
+      task_run_id: candidate.task_run_id ?? null,
+      candidate_kind: candidate.candidate_kind ?? null,
       source_record_id: candidate.source_record_id,
       scope_id: candidate.scope_id,
       task_type: candidate.task_type,
@@ -97,6 +107,8 @@ export class CandidateRepository {
       source_kind: candidate.source_kind,
       source_context_summary: candidate.source_context_summary ?? null,
       source_outcome_signal: candidate.source_outcome_signal,
+      raw_summary: candidate.raw_summary ?? null,
+      failure_signature: candidate.failure_signature ?? null,
       source_signal_json: JSON.stringify(candidate.source_signal),
       lifecycle_state: candidate.lifecycle_state,
       retry_count: candidate.retry_count,
@@ -112,18 +124,20 @@ export class CandidateRepository {
     this.db
       .prepare(
         `INSERT INTO experience_candidates
-          (id, source_record_id, scope_id, task_type, node_type, trigger_pattern, applicability_notes, env_signature,
+          (id, task_run_id, candidate_kind, source_record_id, scope_id, task_type, node_type, trigger_pattern, applicability_notes, env_signature,
            compact_hint, goal, recommended_steps_json, avoid_steps_json, fallback_steps_json, success_signal, stop_condition,
-           escalation_condition, evidence_summary, retrieval_text, source_kind, source_context_summary, source_outcome_signal,
+           escalation_condition, evidence_summary, retrieval_text, source_kind, source_context_summary, source_outcome_signal, raw_summary, failure_signature,
            source_signal_json, lifecycle_state, retry_count, distilled_node_id, last_error, created_at, updated_at, distilled_at,
            discarded_at, last_failed_at)
          VALUES
-          (@id, @source_record_id, @scope_id, @task_type, @node_type, @trigger_pattern, @applicability_notes, @env_signature,
+          (@id, @task_run_id, @candidate_kind, @source_record_id, @scope_id, @task_type, @node_type, @trigger_pattern, @applicability_notes, @env_signature,
            @compact_hint, @goal, @recommended_steps_json, @avoid_steps_json, @fallback_steps_json, @success_signal, @stop_condition,
-           @escalation_condition, @evidence_summary, @retrieval_text, @source_kind, @source_context_summary, @source_outcome_signal,
+           @escalation_condition, @evidence_summary, @retrieval_text, @source_kind, @source_context_summary, @source_outcome_signal, @raw_summary, @failure_signature,
            @source_signal_json, @lifecycle_state, @retry_count, @distilled_node_id, @last_error, @created_at, @updated_at, @distilled_at,
            @discarded_at, @last_failed_at)
          ON CONFLICT(id) DO UPDATE SET
+           task_run_id = excluded.task_run_id,
+           candidate_kind = excluded.candidate_kind,
            source_record_id = excluded.source_record_id,
            trigger_pattern = excluded.trigger_pattern,
            applicability_notes = excluded.applicability_notes,
@@ -141,6 +155,8 @@ export class CandidateRepository {
            source_kind = excluded.source_kind,
            source_context_summary = excluded.source_context_summary,
            source_outcome_signal = excluded.source_outcome_signal,
+           raw_summary = excluded.raw_summary,
+           failure_signature = excluded.failure_signature,
            source_signal_json = excluded.source_signal_json,
            lifecycle_state = excluded.lifecycle_state,
            retry_count = excluded.retry_count,

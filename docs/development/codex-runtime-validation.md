@@ -4,6 +4,8 @@ This document records the March 17, 2026 real-host validation pass for Experienc
 
 `Codex` is a supported product host for ExperienceEngine. This pass validates that the shared MCP-first runtime, high-signal candidate flow, distillation flow, and governance flow work end to end on a real local Codex CLI session. It does **not** replace the OpenClaw-first baseline for core learning validation.
 
+For the current product phase, governance and review are exercised through the shared MCP surface and the `ee` CLI fallback. A standalone review UI is still deferred and is not part of this Codex validation pass.
+
 ## Scope
 
 Included in this pass:

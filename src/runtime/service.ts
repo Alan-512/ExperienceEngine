@@ -16,6 +16,8 @@ import type {
   ExperienceInput,
   ExperienceInputRecord,
   ExperienceNode,
+  OutcomeRecord,
+  TaskRun,
   ToolEvent
 } from "../types/domain.js";
 import type {
@@ -31,8 +33,10 @@ import { CandidateRepository } from "../store/sqlite/repositories/candidate-repo
 import { DistillationJobRepository } from "../store/sqlite/repositories/distillation-job-repo.js";
 import { InputRecordRepository } from "../store/sqlite/repositories/input-record-repo.js";
 import { NodeRepository } from "../store/sqlite/repositories/node-repo.js";
+import { OutcomeRecordRepository } from "../store/sqlite/repositories/outcome-record-repo.js";
 import { ScopeRepository } from "../store/sqlite/repositories/scope-repo.js";
 import { StatsRepository } from "../store/sqlite/repositories/stats-repo.js";
+import { TaskRunRepository } from "../store/sqlite/repositories/task-run-repo.js";
 import { RuntimeCaptureWriter } from "../plugin/runtime-capture.js";
 import { normalizeToolResult } from "../plugin/hooks/tool-result-persist.js";
 import { extractToolResultsFromPayload } from "../plugin/runtime-helpers.js";
@@ -64,6 +68,38 @@ const toInputRecord = (input: ExperienceInput, sessionId?: string): ExperienceIn
   created_at: nowIso()
 });
 
+const toTaskRun = (input: ExperienceInput, sessionId: string, context: HostPromptContext): TaskRun => {
+  const timestamp = nowIso();
+  const signals = buildCandidateSignals(input);
+
+  return {
+    id: stableId("taskrun", `${sessionId}:${input.task_summary}:${timestamp}`),
+    host: "openclaw",
+    scope_id: input.scope_id,
+    session_id: sessionId,
+    task_type: input.task_type,
+    task_summary: input.task_summary,
+    prompt_excerpt: context.userMessage,
+    context_summary: input.context_summary,
+    started_at: timestamp,
+    ended_at: timestamp,
+    final_status:
+      input.outcome_signal === "success" ? "success" : input.outcome_signal === "failure" ? "failure" : "unknown",
+    failure_signature: signals.failure_signature,
+    created_at: timestamp,
+    updated_at: timestamp
+  };
+};
+
+const toOutcomeRecord = (taskRun: TaskRun, input: ExperienceInput): OutcomeRecord => ({
+  id: createId("outcome"),
+  task_run_id: taskRun.id,
+  outcome_signal: input.outcome_signal,
+  failure_signature: taskRun.failure_signature,
+  summary: input.task_summary,
+  created_at: nowIso()
+});
+
 const buildCandidateSourceSignal = (input: ExperienceInput): CandidateSourceSignal => {
   const signals = buildCandidateSignals(input);
 
@@ -80,12 +116,38 @@ const buildCandidateSourceSignal = (input: ExperienceInput): CandidateSourceSign
   };
 };
 
+const summarizeRawCandidate = (sourceSignal: CandidateSourceSignal): string => {
+  const fragments = [...sourceSignal.tool_event_summary];
+  if (sourceSignal.failure_signature) {
+    fragments.unshift(`failure signature: ${sourceSignal.failure_signature}`);
+  }
+  return fragments.slice(0, 3).join(" | ");
+};
+
+const resolveCandidateKind = (
+  input: ExperienceInput,
+  sourceSignal: CandidateSourceSignal
+): NonNullable<ExperienceCandidate["candidate_kind"]> => {
+  if (input.outcome_signal === "success") {
+    return "successful_fix";
+  }
+  if (sourceSignal.retry_count > 1) {
+    return "retry_pattern";
+  }
+  if (sourceSignal.correction_signals.length > 0) {
+    return "correction";
+  }
+  return "failure";
+};
+
 const draftToCandidate = (
   draft: ExperienceCandidateDraft,
   input: ExperienceInput,
-  originRecordId: string
+  originRecordId: string,
+  taskRunId?: string
 ): ExperienceCandidate => {
   const timestamp = nowIso();
+  const sourceSignal = buildCandidateSourceSignal(input);
   const candidateId = stableId(
     "candidate",
     [draft.scope_id, draft.task_type, draft.node_type, draft.compact_hint, originRecordId].join(":")
@@ -93,11 +155,15 @@ const draftToCandidate = (
 
   return {
     id: candidateId,
+    task_run_id: taskRunId ?? originRecordId,
+    candidate_kind: resolveCandidateKind(input, sourceSignal),
     ...draft,
     source_record_id: originRecordId,
     source_context_summary: input.context_summary,
     source_outcome_signal: input.outcome_signal,
-    source_signal: buildCandidateSourceSignal(input),
+    raw_summary: summarizeRawCandidate(sourceSignal),
+    failure_signature: sourceSignal.failure_signature,
+    source_signal: sourceSignal,
     lifecycle_state: "pending",
     retry_count: 0,
     created_at: timestamp,
@@ -152,6 +218,8 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly nodeRepo;
   private readonly candidateRepo;
   private readonly jobRepo;
+  private readonly taskRunRepo;
+  private readonly outcomeRepo;
   private readonly statsRepo;
   private readonly distillationWorker;
   readonly captureWriter;
@@ -168,6 +236,8 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     this.nodeRepo = new NodeRepository(this.db);
     this.candidateRepo = new CandidateRepository(this.db);
     this.jobRepo = new DistillationJobRepository(this.db);
+    this.taskRunRepo = new TaskRunRepository(this.db);
+    this.outcomeRepo = new OutcomeRecordRepository(this.db);
     this.statsRepo = new StatsRepository(this.db);
     this.distillationWorker = new DistillationQueueWorker(
       config,
@@ -257,9 +327,11 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     return record;
   }
 
-  private persistCandidates(input: ExperienceInput, originRecordId: string): ExperienceCandidate[] {
+  private persistCandidates(input: ExperienceInput, originRecordId: string, taskRunId?: string): ExperienceCandidate[] {
     const analysis = analyzeExperience(input);
-    const persistedCandidates = analysis.accepted.map((draft) => draftToCandidate(draft, input, originRecordId));
+    const persistedCandidates = analysis.accepted.map((draft) =>
+      draftToCandidate(draft, input, originRecordId, taskRunId)
+    );
     for (const candidate of persistedCandidates) {
       this.candidateRepo.upsert(candidate);
       this.jobRepo.upsert(candidateToInitialJob(candidate, this.config.distillerProfile));
@@ -375,7 +447,10 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     const input = this.buildFinalizedInput(context, session);
     withTransaction(this.db, () => {
       const record = this.persistFinalizedInput(input, sessionId, session);
-      this.persistCandidates(input, record.record_id);
+      const taskRun = toTaskRun(input, sessionId, context);
+      this.taskRunRepo.upsert(taskRun);
+      this.outcomeRepo.upsert(toOutcomeRecord(taskRun, input));
+      this.persistCandidates(input, record.record_id, taskRun.id);
       this.updateInjectedNodes(input, record.record_id);
     });
     this.sessions.delete(sessionId);

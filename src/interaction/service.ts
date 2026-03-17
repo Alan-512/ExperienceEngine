@@ -5,17 +5,22 @@ import { CandidateRepository } from "../store/sqlite/repositories/candidate-repo
 import { DistillationJobRepository } from "../store/sqlite/repositories/distillation-job-repo.js";
 import { InputRecordRepository } from "../store/sqlite/repositories/input-record-repo.js";
 import { NodeRepository } from "../store/sqlite/repositories/node-repo.js";
+import { OutcomeRecordRepository } from "../store/sqlite/repositories/outcome-record-repo.js";
+import { ReviewEventRepository } from "../store/sqlite/repositories/review-event-repo.js";
 import { ScopeRepository } from "../store/sqlite/repositories/scope-repo.js";
+import { TaskRunRepository } from "../store/sqlite/repositories/task-run-repo.js";
 import type {
   CandidateLifecycleState,
   DistillationJobState,
   ExperienceInputRecord,
   ExperienceNode,
   ExperienceNodeType,
-  ExperienceState
+  ExperienceState,
+  ReviewEvent
 } from "../types/domain.js";
 import { transitionState } from "../feedback/state-transition.js";
 import { nowIso } from "../utils/clock.js";
+import { createId } from "../utils/ids.js";
 
 export type ExperienceNodeSummary = {
   id: string;
@@ -101,8 +106,27 @@ export type ExperienceLearningSummary = {
   candidates: Record<CandidateLifecycleState, number>;
   jobs: Record<DistillationJobState, number>;
   nodes: Record<ExperienceState, number>;
+  runtime: {
+    taskRuns: number;
+    outcomes: number;
+    reviews: number;
+  };
   latestRecordCreatedAt?: string;
 };
+
+const toReviewEvent = (
+  nodeId: string,
+  eventType: ReviewEvent["event_type"],
+  source: ReviewEvent["source"],
+  taskRunId?: string
+): ReviewEvent => ({
+  id: createId("review"),
+  node_id: nodeId,
+  task_run_id: taskRunId,
+  event_type: eventType,
+  source,
+  created_at: nowIso()
+});
 
 const toNodeSummary = (node: ExperienceNode): ExperienceNodeSummary => ({
   id: node.id,
@@ -153,6 +177,9 @@ export class ExperienceInteractionService {
   private readonly nodeRepo;
   private readonly candidateRepo;
   private readonly jobRepo;
+  private readonly taskRunRepo;
+  private readonly outcomeRepo;
+  private readonly reviewEventRepo;
   private readonly scopeRepo;
 
   constructor(config: ExperienceEngineConfig) {
@@ -162,6 +189,9 @@ export class ExperienceInteractionService {
     this.nodeRepo = new NodeRepository(db);
     this.candidateRepo = new CandidateRepository(db);
     this.jobRepo = new DistillationJobRepository(db);
+    this.taskRunRepo = new TaskRunRepository(db);
+    this.outcomeRepo = new OutcomeRecordRepository(db);
+    this.reviewEventRepo = new ReviewEventRepository(db);
     this.scopeRepo = new ScopeRepository(db);
   }
 
@@ -234,6 +264,11 @@ export class ExperienceInteractionService {
       nodes: Object.fromEntries(
         nodeStates.map((state) => [state, this.nodeRepo.listByState(state).length])
       ) as Record<ExperienceState, number>,
+      runtime: {
+        taskRuns: this.taskRunRepo.count(),
+        outcomes: this.outcomeRepo.count(),
+        reviews: this.reviewEventRepo.count()
+      },
       latestRecordCreatedAt: latestRecord?.created_at
     };
   }
@@ -255,8 +290,15 @@ export class ExperienceInteractionService {
       };
     }
 
+    const taskRunId = record.session_id
+      ? this.taskRunRepo.getLatestBySessionId(record.session_id)?.id
+      : undefined;
+
     for (const node of nodes) {
       this.nodeRepo.upsert(applyNodeFeedback(node, feedback));
+      this.reviewEventRepo.upsert(
+        toReviewEvent(node.id, feedback === "helped" ? "mark_helped" : "mark_harmed", "user", taskRunId)
+      );
     }
 
     return {
@@ -277,6 +319,9 @@ export class ExperienceInteractionService {
     }
 
     this.nodeRepo.upsert(applyNodeFeedback(node, feedback));
+    this.reviewEventRepo.upsert(
+      toReviewEvent(nodeId, feedback === "helped" ? "mark_helped" : "mark_harmed", "user")
+    );
     return {
       status: "updated",
       feedback,
@@ -328,6 +373,10 @@ export class ExperienceInteractionService {
         nodeId
       };
     }
+
+    this.reviewEventRepo.upsert(
+      toReviewEvent(nodeId, state === "cooling" ? "cool" : "retire", "user")
+    );
 
     return {
       status: "updated",

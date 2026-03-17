@@ -131,9 +131,30 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     });
 
     const db = new DatabaseSync(sqlitePath);
-    const candidateRow = db.prepare("SELECT lifecycle_state, retry_count FROM experience_candidates LIMIT 1").get() as {
+    const taskRunRow = db.prepare(
+      "SELECT session_id, task_type, final_status, failure_signature FROM task_runs LIMIT 1"
+    ).get() as {
+      session_id: string | null;
+      task_type: string;
+      final_status: string;
+      failure_signature: string | null;
+    };
+    const outcomeRow = db.prepare(
+      "SELECT outcome_signal, failure_signature, summary FROM outcome_records LIMIT 1"
+    ).get() as {
+      outcome_signal: string;
+      failure_signature: string | null;
+      summary: string;
+    };
+    const candidateRow = db.prepare(
+      "SELECT lifecycle_state, retry_count, task_run_id, candidate_kind, raw_summary, failure_signature FROM experience_candidates LIMIT 1"
+    ).get() as {
       lifecycle_state: string;
       retry_count: number;
+      task_run_id: string | null;
+      candidate_kind: string | null;
+      raw_summary: string | null;
+      failure_signature: string | null;
     };
     const jobRow = db.prepare("SELECT status, extractor_profile FROM distillation_jobs LIMIT 1").get() as {
       status: string;
@@ -141,8 +162,19 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     };
     const nodeCountBeforeDrain = db.prepare("SELECT COUNT(*) AS count FROM experience_nodes").get() as { count: number };
 
+    expect(taskRunRow.session_id).toBe("candidate-session");
+    expect(taskRunRow.task_type).toBe("test_debug");
+    expect(taskRunRow.final_status).toBe("success");
+    expect(taskRunRow.failure_signature).toBeTruthy();
+    expect(outcomeRow.outcome_signal).toBe("success");
+    expect(outcomeRow.failure_signature).toBeTruthy();
+    expect(outcomeRow.summary).toContain("Fix the failing vitest auth test");
     expect(candidateRow.lifecycle_state).toBe("pending");
     expect(candidateRow.retry_count).toBe(0);
+    expect(candidateRow.task_run_id).toBeTruthy();
+    expect(candidateRow.candidate_kind).toBe("successful_fix");
+    expect(candidateRow.raw_summary).toContain("Auth tests");
+    expect(candidateRow.failure_signature).toBeTruthy();
     expect(jobRow.status).toBe("pending");
     expect(jobRow.extractor_profile).toBe("balanced");
     expect(nodeCountBeforeDrain.count).toBe(0);

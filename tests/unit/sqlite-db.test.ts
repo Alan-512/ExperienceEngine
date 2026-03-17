@@ -104,4 +104,21 @@ describe("bootstrapDatabase", () => {
     expect(columnNames).toContain("helped_record_ids_json");
     expect(columnNames).toContain("harmed_record_ids_json");
   });
+
+  it("creates additive V3 runtime tables for task runs, outcomes, and review events", () => {
+    const runtimeDir = makeTempDir();
+    const dbPath = join(runtimeDir, "experienceengine.db");
+    const db = new DatabaseSync(dbPath);
+
+    bootstrapDatabase(db);
+
+    const tables = db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+      .all() as Array<{ name: string }>;
+    const tableNames = tables.map((table) => table.name);
+
+    expect(tableNames).toContain("task_runs");
+    expect(tableNames).toContain("outcome_records");
+    expect(tableNames).toContain("review_events");
+  });
 });

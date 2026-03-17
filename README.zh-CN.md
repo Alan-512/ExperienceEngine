@@ -40,6 +40,10 @@ ExperienceEngine 不是通用记忆库，也不是 context engine 的替代品�
   - install / repair / upgrade
   - backup / export / import / rollback
 
+当前治理面形态：
+- CLI + MCP 是当前最小可用的治理与审查交互面。
+- 完整的独立 review UI 仍然延后到后续产品阶段。
+
 ## 快速开始
 
 从源码目录启动：

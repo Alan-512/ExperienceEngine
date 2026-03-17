@@ -21,6 +21,41 @@ CREATE TABLE IF NOT EXISTS experience_input_records (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS task_runs (
+  id TEXT PRIMARY KEY,
+  host TEXT NOT NULL,
+  scope_id TEXT NOT NULL,
+  session_id TEXT,
+  task_type TEXT NOT NULL,
+  task_summary TEXT NOT NULL,
+  prompt_excerpt TEXT,
+  context_summary TEXT,
+  started_at TEXT NOT NULL,
+  ended_at TEXT,
+  final_status TEXT NOT NULL,
+  failure_signature TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS outcome_records (
+  id TEXT PRIMARY KEY,
+  task_run_id TEXT NOT NULL,
+  outcome_signal TEXT NOT NULL,
+  failure_signature TEXT,
+  summary TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS review_events (
+  id TEXT PRIMARY KEY,
+  node_id TEXT NOT NULL,
+  task_run_id TEXT,
+  event_type TEXT NOT NULL,
+  source TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS experience_nodes (
   id TEXT PRIMARY KEY,
   node_type TEXT NOT NULL,
@@ -62,6 +97,8 @@ CREATE TABLE IF NOT EXISTS experience_nodes (
 
 CREATE TABLE IF NOT EXISTS experience_candidates (
   id TEXT PRIMARY KEY,
+  task_run_id TEXT,
+  candidate_kind TEXT,
   source_record_id TEXT NOT NULL,
   scope_id TEXT NOT NULL,
   task_type TEXT NOT NULL,
@@ -82,6 +119,8 @@ CREATE TABLE IF NOT EXISTS experience_candidates (
   source_kind TEXT NOT NULL,
   source_context_summary TEXT,
   source_outcome_signal TEXT NOT NULL,
+  raw_summary TEXT,
+  failure_signature TEXT,
   source_signal_json TEXT NOT NULL,
   lifecycle_state TEXT NOT NULL,
   retry_count INTEGER NOT NULL DEFAULT 0,

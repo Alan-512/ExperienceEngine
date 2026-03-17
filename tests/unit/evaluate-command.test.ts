@@ -37,6 +37,9 @@ describe("evaluate command", () => {
           scenariosWithCandidates: 0,
           scenariosWithDistilledCandidates: 0,
           scenariosWithInjectedNodes: 0,
+          scenariosWithTaskRuns: 0,
+          scenariosWithOutcomes: 0,
+          scenariosWithReviews: 0,
           successfulRecords: 0,
           failedRecords: 0,
           unknownRecords: 0
