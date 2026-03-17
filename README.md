@@ -94,6 +94,7 @@ That managed state includes:
 - SQLite database
 - product settings
 - per-adapter install state
+- managed local embedding model cache under `~/.experienceengine/models/embeddings`
 - managed backups and exports
 
 ## User Guide
@@ -112,6 +113,7 @@ The user guide includes:
 - OpenClaw baseline evaluation workflow
 - OpenClaw high-confidence scenario evaluation workflow
 - Codex real-host validation workflow and checklist
+- local embedding retrieval design, managed model behavior, and fallback diagnostics
 
 ## Validation
 

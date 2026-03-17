@@ -23,6 +23,10 @@ export class NodeRepository {
     evidence_summary: string;
     retrieval_text: string | null;
     embedding_json: string | null;
+    embedding_provider: string | null;
+    embedding_model: string | null;
+    embedding_version: string | null;
+    embedding_dimensions: number | null;
     source_kind: ExperienceNode["source_kind"];
     origin_record_ids_json: string;
     helped_record_ids_json: string;
@@ -57,6 +61,10 @@ export class NodeRepository {
       evidence_summary: row.evidence_summary,
       retrieval_text: row.retrieval_text ?? undefined,
       embedding: row.embedding_json ? (JSON.parse(row.embedding_json) as number[]) : undefined,
+      embedding_provider: row.embedding_provider ?? undefined,
+      embedding_model: row.embedding_model ?? undefined,
+      embedding_version: row.embedding_version ?? undefined,
+      embedding_dimensions: row.embedding_dimensions ?? undefined,
       source_kind: row.source_kind,
       origin_record_ids: JSON.parse(row.origin_record_ids_json) as string[],
       helped_record_ids: JSON.parse(row.helped_record_ids_json) as string[],
@@ -94,6 +102,10 @@ export class NodeRepository {
       evidence_summary: node.evidence_summary,
       retrieval_text: node.retrieval_text ?? null,
       embedding_json: node.embedding ? JSON.stringify(node.embedding) : null,
+      embedding_provider: node.embedding_provider ?? null,
+      embedding_model: node.embedding_model ?? null,
+      embedding_version: node.embedding_version ?? null,
+      embedding_dimensions: node.embedding_dimensions ?? null,
       source_kind: node.source_kind,
       origin_record_ids_json: JSON.stringify(node.origin_record_ids ?? []),
       helped_record_ids_json: JSON.stringify(node.helped_record_ids ?? []),
@@ -114,12 +126,12 @@ export class NodeRepository {
       .prepare(
         `INSERT INTO experience_nodes
           (id, node_type, scope_id, task_type, trigger_pattern, applicability_notes, env_signature, compact_hint, goal, recommended_steps_json,
-           avoid_steps_json, fallback_steps_json, success_signal, stop_condition, escalation_condition, evidence_summary, retrieval_text, embedding_json, source_kind,
+           avoid_steps_json, fallback_steps_json, success_signal, stop_condition, escalation_condition, evidence_summary, retrieval_text, embedding_json, embedding_provider, embedding_model, embedding_version, embedding_dimensions, source_kind,
            origin_record_ids_json, helped_record_ids_json, harmed_record_ids_json, state,
            usage_count, helped_count, harmed_count, support_count, last_used_at, last_helped_at, last_harmed_at, created_at, updated_at)
          VALUES
          (@id, @node_type, @scope_id, @task_type, @trigger_pattern, @applicability_notes, @env_signature, @compact_hint, @goal, @recommended_steps_json,
-           @avoid_steps_json, @fallback_steps_json, @success_signal, @stop_condition, @escalation_condition, @evidence_summary, @retrieval_text, @embedding_json, @source_kind,
+           @avoid_steps_json, @fallback_steps_json, @success_signal, @stop_condition, @escalation_condition, @evidence_summary, @retrieval_text, @embedding_json, @embedding_provider, @embedding_model, @embedding_version, @embedding_dimensions, @source_kind,
            @origin_record_ids_json, @helped_record_ids_json, @harmed_record_ids_json, @state,
            @usage_count, @helped_count, @harmed_count, @support_count, @last_used_at, @last_helped_at, @last_harmed_at, @created_at, @updated_at)
          ON CONFLICT(id) DO UPDATE SET
@@ -137,6 +149,10 @@ export class NodeRepository {
           evidence_summary = excluded.evidence_summary,
           retrieval_text = excluded.retrieval_text,
           embedding_json = excluded.embedding_json,
+          embedding_provider = excluded.embedding_provider,
+          embedding_model = excluded.embedding_model,
+          embedding_version = excluded.embedding_version,
+          embedding_dimensions = excluded.embedding_dimensions,
           source_kind = excluded.source_kind,
           origin_record_ids_json = excluded.origin_record_ids_json,
           helped_record_ids_json = excluded.helped_record_ids_json,

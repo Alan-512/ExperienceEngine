@@ -316,7 +316,14 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     const stats =
       input.task_type !== "unknown" ? this.statsRepo.get(input.scope_id, input.task_type) : undefined;
     const nodes = input.task_type !== "unknown" ? this.nodeRepo.listInjectableByScope(input.scope_id) : [];
-    const decision = decideIntervention(input, nodes, stats, this.config.triggerThreshold, this.config.maxHints);
+    const decision = await decideIntervention(
+      input,
+      nodes,
+      stats,
+      this.config.triggerThreshold,
+      this.config.maxHints,
+      this.config
+    );
 
     session.injectedNodeIds = decision.selected.map((node) => node.id);
     session.context = {

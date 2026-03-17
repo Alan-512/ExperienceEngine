@@ -1,5 +1,5 @@
 import type { ExperienceNode } from "../../types/domain.js";
-import { embedText, isCompatibleEmbedding } from "./embeddings.js";
+import { buildLegacyEmbedding, isCompatibleEmbedding } from "./embeddings.js";
 import { openVectorStore } from "./lancedb.js";
 
 export class NodeIndex {
@@ -9,12 +9,12 @@ export class NodeIndex {
   upsert(node: ExperienceNode): void {
     const embedding = isCompatibleEmbedding(node.embedding)
       ? node.embedding
-      : embedText(node.retrieval_text ?? `${node.trigger_pattern} ${node.compact_hint}`);
+      : buildLegacyEmbedding(node.retrieval_text ?? `${node.trigger_pattern} ${node.compact_hint}`).embedding;
     this.index.set(node.id, embedding);
   }
 
   query(summary: string, limit = 8): Array<{ id: string; score: number }> {
-    const queryEmbedding = embedText(summary);
+    const queryEmbedding = buildLegacyEmbedding(summary).embedding;
     return this.store.query(
       [...this.index.entries()].map(([id, embedding]) => ({
         id,

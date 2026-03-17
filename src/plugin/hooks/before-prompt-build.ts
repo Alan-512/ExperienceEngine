@@ -8,9 +8,16 @@ export const handleBeforePromptBuild = (
   nodes: ExperienceNode[] = [],
   stats?: ScopeTaskStats,
   toolEvents: ToolEvent[] = []
+) => handleBeforePromptBuildInternal(context, nodes, stats, toolEvents);
+
+const handleBeforePromptBuildInternal = async (
+  context: HostPromptContext,
+  nodes: ExperienceNode[] = [],
+  stats?: ScopeTaskStats,
+  toolEvents: ToolEvent[] = []
 ) => {
   const input = buildExperienceInput(context, toolEvents);
-  const decision = decideIntervention(input, nodes, stats);
+  const decision = await decideIntervention(input, nodes, stats);
 
   return {
     mode: decision.mode,
@@ -18,4 +25,3 @@ export const handleBeforePromptBuild = (
     input
   };
 };
-

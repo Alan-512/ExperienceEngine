@@ -9,6 +9,10 @@ export const configSchema = z.object({
   captureDir: z.string().default("./data/runtime-captures"),
   maxHints: z.number().int().min(1).max(3).default(3),
   triggerThreshold: z.number().min(0).max(1).default(0.6),
+  embeddingProvider: z.enum(["local", "legacy"]).default("local"),
+  embeddingModel: z.string().default("Xenova/multilingual-e5-small"),
+  embeddingDtype: z.enum(["q8", "fp32"]).default("q8"),
+  embeddingCacheDir: z.string().default("./data/models/embeddings"),
   distillerProfile: z.enum(["fast", "balanced", "high_quality"]).default("balanced"),
   distillationAllowPassthrough: z.boolean().default(false),
   distillationMaxRetries: z.number().int().min(0).max(10).default(2),
@@ -58,6 +62,24 @@ export const pluginConfigJsonSchema = {
       minimum: 0,
       maximum: 1,
       description: "Trigger threshold for intervention gating."
+    },
+    embeddingProvider: {
+      type: "string",
+      enum: ["local", "legacy"],
+      description: "Embedding provider used for retrieval. `local` manages a local model, `legacy` keeps hash fallback only."
+    },
+    embeddingModel: {
+      type: "string",
+      description: "Embedding model identifier used by the managed local provider."
+    },
+    embeddingDtype: {
+      type: "string",
+      enum: ["q8", "fp32"],
+      description: "Embedding model dtype. `q8` prefers the quantized ONNX artifact for smaller local downloads."
+    },
+    embeddingCacheDir: {
+      type: "string",
+      description: "Directory used to cache managed embedding model files."
     },
     distillerProfile: {
       type: "string",
@@ -114,6 +136,19 @@ export const pluginUiHints = {
   },
   triggerThreshold: {
     label: "Trigger Threshold"
+  },
+  embeddingProvider: {
+    label: "Embedding Provider"
+  },
+  embeddingModel: {
+    label: "Embedding Model"
+  },
+  embeddingDtype: {
+    label: "Embedding Dtype"
+  },
+  embeddingCacheDir: {
+    label: "Embedding Cache Directory",
+    placeholder: "./data/models/embeddings"
   },
   distillerProfile: {
     label: "Distiller Profile"

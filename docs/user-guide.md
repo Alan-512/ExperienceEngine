@@ -100,6 +100,22 @@ Before installing any adapter, make sure the host CLI itself already works on th
 
 ExperienceEngine wires itself into an existing host environment. It does not install the host CLI for you.
 
+## Local Embedding Retrieval
+
+ExperienceEngine now prefers a managed local embedding model for retrieval instead of relying on hash-only lexical vectors.
+
+Default behavior:
+
+- the default model is `Xenova/multilingual-e5-small`
+- the default dtype is `q8`, so ExperienceEngine prefers the quantized ONNX artifact
+- ExperienceEngine manages the local cache itself
+- the first semantic retrieval may trigger a one-time model download
+- the cache lives under `~/.experienceengine/models/embeddings`
+- if local embedding initialization fails, ExperienceEngine logs a warning once and falls back to the legacy hash-based retrieval path
+- if a cached ONNX file is corrupted, ExperienceEngine clears that model cache and retries once before falling back
+
+This means users do not need to prepare a separate embedding service before installing ExperienceEngine.
+
 ### OpenClaw
 
 Install:

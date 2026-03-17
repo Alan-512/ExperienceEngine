@@ -7,7 +7,7 @@ import type { DistillationJob } from "../types/domain.js";
 import { CandidateRepository } from "../store/sqlite/repositories/candidate-repo.js";
 import { DistillationJobRepository } from "../store/sqlite/repositories/distillation-job-repo.js";
 import { NodeRepository } from "../store/sqlite/repositories/node-repo.js";
-import { embedText } from "../store/vector/embeddings.js";
+import { buildLegacyEmbedding, embedPassageText, withEmbeddingMetadata } from "../store/vector/embeddings.js";
 import { transitionState } from "../feedback/state-transition.js";
 
 const DISTILLATION_STALE_PROCESSING_MS = 60_000;
@@ -29,12 +29,13 @@ const distilledDraftToNode = (candidate: ExperienceCandidate, distilled: Experie
     stableId("node", [candidate.scope_id, candidate.task_type, candidate.node_type, distilled.compact_hint].join(":"));
 
   const retrievalText = buildRetrievalText(distilled);
+  const legacyEmbedding = buildLegacyEmbedding(retrievalText);
 
   return {
     id,
     ...distilled,
     retrieval_text: retrievalText,
-    embedding: embedText(retrievalText),
+    ...withEmbeddingMetadata(legacyEmbedding),
     origin_record_ids: mergeIds(existing?.origin_record_ids, [candidate.source_record_id]),
     helped_record_ids: existing?.helped_record_ids ?? [],
     harmed_record_ids: existing?.harmed_record_ids ?? [],
@@ -158,8 +159,12 @@ export class DistillationQueueWorker {
         stableId("node", [candidate.scope_id, candidate.task_type, candidate.node_type, distilled.compact_hint].join(":"));
       const existingNode = this.nodeRepo.getById(resolvedNodeId);
       const node = distilledDraftToNode(candidate, distilled, existingNode);
+      const semanticEmbedding = await embedPassageText(node.retrieval_text ?? `${node.trigger_pattern}\n${node.compact_hint}`, {
+        config: this.config
+      });
       this.nodeRepo.upsert({
         ...node,
+        ...withEmbeddingMetadata(semanticEmbedding),
         state: transitionState(node)
       });
 

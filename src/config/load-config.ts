@@ -1,3 +1,4 @@
+import { join } from "node:path";
 import { defaultConfig } from "./default-config.js";
 import { configSchema, type ExperienceEngineConfig } from "./config-schema.js";
 import { resolveExperienceEnginePaths } from "./path-resolver.js";
@@ -37,6 +38,22 @@ export const loadConfig = (
     triggerThreshold: env.EXPERIENCE_ENGINE_TRIGGER_THRESHOLD
       ? Number(env.EXPERIENCE_ENGINE_TRIGGER_THRESHOLD)
       : overrides.triggerThreshold ?? defaultConfig.triggerThreshold,
+    embeddingProvider:
+      (env.EXPERIENCE_ENGINE_EMBEDDING_PROVIDER as ExperienceEngineConfig["embeddingProvider"] | undefined) ??
+      overrides.embeddingProvider ??
+      defaultConfig.embeddingProvider,
+    embeddingModel:
+      env.EXPERIENCE_ENGINE_EMBEDDING_MODEL ??
+      overrides.embeddingModel ??
+      defaultConfig.embeddingModel,
+    embeddingDtype:
+      (env.EXPERIENCE_ENGINE_EMBEDDING_DTYPE as ExperienceEngineConfig["embeddingDtype"] | undefined) ??
+      overrides.embeddingDtype ??
+      defaultConfig.embeddingDtype,
+    embeddingCacheDir:
+      env.EXPERIENCE_ENGINE_EMBEDDING_CACHE_DIR ??
+      overrides.embeddingCacheDir ??
+      join(paths.productHome, "models", "embeddings"),
     distillerProfile:
       (env.EXPERIENCE_ENGINE_DISTILLER_PROFILE as ExperienceEngineConfig["distillerProfile"] | undefined) ??
       overrides.distillerProfile ??

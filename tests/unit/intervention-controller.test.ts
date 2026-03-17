@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { decideIntervention, selectInjectableNodes } from "../../src/controller/intervention-controller.js";
 import type { ExperienceInput, ExperienceNode, ScopeTaskStats } from "../../src/types/domain.js";
+import { clearEmbeddingProviderForTests, setEmbeddingProviderForTests } from "../../src/store/vector/embeddings.js";
 
 const node = (overrides: Partial<ExperienceNode>): ExperienceNode => ({
   id: "node_default",
@@ -74,8 +75,27 @@ describe("selectInjectableNodes", () => {
 });
 
 describe("decideIntervention", () => {
-  it("injects only strategy nodes when both types are available", () => {
-    const decision = decideIntervention(
+  beforeEach(() => {
+    setEmbeddingProviderForTests({
+      provider: "local",
+      model: "Xenova/multilingual-e5-small",
+      version: "local-e5-v1",
+      dimensions: 3,
+      async embedQuery() {
+        return [1, 0, 0];
+      },
+      async embedPassage() {
+        return [1, 0, 0];
+      }
+    });
+  });
+
+  afterEach(() => {
+    clearEmbeddingProviderForTests();
+  });
+
+  it("injects only strategy nodes when both types are available", async () => {
+    const decision = await decideIntervention(
       input,
       [
         node({ id: "strategy", node_type: "strategy", helped_count: 2 }),
@@ -92,8 +112,8 @@ describe("decideIntervention", () => {
     expect(decision.text).not.toContain("Do not keep iterating blindly.");
   });
 
-  it("uses the selected strategy trigger instead of a higher-ranked warning trigger", () => {
-    const decision = decideIntervention(
+  it("uses the selected strategy trigger instead of a higher-ranked warning trigger", async () => {
+    const decision = await decideIntervention(
       input,
       [
         node({
@@ -122,8 +142,8 @@ describe("decideIntervention", () => {
     expect(decision.text).toContain("Reproduce first, then validate the fix with exec before moving on.");
   });
 
-  it("injects warning nodes when they are the only available guidance", () => {
-    const decision = decideIntervention(
+  it("injects warning nodes when they are the only available guidance", async () => {
+    const decision = await decideIntervention(
       input,
       [node({ id: "warning", node_type: "warning", compact_hint: "Narrow the failure signature first." })],
       stats,
@@ -136,8 +156,8 @@ describe("decideIntervention", () => {
     expect(decision.text).toContain("Narrow the failure signature first.");
   });
 
-  it("keeps specific distilled strategy nodes ahead of legacy generic strategies", () => {
-    const decision = decideIntervention(
+  it("keeps specific distilled strategy nodes ahead of legacy generic strategies", async () => {
+    const decision = await decideIntervention(
       input,
       [
         node({
@@ -169,8 +189,8 @@ describe("decideIntervention", () => {
     expect(decision.selected[0]?.id).toBe("specific-distilled");
   });
 
-  it("prefers exact task-family strategies over general fallback nodes", () => {
-    const decision = decideIntervention(
+  it("prefers exact task-family strategies over general fallback nodes", async () => {
+    const decision = await decideIntervention(
       input,
       [
         node({
@@ -203,8 +223,8 @@ describe("decideIntervention", () => {
     expect(decision.selected[0]?.id).toBe("exact-test-node");
   });
 
-  it("keeps an exact candidate-family match ahead of unrelated active cross-family nodes", () => {
-    const decision = decideIntervention(
+  it("keeps an exact candidate-family match ahead of unrelated active cross-family nodes", async () => {
+    const decision = await decideIntervention(
       {
         ...input,
         task_type: "integration_fix",
@@ -244,5 +264,40 @@ describe("decideIntervention", () => {
 
     expect(decision.mode).toBe("inject_conservative");
     expect(decision.selected[0]?.id).toBe("exact-candidate-match");
+  });
+
+  it("awaits the active embedding provider before selecting nodes", async () => {
+    setEmbeddingProviderForTests({
+      provider: "local",
+      model: "Xenova/multilingual-e5-small",
+      version: "local-e5-v1",
+      dimensions: 3,
+      async embedQuery() {
+        return [1, 0, 0];
+      },
+      async embedPassage() {
+        return [1, 0, 0];
+      }
+    });
+
+    const decision = await decideIntervention(
+      input,
+      [
+        node({
+          id: "semantic-local-node",
+          embedding: [1, 0, 0],
+          embedding_provider: "local",
+          embedding_model: "Xenova/multilingual-e5-small",
+          embedding_version: "local-e5-v1",
+          embedding_dimensions: 3
+        })
+      ],
+      stats,
+      0.6,
+      3
+    );
+
+    expect(decision.mode).toBe("inject");
+    expect(decision.selected[0]?.id).toBe("semantic-local-node");
   });
 });

@@ -5,6 +5,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadConfig } from "../../src/config/load-config.js";
 import { LlmDistiller } from "../../src/distillation/llm-distiller.js";
 import { DistillationQueueWorker } from "../../src/distillation/queue-worker.js";
+import {
+  clearEmbeddingProviderForTests,
+  setEmbeddingProviderForTests
+} from "../../src/store/vector/embeddings.js";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
 import { CandidateRepository } from "../../src/store/sqlite/repositories/candidate-repo.js";
 import { DistillationJobRepository } from "../../src/store/sqlite/repositories/distillation-job-repo.js";
@@ -29,6 +33,7 @@ const makeDb = (overrides: Partial<ReturnType<typeof loadConfig>> = {}) => {
 };
 
 afterEach(() => {
+  clearEmbeddingProviderForTests();
   while (tempDirs.length) {
     rmSync(tempDirs.pop()!, { recursive: true, force: true });
   }
@@ -185,6 +190,19 @@ describe("LlmDistiller", () => {
 
 describe("DistillationQueueWorker", () => {
   it("promotes pending candidates into formal nodes", async () => {
+    setEmbeddingProviderForTests({
+      provider: "local",
+      model: "Xenova/multilingual-e5-small",
+      version: "local-e5-v1",
+      dimensions: 3,
+      async embedQuery() {
+        return [1, 0, 0];
+      },
+      async embedPassage() {
+        return [1, 0, 0];
+      }
+    });
+
     const { db, config } = makeDb({ distillationAllowPassthrough: true });
     const candidateRepo = new CandidateRepository(db);
     const jobRepo = new DistillationJobRepository(db);
@@ -198,7 +216,13 @@ describe("DistillationQueueWorker", () => {
     expect(drained).toBe(1);
     expect(candidateRepo.getById("candidate_distill_auth")?.lifecycle_state).toBe("distilled");
     expect(jobRepo.getById("job_distill_auth")?.status).toBe("succeeded");
-    expect(nodeRepo.listByState("candidate")).toHaveLength(1);
+    const [createdNode] = nodeRepo.listByState("candidate");
+    expect(createdNode).toBeDefined();
+    expect(createdNode?.embedding_provider).toBe("local");
+    expect(createdNode?.embedding_model).toBe("Xenova/multilingual-e5-small");
+    expect(createdNode?.embedding_version).toBe("local-e5-v1");
+    expect(createdNode?.embedding_dimensions).toBe(3);
+    expect(createdNode?.embedding).toEqual([1, 0, 0]);
   });
 
   it("discards candidates after retry exhaustion", async () => {
@@ -280,6 +304,19 @@ describe("DistillationQueueWorker", () => {
   });
 
   it("requeues stale processing jobs instead of leaving them stuck forever", async () => {
+    setEmbeddingProviderForTests({
+      provider: "local",
+      model: "Xenova/multilingual-e5-small",
+      version: "local-e5-v1",
+      dimensions: 3,
+      async embedQuery() {
+        return [1, 0, 0];
+      },
+      async embedPassage() {
+        return [1, 0, 0];
+      }
+    });
+
     const { db, config } = makeDb({ distillationAllowPassthrough: true });
     const candidateRepo = new CandidateRepository(db);
     const jobRepo = new DistillationJobRepository(db);
@@ -302,5 +339,37 @@ describe("DistillationQueueWorker", () => {
     expect(jobRepo.getById("job_distill_auth")?.status).toBe("succeeded");
     expect(jobRepo.getById("job_distill_auth")?.retry_count).toBe(1);
     expect(nodeRepo.listByState("candidate")).toHaveLength(1);
+  });
+
+  it("falls back to legacy embedding metadata when the local provider fails", async () => {
+    setEmbeddingProviderForTests({
+      provider: "local",
+      model: "Xenova/multilingual-e5-small",
+      version: "local-e5-v1",
+      dimensions: 3,
+      async embedQuery() {
+        return [1, 0, 0];
+      },
+      async embedPassage() {
+        throw new Error("model unavailable");
+      }
+    });
+
+    const { db, config } = makeDb({ distillationAllowPassthrough: true });
+    const candidateRepo = new CandidateRepository(db);
+    const jobRepo = new DistillationJobRepository(db);
+    const nodeRepo = new NodeRepository(db);
+    candidateRepo.upsert(makeCandidate());
+    jobRepo.upsert(makeJob());
+
+    const worker = new DistillationQueueWorker(config, candidateRepo, jobRepo, nodeRepo, { env: {} });
+    await worker.drain();
+
+    const [createdNode] = nodeRepo.listByState("candidate");
+    expect(createdNode).toBeDefined();
+    expect(createdNode?.embedding_provider).toBe("legacy");
+    expect(createdNode?.embedding_model).toBe("hashed-bow");
+    expect(createdNode?.embedding_version).toBeTruthy();
+    expect(createdNode?.embedding_dimensions).toBe(createdNode?.embedding?.length);
   });
 });

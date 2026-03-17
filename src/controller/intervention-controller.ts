@@ -3,6 +3,7 @@ import { retrieveCandidates } from "./candidate-retriever.js";
 import { renderInjection } from "./injection-renderer.js";
 import { rankNodes } from "./node-ranker.js";
 import { evaluateTrigger } from "./trigger-evaluator.js";
+import type { ExperienceEngineConfig } from "../config/config-schema.js";
 
 export type InterventionDecision = {
   mode: InjectionMode;
@@ -24,9 +25,19 @@ export const decideIntervention = (
   nodes: ExperienceNode[],
   stats?: ScopeTaskStats,
   threshold = 0.6,
-  maxHints = 3
-): InterventionDecision => {
-  const candidates = retrieveCandidates(input, nodes);
+  maxHints = 3,
+  config?: Pick<ExperienceEngineConfig, "embeddingProvider" | "embeddingModel" | "embeddingDtype" | "embeddingCacheDir">
+): Promise<InterventionDecision> => decideInterventionInternal(input, nodes, stats, threshold, maxHints, config);
+
+const decideInterventionInternal = async (
+  input: ExperienceInput,
+  nodes: ExperienceNode[],
+  stats?: ScopeTaskStats,
+  threshold = 0.6,
+  maxHints = 3,
+  config?: Pick<ExperienceEngineConfig, "embeddingProvider" | "embeddingModel" | "embeddingDtype" | "embeddingCacheDir">
+): Promise<InterventionDecision> => {
+  const candidates = await retrieveCandidates(input, nodes, { config });
   const ranked = rankNodes(input.task_summary, candidates, input.task_type);
 
   if (!ranked.length) {

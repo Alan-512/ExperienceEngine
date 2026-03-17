@@ -1,8 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import { retrieveCandidates } from "../../src/controller/candidate-retriever.js";
 import type { ExperienceInput, ExperienceNode } from "../../src/types/domain.js";
-import { embedText } from "../../src/store/vector/embeddings.js";
+import {
+  clearEmbeddingProviderForTests,
+  embedText,
+  setEmbeddingProviderForTests
+} from "../../src/store/vector/embeddings.js";
 
 const node = (overrides: Partial<ExperienceNode>): ExperienceNode => {
   const base: ExperienceNode = {
@@ -36,7 +40,11 @@ const node = (overrides: Partial<ExperienceNode>): ExperienceNode => {
   return {
     ...merged,
     retrieval_text: retrievalText,
-    embedding: merged.embedding ?? embedText(retrievalText)
+    embedding: merged.embedding ?? embedText(retrievalText),
+    embedding_provider: merged.embedding_provider,
+    embedding_model: merged.embedding_model,
+    embedding_version: merged.embedding_version,
+    embedding_dimensions: merged.embedding_dimensions
   };
 };
 
@@ -51,8 +59,27 @@ const input = (overrides: Partial<ExperienceInput> = {}): ExperienceInput => ({
 });
 
 describe("retrieveCandidates", () => {
-  it("retrieves semantically similar nodes even when wording differs", () => {
-    const candidates = retrieveCandidates(input(), [
+  beforeEach(() => {
+    setEmbeddingProviderForTests({
+      provider: "local",
+      model: "Xenova/multilingual-e5-small",
+      version: "local-e5-v1",
+      dimensions: 3,
+      async embedQuery() {
+        return [1, 0, 0];
+      },
+      async embedPassage() {
+        return [1, 0, 0];
+      }
+    });
+  });
+
+  afterEach(() => {
+    clearEmbeddingProviderForTests();
+  });
+
+  it("retrieves semantically similar nodes even when wording differs", async () => {
+    const candidates = await retrieveCandidates(input(), [
       node({ id: "semantically-close" }),
       node({
         id: "unrelated",
@@ -68,8 +95,8 @@ describe("retrieveCandidates", () => {
     expect(candidates.map((entry) => entry.id)).not.toContain("unrelated");
   });
 
-  it("allows related task families instead of requiring exact task-type equality", () => {
-    const candidates = retrieveCandidates(
+  it("allows related task families instead of requiring exact task-type equality", async () => {
+    const candidates = await retrieveCandidates(
       input({
         task_type: "bug_fix",
         task_summary: "Repair the authentication unit test regression"
@@ -94,8 +121,8 @@ describe("retrieveCandidates", () => {
     expect(candidates.map((entry) => entry.id)).not.toContain("far-family-node");
   });
 
-  it("downranks low-specificity legacy hints below more specific distilled nodes", () => {
-    const candidates = retrieveCandidates(
+  it("downranks low-specificity legacy hints below more specific distilled nodes", async () => {
+    const candidates = await retrieveCandidates(
       input({
         task_type: "test_debug",
         task_summary: "Reproduce the failing auth baseline test and rerun it after the smallest fix"
@@ -127,8 +154,8 @@ describe("retrieveCandidates", () => {
     expect(candidates.map((entry) => entry.id)).toContain("legacy-generic");
   });
 
-  it("does not let general verification tasks pull in unrelated debug-family fallback nodes", () => {
-    const candidates = retrieveCandidates(
+  it("does not let general verification tasks pull in unrelated debug-family fallback nodes", async () => {
+    const candidates = await retrieveCandidates(
       input({
         task_type: "general",
         task_summary:
@@ -155,8 +182,8 @@ describe("retrieveCandidates", () => {
     expect(candidates.map((entry) => entry.id)).not.toContain("debug-fallback");
   });
 
-  it("falls back to retrieval text when a stored embedding is stale or incompatible", () => {
-    const candidates = retrieveCandidates(input(), [
+  it("falls back to retrieval text when a stored embedding is stale or incompatible", async () => {
+    const candidates = await retrieveCandidates(input(), [
       node({
         id: "stale-embedding",
         embedding: [1, 2],
@@ -166,5 +193,67 @@ describe("retrieveCandidates", () => {
     ]);
 
     expect(candidates.map((entry) => entry.id)).toContain("stale-embedding");
+  });
+
+  it("prefers nodes whose embedding metadata matches the active local provider", async () => {
+    setEmbeddingProviderForTests({
+      provider: "local",
+      model: "Xenova/multilingual-e5-small",
+      version: "local-e5-v1",
+      dimensions: 3,
+      async embedQuery() {
+        return [1, 0, 0];
+      },
+      async embedPassage() {
+        return [1, 0, 0];
+      }
+    });
+
+    const candidates = await retrieveCandidates(input(), [
+      node({
+        id: "local-match",
+        embedding: [1, 0, 0],
+        embedding_provider: "local",
+        embedding_model: "Xenova/multilingual-e5-small",
+        embedding_version: "local-e5-v1",
+        embedding_dimensions: 3
+      }),
+      node({
+        id: "legacy-mismatch",
+        embedding: [1, 0, 0],
+        embedding_provider: "legacy",
+        embedding_model: "hashed-bow",
+        embedding_version: "legacy-v1",
+        embedding_dimensions: 3
+      })
+    ]);
+
+    expect(candidates[0]?.id).toBe("local-match");
+  });
+
+  it("falls back to legacy retrieval when the local provider cannot embed the query", async () => {
+    setEmbeddingProviderForTests({
+      provider: "local",
+      model: "Xenova/multilingual-e5-small",
+      version: "local-e5-v1",
+      dimensions: 3,
+      async embedQuery() {
+        throw new Error("provider offline");
+      },
+      async embedPassage() {
+        return [1, 0, 0];
+      }
+    });
+
+    const candidates = await retrieveCandidates(input(), [
+      node({
+        id: "legacy-fallback",
+        embedding: undefined,
+        trigger_pattern: "Fix the failing auth test in ExperienceEngine",
+        compact_hint: "Run the failing auth test before editing and rerun it immediately after the fix."
+      })
+    ]);
+
+    expect(candidates.map((entry) => entry.id)).toContain("legacy-fallback");
   });
 });

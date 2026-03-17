@@ -49,6 +49,10 @@ export const bootstrapDatabase = (db: DatabaseSync): void => {
 
   ensureColumn(db, "experience_nodes", "retrieval_text", "TEXT");
   ensureColumn(db, "experience_nodes", "embedding_json", "TEXT");
+  ensureColumn(db, "experience_nodes", "embedding_provider", "TEXT");
+  ensureColumn(db, "experience_nodes", "embedding_model", "TEXT");
+  ensureColumn(db, "experience_nodes", "embedding_version", "TEXT");
+  ensureColumn(db, "experience_nodes", "embedding_dimensions", "INTEGER");
   ensureColumn(db, "experience_nodes", "origin_record_ids_json", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "experience_nodes", "helped_record_ids_json", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "experience_nodes", "harmed_record_ids_json", "TEXT NOT NULL DEFAULT '[]'");

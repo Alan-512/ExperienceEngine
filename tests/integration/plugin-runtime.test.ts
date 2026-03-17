@@ -5,6 +5,7 @@ import { DatabaseSync } from "node:sqlite";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import plugin from "../../src/plugin/openclaw-plugin.js";
 import { installOpenClawAdapter } from "../../src/install/openclaw-installer.js";
+import { clearEmbeddingProviderForTests, setEmbeddingProviderForTests } from "../../src/store/vector/embeddings.js";
 import { replayScenarios, type ReplayScenario } from "../fixtures/openclaw/index.js";
 
 type Handler = (payload: unknown, context?: unknown) => unknown | Promise<unknown>;
@@ -14,9 +15,22 @@ const originalAllowPassthrough = process.env.EXPERIENCE_ENGINE_DISTILLATION_ALLO
 
 beforeAll(() => {
   process.env.EXPERIENCE_ENGINE_DISTILLATION_ALLOW_PASSTHROUGH = "true";
+  setEmbeddingProviderForTests({
+    provider: "local",
+    model: "Xenova/multilingual-e5-small",
+    version: "local-e5-v1",
+    dimensions: 3,
+    async embedQuery() {
+      return [1, 0, 0];
+    },
+    async embedPassage() {
+      return [1, 0, 0];
+    }
+  });
 });
 
 afterAll(() => {
+  clearEmbeddingProviderForTests();
   if (originalAllowPassthrough === undefined) {
     delete process.env.EXPERIENCE_ENGINE_DISTILLATION_ALLOW_PASSTHROUGH;
   } else {
@@ -421,6 +435,12 @@ describe("OpenClaw plugin runtime", () => {
       message: { content: "Fix the failing vitest auth test in the current workspace." }
     });
 
+    const db = new DatabaseSync(sqlitePath);
+    await waitFor(() => {
+      const nodeCount = db.prepare("SELECT COUNT(*) AS count FROM experience_nodes").get() as { count: number };
+      expect(nodeCount.count).toBeGreaterThanOrEqual(1);
+    });
+
     const replayPayload = {
       session: { key: "followup-clean" },
       workspace: { cwd: "/tmp/repo" },
@@ -455,7 +475,6 @@ describe("OpenClaw plugin runtime", () => {
       }
     );
 
-    const db = new DatabaseSync(sqlitePath);
     const latestInput = db
       .prepare(
         "SELECT task_summary FROM experience_input_records WHERE session_id = ? ORDER BY created_at DESC LIMIT 1"
@@ -1068,18 +1087,26 @@ describe("OpenClaw plugin runtime", () => {
     });
 
     const db = new DatabaseSync(sqlitePath);
-    const warningRows = db
-      .prepare(
-        "SELECT id, compact_hint, evidence_summary, support_count FROM experience_nodes WHERE task_type = 'test_debug' AND node_type = 'warning' ORDER BY updated_at DESC"
-      )
-      .all() as Array<{
-        id: string;
-        compact_hint: string;
-        evidence_summary: string;
-        support_count: number;
-      }>;
+    let warningRows: Array<{
+      id: string;
+      compact_hint: string;
+      evidence_summary: string;
+      support_count: number;
+    }> = [];
+    await waitFor(() => {
+      warningRows = db
+        .prepare(
+          "SELECT id, compact_hint, evidence_summary, support_count FROM experience_nodes WHERE task_type = 'test_debug' AND node_type = 'warning' ORDER BY updated_at DESC"
+        )
+        .all() as Array<{
+          id: string;
+          compact_hint: string;
+          evidence_summary: string;
+          support_count: number;
+        }>;
+      expect(warningRows.length).toBe(1);
+    });
 
-    expect(warningRows).toHaveLength(1);
     expect(warningRows[0]?.compact_hint).toContain("process");
     expect(warningRows[0]?.compact_hint).toContain("narrow");
     expect(warningRows[0]?.evidence_summary).toContain("process failed");

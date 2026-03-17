@@ -1,5 +1,11 @@
 import type { ExperienceInput, ExperienceNode, TaskType } from "../types/domain.js";
-import { embedText, isCompatibleEmbedding } from "../store/vector/embeddings.js";
+import {
+  buildLegacyEmbedding,
+  embedQueryText,
+  isCompatibleEmbedding,
+  isMatchingEmbeddingSpace
+} from "../store/vector/embeddings.js";
+import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import { openVectorStore } from "../store/vector/lancedb.js";
 import { tokenize } from "../utils/text.js";
 
@@ -90,28 +96,49 @@ const getGenericPenalty = (node: ExperienceNode): number => (isLegacyGenericNode
 const getFamilyScore = (inputTaskType: TaskType, nodeTaskType: TaskType): number =>
   TASK_FAMILY_PROXIMITY[inputTaskType][nodeTaskType] ?? 0;
 
-export const retrieveCandidates = (input: ExperienceInput, nodes: ExperienceNode[]): ExperienceNode[] => {
+type RetrieveOptions = {
+  config?: Pick<ExperienceEngineConfig, "embeddingProvider" | "embeddingModel" | "embeddingDtype" | "embeddingCacheDir">;
+  env?: NodeJS.ProcessEnv;
+  homeDir?: string;
+};
+
+export const retrieveCandidates = async (
+  input: ExperienceInput,
+  nodes: ExperienceNode[],
+  options: RetrieveOptions = {}
+): Promise<ExperienceNode[]> => {
   if (input.task_type === "unknown") {
     return [];
   }
 
   const inputTaskType = input.task_type;
   const queryText = [input.task_summary, input.context_summary].filter(Boolean).join("\n");
-  const queryEmbedding = embedText(queryText || input.task_summary);
+  const localQuery = await embedQueryText(queryText || input.task_summary, options);
+  const legacyQuery = buildLegacyEmbedding(queryText || input.task_summary);
   const vectorStore = openVectorStore();
   const scopeLocalNodes = nodes.filter(isInjectableState);
-  const semanticMatches = vectorStore.query(
-    scopeLocalNodes.map((node) => ({
+  const localSemanticRecords = scopeLocalNodes
+    .filter((node) => isMatchingEmbeddingSpace(node, localQuery.space))
+    .map((node) => ({
+      id: node.id,
+      embedding: node.embedding!
+    }));
+  const legacyRecords = scopeLocalNodes
+    .filter((node) => !isMatchingEmbeddingSpace(node, localQuery.space))
+    .map((node) => ({
       id: node.id,
       embedding: isCompatibleEmbedding(node.embedding)
         ? node.embedding
-        : embedText(node.retrieval_text ?? `${node.trigger_pattern} ${node.compact_hint}`)
-    })),
-    queryEmbedding,
-    16
-  );
+        : buildLegacyEmbedding(node.retrieval_text ?? `${node.trigger_pattern} ${node.compact_hint}`).embedding
+    }));
 
-  const scoreById = new Map(semanticMatches.map((match) => [match.id, match.score]));
+  const scoreById = new Map<string, number>();
+  for (const match of vectorStore.query(localSemanticRecords, localQuery.embedding, 16)) {
+    scoreById.set(match.id, match.score);
+  }
+  for (const match of vectorStore.query(legacyRecords, legacyQuery.embedding, 16)) {
+    scoreById.set(match.id, Math.max(scoreById.get(match.id) ?? 0, match.score * 0.78));
+  }
 
   const minimumFamilyScore = inputTaskType === "general" ? 0.75 : 0.65;
 

@@ -1,13 +1,14 @@
 import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { processClaudeHookPayload, persistClaudeHookCapture } from "../../src/cli/commands/claude-hook.js";
 import { persistClaudeNormalizedEvent } from "../../src/adapters/claude-code/event-store.js";
 import { normalizeClaudeHookPayload } from "../../src/adapters/claude-code/hook-normalizer.js";
 import { loadClaudeSession } from "../../src/adapters/claude-code/session-store.js";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
+import { clearEmbeddingProviderForTests, setEmbeddingProviderForTests } from "../../src/store/vector/embeddings.js";
 import { loadConfig } from "../../src/config/load-config.js";
 import { resolveScope } from "../../src/input/scope-resolver.js";
 import { nowIso } from "../../src/utils/clock.js";
@@ -20,7 +21,23 @@ const makeTempDir = (): string => {
   return dir;
 };
 
+beforeEach(() => {
+  setEmbeddingProviderForTests({
+    provider: "local",
+    model: "Xenova/multilingual-e5-small",
+    version: "local-e5-v1",
+    dimensions: 3,
+    async embedQuery() {
+      return [1, 0, 0];
+    },
+    async embedPassage() {
+      return [1, 0, 0];
+    }
+  });
+});
+
 afterEach(() => {
+  clearEmbeddingProviderForTests();
   while (tempDirs.length) {
     const dir = tempDirs.pop();
     if (dir) {

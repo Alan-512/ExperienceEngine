@@ -2,9 +2,10 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../../src/config/load-config.js";
 import { ExperienceRuntimeService } from "../../src/runtime/service.js";
+import { clearEmbeddingProviderForTests, setEmbeddingProviderForTests } from "../../src/store/vector/embeddings.js";
 
 const tempDirs: string[] = [];
 
@@ -14,7 +15,23 @@ const makeTempDir = (): string => {
   return dir;
 };
 
+beforeEach(() => {
+  setEmbeddingProviderForTests({
+    provider: "local",
+    model: "Xenova/multilingual-e5-small",
+    version: "local-e5-v1",
+    dimensions: 3,
+    async embedQuery() {
+      return [1, 0, 0];
+    },
+    async embedPassage() {
+      return [1, 0, 0];
+    }
+  });
+});
+
 afterEach(() => {
+  clearEmbeddingProviderForTests();
   while (tempDirs.length) {
     rmSync(tempDirs.pop()!, { recursive: true, force: true });
   }

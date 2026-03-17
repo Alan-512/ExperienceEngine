@@ -81,6 +81,10 @@ export type ExperienceNode = {
   evidence_summary: string;
   retrieval_text?: string;
   embedding?: number[];
+  embedding_provider?: string;
+  embedding_model?: string;
+  embedding_version?: string;
+  embedding_dimensions?: number;
   source_kind: "system_derived" | "user_authored_candidate_promoted";
   origin_record_ids: string[];
   helped_record_ids: string[];

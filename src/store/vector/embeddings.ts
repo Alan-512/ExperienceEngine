@@ -1,6 +1,28 @@
 import { normalizeWhitespace, tokenize } from "../../utils/text.js";
+import type { ExperienceEngineConfig } from "../../config/config-schema.js";
+import { getLocalEmbeddingProvider, type SemanticEmbeddingProvider } from "./local-provider.js";
+
+export type EmbeddingSpace = {
+  provider: string;
+  model: string;
+  version: string;
+  dimensions: number;
+};
+
+export type EmbeddingResult = {
+  embedding: number[];
+  space: EmbeddingSpace;
+};
+
+type EmbeddingOptions = {
+  config?: Pick<ExperienceEngineConfig, "embeddingProvider" | "embeddingModel" | "embeddingDtype" | "embeddingCacheDir">;
+  env?: NodeJS.ProcessEnv;
+  homeDir?: string;
+};
 
 const EMBEDDING_DIMENSIONS = 192;
+const LEGACY_EMBEDDING_MODEL = "hashed-bow";
+const LEGACY_EMBEDDING_VERSION = "legacy-v1";
 const SYNONYM_MAP = new Map<string, string>([
   ["fix", "repair"],
   ["fixed", "repair"],
@@ -73,6 +95,16 @@ export const embedText = (value: string): number[] => {
   return embedding.map((value) => Number((value / magnitude).toFixed(6)));
 };
 
+const toLegacyResult = (value: string): EmbeddingResult => ({
+  embedding: embedText(value),
+  space: {
+    provider: "legacy",
+    model: LEGACY_EMBEDDING_MODEL,
+    version: LEGACY_EMBEDDING_VERSION,
+    dimensions: EMBEDDING_DIMENSIONS
+  }
+});
+
 export const cosineSimilarity = (left: number[], right: number[]): number => {
   if (!left.length || !right.length || left.length !== right.length) {
     return 0;
@@ -101,3 +133,121 @@ export const getEmbeddingDimensions = (): number => EMBEDDING_DIMENSIONS;
 
 export const isCompatibleEmbedding = (embedding: number[] | undefined): embedding is number[] =>
   Array.isArray(embedding) && embedding.length === EMBEDDING_DIMENSIONS;
+
+let testProvider: SemanticEmbeddingProvider | null = null;
+let localEmbeddingWarningShown = false;
+
+const warnLocalEmbeddingFallback = (message: string): void => {
+  if (localEmbeddingWarningShown) {
+    return;
+  }
+  localEmbeddingWarningShown = true;
+  console.warn(`[ExperienceEngine] Local embedding provider unavailable, falling back to legacy retrieval: ${message}`);
+};
+
+export const setEmbeddingProviderForTests = (provider: SemanticEmbeddingProvider | null): void => {
+  testProvider = provider;
+};
+
+export const clearEmbeddingProviderForTests = (): void => {
+  testProvider = null;
+  localEmbeddingWarningShown = false;
+};
+
+const resolveProvider = async (options: EmbeddingOptions = {}): Promise<SemanticEmbeddingProvider | null> => {
+  if (testProvider) {
+    return testProvider;
+  }
+  if (options.config?.embeddingProvider === "legacy") {
+    return null;
+  }
+  try {
+    return await getLocalEmbeddingProvider(options);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    warnLocalEmbeddingFallback(message);
+    return null;
+  }
+};
+
+export const buildLegacyEmbedding = (value: string): EmbeddingResult => toLegacyResult(value);
+
+export const embedQueryText = async (
+  value: string,
+  options: EmbeddingOptions = {}
+): Promise<EmbeddingResult> => {
+  const provider = await resolveProvider(options);
+  if (!provider) {
+    return toLegacyResult(value);
+  }
+  try {
+    return {
+      embedding: await provider.embedQuery(value),
+      space: {
+        provider: provider.provider,
+        model: provider.model,
+        version: provider.version,
+        dimensions: provider.dimensions
+      }
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    warnLocalEmbeddingFallback(message);
+    return toLegacyResult(value);
+  }
+};
+
+export const embedPassageText = async (
+  value: string,
+  options: EmbeddingOptions = {}
+): Promise<EmbeddingResult> => {
+  const provider = await resolveProvider(options);
+  if (!provider) {
+    return toLegacyResult(value);
+  }
+  try {
+    return {
+      embedding: await provider.embedPassage(value),
+      space: {
+        provider: provider.provider,
+        model: provider.model,
+        version: provider.version,
+        dimensions: provider.dimensions
+      }
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    warnLocalEmbeddingFallback(message);
+    return toLegacyResult(value);
+  }
+};
+
+export const isMatchingEmbeddingSpace = (
+  node: {
+    embedding?: number[];
+    embedding_provider?: string;
+    embedding_model?: string;
+    embedding_version?: string;
+    embedding_dimensions?: number;
+  },
+  space: EmbeddingSpace
+): boolean =>
+  Array.isArray(node.embedding) &&
+  node.embedding.length === space.dimensions &&
+  node.embedding_provider === space.provider &&
+  node.embedding_model === space.model &&
+  node.embedding_version === space.version &&
+  node.embedding_dimensions === space.dimensions;
+
+export const withEmbeddingMetadata = (
+  result: EmbeddingResult
+): Pick<
+  import("../../types/domain.js").ExperienceNode,
+  "embedding" | "embedding_provider" | "embedding_model" | "embedding_version" | "embedding_dimensions"
+> => ({
+  embedding: result.embedding,
+  embedding_provider: result.space.provider,
+  embedding_model: result.space.model,
+  embedding_version: result.space.version,
+  embedding_dimensions: result.space.dimensions
+});

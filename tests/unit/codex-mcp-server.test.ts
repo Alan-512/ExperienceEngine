@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
   createCodexBehaviorLoop,
   createCodexInteractionSurface,
@@ -13,6 +13,7 @@ import { resolveScope } from "../../src/input/scope-resolver.js";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
 import { ScopeRepository } from "../../src/store/sqlite/repositories/scope-repo.js";
+import { clearEmbeddingProviderForTests, setEmbeddingProviderForTests } from "../../src/store/vector/embeddings.js";
 import { nowIso } from "../../src/utils/clock.js";
 import type { ExperienceNode } from "../../src/types/domain.js";
 
@@ -24,7 +25,23 @@ const makeTempDir = (): string => {
   return dir;
 };
 
+beforeEach(() => {
+  setEmbeddingProviderForTests({
+    provider: "local",
+    model: "Xenova/multilingual-e5-small",
+    version: "local-e5-v1",
+    dimensions: 3,
+    async embedQuery() {
+      return [1, 0, 0];
+    },
+    async embedPassage() {
+      return [1, 0, 0];
+    }
+  });
+});
+
 afterEach(() => {
+  clearEmbeddingProviderForTests();
   while (tempDirs.length) {
     const dir = tempDirs.pop();
     if (dir) {

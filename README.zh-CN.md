@@ -91,6 +91,7 @@ ee install codex
 - SQLite 数据库
 - 产品设置
 - 各 adapter 的 install state
+- 受管本地 embedding 模型缓存，默认位于 `~/.experienceengine/models/embeddings`
 - 受管备份与导出快照
 
 ## 用户手册
@@ -107,6 +108,7 @@ ee install codex
 - backup / export / import / rollback 使用方式
 - OpenClaw、Claude Code、Codex 的故障排查说明
 - Codex 真实宿主验收流程与检查清单
+- 本地 embedding 检索设计、模型缓存行为与降级告警
 
 ## 校验
 
