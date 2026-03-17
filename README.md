@@ -63,7 +63,7 @@ ee doctor codex
 
 Before installing an adapter, make sure the host CLI already works on this machine:
 
-- `openclaw` for the OpenClaw adapter
+- `openclaw` for the OpenClaw plugin/runtime integration
 - `claude` for the Claude Code adapter
 - `codex` for the Codex adapter
 
@@ -78,7 +78,7 @@ ee install codex
 ```
 
 Notes:
-- `OpenClaw` uses plugin/runtime integration and CLI fallback for management.
+- `OpenClaw` uses plugin/runtime integration (not `src/adapters/`) and CLI fallback for management.
 - `Claude Code` installs both hooks and the shared ExperienceEngine MCP server.
 - `Codex` installs the shared ExperienceEngine MCP server.
 

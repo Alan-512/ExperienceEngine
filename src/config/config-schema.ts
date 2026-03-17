@@ -9,7 +9,8 @@ export const configSchema = z.object({
   captureDir: z.string().default("./data/runtime-captures"),
   maxHints: z.number().int().min(1).max(3).default(3),
   triggerThreshold: z.number().min(0).max(1).default(0.6),
-  distillerProfile: z.enum(["balanced", "high_quality"]).default("balanced"),
+  distillerProfile: z.enum(["fast", "balanced", "high_quality"]).default("balanced"),
+  distillationAllowPassthrough: z.boolean().default(false),
   distillationMaxRetries: z.number().int().min(0).max(10).default(2),
   distillationBatchSize: z.number().int().min(1).max(20).default(5),
   distillationAutoDrain: z.boolean().default(true)
@@ -60,8 +61,12 @@ export const pluginConfigJsonSchema = {
     },
     distillerProfile: {
       type: "string",
-      enum: ["balanced", "high_quality"],
+      enum: ["fast", "balanced", "high_quality"],
       description: "Extractor profile used for asynchronous experience distillation."
+    },
+    distillationAllowPassthrough: {
+      type: "boolean",
+      description: "Allow rule-based passthrough when no LLM distiller endpoint is available."
     },
     distillationMaxRetries: {
       type: "integer",
@@ -112,6 +117,9 @@ export const pluginUiHints = {
   },
   distillerProfile: {
     label: "Distiller Profile"
+  },
+  distillationAllowPassthrough: {
+    label: "Distillation Allow Passthrough"
   },
   distillationMaxRetries: {
     label: "Distillation Max Retries"

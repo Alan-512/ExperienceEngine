@@ -82,7 +82,8 @@ describe("ExperienceRuntimeService finalize transaction", () => {
         dataDir: join(runtimeDir, "data"),
         sqlitePath,
         captureDir: join(runtimeDir, "captures"),
-        distillationAutoDrain: false
+        distillationAutoDrain: false,
+        distillationAllowPassthrough: true
       })
     );
 

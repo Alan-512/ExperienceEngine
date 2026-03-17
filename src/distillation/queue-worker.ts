@@ -8,6 +8,7 @@ import { CandidateRepository } from "../store/sqlite/repositories/candidate-repo
 import { DistillationJobRepository } from "../store/sqlite/repositories/distillation-job-repo.js";
 import { NodeRepository } from "../store/sqlite/repositories/node-repo.js";
 import { embedText } from "../store/vector/embeddings.js";
+import { transitionState } from "../feedback/state-transition.js";
 
 const buildRetrievalText = (candidate: ExperienceCandidateDraft): string =>
   [candidate.trigger_pattern, candidate.compact_hint, candidate.goal, candidate.evidence_summary]
@@ -35,7 +36,7 @@ const distilledDraftToNode = (candidate: ExperienceCandidate, distilled: Experie
     origin_record_ids: mergeIds(existing?.origin_record_ids, [candidate.source_record_id]),
     helped_record_ids: existing?.helped_record_ids ?? [],
     harmed_record_ids: existing?.harmed_record_ids ?? [],
-    state: existing?.state ?? "active",
+    state: existing?.state ?? "candidate",
     usage_count: existing?.usage_count ?? 0,
     helped_count: existing?.helped_count ?? 0,
     harmed_count: existing?.harmed_count ?? 0,
@@ -105,7 +106,10 @@ export class DistillationQueueWorker {
         stableId("node", [candidate.scope_id, candidate.task_type, candidate.node_type, distilled.compact_hint].join(":"));
       const existingNode = this.nodeRepo.getById(resolvedNodeId);
       const node = distilledDraftToNode(candidate, distilled, existingNode);
-      this.nodeRepo.upsert(node);
+      this.nodeRepo.upsert({
+        ...node,
+        state: transitionState(node)
+      });
 
       const completedAt = nowIso();
       this.candidateRepo.upsert({

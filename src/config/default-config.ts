@@ -10,6 +10,7 @@ export const defaultConfig: ExperienceEngineConfig = {
   maxHints: 3,
   triggerThreshold: 0.6,
   distillerProfile: "balanced",
+  distillationAllowPassthrough: false,
   distillationMaxRetries: 2,
   distillationBatchSize: 5,
   distillationAutoDrain: true

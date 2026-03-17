@@ -170,6 +170,18 @@ const applyFallbacks = (
 const passthroughDistillation = (candidate: ExperienceCandidate): DistillationResult =>
   applyFallbacks(candidate, {});
 
+const resolveTemperature = (profile: ExperienceEngineConfig["distillerProfile"]): number => {
+  switch (profile) {
+    case "high_quality":
+      return 0.3;
+    case "fast":
+      return 0;
+    case "balanced":
+    default:
+      return 0.1;
+  }
+};
+
 export class LlmDistiller {
   constructor(
     private readonly config: ExperienceEngineConfig,
@@ -211,7 +223,10 @@ export class LlmDistiller {
   async distill(candidate: ExperienceCandidate): Promise<DistillationResult> {
     const endpoint = this.resolveEndpoint();
     if (!endpoint) {
-      return passthroughDistillation(candidate);
+      if (this.config.distillationAllowPassthrough) {
+        return passthroughDistillation(candidate);
+      }
+      throw new Error("Distillation requires a configured LLM endpoint");
     }
 
     if (endpoint.kind === "anthropic") {
@@ -223,7 +238,7 @@ export class LlmDistiller {
           max_tokens: 900,
           system: DEFAULT_DISTILLER_SYSTEM_PROMPT,
           messages: [{ role: "user", content: buildCandidatePayload(candidate) }],
-          temperature: this.config.distillerProfile === "high_quality" ? 0.3 : 0.1
+          temperature: resolveTemperature(this.config.distillerProfile)
         })
       });
 
@@ -263,7 +278,7 @@ export class LlmDistiller {
         model: endpoint.model,
         response_format: { type: "json_object" },
         messages,
-        temperature: this.config.distillerProfile === "high_quality" ? 0.3 : 0.1
+        temperature: resolveTemperature(this.config.distillerProfile)
       })
     });
 

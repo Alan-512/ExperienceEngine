@@ -94,7 +94,7 @@ That applies to:
 
 Before installing any adapter, make sure the host CLI itself already works on this machine:
 
-- `openclaw` for the OpenClaw adapter
+- `openclaw` for the OpenClaw plugin/runtime integration
 - `claude` for the Claude Code adapter
 - `codex` for the Codex adapter
 
@@ -109,7 +109,7 @@ ee install openclaw
 ```
 
 What happens:
-- ExperienceEngine installs as an OpenClaw plugin/runtime adapter
+- ExperienceEngine installs as an OpenClaw plugin/runtime integration (not `src/adapters/`)
 - OpenClaw runtime events are used for intervention and persistence
 - management remains mostly through CLI fallback today
 

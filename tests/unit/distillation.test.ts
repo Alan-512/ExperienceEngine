@@ -13,14 +13,15 @@ import type { DistillationJob, ExperienceCandidate } from "../../src/types/domai
 
 const tempDirs: string[] = [];
 
-const makeDb = () => {
+const makeDb = (overrides: Partial<ReturnType<typeof loadConfig>> = {}) => {
   const runtimeDir = mkdtempSync(join(tmpdir(), "experienceengine-distillation-"));
   tempDirs.push(runtimeDir);
   const config = loadConfig({
     dataDir: runtimeDir,
     sqlitePath: join(runtimeDir, "experienceengine.db"),
     captureDir: join(runtimeDir, "captures"),
-    distillationAutoDrain: false
+    distillationAutoDrain: false,
+    ...overrides
   });
   const db = openDatabase(config);
   bootstrapDatabase(db);
@@ -79,12 +80,19 @@ const makeJob = (overrides: Partial<DistillationJob> = {}): DistillationJob => (
 
 describe("LlmDistiller", () => {
   it("falls back to passthrough distillation when no remote profile is configured", async () => {
-    const { config } = makeDb();
+    const { config } = makeDb({ distillationAllowPassthrough: true });
     const distiller = new LlmDistiller(config, { env: {} });
     const result = await distiller.distill(makeCandidate());
 
     expect(result.compact_hint).toBe("Use vitest as the terminal verification loop for the auth failure.");
     expect(result.goal).toBe("Keep the auth test in a narrow loop.");
+  });
+
+  it("rejects distillation when no endpoint is configured and passthrough is disabled", async () => {
+    const { config } = makeDb({ distillationAllowPassthrough: false });
+    const distiller = new LlmDistiller(config, { env: {} });
+
+    await expect(distiller.distill(makeCandidate())).rejects.toThrow("configured LLM endpoint");
   });
 
   it("parses structured remote distillation output when a provider is configured", async () => {
@@ -161,7 +169,7 @@ describe("LlmDistiller", () => {
 
 describe("DistillationQueueWorker", () => {
   it("promotes pending candidates into formal nodes", async () => {
-    const { db, config } = makeDb();
+    const { db, config } = makeDb({ distillationAllowPassthrough: true });
     const candidateRepo = new CandidateRepository(db);
     const jobRepo = new DistillationJobRepository(db);
     const nodeRepo = new NodeRepository(db);
@@ -174,7 +182,7 @@ describe("DistillationQueueWorker", () => {
     expect(drained).toBe(1);
     expect(candidateRepo.getById("candidate_distill_auth")?.lifecycle_state).toBe("distilled");
     expect(jobRepo.getById("job_distill_auth")?.status).toBe("succeeded");
-    expect(nodeRepo.listActive()).toHaveLength(1);
+    expect(nodeRepo.listByState("candidate")).toHaveLength(1);
   });
 
   it("discards candidates after retry exhaustion", async () => {

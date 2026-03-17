@@ -9,8 +9,11 @@ export const transitionState = (node: ExperienceNode): ExperienceNode["state"] =
     return "cooling";
   }
 
-  if (node.support_count >= 2 || node.helped_count >= 1) {
-    return "active";
+  if (node.state === "candidate") {
+    if (node.support_count >= 2 || node.helped_count >= 1) {
+      return "active";
+    }
+    return "candidate";
   }
 
   return "active";

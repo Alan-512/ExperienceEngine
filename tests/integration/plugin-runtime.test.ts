@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import plugin from "../../src/plugin/openclaw-plugin.js";
 import { installOpenClawAdapter } from "../../src/install/openclaw-installer.js";
 import { replayScenarios, type ReplayScenario } from "../fixtures/openclaw/index.js";
@@ -10,6 +10,19 @@ import { replayScenarios, type ReplayScenario } from "../fixtures/openclaw/index
 type Handler = (payload: unknown, context?: unknown) => unknown | Promise<unknown>;
 
 const tempDirs: string[] = [];
+const originalAllowPassthrough = process.env.EXPERIENCE_ENGINE_DISTILLATION_ALLOW_PASSTHROUGH;
+
+beforeAll(() => {
+  process.env.EXPERIENCE_ENGINE_DISTILLATION_ALLOW_PASSTHROUGH = "true";
+});
+
+afterAll(() => {
+  if (originalAllowPassthrough === undefined) {
+    delete process.env.EXPERIENCE_ENGINE_DISTILLATION_ALLOW_PASSTHROUGH;
+  } else {
+    process.env.EXPERIENCE_ENGINE_DISTILLATION_ALLOW_PASSTHROUGH = originalAllowPassthrough;
+  }
+});
 
 const buildFailureToolResult = (toolResult: Record<string, unknown>): Record<string, unknown> => {
   if ("sessionKey" in toolResult || "tool" in toolResult) {

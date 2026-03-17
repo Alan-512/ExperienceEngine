@@ -41,6 +41,10 @@ export const loadConfig = (
       (env.EXPERIENCE_ENGINE_DISTILLER_PROFILE as ExperienceEngineConfig["distillerProfile"] | undefined) ??
       overrides.distillerProfile ??
       defaultConfig.distillerProfile,
+    distillationAllowPassthrough:
+      env.EXPERIENCE_ENGINE_DISTILLATION_ALLOW_PASSTHROUGH !== undefined
+        ? env.EXPERIENCE_ENGINE_DISTILLATION_ALLOW_PASSTHROUGH === "true"
+        : overrides.distillationAllowPassthrough ?? defaultConfig.distillationAllowPassthrough,
     distillationMaxRetries: env.EXPERIENCE_ENGINE_DISTILLATION_MAX_RETRIES
       ? Number(env.EXPERIENCE_ENGINE_DISTILLATION_MAX_RETRIES)
       : overrides.distillationMaxRetries ?? defaultConfig.distillationMaxRetries,
