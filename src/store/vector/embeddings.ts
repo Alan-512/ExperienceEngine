@@ -98,3 +98,6 @@ export const cosineSimilarity = (left: number[], right: number[]): number => {
 };
 
 export const getEmbeddingDimensions = (): number => EMBEDDING_DIMENSIONS;
+
+export const isCompatibleEmbedding = (embedding: number[] | undefined): embedding is number[] =>
+  Array.isArray(embedding) && embedding.length === EMBEDDING_DIMENSIONS;

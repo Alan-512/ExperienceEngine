@@ -14,6 +14,7 @@ import type {
   ExperienceNodeType,
   ExperienceState
 } from "../types/domain.js";
+import { transitionState } from "../feedback/state-transition.js";
 import { nowIso } from "../utils/clock.js";
 
 export type ExperienceNodeSummary = {
@@ -132,13 +133,18 @@ const toNodeDetail = (node: ExperienceNode): ExperienceNodeDetail => ({
 const applyNodeFeedback = (node: ExperienceNode, feedback: FeedbackValue): ExperienceNode => {
   const timestamp = nowIso();
 
-  return {
+  const next = {
     ...node,
     helped_count: feedback === "helped" ? node.helped_count + 1 : node.helped_count,
     harmed_count: feedback === "harmed" ? node.harmed_count + 1 : node.harmed_count,
     last_helped_at: feedback === "helped" ? timestamp : node.last_helped_at,
     last_harmed_at: feedback === "harmed" ? timestamp : node.last_harmed_at,
     updated_at: timestamp
+  };
+
+  return {
+    ...next,
+    state: node.state === "retired" ? "retired" : transitionState(next)
   };
 };
 

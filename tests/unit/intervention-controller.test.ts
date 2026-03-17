@@ -202,4 +202,47 @@ describe("decideIntervention", () => {
     expect(decision.mode).toBe("inject");
     expect(decision.selected[0]?.id).toBe("exact-test-node");
   });
+
+  it("keeps an exact candidate-family match ahead of unrelated active cross-family nodes", () => {
+    const decision = decideIntervention(
+      {
+        ...input,
+        task_type: "integration_fix",
+        task_summary: "Repair the broken sqlite ledger migration in ExperienceEngine"
+      },
+      [
+        node({
+          id: "older-active-cross-family",
+          task_type: "test_debug",
+          state: "active",
+          trigger_pattern: "Fix the failing payments auth test in ExperienceEngine",
+          compact_hint: "Run the failing payments auth test before editing and rerun it after the fix.",
+          helped_count: 3,
+          support_count: 3
+        }),
+        node({
+          id: "exact-candidate-match",
+          task_type: "integration_fix",
+          state: "candidate",
+          trigger_pattern: "Repair the broken sqlite ledger migration in ExperienceEngine",
+          compact_hint:
+            "Use exec to isolate the sqlite ledger migration order mismatch, apply the smallest reordering fix, then rerun exec.",
+          recommended_steps: [
+            "Run the focused ledger migration verification once.",
+            "Apply the smallest migration ordering fix.",
+            "Rerun the focused ledger migration verification."
+          ]
+        })
+      ],
+      {
+        ...stats,
+        task_type: "integration_fix"
+      },
+      0.6,
+      3
+    );
+
+    expect(decision.mode).toBe("inject_conservative");
+    expect(decision.selected[0]?.id).toBe("exact-candidate-match");
+  });
 });

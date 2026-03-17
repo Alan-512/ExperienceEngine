@@ -154,4 +154,17 @@ describe("retrieveCandidates", () => {
     expect(candidates.map((entry) => entry.id)).toContain("general-node");
     expect(candidates.map((entry) => entry.id)).not.toContain("debug-fallback");
   });
+
+  it("falls back to retrieval text when a stored embedding is stale or incompatible", () => {
+    const candidates = retrieveCandidates(input(), [
+      node({
+        id: "stale-embedding",
+        embedding: [1, 2],
+        trigger_pattern: "Fix the failing auth test in ExperienceEngine",
+        compact_hint: "Run the failing auth test before editing and rerun it immediately after the fix."
+      })
+    ]);
+
+    expect(candidates.map((entry) => entry.id)).toContain("stale-embedding");
+  });
 });

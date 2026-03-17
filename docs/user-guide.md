@@ -224,6 +224,11 @@ Host note:
 - this avoids MCP handshake failures on slower local startups
 - if Codex still cannot see ExperienceEngine in new sessions, re-run `ee install codex`
 
+Developer validation docs:
+
+- [docs/development/codex-runtime-validation.md](development/codex-runtime-validation.md)
+- [docs/development/codex-runtime-validation-checklist.md](development/codex-runtime-validation-checklist.md)
+
 ## CLI Fallback
 
 Even though MCP is the main user interaction model for Claude/Codex, the `ee` CLI still exists as:

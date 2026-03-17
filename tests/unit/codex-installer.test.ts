@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -28,9 +28,24 @@ describe("Codex installer", () => {
   it("writes install state and registers the MCP server", () => {
     const homeDir = makeTempDir();
     const commands: string[] = [];
+    const env = {
+      OPENROUTER_API_KEY: "test-openrouter-key",
+      CODEX_CONFIG_PATH: join(homeDir, "codex-openrouter.toml")
+    } satisfies NodeJS.ProcessEnv;
+
+    rmSync(env.CODEX_CONFIG_PATH, { force: true });
+    const configPayload = `model = "stepfun/step-3.5-flash:free"
+model_provider = "openrouter"
+
+[model_providers.openrouter]
+base_url = "https://openrouter.ai/api/v1"
+env_key = "OPENROUTER_API_KEY"
+`;
+    writeFileSync(env.CODEX_CONFIG_PATH, configPayload, "utf8");
 
     const report = installCodexAdapter({
       homeDir,
+      env,
       runner(command) {
         const key = [command.bin, ...command.args].join(" ");
         commands.push(key);
@@ -58,6 +73,10 @@ describe("Codex installer", () => {
     expect(readFileSync(join(homeDir, ".codex", "config.toml"), "utf8")).toContain("startup_timeout_sec = 60.0");
     expect(commands[0]).toBe("codex mcp get experienceengine");
     expect(commands[1]).toContain("codex mcp add experienceengine --env");
+    expect(commands[1]).toContain("--env EXPERIENCE_ENGINE_USE_HOST_LLM=true");
+    expect(commands[1]).toContain("--env EXPERIENCE_ENGINE_ADAPTER=codex");
+    expect(commands[1]).toContain(`--env CODEX_CONFIG_PATH=${env.CODEX_CONFIG_PATH}`);
+    expect(commands[1]).toContain("--env OPENROUTER_API_KEY=test-openrouter-key");
 
     const payload = JSON.parse(readFileSync(report.paths.installStatePath, "utf8")) as {
       adapter: string;

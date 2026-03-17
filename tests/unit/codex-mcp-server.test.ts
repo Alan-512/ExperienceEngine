@@ -14,6 +14,7 @@ import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
 import { ScopeRepository } from "../../src/store/sqlite/repositories/scope-repo.js";
 import { nowIso } from "../../src/utils/clock.js";
+import type { ExperienceNode } from "../../src/types/domain.js";
 
 const tempDirs: string[] = [];
 
@@ -63,7 +64,13 @@ const getRegisteredPrompt = (server: ReturnType<typeof createCodexMcpServer>, na
     }
   )._registeredPrompts[name];
 
-const seedStrategyNode = (nodeRepo: NodeRepository, cwd: string, timestamp: string, id: string): void => {
+const seedStrategyNode = (
+  nodeRepo: NodeRepository,
+  cwd: string,
+  timestamp: string,
+  id: string,
+  state: ExperienceNode["state"] = "active"
+): void => {
   const scope = resolveScope(cwd);
   nodeRepo.upsert({
     id,
@@ -87,7 +94,7 @@ const seedStrategyNode = (nodeRepo: NodeRepository, cwd: string, timestamp: stri
     origin_record_ids: ["input_origin"],
     helped_record_ids: ["input_helped"],
     harmed_record_ids: ["input_harmed"],
-    state: "candidate",
+    state,
     usage_count: 0,
     helped_count: 0,
     harmed_count: 0,
@@ -108,7 +115,7 @@ describe("Codex MCP behavior loop", () => {
     const db = openDatabase(config);
     bootstrapDatabase(db);
     const nodeRepo = new NodeRepository(db);
-    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_codex_prompt_injection");
+    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_codex_prompt_injection", "candidate");
 
     const loop = createCodexBehaviorLoop({ homeDir, env });
     const result = await loop.lookupHints({

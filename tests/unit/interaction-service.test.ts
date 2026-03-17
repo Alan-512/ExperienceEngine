@@ -160,4 +160,49 @@ describe("ExperienceInteractionService", () => {
     });
   });
 
+  it("lets explicit harmful feedback drive the node into cooling", () => {
+    const homeDir = makeTempDir();
+    const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_interaction_feedback");
+    nodeRepo.upsert({
+      ...nodeRepo.getById("node_interaction_feedback")!,
+      helped_count: 1,
+      state: "active"
+    });
+
+    const service = new ExperienceInteractionService(config);
+    service.feedbackNode("node_interaction_feedback", "harmed");
+    service.feedbackNode("node_interaction_feedback", "harmed");
+
+    expect(nodeRepo.getById("node_interaction_feedback")).toMatchObject({
+      state: "cooling",
+      helped_count: 1,
+      harmed_count: 2
+    });
+  });
+
+  it("does not automatically revive explicitly retired nodes through feedback", () => {
+    const homeDir = makeTempDir();
+    const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_interaction_retired_feedback");
+    nodeRepo.upsert({
+      ...nodeRepo.getById("node_interaction_retired_feedback")!,
+      state: "retired"
+    });
+
+    const service = new ExperienceInteractionService(config);
+    service.feedbackNode("node_interaction_retired_feedback", "helped");
+
+    expect(nodeRepo.getById("node_interaction_retired_feedback")).toMatchObject({
+      state: "retired",
+      helped_count: 1
+    });
+  });
+
 });

@@ -40,7 +40,8 @@ export const buildCodexMcpServerCommand = (packageRoot = resolveExperienceEngine
 export const buildCodexAddCommand = (
   packageRoot: string,
   experienceEngineHome: string,
-  cliEnv?: NodeJS.ProcessEnv
+  cliEnv?: NodeJS.ProcessEnv,
+  serverEnv: Array<[string, string]> = []
 ): CodexCommand => ({
   bin: "codex",
   args: [
@@ -49,6 +50,7 @@ export const buildCodexAddCommand = (
     CODEX_EXPERIENCEENGINE_SERVER,
     "--env",
     `EXPERIENCE_ENGINE_HOME=${experienceEngineHome}`,
+    ...serverEnv.flatMap(([key, value]) => ["--env", `${key}=${value}`]),
     "--",
     ...buildCodexMcpServerCommand(packageRoot)
   ],

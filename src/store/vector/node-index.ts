@@ -1,5 +1,5 @@
 import type { ExperienceNode } from "../../types/domain.js";
-import { embedText } from "./embeddings.js";
+import { embedText, isCompatibleEmbedding } from "./embeddings.js";
 import { openVectorStore } from "./lancedb.js";
 
 export class NodeIndex {
@@ -7,7 +7,9 @@ export class NodeIndex {
   private readonly store = openVectorStore();
 
   upsert(node: ExperienceNode): void {
-    const embedding = node.embedding ?? embedText(node.retrieval_text ?? `${node.trigger_pattern} ${node.compact_hint}`);
+    const embedding = isCompatibleEmbedding(node.embedding)
+      ? node.embedding
+      : embedText(node.retrieval_text ?? `${node.trigger_pattern} ${node.compact_hint}`);
     this.index.set(node.id, embedding);
   }
 

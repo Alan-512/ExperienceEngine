@@ -18,6 +18,7 @@ import {
   type ResolvedPathInfo
 } from "../config/path-resolver.js";
 import { resolveExperienceEnginePackageRoot } from "./openclaw-cli.js";
+import { resolveCodexHostLlmBinding } from "../distillation/host-llm.js";
 import { buildVersionStatus, readCurrentPackageVersion } from "../version/package-version.js";
 
 type InstallerOptions = {
@@ -84,11 +85,26 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
   mkdirSync(resolveProductStateDir(paths), { recursive: true });
   mkdirSync(paths.captureDir, { recursive: true });
 
+  const hostLlmBinding = resolveCodexHostLlmBinding({
+    env: options.env ?? process.env,
+    homeDir: options.homeDir
+  });
+  const serverEnv: Array<[string, string]> = [
+    ["EXPERIENCE_ENGINE_USE_HOST_LLM", "true"],
+    ["EXPERIENCE_ENGINE_ADAPTER", "codex"]
+  ];
+  if (hostLlmBinding?.configPath) {
+    serverEnv.push(["CODEX_CONFIG_PATH", hostLlmBinding.configPath]);
+  }
+  for (const [key, value] of Object.entries(hostLlmBinding?.envBindings ?? {})) {
+    serverEnv.push([key, value]);
+  }
+
   if (existing?.name === "experienceengine") {
     runCodexCommand(buildCodexRemoveCommand(options.cliEnv), runner);
   }
 
-  runCodexCommand(buildCodexAddCommand(packageRoot, paths.productHome, options.cliEnv), runner);
+  runCodexCommand(buildCodexAddCommand(packageRoot, paths.productHome, options.cliEnv, serverEnv), runner);
   ensureCodexMcpServerStartupTimeout("experienceengine", CODEX_EXPERIENCEENGINE_STARTUP_TIMEOUT_SEC, {
     homeDir: options.homeDir
   });

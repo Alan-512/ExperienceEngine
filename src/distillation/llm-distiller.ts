@@ -14,6 +14,8 @@ type OpenAiMessage = {
   content: string;
 };
 
+const DISTILLATION_REQUEST_TIMEOUT_MS = 25_000;
+
 const DEFAULT_DISTILLER_SYSTEM_PROMPT = `You turn coding-task experience candidates into compact intervention hints.
 Use hindsight framing: if the agent knew one key fact earlier, what would it do differently?
 
@@ -220,6 +222,36 @@ export class LlmDistiller {
     return `${baseUrl.replace(/\/$/, "")}/v1/messages`;
   }
 
+  private async postJson(
+    url: string,
+    endpoint: DistillerEndpoint,
+    body: Record<string, unknown>
+  ): Promise<Response> {
+    try {
+      return await this.fetchImpl(url, {
+        method: "POST",
+        headers:
+          endpoint.kind === "openai"
+            ? {
+                "Content-Type": "application/json",
+                ...endpoint.headers
+              }
+            : endpoint.headers,
+        body: JSON.stringify(body),
+        signal: AbortSignal.timeout(DISTILLATION_REQUEST_TIMEOUT_MS)
+      });
+    } catch (error) {
+      if (
+        (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError")) ||
+        (typeof DOMException !== "undefined" && error instanceof DOMException && error.name === "TimeoutError")
+      ) {
+        throw new Error(`Distillation request timed out after ${DISTILLATION_REQUEST_TIMEOUT_MS}ms`);
+      }
+
+      throw error;
+    }
+  }
+
   async distill(candidate: ExperienceCandidate): Promise<DistillationResult> {
     const endpoint = this.resolveEndpoint();
     if (!endpoint) {
@@ -230,16 +262,12 @@ export class LlmDistiller {
     }
 
     if (endpoint.kind === "anthropic") {
-      const response = await this.fetchImpl(this.buildAnthropicUrl(endpoint.baseUrl), {
-        method: "POST",
-        headers: endpoint.headers,
-        body: JSON.stringify({
+      const response = await this.postJson(this.buildAnthropicUrl(endpoint.baseUrl), endpoint, {
           model: endpoint.model,
           max_tokens: 900,
           system: DEFAULT_DISTILLER_SYSTEM_PROMPT,
           messages: [{ role: "user", content: buildCandidatePayload(candidate) }],
           temperature: resolveTemperature(this.config.distillerProfile)
-        })
       });
 
       if (!response.ok) {
@@ -268,18 +296,11 @@ export class LlmDistiller {
       { role: "user", content: buildCandidatePayload(candidate) }
     ];
 
-    const response = await this.fetchImpl(this.buildOpenAiUrl(endpoint.baseUrl), {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        ...endpoint.headers
-      },
-      body: JSON.stringify({
+    const response = await this.postJson(this.buildOpenAiUrl(endpoint.baseUrl), endpoint, {
         model: endpoint.model,
         response_format: { type: "json_object" },
         messages,
         temperature: resolveTemperature(this.config.distillerProfile)
-      })
     });
 
     if (!response.ok) {

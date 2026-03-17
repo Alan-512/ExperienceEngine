@@ -32,6 +32,15 @@ type ResolveOptions = {
   homeDir?: string;
 };
 
+export type CodexHostLlmBinding = {
+  configPath: string;
+  model?: string;
+  providerId?: string;
+  envBindings: Record<string, string>;
+  requiredEnvKeys: string[];
+  missingEnvKeys: string[];
+};
+
 type CachedToken = {
   value: string;
   expiresAt: number;
@@ -177,7 +186,7 @@ const parseToml = (raw: string): Record<string, unknown> => {
   return result;
 };
 
-const resolveCodexConfig = (options: ResolveOptions): CodexConfig | null => {
+const resolveCodexConfigFile = (options: ResolveOptions): { configPath: string; config: CodexConfig } | null => {
   const env = options.env ?? process.env;
   const home = resolveHomeDir(options.homeDir);
   const configPath =
@@ -188,7 +197,70 @@ const resolveCodexConfig = (options: ResolveOptions): CodexConfig | null => {
   }
 
   const raw = readFileSync(configPath, "utf8");
-  return parseToml(raw) as CodexConfig;
+  return {
+    configPath,
+    config: parseToml(raw) as CodexConfig
+  };
+};
+
+const resolveCodexConfig = (options: ResolveOptions): CodexConfig | null =>
+  resolveCodexConfigFile(options)?.config ?? null;
+
+export const resolveCodexHostLlmBinding = (options: ResolveOptions = {}): CodexHostLlmBinding | null => {
+  const env = options.env ?? process.env;
+  const resolved = resolveCodexConfigFile(options);
+  if (!resolved) {
+    return null;
+  }
+
+  const { configPath, config } = resolved;
+  const activeProfile = typeof config.profile === "string" ? config.profile : undefined;
+  const profile =
+    activeProfile && config.profiles && typeof config.profiles[activeProfile] === "object"
+      ? (config.profiles[activeProfile] as Record<string, unknown>)
+      : undefined;
+
+  const model = (profile?.model as string) ?? config.model;
+  const providerId = (profile?.model_provider as string) ?? config.model_provider;
+  const provider =
+    providerId && config.model_providers
+      ? ((config.model_providers[providerId] as Record<string, unknown> | undefined) ?? {})
+      : {};
+
+  const requiredEnvKeys = new Set<string>();
+  const envKey =
+    (provider.env_key as string | undefined) ??
+    (provider.api_key_env as string | undefined) ??
+    (providerId === "openai" ? "OPENAI_API_KEY" : undefined);
+  if (envKey) {
+    requiredEnvKeys.add(envKey);
+  }
+
+  const envHeaders = provider.env_http_headers as Record<string, string> | undefined;
+  if (envHeaders) {
+    for (const envName of Object.values(envHeaders)) {
+      if (typeof envName === "string" && envName.trim().length > 0) {
+        requiredEnvKeys.add(envName);
+      }
+    }
+  }
+
+  const envBindings = Object.fromEntries(
+    [...requiredEnvKeys]
+      .filter((key) => typeof env[key] === "string" && env[key]!.length > 0)
+      .map((key) => [key, String(env[key])])
+  );
+
+  const missingEnvKeys = [...requiredEnvKeys].filter((key) => !(key in envBindings));
+
+  return {
+    configPath,
+    model,
+    providerId,
+    envBindings,
+    requiredEnvKeys: [...requiredEnvKeys],
+    missingEnvKeys
+  };
 };
 
 const resolveExplicitEndpoint = (env: NodeJS.ProcessEnv): DistillerEndpoint | null => {
@@ -305,10 +377,11 @@ const resolveClaudeEndpoint = (options: ResolveOptions): DistillerEndpoint | nul
 
 const resolveCodexEndpoint = (options: ResolveOptions): DistillerEndpoint | null => {
   const env = options.env ?? process.env;
-  const config = resolveCodexConfig(options);
-  if (!config) {
+  const resolved = resolveCodexConfigFile(options);
+  if (!resolved) {
     return null;
   }
+  const { config } = resolved;
 
   const activeProfile = typeof config.profile === "string" ? config.profile : undefined;
   const profile =
@@ -349,6 +422,10 @@ const resolveCodexEndpoint = (options: ResolveOptions): DistillerEndpoint | null
   const token =
     (provider.experimental_bearer_token as string | undefined) ??
     (envKey ? env[envKey] : undefined);
+
+  if (envKey && !token && !headers.Authorization) {
+    return null;
+  }
 
   if (token && !headers.Authorization) {
     headers.Authorization = `Bearer ${token}`;

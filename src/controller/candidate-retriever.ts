@@ -1,5 +1,5 @@
 import type { ExperienceInput, ExperienceNode, TaskType } from "../types/domain.js";
-import { embedText } from "../store/vector/embeddings.js";
+import { embedText, isCompatibleEmbedding } from "../store/vector/embeddings.js";
 import { openVectorStore } from "../store/vector/lancedb.js";
 import { tokenize } from "../utils/text.js";
 
@@ -103,7 +103,9 @@ export const retrieveCandidates = (input: ExperienceInput, nodes: ExperienceNode
   const semanticMatches = vectorStore.query(
     scopeLocalNodes.map((node) => ({
       id: node.id,
-      embedding: node.embedding ?? embedText(node.retrieval_text ?? `${node.trigger_pattern} ${node.compact_hint}`)
+      embedding: isCompatibleEmbedding(node.embedding)
+        ? node.embedding
+        : embedText(node.retrieval_text ?? `${node.trigger_pattern} ${node.compact_hint}`)
     })),
     queryEmbedding,
     16

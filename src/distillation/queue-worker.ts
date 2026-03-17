@@ -10,6 +10,8 @@ import { NodeRepository } from "../store/sqlite/repositories/node-repo.js";
 import { embedText } from "../store/vector/embeddings.js";
 import { transitionState } from "../feedback/state-transition.js";
 
+const DISTILLATION_STALE_PROCESSING_MS = 60_000;
+
 const buildRetrievalText = (candidate: ExperienceCandidateDraft): string =>
   [candidate.trigger_pattern, candidate.compact_hint, candidate.goal, candidate.evidence_summary]
     .filter(Boolean)
@@ -63,6 +65,8 @@ export class DistillationQueueWorker {
   }
 
   async drain(limit: number = this.config.distillationBatchSize): Promise<number> {
+    this.recoverStaleProcessingJobs();
+
     const runnableJobs = [
       ...this.jobRepo.listByStatus("pending"),
       ...this.jobRepo
@@ -77,6 +81,54 @@ export class DistillationQueueWorker {
     }
 
     return runnableJobs.length;
+  }
+
+  private recoverStaleProcessingJobs(): void {
+    const now = Date.now();
+    const staleJobs = this.jobRepo
+      .listByStatus("processing")
+      .filter((job) => now - Date.parse(job.updated_at) >= DISTILLATION_STALE_PROCESSING_MS);
+
+    for (const job of staleJobs) {
+      const candidate = this.candidateRepo.getById(job.candidate_id);
+      if (!candidate) {
+        this.jobRepo.upsert({
+          ...job,
+          status: "discarded",
+          last_error: "Distillation processing lease expired after the candidate disappeared.",
+          discarded_at: nowIso(),
+          updated_at: nowIso()
+        });
+        continue;
+      }
+
+      this.markJobFailure(job, candidate, "Distillation processing timed out or the worker was interrupted.");
+    }
+  }
+
+  private markJobFailure(job: DistillationJob, candidate: ExperienceCandidate, message: string): void {
+    const nextRetryCount = candidate.retry_count + 1;
+    const failedAt = nowIso();
+    const shouldDiscard = nextRetryCount > this.config.distillationMaxRetries;
+
+    this.candidateRepo.upsert({
+      ...candidate,
+      lifecycle_state: shouldDiscard ? "discarded" : "failed",
+      retry_count: nextRetryCount,
+      last_error: message,
+      last_failed_at: failedAt,
+      discarded_at: shouldDiscard ? failedAt : candidate.discarded_at,
+      updated_at: failedAt
+    });
+    this.jobRepo.upsert({
+      ...job,
+      status: shouldDiscard ? "discarded" : "failed",
+      retry_count: nextRetryCount,
+      last_error: message,
+      finished_at: failedAt,
+      discarded_at: shouldDiscard ? failedAt : job.discarded_at,
+      updated_at: failedAt
+    });
   }
 
   private async processJob(job: DistillationJob): Promise<void> {
@@ -128,29 +180,8 @@ export class DistillationQueueWorker {
         updated_at: completedAt
       });
     } catch (error) {
-      const nextRetryCount = candidate.retry_count + 1;
-      const failedAt = nowIso();
       const message = error instanceof Error ? error.message : String(error);
-      const shouldDiscard = nextRetryCount > this.config.distillationMaxRetries;
-
-      this.candidateRepo.upsert({
-        ...candidate,
-        lifecycle_state: shouldDiscard ? "discarded" : "failed",
-        retry_count: nextRetryCount,
-        last_error: message,
-        last_failed_at: failedAt,
-        discarded_at: shouldDiscard ? failedAt : candidate.discarded_at,
-        updated_at: failedAt
-      });
-      this.jobRepo.upsert({
-        ...job,
-        status: shouldDiscard ? "discarded" : "failed",
-        retry_count: nextRetryCount,
-        last_error: message,
-        finished_at: failedAt,
-        discarded_at: shouldDiscard ? failedAt : job.discarded_at,
-        updated_at: failedAt
-      });
+      this.markJobFailure(job, candidate, message);
     }
   }
 }

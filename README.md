@@ -111,6 +111,7 @@ The user guide includes:
 - troubleshooting notes for OpenClaw, Claude Code, and Codex
 - OpenClaw baseline evaluation workflow
 - OpenClaw high-confidence scenario evaluation workflow
+- Codex real-host validation workflow and checklist
 
 ## Validation
 

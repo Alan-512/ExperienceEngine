@@ -2,9 +2,9 @@ import type { ExperienceNode, ResolvedTaskType } from "../types/domain.js";
 import { tokenize } from "../utils/text.js";
 
 const STATE_WEIGHT: Record<ExperienceNode["state"], number> = {
-  active: 3,
-  cooling: 2,
-  candidate: 1,
+  active: 2,
+  cooling: 1.4,
+  candidate: 1.2,
   retired: 0
 };
 
@@ -52,14 +52,14 @@ const getTaskTypePreference = (
   }
 
   if (node.task_type === preferredTaskType) {
-    return 1.5;
+    return 8;
   }
 
   if (node.task_type === "general") {
-    return -0.75;
+    return -2;
   }
 
-  return 0;
+  return -4;
 };
 
 export const rankNodes = (
@@ -70,7 +70,7 @@ export const rankNodes = (
   [...nodes].sort((a, b) => {
     const aScore =
       STATE_WEIGHT[a.state] * 10 +
-      similarity(summary, a.trigger_pattern) * 3 +
+      similarity(summary, a.trigger_pattern) * 6 +
       getSpecificityBonus(a) +
       getFeedbackAdjustment(a) +
       a.support_count * 0.1 -
@@ -78,7 +78,7 @@ export const rankNodes = (
       getTaskTypePreference(preferredTaskType, a);
     const bScore =
       STATE_WEIGHT[b.state] * 10 +
-      similarity(summary, b.trigger_pattern) * 3 +
+      similarity(summary, b.trigger_pattern) * 6 +
       getSpecificityBonus(b) +
       getFeedbackAdjustment(b) +
       b.support_count * 0.1 -

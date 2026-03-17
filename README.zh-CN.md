@@ -106,6 +106,7 @@ ee install codex
 - `MCP` 与 `ee` CLI fallback 的分工
 - backup / export / import / rollback 使用方式
 - OpenClaw、Claude Code、Codex 的故障排查说明
+- Codex 真实宿主验收流程与检查清单
 
 ## 校验
 

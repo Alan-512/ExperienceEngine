@@ -43,6 +43,34 @@ describe("Codex CLI wiring", () => {
     ]);
   });
 
+  it("adds repeated server env bindings when extra host-llm env is provided", () => {
+    const command = buildCodexAddCommand("/tmp/experienceengine", "/tmp/ee-home", undefined, [
+      ["EXPERIENCE_ENGINE_USE_HOST_LLM", "true"],
+      ["EXPERIENCE_ENGINE_ADAPTER", "codex"],
+      ["CODEX_CONFIG_PATH", "/tmp/codex.toml"],
+      ["OPENROUTER_API_KEY", "token"]
+    ]);
+
+    expect([command.bin, ...command.args]).toEqual([
+      "codex",
+      "mcp",
+      "add",
+      "experienceengine",
+      "--env",
+      "EXPERIENCE_ENGINE_HOME=/tmp/ee-home",
+      "--env",
+      "EXPERIENCE_ENGINE_USE_HOST_LLM=true",
+      "--env",
+      "EXPERIENCE_ENGINE_ADAPTER=codex",
+      "--env",
+      "CODEX_CONFIG_PATH=/tmp/codex.toml",
+      "--env",
+      "OPENROUTER_API_KEY=token",
+      "--",
+      ...buildCodexMcpServerCommand("/tmp/experienceengine")
+    ]);
+  });
+
   it("parses `codex mcp get` output", () => {
     const info = parseCodexMcpServerInfo(`experienceengine
   enabled: true

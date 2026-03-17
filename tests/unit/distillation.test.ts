@@ -165,6 +165,22 @@ describe("LlmDistiller", () => {
 
     await expect(distiller.distill(makeCandidate())).rejects.toThrow("missing required fields");
   });
+
+  it("times out stalled remote distillation requests", async () => {
+    const { config } = makeDb();
+    const fetchImpl = vi.fn().mockRejectedValue(Object.assign(new Error("aborted"), { name: "AbortError" }));
+
+    const distiller = new LlmDistiller(config, {
+      env: {
+        EXPERIENCE_ENGINE_DISTILLER_MODEL: "gpt-test",
+        EXPERIENCE_ENGINE_DISTILLER_API_KEY: "secret",
+        EXPERIENCE_ENGINE_DISTILLER_BASE_URL: "https://example.test/v1/chat/completions"
+      },
+      fetchImpl: fetchImpl as unknown as typeof fetch
+    });
+
+    await expect(distiller.distill(makeCandidate())).rejects.toThrow("timed out");
+  });
 });
 
 describe("DistillationQueueWorker", () => {
@@ -261,5 +277,30 @@ describe("DistillationQueueWorker", () => {
 
     expect(candidateRepo.getById("candidate_distill_auth")?.lifecycle_state).toBe("discarded");
     expect(jobRepo.getById("job_distill_auth")?.status).toBe("discarded");
+  });
+
+  it("requeues stale processing jobs instead of leaving them stuck forever", async () => {
+    const { db, config } = makeDb({ distillationAllowPassthrough: true });
+    const candidateRepo = new CandidateRepository(db);
+    const jobRepo = new DistillationJobRepository(db);
+    const nodeRepo = new NodeRepository(db);
+    candidateRepo.upsert(makeCandidate({ updated_at: "2026-03-15T10:00:00.000Z" }));
+    jobRepo.upsert(
+      makeJob({
+        status: "processing",
+        started_at: "2026-03-15T10:00:00.000Z",
+        updated_at: "2026-03-15T10:00:00.000Z"
+      })
+    );
+
+    const worker = new DistillationQueueWorker(config, candidateRepo, jobRepo, nodeRepo, { env: {} });
+    const drained = await worker.drain();
+
+    expect(drained).toBe(1);
+    expect(candidateRepo.getById("candidate_distill_auth")?.lifecycle_state).toBe("distilled");
+    expect(candidateRepo.getById("candidate_distill_auth")?.retry_count).toBe(1);
+    expect(jobRepo.getById("job_distill_auth")?.status).toBe("succeeded");
+    expect(jobRepo.getById("job_distill_auth")?.retry_count).toBe(1);
+    expect(nodeRepo.listByState("candidate")).toHaveLength(1);
   });
 });
