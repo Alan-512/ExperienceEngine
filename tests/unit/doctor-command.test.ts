@@ -91,4 +91,57 @@ describe("doctor command", () => {
       "Remote release check unavailable: GitHub latest release lookup failed with HTTP 404."
     );
   });
+
+  it("prints registry advisories when npm or pnpm uses a non-official registry", async () => {
+    await runDoctorCommand("codex", {
+      inspectCodexInstall: () =>
+        ({
+          adapter: "codex",
+          installed: true,
+          versionStatus: {
+            recordedVersion: "0.1.0",
+            currentVersion: "0.1.0",
+            state: "current",
+            updateAvailable: false
+          },
+          serverName: "experienceengine",
+          hostWiring: {
+            wired: true,
+            enabled: true,
+            transport: "stdio",
+            command: "node dist/cli/index.js codex-mcp-server"
+          },
+          captureDir: "/tmp/.experienceengine/adapters/codex/captures"
+        }) as never,
+      fetchLatestGitHubReleaseStatus: async () => ({
+        source: "github-releases",
+        repository: "Alan-512/ExperienceEngine",
+        latestVersion: "0.1.0",
+        releaseUrl: null,
+        publishedAt: "2026-03-12T12:00:00Z",
+        state: "current",
+        updateAvailable: false
+      }),
+      readRegistryHealth: () => ({
+        checks: [
+          {
+            tool: "npm",
+            registry: "https://registry.npmmirror.com",
+            official: false
+          }
+        ],
+        hasNonOfficialRegistry: true,
+        warnings: [
+          "npm registry is set to https://registry.npmmirror.com. Managed installs are most reliable with https://registry.npmjs.org/."
+        ]
+      })
+    });
+
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      "[ExperienceEngine] Registry advisory: npm registry is set to https://registry.npmmirror.com. Managed installs are most reliable with https://registry.npmjs.org/."
+    );
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      "[ExperienceEngine] Recommended next step: npm config set registry https://registry.npmjs.org --global"
+    );
+  });
 });

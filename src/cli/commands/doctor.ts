@@ -5,6 +5,11 @@ import {
   getOpenClawRepairHint,
   inspectOpenClawInstall
 } from "../../install/openclaw-installer.js";
+import {
+  buildRegistryRecommendationCommands,
+  readRegistryHealth,
+  type RegistryHealth
+} from "../../install/registry-health.js";
 import { fetchLatestGitHubReleaseStatus, type RemoteReleaseStatus } from "../../version/remote-release.js";
 
 type DoctorDeps = {
@@ -12,6 +17,7 @@ type DoctorDeps = {
   inspectClaudeCodeInstall?: typeof inspectClaudeCodeInstall;
   inspectCodexInstall?: typeof inspectCodexInstall;
   inspectOpenClawInstall?: typeof inspectOpenClawInstall;
+  readRegistryHealth?: typeof readRegistryHealth;
 };
 
 const logRemoteReleaseStatus = (target: string, remoteStatus: RemoteReleaseStatus): void => {
@@ -30,8 +36,23 @@ const logRemoteReleaseStatus = (target: string, remoteStatus: RemoteReleaseStatu
   }
 };
 
+const logRegistryHealth = (health: RegistryHealth): void => {
+  if (!health.hasNonOfficialRegistry) {
+    return;
+  }
+
+  for (const warning of health.warnings) {
+    console.log(`[ExperienceEngine] Registry advisory: ${warning}`);
+  }
+
+  for (const command of buildRegistryRecommendationCommands(health)) {
+    console.log(`[ExperienceEngine] Recommended next step: ${command}`);
+  }
+};
+
 export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): Promise<void> => {
   const resolveRemoteStatus = deps.fetchLatestGitHubReleaseStatus ?? fetchLatestGitHubReleaseStatus;
+  const registryHealth = (deps.readRegistryHealth ?? readRegistryHealth)();
   if (target === "claude-code") {
     const status = (deps.inspectClaudeCodeInstall ?? inspectClaudeCodeInstall)();
     const remoteStatus = await resolveRemoteStatus({
@@ -61,6 +82,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
       console.log("Recommended next step: ee upgrade claude-code");
     }
     logRemoteReleaseStatus("claude-code", remoteStatus);
+    logRegistryHealth(registryHealth);
     return;
   }
 
@@ -92,6 +114,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
       console.log("Recommended next step: ee upgrade codex");
     }
     logRemoteReleaseStatus("codex", remoteStatus);
+    logRegistryHealth(registryHealth);
     return;
   }
 
@@ -160,4 +183,5 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
   }
 
   logRemoteReleaseStatus("openclaw", remoteStatus);
+  logRegistryHealth(registryHealth);
 };

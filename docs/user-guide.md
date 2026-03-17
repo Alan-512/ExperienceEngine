@@ -113,8 +113,18 @@ Default behavior:
 - the cache lives under `~/.experienceengine/models/embeddings`
 - if local embedding initialization fails, ExperienceEngine logs a warning once and falls back to the legacy hash-based retrieval path
 - if a cached ONNX file is corrupted, ExperienceEngine clears that model cache and retries once before falling back
+- `ee install ...` and `ee doctor ...` warn when `npm` or `pnpm` is pointed at a non-official registry
+- the recommended registry for managed model downloads is `https://registry.npmjs.org`
 
 This means users do not need to prepare a separate embedding service before installing ExperienceEngine.
+
+Maintenance:
+
+```bash
+ee maintenance embeddings-reset
+```
+
+That command clears the configured managed embedding cache for the active model and immediately rebuilds it.
 
 ### OpenClaw
 

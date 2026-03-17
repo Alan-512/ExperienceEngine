@@ -81,6 +81,7 @@ Notes:
 - `OpenClaw` uses plugin/runtime integration (not `src/adapters/`) and CLI fallback for management.
 - `Claude Code` installs both hooks and the shared ExperienceEngine MCP server.
 - `Codex` installs the shared ExperienceEngine MCP server.
+- `ee install ...` and `ee doctor ...` now warn if `npm` or `pnpm` uses a non-official registry, because managed model downloads are most reliable with `https://registry.npmjs.org`.
 
 ## Data Location
 
@@ -114,6 +115,8 @@ The user guide includes:
 - OpenClaw high-confidence scenario evaluation workflow
 - Codex real-host validation workflow and checklist
 - local embedding retrieval design, managed model behavior, and fallback diagnostics
+- registry advisory behavior during `install` / `doctor`
+- `ee maintenance embeddings-reset` for clearing and rebuilding the managed embedding cache
 
 ## Validation
 

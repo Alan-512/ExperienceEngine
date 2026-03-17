@@ -18,6 +18,7 @@ import { runDisableCommand } from "./commands/disable.js";
 import { runEnableCommand } from "./commands/enable.js";
 import { runFeedbackCommand } from "./commands/feedback.js";
 import { runInspectCommand } from "./commands/inspect.js";
+import { runMaintenanceCommand } from "./commands/maintenance.js";
 import { runStatsCommand } from "./commands/stats.js";
 
 const main = async (): Promise<void> => {
@@ -76,6 +77,9 @@ const main = async (): Promise<void> => {
         args[0] === "node" ? args[3] : args[2]
       );
       break;
+    case "maintenance":
+      await runMaintenanceCommand(args[0]);
+      break;
     case "disable":
       runDisableCommand(args[0], args[1]);
       break;
@@ -92,6 +96,7 @@ const main = async (): Promise<void> => {
       console.log(
         "Usage: ee <install openclaw|claude-code|codex|upgrade openclaw|claude-code|codex|repair openclaw|claude-hook|codex-mcp-server|doctor [claude-code|codex]|stats|inspect|feedback|disable|enable|cool|retire>"
         + " | backup|export|import <snapshot-path>|rollback <backup-id>"
+        + " | maintenance embeddings-reset"
         + " | evaluate openclaw-baseline [--lookback-hours N] [--output-dir PATH]"
         + " | evaluate openclaw-scenarios --pack high-confidence [--repo-root PATH] [--output-dir PATH] [--dry-run]"
         + " | mcp-server"

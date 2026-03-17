@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   clearLocalEmbeddingProviderCache,
   createLocalEmbeddingProvider,
+  resetManagedEmbeddingCache,
   setTransformersModuleLoaderForTests
 } from "../../src/store/vector/local-provider.js";
 
@@ -78,5 +79,45 @@ describe("local embedding provider", () => {
     expect(provider.dimensions).toBe(3);
     expect(pipelineSpy).toHaveBeenCalledTimes(2);
     expect(existsSync(join(modelDir, "model.onnx"))).toBe(false);
+  });
+
+  it("clears the configured model cache and rebuilds it", async () => {
+    const cacheDir = mkdtempSync(join(tmpdir(), "ee-local-provider-"));
+    const modelDir = join(cacheDir, "Xenova", "multilingual-e5-small");
+    mkdirSync(join(modelDir, "onnx"), { recursive: true });
+    writeFileSync(join(modelDir, "onnx", "model.onnx"), "stale");
+
+    const pipelineSpy = vi.fn(async () =>
+      async () => ({
+        data: [0.7, 0.8, 0.9]
+      })
+    );
+
+    setTransformersModuleLoaderForTests(async () => ({
+      env: {
+        allowRemoteModels: false,
+        allowLocalModels: false,
+        cacheDir: undefined
+      },
+      pipeline: pipelineSpy
+    }));
+
+    const report = await resetManagedEmbeddingCache({
+      config: {
+        embeddingProvider: "local",
+        embeddingModel: "Xenova/multilingual-e5-small",
+        embeddingCacheDir: cacheDir,
+        embeddingDtype: "q8"
+      }
+    });
+
+    expect(report).toMatchObject({
+      cacheDir: modelDir,
+      model: "Xenova/multilingual-e5-small",
+      rebuilt: true,
+      dimensions: 3
+    });
+    expect(existsSync(join(modelDir, "onnx", "model.onnx"))).toBe(false);
+    expect(pipelineSpy).toHaveBeenCalledTimes(1);
   });
 });

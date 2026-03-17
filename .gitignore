@@ -7,6 +7,7 @@ coverage
 *.log
 data/sqlite/*.db
 data/sqlite/*.db-*
+data/models/
 data/vector/*
 !data/vector/.gitkeep
 data/logs/*.jsonl

@@ -92,6 +92,13 @@ export const clearLocalEmbeddingProviderCache = (): void => {
   cachedProvider = null;
 };
 
+export type ManagedEmbeddingCacheResetReport = {
+  cacheDir: string;
+  model: string;
+  rebuilt: boolean;
+  dimensions: number | null;
+};
+
 export const setTransformersModuleLoaderForTests = (
   loader: (() => Promise<TransformersModule>) | null
 ): void => {
@@ -155,4 +162,32 @@ export const getLocalEmbeddingProvider = async (
     cachedProvider = createLocalEmbeddingProvider(options);
   }
   return cachedProvider;
+};
+
+export const resetManagedEmbeddingCache = async (
+  options: ProviderOptions = {}
+): Promise<ManagedEmbeddingCacheResetReport> => {
+  const cacheDir = resolveCacheDir(options);
+  const model = resolveModel(options);
+  const modelCacheDir = resolveModelCacheDir(cacheDir, model);
+
+  rmSync(modelCacheDir, { recursive: true, force: true });
+  clearLocalEmbeddingProviderCache();
+
+  if (options.config?.embeddingProvider === "legacy") {
+    return {
+      cacheDir: modelCacheDir,
+      model,
+      rebuilt: false,
+      dimensions: null
+    };
+  }
+
+  const provider = await getLocalEmbeddingProvider(options);
+  return {
+    cacheDir: modelCacheDir,
+    model,
+    rebuilt: true,
+    dimensions: provider.dimensions
+  };
 };

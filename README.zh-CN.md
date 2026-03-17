@@ -78,6 +78,7 @@ ee install codex
 - `OpenClaw` 走 plugin/runtime 集成，管理面更多依赖 CLI fallback
 - `Claude Code` 会同时安装 hooks 和共享 MCP server
 - `Codex` 会安装共享 MCP server
+- `ee install ...` 和 `ee doctor ...` 现在会检查 `npm/pnpm` 是否使用非官方 registry；受管模型下载默认建议使用 `https://registry.npmjs.org`
 
 ## 数据目录
 
@@ -109,6 +110,8 @@ ee install codex
 - OpenClaw、Claude Code、Codex 的故障排查说明
 - Codex 真实宿主验收流程与检查清单
 - 本地 embedding 检索设计、模型缓存行为与降级告警
+- `install / doctor` 的 registry 告警行为
+- `ee maintenance embeddings-reset` 的缓存清理与重建方式
 
 ## 校验
 
