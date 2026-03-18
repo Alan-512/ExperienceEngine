@@ -215,7 +215,7 @@ describe("ExperienceRuntimeService finalize transaction", () => {
       task_run_id: string | null;
     }>;
     const injectionRow = db.prepare(
-      "SELECT session_id, task_summary, mode, scorecard_json, was_successful, harm_observed FROM injection_events LIMIT 1"
+      "SELECT session_id, task_summary, mode, scorecard_json, was_successful, harm_observed, attribution_reason FROM injection_events LIMIT 1"
     ).get() as {
       session_id: string | null;
       task_summary: string;
@@ -223,6 +223,7 @@ describe("ExperienceRuntimeService finalize transaction", () => {
       scorecard_json: string | null;
       was_successful: number | null;
       harm_observed: number | null;
+      attribution_reason: string | null;
     };
     const nodeCountBeforeDrain = db
       .prepare("SELECT COUNT(*) AS count FROM experience_nodes WHERE id != 'node_runtime_scorecard'")
@@ -265,6 +266,7 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     });
     expect(injectionRow.was_successful).toBe(1);
     expect(injectionRow.harm_observed).toBe(0);
+    expect(injectionRow.attribution_reason).toBe("success_outcome");
     expect(nodeCountBeforeDrain.count).toBe(0);
 
     await service.drainDistillationQueue();
@@ -320,12 +322,13 @@ describe("ExperienceRuntimeService finalize transaction", () => {
 
     const db = new DatabaseSync(sqlitePath);
     const injectionRow = db.prepare(
-      "SELECT mode, delivery_mode, delivered, injected_node_ids_json FROM injection_events LIMIT 1"
+      "SELECT mode, delivery_mode, delivered, injected_node_ids_json, attribution_reason FROM injection_events LIMIT 1"
     ).get() as {
       mode: string;
       delivery_mode: string;
       delivered: number;
       injected_node_ids_json: string;
+      attribution_reason: string | null;
     };
     const latestRecord = db.prepare(
       "SELECT injected_node_ids_json FROM experience_input_records LIMIT 1"
@@ -335,6 +338,7 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     expect(injectionRow.mode).toBe("inject");
     expect(injectionRow.delivery_mode).toBe("shadow");
     expect(injectionRow.delivered).toBe(0);
+    expect(injectionRow.attribution_reason).toBe("suppressed_delivery");
     expect(JSON.parse(injectionRow.injected_node_ids_json)).toEqual(["node_runtime_shadow"]);
     expect(JSON.parse(latestRecord.injected_node_ids_json)).toEqual([]);
     expect(reviewCount.count).toBe(0);
@@ -375,10 +379,11 @@ describe("ExperienceRuntimeService finalize transaction", () => {
 
     const db = new DatabaseSync(sqlitePath);
     const injectionRow = db.prepare(
-      "SELECT delivery_mode, delivered FROM injection_events LIMIT 1"
+      "SELECT delivery_mode, delivered, attribution_reason FROM injection_events LIMIT 1"
     ).get() as {
       delivery_mode: string;
       delivered: number;
+      attribution_reason: string | null;
     };
     const latestRecord = db.prepare(
       "SELECT injected_node_ids_json FROM experience_input_records LIMIT 1"
@@ -387,7 +392,65 @@ describe("ExperienceRuntimeService finalize transaction", () => {
 
     expect(injectionRow.delivery_mode).toBe("holdout");
     expect(injectionRow.delivered).toBe(0);
+    expect(injectionRow.attribution_reason).toBe("suppressed_delivery");
     expect(JSON.parse(latestRecord.injected_node_ids_json)).toEqual([]);
     expect(reviewCount.count).toBe(0);
+  });
+
+  it("persists relevant failure attribution when injected guidance appears harmful", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    seedStrategyNode(sqlitePath, "/repo", "node_runtime_harm");
+    const service = new ExperienceRuntimeService(
+      loadConfig({
+        dataDir: join(runtimeDir, "data"),
+        sqlitePath,
+        captureDir: join(runtimeDir, "captures"),
+        distillationAutoDrain: false
+      })
+    );
+
+    await service.beforePromptBuild({
+      sessionId: "harm-session",
+      cwd: "/repo",
+      userMessage: "Fix the failing vitest auth test",
+      taskSummary: "Fix the failing vitest auth test"
+    });
+    await service.persistToolResult({
+      sessionId: "harm-session",
+      toolName: "vitest",
+      outputSummary: "Fix the failing vitest auth test still fails with the same assertion",
+      errorSignature: "Fix the failing vitest auth test still fails with the same assertion",
+      status: "failure"
+    });
+
+    await service.finalizeTask({
+      sessionId: "harm-session",
+      cwd: "/repo",
+      userMessage: "Fix the failing vitest auth test",
+      taskSummary: "Fix the failing vitest auth test"
+    });
+
+    const db = new DatabaseSync(sqlitePath);
+    const injectionRow = db.prepare(
+      "SELECT was_successful, harm_observed, attribution_reason FROM injection_events LIMIT 1"
+    ).get() as {
+      was_successful: number | null;
+      harm_observed: number | null;
+      attribution_reason: string | null;
+    };
+    const reviewRows = db
+      .prepare("SELECT event_type, source FROM review_events ORDER BY created_at ASC")
+      .all() as Array<{ event_type: string; source: string }>;
+
+    expect(injectionRow.was_successful).toBe(0);
+    expect(injectionRow.harm_observed).toBe(1);
+    expect(injectionRow.attribution_reason).toBe("relevant_failure");
+    expect(reviewRows).toEqual([
+      expect.objectContaining({
+        event_type: "mark_harmed",
+        source: "automatic"
+      })
+    ]);
   });
 });

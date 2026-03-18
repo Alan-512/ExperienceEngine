@@ -344,6 +344,21 @@ describe("Codex MCP behavior loop", () => {
     expect(last?.sessionId).toBe("codex-surface-view");
     expect(last?.intervention).toBe("inject");
     expect(last?.autoFeedback).toBe("helped");
+    expect(last?.autoFeedbackReason).toBe("success_outcome");
+    expect(last?.timeline).toEqual([
+      expect.objectContaining({
+        kind: "decision",
+        summary: "inject: Delivered 1 node for the task."
+      }),
+      expect.objectContaining({
+        kind: "outcome",
+        summary: "success: Fix the failing auth test"
+      }),
+      expect.objectContaining({
+        kind: "feedback",
+        summary: "helped: Automatic attribution marked the injection as helpful."
+      })
+    ]);
     expect(last?.injectedNodes[0]?.sourceKind).toBe("system_derived");
     expect(last?.scorecard).toMatchObject({
       riskLevel: "low",
@@ -417,6 +432,21 @@ describe("Codex MCP behavior loop", () => {
       sessionId: "codex-resource-view",
       intervention: "inject",
       autoFeedback: "helped",
+      autoFeedbackReason: "success_outcome",
+      timeline: [
+        expect.objectContaining({
+          kind: "decision",
+          summary: "inject: Delivered 1 node for the task."
+        }),
+        expect.objectContaining({
+          kind: "outcome",
+          summary: "success: Fix the failing auth test"
+        }),
+        expect.objectContaining({
+          kind: "feedback",
+          summary: "helped: Automatic attribution marked the injection as helpful."
+        })
+      ],
       scorecard: expect.objectContaining({
         riskLevel: "low"
       })

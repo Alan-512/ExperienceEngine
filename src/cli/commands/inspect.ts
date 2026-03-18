@@ -44,6 +44,9 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
     console.log(`Task type: ${record.taskType}`);
     console.log(`Intervention: ${record.intervention}`);
     console.log(`Automatic feedback: ${record.autoFeedback}`);
+    if (record.autoFeedbackReason) {
+      console.log(`Automatic feedback reason: ${record.autoFeedbackReason}`);
+    }
 
     if (record.injectedNodes.length) {
       console.log("Injected nodes:");
@@ -73,6 +76,13 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
         for (const reason of record.scorecard.reasons) {
           console.log(`  - ${reason}`);
         }
+      }
+    }
+
+    if (record.timeline.length) {
+      console.log("Timeline:");
+      for (const entry of record.timeline) {
+        console.log(`- ${entry.kind} ${entry.summary}`);
       }
     }
 
@@ -147,6 +157,13 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
     console.table(summary.nodes);
     console.log("Node sources:");
     console.table(summary.nodeSources);
+    console.log("Effectiveness:");
+    console.table(summary.effectiveness);
+    console.log("Benchmark summary:");
+    console.table(summary.benchmark);
+    console.log(`Recommendation: ${summary.benchmark.recommendation}`);
+    console.log("Attribution reasons:");
+    console.table(summary.attributionReasons);
     console.log("Runtime records:");
     console.table(summary.runtime);
     if (summary.latestRecordCreatedAt) {

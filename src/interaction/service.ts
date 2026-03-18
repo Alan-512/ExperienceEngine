@@ -1,5 +1,6 @@
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import { buildInjectionScorecard } from "../controller/injection-scorecard.js";
+import { buildBenchmarkSummary, type BenchmarkSummary } from "../evaluation/benchmark-summary.js";
 import { resolveScope } from "../input/scope-resolver.js";
 import { bootstrapDatabase, openDatabase } from "../store/sqlite/db.js";
 import { CandidateRepository } from "../store/sqlite/repositories/candidate-repo.js";
@@ -17,6 +18,8 @@ import type {
   DistillationJobState,
   EvaluationMode,
   ExperienceInputRecord,
+  FeedbackAttributionReason,
+  InjectionEvent,
   InjectionScorecard,
   ExperienceNode,
   ExperienceNodeType,
@@ -58,6 +61,12 @@ export type ExperienceNodeDetail = ExperienceNodeSummary & {
   harmedRecordIds: string[];
 };
 
+export type ExperienceTimelineEntry = {
+  kind: "decision" | "outcome" | "feedback";
+  createdAt: string;
+  summary: string;
+};
+
 export type ExperienceLastInspection = {
   sessionId?: string;
   scopeId: string;
@@ -66,11 +75,13 @@ export type ExperienceLastInspection = {
   deliveryMode?: EvaluationMode;
   delivered?: boolean;
   autoFeedback: "helped" | "harmed" | "none";
+  autoFeedbackReason?: InjectionEvent["attribution_reason"];
   outcome: ExperienceInputRecord["outcome_signal"];
   injectedNodes: ExperienceNodeSummary[];
   hints: string[];
   evidence: string[];
   scorecard?: InjectionScorecard;
+  timeline: ExperienceTimelineEntry[];
   summary: string;
   createdAt: string;
 };
@@ -122,6 +133,18 @@ export type ExperienceLearningSummary = {
   jobs: Record<DistillationJobState, number>;
   nodes: Record<ExperienceState, number>;
   nodeSources: Record<DistillationSource, number>;
+  effectiveness: {
+    decisions: number;
+    live: number;
+    shadow: number;
+    holdout: number;
+    delivered: number;
+    suppressed: number;
+    automaticHelped: number;
+    automaticHarmed: number;
+  };
+  benchmark: BenchmarkSummary;
+  attributionReasons: Record<FeedbackAttributionReason, number>;
   runtime: {
     records: number;
     taskRuns: number;
@@ -214,6 +237,108 @@ const summarizeAutomaticFeedback = (events: ReviewEvent[]): "helped" | "harmed" 
   return "none";
 };
 
+const toDecisionSummary = (
+  intervention: ExperienceLastInspection["intervention"],
+  delivered: boolean | undefined,
+  injectedCount: number
+): string => {
+  if (intervention === "inject") {
+    return `inject: Delivered ${injectedCount} node${injectedCount === 1 ? "" : "s"} for the task.`;
+  }
+
+  if (intervention === "shadow") {
+    return `shadow: Suppressed delivery for ${injectedCount} matched node${injectedCount === 1 ? "" : "s"}.`;
+  }
+
+  if (intervention === "holdout") {
+    return `holdout: Withheld ${injectedCount} matched node${injectedCount === 1 ? "" : "s"} for evaluation.`;
+  }
+
+  if (delivered === false) {
+    return "skip: No guidance was delivered for this task.";
+  }
+
+  return "skip: No matching experience guidance was available.";
+};
+
+const toFeedbackSummary = (feedback: "helped" | "harmed" | "none"): string | undefined => {
+  if (feedback === "helped") {
+    return "helped: Automatic attribution marked the injection as helpful.";
+  }
+
+  if (feedback === "harmed") {
+    return "harmed: Automatic attribution marked the injection as harmful.";
+  }
+
+  return undefined;
+};
+
+const inferAutoFeedbackReason = (input: {
+  explicitReason?: InjectionEvent["attribution_reason"];
+  autoFeedback: "helped" | "harmed" | "none";
+  intervention: ExperienceLastInspection["intervention"];
+  outcome: ExperienceInputRecord["outcome_signal"];
+}): InjectionEvent["attribution_reason"] | undefined => {
+  if (input.explicitReason) {
+    return input.explicitReason;
+  }
+
+  if (input.intervention === "shadow" || input.intervention === "holdout") {
+    return "suppressed_delivery";
+  }
+
+  if (input.autoFeedback === "helped") {
+    return "success_outcome";
+  }
+
+  if (input.autoFeedback === "harmed") {
+    return "relevant_failure";
+  }
+
+  if (input.outcome === "unknown") {
+    return "unknown_outcome";
+  }
+
+  return undefined;
+};
+
+const buildLatestTimeline = (input: {
+  record: ExperienceInputRecord;
+  taskRunCreatedAt?: string;
+  outcomeCreatedAt?: string;
+  outcomeSummary?: string;
+  injectionCreatedAt?: string;
+  intervention: ExperienceLastInspection["intervention"];
+  delivered?: boolean;
+  injectedCount: number;
+  autoFeedback: "helped" | "harmed" | "none";
+  autoFeedbackCreatedAt?: string;
+}): ExperienceTimelineEntry[] => {
+  const entries: ExperienceTimelineEntry[] = [
+    {
+      kind: "decision",
+      createdAt: input.injectionCreatedAt ?? input.taskRunCreatedAt ?? input.record.created_at,
+      summary: toDecisionSummary(input.intervention, input.delivered, input.injectedCount)
+    },
+    {
+      kind: "outcome",
+      createdAt: input.outcomeCreatedAt ?? input.taskRunCreatedAt ?? input.record.created_at,
+      summary: `${input.record.outcome_signal}: ${input.outcomeSummary ?? input.record.task_summary}`
+    }
+  ];
+
+  const feedbackSummary = toFeedbackSummary(input.autoFeedback);
+  if (feedbackSummary) {
+    entries.push({
+      kind: "feedback",
+      createdAt: input.autoFeedbackCreatedAt ?? input.outcomeCreatedAt ?? input.record.created_at,
+      summary: feedbackSummary
+    });
+  }
+
+  return entries.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+};
+
 export class ExperienceInteractionService {
   private readonly inputRepo;
   private readonly injectionRepo;
@@ -273,8 +398,8 @@ export class ExperienceInteractionService {
           )
         : undefined);
     const taskRun = record.session_id ? this.taskRunRepo.getLatestBySessionId(record.session_id) : undefined;
-    const autoFeedback =
-      taskRun?.id ? summarizeAutomaticFeedback(this.reviewEventRepo.listByTaskRunId(taskRun.id)) : "none";
+    const reviewEvents = taskRun?.id ? this.reviewEventRepo.listByTaskRunId(taskRun.id) : [];
+    const autoFeedback = summarizeAutomaticFeedback(reviewEvents);
     const intervention =
       selectedNodeIds.length === 0
         ? "skip"
@@ -283,6 +408,14 @@ export class ExperienceInteractionService {
             ? "holdout"
             : "shadow"
           : "inject";
+    const outcomeRecord = taskRun?.id ? this.outcomeRepo.listByTaskRunId(taskRun.id)[0] : undefined;
+    const latestAutomaticFeedback = reviewEvents.find((event) => event.source === "automatic");
+    const autoFeedbackReason = inferAutoFeedbackReason({
+      explicitReason: injectionEvent?.attribution_reason,
+      autoFeedback,
+      intervention,
+      outcome: record.outcome_signal
+    });
     return {
       sessionId: record.session_id,
       scopeId: record.scope_id,
@@ -291,11 +424,24 @@ export class ExperienceInteractionService {
       deliveryMode: injectionEvent?.delivery_mode,
       delivered: injectionEvent?.delivered,
       autoFeedback,
+      autoFeedbackReason,
       outcome: record.outcome_signal,
       injectedNodes: injectedNodes.map(toNodeSummary),
       hints: injectedNodes.map((node) => node.compact_hint),
       evidence: record.evidence,
       scorecard,
+      timeline: buildLatestTimeline({
+        record,
+        taskRunCreatedAt: taskRun?.created_at,
+        outcomeCreatedAt: outcomeRecord?.created_at,
+        outcomeSummary: outcomeRecord?.summary,
+        injectionCreatedAt: injectionEvent?.created_at,
+        intervention,
+        delivered: injectionEvent?.delivered,
+        injectedCount: injectedNodes.length,
+        autoFeedback,
+        autoFeedbackCreatedAt: latestAutomaticFeedback?.created_at
+      }),
       summary: record.task_summary,
       createdAt: record.created_at
     };
@@ -344,8 +490,28 @@ export class ExperienceInteractionService {
       "rule",
       "disabled"
     ];
+    const attributionReasons: FeedbackAttributionReason[] = [
+      "success_outcome",
+      "relevant_failure",
+      "environmental_failure",
+      "exploratory_failure",
+      "no_relevant_failure",
+      "suppressed_delivery",
+      "unknown_outcome"
+    ];
     const latestRecord = this.inputRepo.getLatest();
     const allNodes = this.nodeRepo.listAll();
+
+    const effectiveness = {
+      decisions: this.injectionRepo.count(),
+      live: this.injectionRepo.countByDeliveryMode("live"),
+      shadow: this.injectionRepo.countByDeliveryMode("shadow"),
+      holdout: this.injectionRepo.countByDeliveryMode("holdout"),
+      delivered: this.injectionRepo.countByDelivered(true),
+      suppressed: this.injectionRepo.countByDelivered(false),
+      automaticHelped: this.reviewEventRepo.countBySourceAndType("automatic", "mark_helped"),
+      automaticHarmed: this.reviewEventRepo.countBySourceAndType("automatic", "mark_harmed")
+    };
 
     return {
       candidates: Object.fromEntries(
@@ -363,6 +529,11 @@ export class ExperienceInteractionService {
           allNodes.filter((node) => (node.distillation_source ?? "disabled") === source).length
         ])
       ) as Record<DistillationSource, number>,
+      effectiveness,
+      benchmark: buildBenchmarkSummary(effectiveness),
+      attributionReasons: Object.fromEntries(
+        attributionReasons.map((reason) => [reason, this.injectionRepo.countByAttributionReason(reason)])
+      ) as Record<FeedbackAttributionReason, number>,
       runtime: {
         records: this.inputRepo.count(),
         taskRuns: this.taskRunRepo.count(),

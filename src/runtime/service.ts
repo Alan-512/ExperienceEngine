@@ -1,6 +1,7 @@
 import { analyzeExperience } from "../analyzer/experience-analyzer.js";
 import { buildCandidateSignals } from "../analyzer/candidate-signals.js";
 import { buildInjectionScorecard } from "../controller/injection-scorecard.js";
+import { classifyFailureAttributionReason } from "../feedback/automatic-attribution.js";
 import { applyFeedback } from "../feedback/feedback-manager.js";
 import { detectHarm } from "../feedback/harm-detector.js";
 import { createEmptyStats, updateStats } from "../feedback/stats-updater.js";
@@ -587,13 +588,25 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       this.persistCandidates(input, record.record_id, taskRun.id);
       this.updateInjectedNodes(input, record.record_id, taskRun.id);
       if (session.lastInjectionEvent) {
-        const harmObserved = input.injected_node_ids
+        const touchedNodes = session.lastInjectionEvent.injected_node_ids
           .map((id) => this.nodeRepo.getById(id))
-          .some((node) => detectHarm(input, node ?? undefined));
+          .filter((node): node is ExperienceNode => Boolean(node));
+        const harmObserved = touchedNodes.some((node) => detectHarm(input, node));
+        const attributionReason = !session.lastInjectionEvent.delivered
+          ? "suppressed_delivery"
+          : input.outcome_signal === "success"
+            ? "success_outcome"
+            : input.outcome_signal === "failure"
+              ? touchedNodes
+                  .map((node) => classifyFailureAttributionReason(input, node))
+                  .find((reason) => reason === "relevant_failure")
+                  ?? classifyFailureAttributionReason(input)
+              : "unknown_outcome";
         this.injectionRepo.upsert({
           ...session.lastInjectionEvent,
           was_successful: input.outcome_signal === "success",
           harm_observed: harmObserved,
+          attribution_reason: attributionReason,
           resolved_at: nowIso()
         });
       }

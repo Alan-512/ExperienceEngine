@@ -166,6 +166,7 @@ CREATE TABLE IF NOT EXISTS injection_events (
   scorecard_json TEXT,
   was_successful INTEGER,
   harm_observed INTEGER,
+  attribution_reason TEXT,
   created_at TEXT NOT NULL,
   resolved_at TEXT
 );

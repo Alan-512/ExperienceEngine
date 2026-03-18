@@ -72,4 +72,12 @@ export class ReviewEventRepository {
   count(): number {
     return (this.db.prepare("SELECT COUNT(*) AS count FROM review_events").get() as { count: number }).count;
   }
+
+  countBySourceAndType(source: ReviewEvent["source"], eventType: ReviewEvent["event_type"]): number {
+    return (
+      this.db
+        .prepare("SELECT COUNT(*) AS count FROM review_events WHERE source = ? AND event_type = ?")
+        .get(source, eventType) as { count: number }
+    ).count;
+  }
 }

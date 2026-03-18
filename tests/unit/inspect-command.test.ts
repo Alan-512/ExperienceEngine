@@ -198,10 +198,12 @@ describe("inspect command", () => {
     const nodeRepo = new NodeRepository(db);
     const inputRepo = new InputRecordRepository(db);
     const taskRunRepo = new TaskRunRepository(db);
+    const outcomeRepo = new OutcomeRecordRepository(db);
     const reviewEventRepo = new ReviewEventRepository(db);
     nodeRepo.upsert(makeNode());
     inputRepo.upsert(makeRecord());
     taskRunRepo.upsert(makeTaskRun());
+    outcomeRepo.upsert(makeOutcomeRecord());
     reviewEventRepo.upsert(makeReviewEvent({ source: "automatic" }));
 
     runInspectCommand("--last");
@@ -223,6 +225,11 @@ describe("inspect command", () => {
         ["- Why it matched:"],
         ["  - Exact task-family match was found in historical experience."],
         ["Automatic feedback: helped"],
+        ["Automatic feedback reason: success_outcome"],
+        ["Timeline:"],
+        ["- decision inject: Delivered 1 node for the task."],
+        ["- outcome success: Fix the failing auth test"],
+        ["- feedback helped: Automatic attribution marked the injection as helpful."],
         ["Hints:"],
         ["- Run the failing auth test before editing and verify after the fix."],
         ["Evidence:"],
@@ -274,6 +281,7 @@ describe("inspect command", () => {
       },
       was_successful: null,
       harm_observed: null,
+      attribution_reason: "suppressed_delivery",
       created_at: "2026-03-13T01:00:00.000Z"
     });
 
@@ -284,6 +292,7 @@ describe("inspect command", () => {
         ["Session: session_shadow"],
         ["Intervention: shadow"],
         ["Automatic feedback: none"],
+        ["Automatic feedback reason: suppressed_delivery"],
         ["Injected nodes:"],
         ["- node_shadow strategy active system_derived"],
         ["Hints:"],
@@ -519,7 +528,24 @@ describe("inspect command", () => {
     new NodeRepository(db).upsert(makeNode({ state: "active" }));
     new TaskRunRepository(db).upsert(makeTaskRun());
     new OutcomeRecordRepository(db).upsert(makeOutcomeRecord());
-    new ReviewEventRepository(db).upsert(makeReviewEvent());
+    new ReviewEventRepository(db).upsert(makeReviewEvent({ source: "automatic" }));
+    new InjectionRepository(db).upsert({
+      injection_id: "inject_learning",
+      session_id: "session_last",
+      scope_id: resolveScope("/repo").scope_id,
+      task_type: "test_debug",
+      task_summary: "Fix the failing auth test",
+      mode: "inject",
+      delivery_mode: "shadow",
+      delivered: false,
+      injected_node_ids: ["node_inspect"],
+      injection_count: 1,
+      created_at: "2026-03-13T01:01:00.000Z",
+      resolved_at: "2026-03-13T01:05:00.000Z",
+      was_successful: true,
+      harm_observed: false,
+      attribution_reason: "suppressed_delivery"
+    });
 
     runInspectCommand("learning");
 
@@ -529,6 +555,10 @@ describe("inspect command", () => {
         ["Distillation jobs:"],
         ["Formal nodes:"],
         ["Node sources:"],
+        ["Effectiveness:"],
+        ["Benchmark summary:"],
+        ["Recommendation: Collect at least 3 decisions before treating benchmark numbers as stable."],
+        ["Attribution reasons:"],
         ["Runtime records:"]
       ])
     );
@@ -538,6 +568,9 @@ describe("inspect command", () => {
         [expect.objectContaining({ pending: 0, processing: 0, succeeded: 0, failed: 1, discarded: 0 })],
         [expect.objectContaining({ candidate: 0, active: 1, cooling: 0, retired: 0 })],
         [expect.objectContaining({ explicit_provider: 0, host_endpoint: 0, host_mediated: 0, rule: 1, disabled: 0 })],
+        [expect.objectContaining({ decisions: 1, live: 0, shadow: 1, holdout: 0, delivered: 0, suppressed: 1, automaticHelped: 1, automaticHarmed: 0 })],
+        [expect.objectContaining({ deliveryRate: 0, suppressionRate: 1, helpfulRate: 1, harmfulRate: 0, netHelpfulRate: 1, verdict: "warming_up" })],
+        [expect.objectContaining({ success_outcome: 0, relevant_failure: 0, environmental_failure: 0, exploratory_failure: 0, no_relevant_failure: 0, suppressed_delivery: 1, unknown_outcome: 0 })],
         [expect.objectContaining({ taskRuns: 1, outcomes: 1, reviews: 1 })]
       ])
     );

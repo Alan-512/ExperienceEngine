@@ -26,6 +26,14 @@ export type DistillationSource =
   | "host_mediated"
   | "rule"
   | "disabled";
+export type FeedbackAttributionReason =
+  | "success_outcome"
+  | "relevant_failure"
+  | "environmental_failure"
+  | "exploratory_failure"
+  | "no_relevant_failure"
+  | "suppressed_delivery"
+  | "unknown_outcome";
 
 export type Scope = {
   scope_id: string;
@@ -163,6 +171,7 @@ export type InjectionEvent = {
   scorecard?: InjectionScorecard;
   was_successful: boolean | null;
   harm_observed: boolean | null;
+  attribution_reason?: FeedbackAttributionReason;
   created_at: string;
   resolved_at?: string;
 };

@@ -86,6 +86,7 @@ export const bootstrapDatabase = (db: DatabaseSync): void => {
   ensureColumn(db, "injection_events", "delivery_mode", "TEXT NOT NULL DEFAULT 'live'");
   ensureColumn(db, "injection_events", "delivered", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "injection_events", "scorecard_json", "TEXT");
+  ensureColumn(db, "injection_events", "attribution_reason", "TEXT");
 };
 
 export const withTransaction = <T>(db: DatabaseSync, operation: () => T): T => {
