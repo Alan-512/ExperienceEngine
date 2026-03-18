@@ -136,4 +136,58 @@ To remove this server, run: claude mcp remove "experienceengine" -s project`;
     expect(settings.hooks?.PreToolUse?.some((entry) => entry.matcher === "Write")).toBe(true);
     expect(settings.hooks?.PreToolUse?.some((entry) => entry.matcher === "*")).toBe(true);
   });
+
+  it("removes stale ExperienceEngine hook variants before writing the current hook command", () => {
+    const homeDir = makeTempDir();
+    const projectDir = makeTempDir();
+    const settingsPath = join(projectDir, ".claude", "settings.local.json");
+
+    mkdirSync(join(projectDir, ".claude"), { recursive: true });
+    writeFileSync(
+      settingsPath,
+      `${JSON.stringify(
+        {
+          hooks: {
+            UserPromptSubmit: [
+              {
+                hooks: [
+                  {
+                    type: "command",
+                    command: "node --no-warnings '/mnt/d/project/ExperienceEngine/dist/cli/index.js' claude-hook"
+                  },
+                  {
+                    type: "command",
+                    command: "node --no-warnings '/mnt/d/project/experienceengine/dist/cli/index.js' claude-hook"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        null,
+        2
+      )}\n`,
+      "utf8"
+    );
+
+    installClaudeCodeAdapter({
+      homeDir,
+      projectDir,
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        if (key === "claude mcp get experienceengine") {
+          throw new Error("missing");
+        }
+        return "";
+      }
+    });
+
+    const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as {
+      hooks?: Record<string, Array<{ hooks: Array<{ command: string }> }>>;
+    };
+
+    expect(settings.hooks?.UserPromptSubmit).toHaveLength(1);
+    expect(settings.hooks?.UserPromptSubmit?.[0]?.hooks).toHaveLength(1);
+    expect(settings.hooks?.UserPromptSubmit?.[0]?.hooks[0]?.command).toContain("claude-hook");
+  });
 });

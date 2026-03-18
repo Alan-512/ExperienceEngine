@@ -73,6 +73,31 @@ const shellQuote = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'
 const buildClaudeHookCommand = (packageRoot: string): string =>
   `node --no-warnings ${shellQuote(join(packageRoot, "dist/cli/index.js"))} claude-hook`;
 
+const isExperienceEngineHookCommand = (command: ClaudeHookCommand): boolean =>
+  command.type === "command" &&
+  command.command.includes("dist/cli/index.js") &&
+  command.command.includes("claude-hook");
+
+const removeStaleExperienceEngineHooks = (
+  hooks: Record<string, ClaudeHookMatcher[]>,
+  eventName: string,
+  matcher: string | undefined
+): void => {
+  const entries = hooks[eventName] ?? [];
+  hooks[eventName] = entries
+    .map((entry) => {
+      if ((entry.matcher ?? "") !== (matcher ?? "")) {
+        return entry;
+      }
+
+      return {
+        ...entry,
+        hooks: entry.hooks.filter((hook) => !isExperienceEngineHookCommand(hook))
+      };
+    })
+    .filter((entry) => entry.hooks.length > 0);
+};
+
 const upsertHookMatcher = (
   hooks: Record<string, ClaudeHookMatcher[]>,
   eventName: string,
@@ -103,6 +128,12 @@ const mergeExperienceEngineHooks = (settings: ClaudeSettings, packageRoot: strin
     command: buildClaudeHookCommand(packageRoot),
     timeout: 30
   };
+
+  removeStaleExperienceEngineHooks(next.hooks!, "UserPromptSubmit", undefined);
+  removeStaleExperienceEngineHooks(next.hooks!, "PreToolUse", "*");
+  removeStaleExperienceEngineHooks(next.hooks!, "PostToolUse", "*");
+  removeStaleExperienceEngineHooks(next.hooks!, "PostToolUseFailure", "*");
+  removeStaleExperienceEngineHooks(next.hooks!, "SessionEnd", undefined);
 
   upsertHookMatcher(next.hooks!, "UserPromptSubmit", undefined, command);
   upsertHookMatcher(next.hooks!, "PreToolUse", "*", command);

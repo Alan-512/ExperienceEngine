@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -381,5 +381,71 @@ describe("Claude hook capture", () => {
     const session = loadClaudeSession("real-session-user-prompt", { homeDir, env });
     expect(session?.promptContext?.userMessage).toBe("Reply with exactly OK.");
     expect(session?.promptContext?.cwd).toBe("/tmp/example-claude-project");
+  });
+
+  it("reconstructs prompt context from the transcript when SessionEnd arrives without a prior prompt hook", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+    const transcriptDir = join(homeDir, ".claude", "projects", "example-project");
+    const transcriptPath = join(transcriptDir, "session-fallback.jsonl");
+    rmSync(transcriptDir, { recursive: true, force: true });
+    mkdirSync(transcriptDir, { recursive: true });
+    writeFileSync(
+      transcriptPath,
+      `${JSON.stringify({
+        type: "user",
+        cwd: "/tmp/example-claude-project",
+        sessionId: "session-transcript-fallback",
+        message: {
+          role: "user",
+          content: "Summarize the current working directory."
+        }
+      })}\n`,
+      "utf8"
+    );
+
+    await processClaudeHookPayload(
+      JSON.stringify({
+        hook_event_name: "PostToolUse",
+        session_id: "session-transcript-fallback",
+        cwd: "/tmp/example-claude-project",
+        tool_name: "Bash",
+        payload: {
+          tool_input: { command: "pwd" },
+          tool_response: { stdout: "/tmp/example-claude-project" }
+        },
+        status: "success"
+      }),
+      { homeDir, env }
+    );
+
+    await processClaudeHookPayload(
+      JSON.stringify({
+        hook_event_name: "SessionEnd",
+        session_id: "session-transcript-fallback",
+        cwd: "/tmp/example-claude-project",
+        transcript_path: transcriptPath
+      }),
+      { homeDir, env }
+    );
+
+    const db = openDatabase(loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME }));
+    const row = db
+      .prepare(
+        "SELECT session_id, task_summary, outcome_signal, evidence_json FROM experience_input_records WHERE session_id = ?"
+      )
+      .get("session-transcript-fallback") as
+      | {
+          session_id: string;
+          task_summary: string;
+          outcome_signal: string;
+          evidence_json: string;
+        }
+      | undefined;
+
+    expect(row?.session_id).toBe("session-transcript-fallback");
+    expect(row?.task_summary).toBe("Summarize the current working directory.");
+    expect(row?.outcome_signal).toBe("success");
+    expect(row?.evidence_json).toContain("Bash: success: /tmp/example-claude-project");
   });
 });

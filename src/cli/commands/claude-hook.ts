@@ -16,6 +16,8 @@ import { ExperienceRuntimeService } from "../../runtime/service.js";
 type ClaudeHookPayload = {
   session_id?: string;
   hook_event_name?: string;
+  transcript_path?: string;
+  cwd?: string;
   [key: string]: unknown;
 };
 
@@ -62,6 +64,84 @@ const buildClaudeHookOutput = (additionalContext: string): string =>
       additionalContext
     }
   });
+
+const asRecord = (value: unknown): Record<string, unknown> | null =>
+  value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
+
+const extractTranscriptPrompt = (transcriptPath: string): { cwd?: string; promptText?: string } | null => {
+  try {
+    const lines = readFileSync(transcriptPath, "utf8")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+
+    for (const line of lines) {
+      const record = asRecord(JSON.parse(line));
+      if (!record) {
+        continue;
+      }
+
+      const message = asRecord(record.message);
+      const role = typeof message?.role === "string" ? message.role : undefined;
+      const content = message?.content;
+      const promptText =
+        typeof content === "string"
+          ? content.trim()
+          : Array.isArray(content)
+            ? content
+                .map((entry) => {
+                  if (typeof entry === "string") {
+                    return entry.trim();
+                  }
+
+                  const item = asRecord(entry);
+                  const text = typeof item?.text === "string" ? item.text.trim() : undefined;
+                  return text ?? "";
+                })
+                .filter(Boolean)
+                .join("\n")
+            : undefined;
+
+      if (role === "user" && promptText) {
+        return {
+          cwd: typeof record.cwd === "string" ? record.cwd : undefined,
+          promptText
+        };
+      }
+    }
+  } catch {
+    return null;
+  }
+
+  return null;
+};
+
+const recoverClaudePromptContext = (
+  payload: ClaudeHookPayload | null,
+  sessionId: string
+): {
+  sessionId: string;
+  cwd?: string;
+  userMessage: string;
+  taskSummary: string;
+} | null => {
+  const transcriptPath = typeof payload?.transcript_path === "string" ? payload.transcript_path : undefined;
+  if (!transcriptPath) {
+    return null;
+  }
+
+  const recovered = extractTranscriptPrompt(transcriptPath);
+  if (!recovered?.promptText) {
+    return null;
+  }
+
+  return {
+    sessionId,
+    cwd: typeof payload?.cwd === "string" ? payload.cwd : recovered.cwd,
+    userMessage: recovered.promptText,
+    taskSummary: recovered.promptText
+  };
+};
 
 export const persistClaudeHookCapture = (
   rawInput: string,
@@ -156,12 +236,13 @@ export const processClaudeHookPayload = async (
 
   if (event.eventName === "SessionEnd" && event.sessionId) {
     const stored = loadClaudeSession(event.sessionId, options);
-    if (stored?.promptContext) {
+    const promptContext = stored?.promptContext ?? recoverClaudePromptContext(payload as ClaudeHookPayload | null, event.sessionId);
+    if (promptContext) {
       const runtime = createClaudeRuntime(options);
-      for (const pendingToolResult of stored.toolResults) {
+      for (const pendingToolResult of stored?.toolResults ?? []) {
         await runtime.persistToolResult(pendingToolResult);
       }
-      await runtime.finalizeTask(stored.promptContext);
+      await runtime.finalizeTask(promptContext);
     }
 
     clearClaudeSession(event.sessionId, options);
