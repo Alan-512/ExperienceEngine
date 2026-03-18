@@ -1,3 +1,8 @@
+import { loadConfig } from "../../config/load-config.js";
+import {
+  ExperienceInteractionService,
+  type ExperienceFirstValueReadiness
+} from "../../interaction/service.js";
 import { inspectClaudeCodeInstall } from "../../install/claude-code-doctor.js";
 import { inspectCodexInstall } from "../../install/codex-installer.js";
 import {
@@ -18,6 +23,7 @@ type DoctorDeps = {
   inspectCodexInstall?: typeof inspectCodexInstall;
   inspectOpenClawInstall?: typeof inspectOpenClawInstall;
   readRegistryHealth?: typeof readRegistryHealth;
+  inspectFirstValueReadiness?: () => ExperienceFirstValueReadiness;
 };
 
 const logRemoteReleaseStatus = (target: string, remoteStatus: RemoteReleaseStatus): void => {
@@ -50,9 +56,22 @@ const logRegistryHealth = (health: RegistryHealth): void => {
   }
 };
 
+const inspectFirstValueReadiness = (): ExperienceFirstValueReadiness =>
+  new ExperienceInteractionService(loadConfig()).inspectFirstValueReadiness();
+
+const logFirstValueReadiness = (summary: ExperienceFirstValueReadiness): void => {
+  console.log("First-value readiness:");
+  console.log(`- Raw task records: ${summary.rawRecords}`);
+  console.log(`- Task runs: ${summary.taskRuns}`);
+  console.log(`- Candidates waiting for promotion: ${summary.candidates}`);
+  console.log(`- Formal experience nodes: ${summary.nodes}`);
+  console.log(`Recommended next step: ${summary.nextStep}`);
+};
+
 export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): Promise<void> => {
   const resolveRemoteStatus = deps.fetchLatestGitHubReleaseStatus ?? fetchLatestGitHubReleaseStatus;
   const registryHealth = (deps.readRegistryHealth ?? readRegistryHealth)();
+  const firstValueReadiness = (deps.inspectFirstValueReadiness ?? inspectFirstValueReadiness)();
   if (target === "claude-code") {
     const status = (deps.inspectClaudeCodeInstall ?? inspectClaudeCodeInstall)();
     const remoteStatus = await resolveRemoteStatus({
@@ -83,6 +102,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     }
     logRemoteReleaseStatus("claude-code", remoteStatus);
     logRegistryHealth(registryHealth);
+    logFirstValueReadiness(firstValueReadiness);
     return;
   }
 
@@ -115,6 +135,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     }
     logRemoteReleaseStatus("codex", remoteStatus);
     logRegistryHealth(registryHealth);
+    logFirstValueReadiness(firstValueReadiness);
     return;
   }
 
@@ -184,4 +205,5 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
 
   logRemoteReleaseStatus("openclaw", remoteStatus);
   logRegistryHealth(registryHealth);
+  logFirstValueReadiness(firstValueReadiness);
 };

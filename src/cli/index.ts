@@ -16,7 +16,7 @@ import { runRetireCommand } from "./commands/retire.js";
 import { runUpgradeCommand } from "./commands/upgrade.js";
 import { runDisableCommand } from "./commands/disable.js";
 import { runEnableCommand } from "./commands/enable.js";
-import { runFeedbackCommand } from "./commands/feedback.js";
+import { runFeedbackCommand, runQuickFeedbackCommand } from "./commands/feedback.js";
 import { runInspectCommand } from "./commands/inspect.js";
 import { runMaintenanceCommand } from "./commands/maintenance.js";
 import { runStatsCommand } from "./commands/stats.js";
@@ -70,6 +70,12 @@ const main = async (): Promise<void> => {
     case "feedback":
       runFeedbackCommand(args[0], args[1], args[2]);
       break;
+    case "helped":
+      runQuickFeedbackCommand("helped");
+      break;
+    case "harmed":
+      runQuickFeedbackCommand("harmed");
+      break;
     case "inspect":
       runInspectCommand(
         args[0] === "node" && args[1] ? `node:${args[1]}` : args[0],
@@ -95,6 +101,7 @@ const main = async (): Promise<void> => {
     default:
       console.log(
         "Usage: ee <install openclaw|claude-code|codex|upgrade openclaw|claude-code|codex|repair openclaw|claude-hook|codex-mcp-server|doctor [claude-code|codex]|stats|inspect|feedback|disable|enable|cool|retire>"
+        + " | helped|harmed"
         + " | backup|export|import <snapshot-path>|rollback <backup-id>"
         + " | maintenance embeddings-reset"
         + " | evaluate openclaw-baseline [--lookback-hours N] [--output-dir PATH]"

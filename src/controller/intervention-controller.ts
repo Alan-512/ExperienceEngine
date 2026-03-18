@@ -44,14 +44,13 @@ const decideInterventionInternal = async (
     return { mode: "skip", selected: [] };
   }
 
-  const selected = selectInjectableNodes(ranked, maxHints);
+  const mode: InjectionMode = ranked[0]?.state === "candidate" ? "inject_conservative" : "inject";
+  const selected = selectInjectableNodes(ranked, mode === "inject_conservative" ? 1 : maxHints);
   const candidateRiskSummary = selected[0]?.trigger_pattern ?? selected[0]?.compact_hint;
 
   if (!evaluateTrigger(input, stats, candidateRiskSummary, threshold)) {
     return { mode: "skip", selected: [] };
   }
-
-  const mode: InjectionMode = ranked[0]?.state === "candidate" ? "inject_conservative" : "inject";
 
   if (!selected.length) {
     return { mode: "skip", selected: [] };

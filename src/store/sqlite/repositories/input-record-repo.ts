@@ -174,4 +174,8 @@ export class InputRecordRepository {
         )
       );
   }
+
+  count(): number {
+    return (this.db.prepare("SELECT COUNT(*) AS count FROM experience_input_records").get() as { count: number }).count;
+  }
 }

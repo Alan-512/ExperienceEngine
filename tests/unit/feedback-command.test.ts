@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { runFeedbackCommand } from "../../src/cli/commands/feedback.js";
+import { runFeedbackCommand, runQuickFeedbackCommand } from "../../src/cli/commands/feedback.js";
 import { loadConfig } from "../../src/config/load-config.js";
 import { resolveScope } from "../../src/input/scope-resolver.js";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
@@ -88,6 +88,26 @@ afterEach(() => {
 });
 
 describe("feedback command", () => {
+  it("records helped feedback through the quick CLI alias entrypoint", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    const inputRepo = new InputRecordRepository(db);
+    nodeRepo.upsert(makeNode());
+    inputRepo.upsert(makeRecord());
+
+    runQuickFeedbackCommand("helped");
+
+    const node = nodeRepo.getById("node_feedback");
+    expect(node?.helped_count).toBe(1);
+    expect(node?.harmed_count).toBe(0);
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      "[ExperienceEngine] Recorded feedback for the last injected experience: helped."
+    );
+  });
+
   it("records helped feedback for the last injected experience set", () => {
     const home = makeTempDir();
     process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");

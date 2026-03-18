@@ -266,6 +266,35 @@ describe("decideIntervention", () => {
     expect(decision.selected[0]?.id).toBe("exact-candidate-match");
   });
 
+  it("caps conservative candidate injection at one hint", async () => {
+    const decision = await decideIntervention(
+      input,
+      [
+        node({
+          id: "candidate_primary",
+          state: "candidate",
+          helped_count: 0,
+          support_count: 1
+        }),
+        node({
+          id: "candidate_secondary",
+          state: "candidate",
+          trigger_pattern: "Fix the failing vitest auth test in the same workspace by checking the mock service first",
+          compact_hint: "Check the mock service before editing the auth flow.",
+          helped_count: 0,
+          support_count: 1
+        })
+      ],
+      stats,
+      0.6,
+      3
+    );
+
+    expect(decision.mode).toBe("inject_conservative");
+    expect(decision.selected).toHaveLength(1);
+    expect(decision.selected[0]?.state).toBe("candidate");
+  });
+
   it("awaits the active embedding provider before selecting nodes", async () => {
     setEmbeddingProviderForTests({
       provider: "local",

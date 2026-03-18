@@ -48,6 +48,11 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
       console.log("Injected nodes:");
       for (const node of record.injectedNodes) {
         console.log(`- ${node.id} ${node.type} ${node.state} ${node.sourceKind}`);
+        console.log(`  Trigger: ${node.triggerPattern}`);
+        if (node.originRecordIds.length) {
+          console.log(`  Origin records: ${node.originRecordIds.join(", ")}`);
+        }
+        console.log(`  Evidence: ${node.evidenceSummary}`);
       }
     }
 

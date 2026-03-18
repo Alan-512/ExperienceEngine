@@ -144,4 +144,58 @@ describe("doctor command", () => {
       "[ExperienceEngine] Recommended next step: npm config set registry https://registry.npmjs.org --global"
     );
   });
+
+  it("prints a cold-start readiness summary when formal experience is still warming up", async () => {
+    await runDoctorCommand("codex", {
+      inspectCodexInstall: () =>
+        ({
+          adapter: "codex",
+          installed: true,
+          versionStatus: {
+            recordedVersion: "0.1.0",
+            currentVersion: "0.1.0",
+            state: "current",
+            updateAvailable: false
+          },
+          serverName: "experienceengine",
+          hostWiring: {
+            wired: true,
+            enabled: true,
+            transport: "stdio",
+            command: "node dist/cli/index.js codex-mcp-server"
+          },
+          captureDir: "/tmp/.experienceengine/adapters/codex/captures"
+        }) as never,
+      fetchLatestGitHubReleaseStatus: async () => ({
+        source: "github-releases",
+        repository: "Alan-512/ExperienceEngine",
+        latestVersion: "0.1.0",
+        releaseUrl: null,
+        publishedAt: "2026-03-12T12:00:00Z",
+        state: "current",
+        updateAvailable: false
+      }),
+      inspectFirstValueReadiness: () => ({
+        rawRecords: 2,
+        taskRuns: 2,
+        candidates: 1,
+        nodes: 0,
+        nextStep:
+          "Keep working in the same repo on a few similar tasks. ExperienceEngine will promote formal hints once it sees enough repeated evidence."
+      })
+    });
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["First-value readiness:"],
+        ["- Raw task records: 2"],
+        ["- Task runs: 2"],
+        ["- Candidates waiting for promotion: 1"],
+        ["- Formal experience nodes: 0"],
+        [
+          "Recommended next step: Keep working in the same repo on a few similar tasks. ExperienceEngine will promote formal hints once it sees enough repeated evidence."
+        ]
+      ])
+    );
+  });
 });

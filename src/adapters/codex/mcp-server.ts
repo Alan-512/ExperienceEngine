@@ -272,6 +272,10 @@ export const createCodexBehaviorLoop = (options: CodexServerOptions = {}) => {
         taskSummary: input.task_summary,
         outcomeSignal: input.outcome_signal,
         injectedNodeIds: input.injected_node_ids,
+        feedbackHint:
+          input.injected_node_ids.length > 0
+            ? "If the injected guidance helped or harmed this task, call experienceengine_quick_feedback."
+            : undefined,
         evidence: input.tool_events.map((event) =>
           [event.tool_name, event.status, event.error_signature ?? event.output_summary]
             .filter(Boolean)
@@ -977,6 +981,26 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
       })
     },
     async (args) => toTextToolResult(await behaviorLoop.finalizeTask(args))
+  );
+
+  server.registerTool(
+    "experienceengine_quick_feedback",
+    {
+      title: "ExperienceEngine Quick Feedback",
+      description:
+        "Record helped or harmed feedback for the last injected ExperienceEngine guidance using the shortest possible interaction path.",
+      inputSchema: z.object({
+        feedback: z.enum(["helped", "harmed"])
+      }),
+      outputSchema: z.object({
+        status: z.enum(["updated", "not_found"]),
+        feedback: z.enum(["helped", "harmed"]).optional(),
+        nodeIds: z.array(z.string()).optional(),
+        reason: z.enum(["last_injected_missing", "node_missing"]).optional(),
+        nodeId: z.string().optional()
+      })
+    },
+    async ({ feedback }) => toStructuredToolResult(await interactionSurface.feedbackLast({ feedback }))
   );
 
   server.registerTool(

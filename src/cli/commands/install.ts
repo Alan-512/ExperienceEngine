@@ -28,6 +28,13 @@ const logRegistryHealth = (health: RegistryHealth): void => {
   }
 };
 
+const logFirstValueGuidance = (): void => {
+  console.log("[ExperienceEngine] Capture is now active for this host.");
+  console.log(
+    "[ExperienceEngine] First value usually appears after a few similar tasks in the same repo, once repeated evidence is strong enough to promote a formal hint."
+  );
+};
+
 export const runInstallCommand = (target?: string, deps: InstallDeps = {}): void => {
   const registryHealth = (deps.readRegistryHealth ?? readRegistryHealth)();
   if (target === "openclaw") {
@@ -42,6 +49,7 @@ export const runInstallCommand = (target?: string, deps: InstallDeps = {}): void
       console.log("OpenClaw gateway restart recommended.");
     }
     logRegistryHealth(registryHealth);
+    logFirstValueGuidance();
     return;
   }
 
@@ -55,6 +63,7 @@ export const runInstallCommand = (target?: string, deps: InstallDeps = {}): void
     console.log(`Server command: ${report.serverCommand}`);
     console.log(`Capture path: ${report.captureDir}`);
     logRegistryHealth(registryHealth);
+    logFirstValueGuidance();
     return;
   }
 
@@ -67,6 +76,7 @@ export const runInstallCommand = (target?: string, deps: InstallDeps = {}): void
     console.log(`Server command: ${report.serverCommand}`);
     console.log(`Capture path: ${report.captureDir}`);
     logRegistryHealth(registryHealth);
+    logFirstValueGuidance();
     return;
   }
 

@@ -28,6 +28,9 @@ export type ExperienceNodeSummary = {
   taskType: ExperienceNode["task_type"];
   state: ExperienceNode["state"];
   sourceKind: ExperienceNode["source_kind"];
+  triggerPattern: string;
+  evidenceSummary: string;
+  originRecordIds: string[];
   helped: number;
   harmed: number;
   lastUsedAt?: string;
@@ -107,11 +110,20 @@ export type ExperienceLearningSummary = {
   jobs: Record<DistillationJobState, number>;
   nodes: Record<ExperienceState, number>;
   runtime: {
+    records: number;
     taskRuns: number;
     outcomes: number;
     reviews: number;
   };
   latestRecordCreatedAt?: string;
+};
+
+export type ExperienceFirstValueReadiness = {
+  rawRecords: number;
+  taskRuns: number;
+  candidates: number;
+  nodes: number;
+  nextStep: string;
 };
 
 const toReviewEvent = (
@@ -134,6 +146,9 @@ const toNodeSummary = (node: ExperienceNode): ExperienceNodeSummary => ({
   taskType: node.task_type,
   state: node.state,
   sourceKind: node.source_kind,
+  triggerPattern: node.trigger_pattern,
+  evidenceSummary: node.evidence_summary,
+  originRecordIds: node.origin_record_ids,
   helped: node.helped_count,
   harmed: node.harmed_count,
   lastUsedAt: node.last_used_at,
@@ -265,11 +280,38 @@ export class ExperienceInteractionService {
         nodeStates.map((state) => [state, this.nodeRepo.listByState(state).length])
       ) as Record<ExperienceState, number>,
       runtime: {
+        records: this.inputRepo.count(),
         taskRuns: this.taskRunRepo.count(),
         outcomes: this.outcomeRepo.count(),
         reviews: this.reviewEventRepo.count()
       },
       latestRecordCreatedAt: latestRecord?.created_at
+    };
+  }
+
+  inspectFirstValueReadiness(): ExperienceFirstValueReadiness {
+    const summary = this.inspectLearningSummary();
+    const rawRecords = summary.runtime.records;
+    const taskRuns = summary.runtime.taskRuns;
+    const candidates = summary.candidates.pending;
+    const nodes = summary.nodes.candidate + summary.nodes.active + summary.nodes.cooling + summary.nodes.retired;
+
+    let nextStep = "Keep working in the same repo so ExperienceEngine can compare similar tasks and promote durable hints.";
+    if (nodes > 0) {
+      nextStep = "Formal experience nodes already exist. Keep an eye on inspect --last and quick feedback to tune what stays active.";
+    } else if (candidates > 0) {
+      nextStep =
+        "Keep working in the same repo on a few similar tasks. ExperienceEngine will promote formal hints once it sees enough repeated evidence.";
+    } else if (rawRecords === 0 && taskRuns === 0) {
+      nextStep = "Run a few real coding tasks in this repo so ExperienceEngine can start capturing task signals.";
+    }
+
+    return {
+      rawRecords,
+      taskRuns,
+      candidates,
+      nodes,
+      nextStep
     };
   }
 

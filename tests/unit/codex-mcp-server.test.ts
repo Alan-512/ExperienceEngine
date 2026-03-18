@@ -426,6 +426,45 @@ describe("Codex MCP behavior loop", () => {
     expect(node?.helped_count).toBe(1);
   });
 
+  it("registers a quick-feedback MCP tool for the last injected guidance", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_codex_mcp_quick_feedback");
+
+    const loop = createCodexBehaviorLoop({ homeDir, env });
+    await loop.lookupHints({
+      cwd: "/repo",
+      prompt: "Fix the failing auth test",
+      sessionId: "codex-mcp-quick-feedback"
+    });
+    await loop.finalizeTask({
+      sessionId: "codex-mcp-quick-feedback",
+      cwd: "/repo",
+      prompt: "Fix the failing auth test"
+    });
+
+    const server = createCodexMcpServer({ homeDir, env });
+    const quickFeedbackTool = getRegisteredTool(server, "experienceengine_quick_feedback");
+
+    const feedbackResult = parseTextPayload<{ status: string; nodeIds?: string[] }>(
+      (await quickFeedbackTool.handler({ feedback: "harmed" })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+
+    expect(feedbackResult).toMatchObject({
+      status: "updated",
+      nodeIds: ["node_codex_mcp_quick_feedback"]
+    });
+
+    const node = nodeRepo.getById("node_codex_mcp_quick_feedback");
+    expect(node?.harmed_count).toBe(1);
+  });
+
   it("registers MCP prompts for review and control workflows", async () => {
     const server = createCodexMcpServer();
     const showLastPrompt = getRegisteredPrompt(server, "experienceengine_show_last_intervention");

@@ -41,6 +41,8 @@ When it injects guidance, you will usually see a lightweight notice like:
 
 If there is no intervention, it stays silent.
 
+When the host surfaces task-finalization metadata, ExperienceEngine can also show a lightweight feedback reminder after an injected turn so the user can quickly mark whether the hint helped or harmed.
+
 You can also turn inline notices off:
 
 ```bash
@@ -59,6 +61,7 @@ Typical examples:
 - "List active warning nodes."
 - "Pause ExperienceEngine for this project."
 - "Mark the last ExperienceEngine intervention as harmful."
+- "Record quick feedback for the last ExperienceEngine intervention."
 - "Create a backup of ExperienceEngine state."
 - "Rollback ExperienceEngine to backup `<id>`."
 
@@ -124,6 +127,7 @@ Default behavior:
 - if a cached ONNX file is corrupted, ExperienceEngine clears that model cache and retries once before falling back
 - `ee install ...` and `ee doctor ...` warn when `npm` or `pnpm` is pointed at a non-official registry
 - the recommended registry for managed model downloads is `https://registry.npmjs.org`
+- `ee doctor ...` reports a first-value readiness summary so users can see how much captured evidence exists before the first durable node is promoted
 
 This means users do not need to prepare a separate embedding service before installing ExperienceEngine.
 
@@ -147,6 +151,7 @@ What happens:
 - ExperienceEngine installs as an OpenClaw plugin/runtime integration (not `src/adapters/`)
 - OpenClaw runtime events are used for intervention and persistence
 - management remains mostly through CLI fallback today
+- install ends with a short cold-start note so users know capture is active before the first formal hint appears
 
 Local state changes:
 - OpenClaw plugin install state and config are updated through the OpenClaw CLI
@@ -183,6 +188,7 @@ ee install claude-code
 What happens:
 - ExperienceEngine writes Claude hooks into `.claude/settings.local.json`
 - ExperienceEngine registers its shared MCP server with Claude Code for the current project
+- install ends with a short cold-start note so users know capture is active before the first formal hint appears
 
 Local state changes:
 - project file `.claude/settings.local.json`
@@ -230,6 +236,7 @@ ee install codex
 What happens:
 - ExperienceEngine registers its shared MCP server with Codex
 - new Codex MCP sessions can use ExperienceEngine interaction surfaces
+- install ends with a short cold-start note so users know capture is active before the first formal hint appears
 
 Local state changes:
 - Codex MCP config in `~/.codex/config.toml`
@@ -289,6 +296,8 @@ ee inspect active
 ee inspect node <id>
 ee inspect state retired
 ee inspect type warning
+ee helped
+ee harmed
 ee feedback --last helped
 ee feedback node <id> harmed
 ee disable scope
@@ -317,6 +326,8 @@ What doctor tells you:
 - whether the host wiring is present
 - where ExperienceEngine is storing its state
 - whether a newer remote release exists
+- how many raw task records / task runs / pending candidates / formal nodes exist today
+- the next step to reach first durable value when the system is still warming up
 
 Use repair when host wiring drifted:
 
@@ -431,6 +442,11 @@ Fallback CLI:
 ee inspect --last
 ```
 
+This view now also shows:
+- the injected node trigger pattern
+- origin record ids when they exist
+- the node evidence summary attached to each injected hint
+
 In MCP-capable hosts, ask:
 
 - "What did ExperienceEngine just inject?"
@@ -463,11 +479,15 @@ ee inspect node <id>
 Fallback CLI:
 
 ```bash
+ee helped
+ee harmed
 ee feedback --last helped
 ee feedback --last harmed
 ee feedback node <id> helped
 ee feedback node <id> harmed
 ```
+
+`ee helped` and `ee harmed` are shortcuts for the common “last injected guidance helped / harmed” case.
 
 ### Temporarily pause interventions
 

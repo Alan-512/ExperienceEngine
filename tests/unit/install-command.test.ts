@@ -8,6 +8,34 @@ afterEach(() => {
 });
 
 describe("install command", () => {
+  it("prints first-value guidance after a successful install", () => {
+    runInstallCommand("codex", {
+      installCodexAdapter: () =>
+        ({
+          adapter: "codex",
+          installedVersion: "0.1.0",
+          packageRoot: "/tmp/experienceengine",
+          serverName: "experienceengine",
+          serverCommand: "node dist/cli/index.js codex-mcp-server",
+          captureDir: "/tmp/.experienceengine/adapters/codex/captures"
+        }) as never,
+      readRegistryHealth: () => ({
+        checks: [],
+        hasNonOfficialRegistry: false,
+        warnings: []
+      })
+    });
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["[ExperienceEngine] Capture is now active for this host."],
+        [
+          "[ExperienceEngine] First value usually appears after a few similar tasks in the same repo, once repeated evidence is strong enough to promote a formal hint."
+        ]
+      ])
+    );
+  });
+
   it("warns when npm or pnpm uses a non-official registry", () => {
     runInstallCommand("codex", {
       installCodexAdapter: () =>

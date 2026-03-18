@@ -83,6 +83,7 @@ ee install codex
 - `Claude Code` 会同时安装 hooks 和共享 MCP server
 - `Codex` 会安装共享 MCP server
 - `ee install ...` 和 `ee doctor ...` 现在会检查 `npm/pnpm` 是否使用非官方 registry；受管模型下载默认建议使用 `https://registry.npmjs.org`
+- `ee install ...` 成功后还会主动说明冷启动预期：采集会立刻开始，但正式经验通常需要同仓库内几次相似任务后才会出现
 
 ## 数据目录
 
@@ -115,6 +116,8 @@ ee install codex
 - Codex 真实宿主验收流程与检查清单
 - 本地 embedding 检索设计、模型缓存行为与降级告警
 - `install / doctor` 的 registry 告警行为
+- doctor 的首次价值 readiness 摘要，以及 install 完成后的冷启动提示
+- `ee inspect --last` 的来源/证据展示，以及 `ee helped` / `ee harmed` 快速反馈入口
 - `ee maintenance embeddings-reset` 的缓存清理与重建方式
 
 ## 校验

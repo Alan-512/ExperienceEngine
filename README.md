@@ -86,6 +86,7 @@ Notes:
 - `Claude Code` installs both hooks and the shared ExperienceEngine MCP server.
 - `Codex` installs the shared ExperienceEngine MCP server.
 - `ee install ...` and `ee doctor ...` now warn if `npm` or `pnpm` uses a non-official registry, because managed model downloads are most reliable with `https://registry.npmjs.org`.
+- successful `ee install ...` also explains the cold-start expectation: capture starts immediately, but formal experience usually appears after a few similar tasks in the same repo.
 
 ## Data Location
 
@@ -120,6 +121,8 @@ The user guide includes:
 - Codex real-host validation workflow and checklist
 - local embedding retrieval design, managed model behavior, and fallback diagnostics
 - registry advisory behavior during `install` / `doctor`
+- doctor first-value readiness output and the install-time cold-start guidance
+- `ee inspect --last` provenance details and quick feedback commands (`ee helped` / `ee harmed`)
 - `ee maintenance embeddings-reset` for clearing and rebuilding the managed embedding cache
 
 ## Validation
