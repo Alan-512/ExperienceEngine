@@ -12,10 +12,28 @@ export type ResolvedTaskType = TaskType | "unknown";
 export type ExperienceState = "candidate" | "active" | "cooling" | "retired";
 export type ExperienceNodeType = "strategy" | "warning";
 export type InjectionMode = "skip" | "inject_conservative" | "inject";
+export type InjectionRiskLevel = "low" | "medium" | "high";
+export type EvaluationMode = "live" | "shadow" | "holdout";
 export type OutcomeSignal = "success" | "failure" | "unknown";
 export type ToolEventStatus = "success" | "failure" | "unknown";
 export type CandidateLifecycleState = "pending" | "distilled" | "failed" | "discarded";
 export type DistillationJobState = "pending" | "processing" | "succeeded" | "failed" | "discarded";
+export type DistillationMode = "auto" | "llm" | "rule" | "disabled";
+export type ResolvedDistillationMode = Exclude<DistillationMode, "auto">;
+export type DistillationSource =
+  | "explicit_provider"
+  | "host_endpoint"
+  | "host_mediated"
+  | "rule"
+  | "disabled";
+export type FeedbackAttributionReason =
+  | "success_outcome"
+  | "relevant_failure"
+  | "environmental_failure"
+  | "exploratory_failure"
+  | "no_relevant_failure"
+  | "suppressed_delivery"
+  | "unknown_outcome";
 
 export type Scope = {
   scope_id: string;
@@ -120,6 +138,9 @@ export type ExperienceNode = {
   embedding_model?: string;
   embedding_version?: string;
   embedding_dimensions?: number;
+  distillation_mode_used?: ResolvedDistillationMode;
+  distillation_source?: DistillationSource;
+  redistilled_from?: DistillationSource;
   source_kind: "system_derived" | "user_authored_candidate_promoted";
   origin_record_ids: string[];
   helped_record_ids: string[];
@@ -138,15 +159,49 @@ export type ExperienceNode = {
 
 export type InjectionEvent = {
   injection_id: string;
+  session_id?: string;
   scope_id: string;
   task_type: TaskType;
+  task_summary?: string;
   mode: Exclude<InjectionMode, "skip">;
+  delivery_mode: EvaluationMode;
+  delivered: boolean;
   injected_node_ids: string[];
   injection_count: number;
+  scorecard?: InjectionScorecard;
   was_successful: boolean | null;
   harm_observed: boolean | null;
+  attribution_reason?: FeedbackAttributionReason;
   created_at: string;
   resolved_at?: string;
+};
+
+export type InjectionScorecardNode = {
+  id: string;
+  nodeType: ExperienceNodeType;
+  state: ExperienceState;
+  sourceKind: ExperienceNode["source_kind"];
+  distillationSource?: DistillationSource;
+  triggerPattern: string;
+  hint: string;
+  helped: number;
+  harmed: number;
+  supportCount: number;
+  riskLevel: InjectionRiskLevel;
+  whyMatched: string[];
+};
+
+export type InjectionScorecard = {
+  sessionId?: string;
+  scopeId: string;
+  taskType: TaskType;
+  taskSummary: string;
+  mode: Exclude<InjectionMode, "skip">;
+  riskLevel: InjectionRiskLevel;
+  recommendation: string;
+  reasons: string[];
+  nodes: InjectionScorecardNode[];
+  createdAt: string;
 };
 
 export type ScopeTaskStats = {
@@ -217,6 +272,8 @@ export type DistillationJob = {
   candidate_id: string;
   status: DistillationJobState;
   extractor_profile: string;
+  distillation_source?: DistillationSource;
+  failure_bucket?: string;
   retry_count: number;
   last_error?: string;
   created_at: string;

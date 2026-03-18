@@ -2,4 +2,6 @@ import type { ExperienceCandidateDraft, ExperienceNodeType } from "../types/doma
 
 export type DistillationResult = ExperienceCandidateDraft & {
   node_type: ExperienceNodeType;
+  distillation_mode_used?: "llm" | "rule" | "disabled";
+  distillation_source?: "explicit_provider" | "host_endpoint" | "host_mediated" | "rule" | "disabled";
 };

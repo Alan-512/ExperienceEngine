@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -6,6 +6,7 @@ import { runOpenClawScenarioEvaluation } from "../../src/evaluation/openclaw-sce
 import { loadConfig } from "../../src/config/load-config.js";
 import { openDatabase, bootstrapDatabase } from "../../src/store/sqlite/db.js";
 import { InputRecordRepository } from "../../src/store/sqlite/repositories/input-record-repo.js";
+import { InjectionRepository } from "../../src/store/sqlite/repositories/injection-repo.js";
 import { CandidateRepository } from "../../src/store/sqlite/repositories/candidate-repo.js";
 import { DistillationJobRepository } from "../../src/store/sqlite/repositories/distillation-job-repo.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
@@ -130,6 +131,8 @@ const node = (overrides: Partial<ExperienceNode> = {}): ExperienceNode => ({
   retrieval_text: "repo test verification",
   embedding: [1, 2, 3],
   source_kind: "system_derived",
+  distillation_mode_used: "rule",
+  distillation_source: "rule",
   origin_record_ids: ["record-ee-openclaw-high-confidence-test-debug-a-2026-03-16T10-00-00-000Z"],
   helped_record_ids: [],
   harmed_record_ids: [],
@@ -212,6 +215,7 @@ describe("runOpenClawScenarioEvaluation", () => {
     const { env, runtimeDir, db } = createRuntime();
     const inputRepo = new InputRecordRepository(db);
     const candidateRepo = new CandidateRepository(db);
+    const injectionRepo = new InjectionRepository(db);
     const jobRepo = new DistillationJobRepository(db);
     const nodeRepo = new NodeRepository(db);
     const taskRunRepo = new TaskRunRepository(db);
@@ -225,12 +229,29 @@ describe("runOpenClawScenarioEvaluation", () => {
     });
     const persistedTaskRun = taskRun(sessionId);
     inputRepo.upsert(sourceRecord);
+    injectionRepo.upsert({
+      injection_id: `inject-${sessionId}`,
+      session_id: sessionId,
+      scope_id: "scope_repo",
+      task_type: "test_debug",
+      task_summary: "Repeated test debug verification",
+      mode: "inject",
+      delivery_mode: "shadow",
+      delivered: false,
+      injected_node_ids: ["node-1"],
+      injection_count: 1,
+      created_at: "2026-03-16T10:00:01.000Z",
+      resolved_at: "2026-03-16T10:00:05.000Z",
+      was_successful: true,
+      harm_observed: false,
+      attribution_reason: "suppressed_delivery"
+    });
     candidateRepo.upsert(candidate(sourceRecord.record_id));
     jobRepo.upsert(job(`candidate-${sourceRecord.record_id}`));
     nodeRepo.upsert(node());
     taskRunRepo.upsert(persistedTaskRun);
     outcomeRepo.upsert(outcome(persistedTaskRun.id));
-    reviewRepo.upsert(review(persistedTaskRun.id));
+    reviewRepo.upsert(review(persistedTaskRun.id, { source: "automatic" }));
 
     const result = runOpenClawScenarioEvaluation({
       env,
@@ -252,7 +273,11 @@ describe("runOpenClawScenarioEvaluation", () => {
     expect(matched?.candidates).toHaveLength(1);
     expect(matched?.jobs).toHaveLength(1);
     expect(matched?.injectedNodes[0]?.id).toBe("node-1");
+    expect(matched?.injectedNodes[0]?.distillationSource).toBe("rule");
     expect(matched?.runtime?.taskRunId).toBe(persistedTaskRun.id);
+    expect(matched?.runtime?.deliveryMode).toBe("shadow");
+    expect(matched?.runtime?.delivered).toBe(false);
+    expect(matched?.runtime?.automaticFeedback).toBe("helped");
     expect(matched?.runtime?.outcomeIds).toEqual([`outcome-${persistedTaskRun.id}`]);
     expect(matched?.runtime?.reviewCount).toBe(1);
     expect(result.report.aggregate.recordsMatched).toBe(1);
@@ -260,6 +285,250 @@ describe("runOpenClawScenarioEvaluation", () => {
     expect(result.report.aggregate.scenariosWithTaskRuns).toBe(1);
     expect(result.report.aggregate.scenariosWithOutcomes).toBe(1);
     expect(result.report.aggregate.scenariosWithReviews).toBe(1);
+    expect(result.report.aggregate.injectedNodeSources.rule).toBe(1);
+    expect(result.report.aggregate.effectiveness).toMatchObject({
+      decisions: 1,
+      live: 0,
+      shadow: 1,
+      holdout: 0,
+      delivered: 0,
+      suppressed: 1,
+      automaticHelped: 1,
+      automaticHarmed: 0
+    });
+    expect(result.report.aggregate.benchmark).toMatchObject({
+      deliveryRate: 0,
+      suppressionRate: 1,
+      helpfulRate: 1,
+      harmfulRate: 0,
+      netHelpfulRate: 1,
+      verdict: "warming_up",
+      suggestedMode: "shadow"
+    });
+    expect(result.report.aggregate.modeComparison.shadow).toMatchObject({
+      decisions: 1,
+      delivered: 0,
+      suppressed: 1,
+      automaticHelped: 1,
+      automaticHarmed: 0,
+      netHelpfulRate: 1,
+      verdict: "warming_up"
+    });
+    expect(result.report.aggregate.attributionReasons).toMatchObject({
+      success_outcome: 0,
+      relevant_failure: 0,
+      environmental_failure: 0,
+      exploratory_failure: 0,
+      no_relevant_failure: 0,
+      suppressed_delivery: 1,
+      unknown_outcome: 0
+    });
     expect(result.baselineJsonPath).toBeTruthy();
+    expect(result.summaryJsonPath).toBeTruthy();
+    expect(result.summaryMarkdownPath).toBeTruthy();
+    expect(result.historyJsonPath).toBeTruthy();
+    expect(result.historyMarkdownPath).toBeTruthy();
+    expect(result.benchmarkReportJsonPath).toBeTruthy();
+    expect(result.benchmarkReportMarkdownPath).toBeTruthy();
+    expect(result.bundleJsonPath).toBeTruthy();
+    expect(result.bundleMarkdownPath).toBeTruthy();
+    expect(result.caseStudyJsonPath).toBeTruthy();
+    expect(result.caseStudyMarkdownPath).toBeTruthy();
+    expect(result.caseStudyIndexJsonPath).toBeTruthy();
+    expect(result.caseStudyIndexMarkdownPath).toBeTruthy();
+    expect(result.evidencePackageJsonPath).toBeTruthy();
+    expect(result.evidencePackageMarkdownPath).toBeTruthy();
+    expect(existsSync(result.summaryJsonPath!)).toBe(true);
+    expect(existsSync(result.summaryMarkdownPath!)).toBe(true);
+    expect(existsSync(result.historyJsonPath!)).toBe(true);
+    expect(existsSync(result.historyMarkdownPath!)).toBe(true);
+    expect(existsSync(result.benchmarkReportJsonPath!)).toBe(true);
+    expect(existsSync(result.benchmarkReportMarkdownPath!)).toBe(true);
+    expect(existsSync(result.bundleJsonPath!)).toBe(true);
+    expect(existsSync(result.bundleMarkdownPath!)).toBe(true);
+    expect(existsSync(result.caseStudyJsonPath!)).toBe(true);
+    expect(existsSync(result.caseStudyMarkdownPath!)).toBe(true);
+    expect(existsSync(result.caseStudyIndexJsonPath!)).toBe(true);
+    expect(existsSync(result.caseStudyIndexMarkdownPath!)).toBe(true);
+    expect(existsSync(result.evidencePackageJsonPath!)).toBe(true);
+    expect(existsSync(result.evidencePackageMarkdownPath!)).toBe(true);
+    expect(readFileSync(result.summaryMarkdownPath!, "utf8")).toContain("# OpenClaw Evaluation Summary");
+    expect(readFileSync(result.summaryMarkdownPath!, "utf8")).toContain("- Suggested mode: shadow");
+    expect(readFileSync(result.historyMarkdownPath!, "utf8")).toContain("# OpenClaw Evaluation History");
+    expect(readFileSync(result.benchmarkReportMarkdownPath!, "utf8")).toContain("# ExperienceEngine Benchmark Report");
+    expect(readFileSync(result.benchmarkReportMarkdownPath!, "utf8")).toContain("- Recommended next mode: shadow");
+    expect(readFileSync(result.bundleMarkdownPath!, "utf8")).toContain("# ExperienceEngine Evaluation Bundle");
+    expect(readFileSync(result.bundleMarkdownPath!, "utf8")).toContain("- Kind: openclaw-scenarios");
+    expect(readFileSync(result.caseStudyMarkdownPath!, "utf8")).toContain("# ExperienceEngine Case Study");
+    expect(readFileSync(result.caseStudyMarkdownPath!, "utf8")).toContain("## Recommendation");
+    expect(readFileSync(result.caseStudyIndexMarkdownPath!, "utf8")).toContain("# ExperienceEngine Case Study Index");
+    expect(readFileSync(result.caseStudyIndexMarkdownPath!, "utf8")).toContain("- Kind: openclaw-scenarios");
+    expect(readFileSync(result.evidencePackageMarkdownPath!, "utf8")).toContain("# ExperienceEngine Evidence Package");
+    expect(readFileSync(result.evidencePackageMarkdownPath!, "utf8")).toContain("## Included Artifacts");
+    expect(JSON.parse(readFileSync(result.historyJsonPath!, "utf8"))).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          generatedAt: "2026-03-16T10:00:00.000Z",
+          caseStudyJsonPath: result.caseStudyJsonPath,
+          caseStudyMarkdownPath: result.caseStudyMarkdownPath,
+          suggestedMode: "shadow",
+          verdict: "warming_up"
+        })
+      ])
+    );
+    expect(readFileSync(result.historyMarkdownPath!, "utf8")).toContain(`- Case study JSON: ${result.caseStudyJsonPath}`);
+    expect(readFileSync(result.historyMarkdownPath!, "utf8")).toContain(`- Case study Markdown: ${result.caseStudyMarkdownPath}`);
+  });
+
+  it("compares the latest evaluation against the previous archived summary", () => {
+    const { env, runtimeDir, db } = createRuntime();
+    const inputRepo = new InputRecordRepository(db);
+    const candidateRepo = new CandidateRepository(db);
+    const injectionRepo = new InjectionRepository(db);
+    const jobRepo = new DistillationJobRepository(db);
+    const nodeRepo = new NodeRepository(db);
+    const taskRunRepo = new TaskRunRepository(db);
+    const outcomeRepo = new OutcomeRecordRepository(db);
+    const reviewRepo = new ReviewEventRepository(db);
+
+    const sessionId = "ee-openclaw-high-confidence-test-debug-a-2026-03-16T10-00-00-000Z";
+    const sourceRecord = record(sessionId, {
+      task_type: "test_debug",
+      task_summary: "Repeated test debug verification"
+    });
+    const persistedTaskRun = taskRun(sessionId);
+    inputRepo.upsert(sourceRecord);
+    injectionRepo.upsert({
+      injection_id: `inject-${sessionId}`,
+      session_id: sessionId,
+      scope_id: "scope_repo",
+      task_type: "test_debug",
+      task_summary: "Repeated test debug verification",
+      mode: "inject",
+      delivery_mode: "live",
+      delivered: true,
+      injected_node_ids: ["node-1"],
+      injection_count: 1,
+      created_at: "2026-03-16T10:00:01.000Z",
+      resolved_at: "2026-03-16T10:00:05.000Z",
+      was_successful: true,
+      harm_observed: false,
+      attribution_reason: "success_outcome"
+    });
+    candidateRepo.upsert(candidate(sourceRecord.record_id));
+    jobRepo.upsert(job(`candidate-${sourceRecord.record_id}`));
+    nodeRepo.upsert(node());
+    taskRunRepo.upsert(persistedTaskRun);
+    outcomeRepo.upsert(outcome(persistedTaskRun.id));
+    reviewRepo.upsert(review(persistedTaskRun.id, { source: "automatic" }));
+
+    const outputDir = join(runtimeDir, "artifacts", "run-2");
+    const historyJsonPath = join(runtimeDir, "artifacts", "evaluation-history.json");
+    mkdirSync(join(runtimeDir, "artifacts"), { recursive: true });
+    writeFileSync(
+      historyJsonPath,
+      JSON.stringify(
+        [
+          {
+            generatedAt: "2026-03-15T10:00:00.000Z",
+            pack: "high-confidence",
+            repoRoot: "/mnt/d/project/experienceengine",
+            verdict: "failing",
+            suggestedMode: "holdout",
+            netHelpfulRate: -0.5,
+            summaryJsonPath: "/tmp/prev-summary.json",
+            summaryMarkdownPath: "/tmp/prev-summary.md"
+          }
+        ],
+        null,
+        2
+      )
+    );
+
+    const result = runOpenClawScenarioEvaluation({
+      env,
+      homeDir: runtimeDir,
+      pack: "high-confidence",
+      repoRoot: "/mnt/d/project/experienceengine",
+      outputDir,
+      now: () => "2026-03-16T10:00:00.000Z",
+      invoker: () => ({
+        exitCode: 0,
+        stdout: "{\"ok\":true}",
+        stderr: ""
+      })
+    });
+
+    const summary = JSON.parse(readFileSync(result.summaryJsonPath!, "utf8"));
+    expect(summary.trend).toMatchObject({
+      previousGeneratedAt: "2026-03-15T10:00:00.000Z",
+      previousNetHelpfulRate: -0.5,
+      deltaNetHelpfulRate: 1.5,
+      previousVerdict: "failing",
+      previousSuggestedMode: "holdout"
+    });
+    expect(readFileSync(result.summaryMarkdownPath!, "utf8")).toContain("## Trend vs Previous Run");
+    expect(readFileSync(result.summaryMarkdownPath!, "utf8")).toContain("- Net helpful rate delta: 1.5");
+    expect(JSON.parse(readFileSync(result.benchmarkReportJsonPath!, "utf8"))).toMatchObject({
+      benchmark: expect.objectContaining({
+        suggestedMode: "shadow",
+        verdict: "warming_up"
+      }),
+      trend: expect.objectContaining({
+        deltaNetHelpfulRate: 1.5
+      })
+    });
+    expect(JSON.parse(readFileSync(result.bundleJsonPath!, "utf8"))).toMatchObject({
+      kind: "openclaw-scenarios",
+      benchmark: expect.objectContaining({
+        suggestedMode: "shadow"
+      }),
+      trend: expect.objectContaining({
+        deltaNetHelpfulRate: 1.5
+      })
+    });
+    expect(JSON.parse(readFileSync(result.caseStudyJsonPath!, "utf8"))).toMatchObject({
+      kind: "openclaw-scenarios",
+      benchmark: expect.objectContaining({
+        suggestedMode: "shadow"
+      }),
+      recommendation: expect.objectContaining({
+        suggestedMode: "shadow"
+      })
+    });
+    expect(JSON.parse(readFileSync(result.caseStudyIndexJsonPath!, "utf8"))).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "openclaw-scenarios",
+          caseStudyJsonPath: result.caseStudyJsonPath,
+          caseStudyMarkdownPath: result.caseStudyMarkdownPath
+        })
+      ])
+    );
+    expect(JSON.parse(readFileSync(result.evidencePackageJsonPath!, "utf8"))).toMatchObject({
+      kind: "openclaw-scenarios",
+      recommendation: expect.objectContaining({
+        suggestedMode: "shadow"
+      }),
+      artifacts: expect.objectContaining({
+        caseStudyJson: result.caseStudyJsonPath,
+        caseStudyIndexJson: result.caseStudyIndexJsonPath
+      })
+    });
+
+    const history = JSON.parse(readFileSync(result.historyJsonPath!, "utf8"));
+    expect(history.at(-1)).toMatchObject({
+      generatedAt: "2026-03-16T10:00:00.000Z",
+      caseStudyJsonPath: result.caseStudyJsonPath,
+      caseStudyMarkdownPath: result.caseStudyMarkdownPath,
+      verdict: "warming_up",
+      suggestedMode: "shadow",
+      trend: expect.objectContaining({
+        previousGeneratedAt: "2026-03-15T10:00:00.000Z",
+        deltaNetHelpfulRate: 1.5
+      })
+    });
+    expect(readFileSync(result.historyMarkdownPath!, "utf8")).toContain("- Trend vs previous: net delta=1.5 verdict=failing->warming_up mode=holdout->shadow");
+    expect(readFileSync(result.historyMarkdownPath!, "utf8")).toContain(`- Case study JSON: ${result.caseStudyJsonPath}`);
   });
 });

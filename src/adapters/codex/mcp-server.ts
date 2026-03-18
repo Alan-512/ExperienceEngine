@@ -233,7 +233,10 @@ export const createCodexBehaviorLoop = (options: CodexServerOptions = {}) => {
         mode: result.mode,
         text: result.text,
         notice: result.notice,
-        injectedNodeIds: result.input.injected_node_ids
+        injectedNodeIds: result.input.injected_node_ids,
+        scorecard: result.scorecard,
+        deliveryMode: result.deliveryMode,
+        delivered: result.delivered
       };
     },
 

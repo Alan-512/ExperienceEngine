@@ -30,6 +30,13 @@ export const loadConfig = (
     sqlitePath: paths.sqlitePath,
     logLevel: env.EXPERIENCE_ENGINE_LOG_LEVEL ?? overrides.logLevel ?? defaultConfig.logLevel,
     noticesInline,
+    evaluationMode:
+      (env.EXPERIENCE_ENGINE_EVALUATION_MODE as ExperienceEngineConfig["evaluationMode"] | undefined) ??
+      overrides.evaluationMode ??
+      defaultConfig.evaluationMode,
+    holdoutRate: env.EXPERIENCE_ENGINE_HOLDOUT_RATE
+      ? Number(env.EXPERIENCE_ENGINE_HOLDOUT_RATE)
+      : overrides.holdoutRate ?? defaultConfig.holdoutRate,
     captureRawPayloads,
     captureDir: paths.captureDir,
     maxHints: env.EXPERIENCE_ENGINE_MAX_HINTS
@@ -54,6 +61,17 @@ export const loadConfig = (
       env.EXPERIENCE_ENGINE_EMBEDDING_CACHE_DIR ??
       overrides.embeddingCacheDir ??
       join(paths.productHome, "models", "embeddings"),
+    distillationMode:
+      (env.EXPERIENCE_ENGINE_DISTILLATION_MODE as ExperienceEngineConfig["distillationMode"] | undefined) ??
+      overrides.distillationMode ??
+      defaultConfig.distillationMode,
+    hostLlmMode:
+      (env.EXPERIENCE_ENGINE_HOST_LLM_MODE as ExperienceEngineConfig["hostLlmMode"] | undefined) ??
+      overrides.hostLlmMode ??
+      defaultConfig.hostLlmMode,
+    hostLlmMediatedTimeoutMs: env.EXPERIENCE_ENGINE_HOST_LLM_MEDIATED_TIMEOUT_MS
+      ? Number(env.EXPERIENCE_ENGINE_HOST_LLM_MEDIATED_TIMEOUT_MS)
+      : overrides.hostLlmMediatedTimeoutMs ?? defaultConfig.hostLlmMediatedTimeoutMs,
     distillerProfile:
       (env.EXPERIENCE_ENGINE_DISTILLER_PROFILE as ExperienceEngineConfig["distillerProfile"] | undefined) ??
       overrides.distillerProfile ??

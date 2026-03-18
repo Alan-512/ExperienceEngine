@@ -1,9 +1,10 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadConfig } from "../../src/config/load-config.js";
 import { LlmDistiller } from "../../src/distillation/llm-distiller.js";
+import { resolveDistillationResolution } from "../../src/distillation/host-llm.js";
 import { DistillationQueueWorker } from "../../src/distillation/queue-worker.js";
 import {
   clearEmbeddingProviderForTests,
@@ -38,6 +39,13 @@ afterEach(() => {
     rmSync(tempDirs.pop()!, { recursive: true, force: true });
   }
 });
+
+const writeCodexConfig = (homeDir: string, payload: string): string => {
+  const configPath = join(homeDir, ".codex", "config.toml");
+  mkdirSync(join(homeDir, ".codex"), { recursive: true });
+  writeFileSync(configPath, payload, "utf8");
+  return configPath;
+};
 
 const makeCandidate = (overrides: Partial<ExperienceCandidate> = {}): ExperienceCandidate => ({
   id: "candidate_distill_auth",
@@ -84,6 +92,146 @@ const makeJob = (overrides: Partial<DistillationJob> = {}): DistillationJob => (
 });
 
 describe("LlmDistiller", () => {
+  it("defaults distillation mode to auto", () => {
+    const { config } = makeDb();
+
+    expect(config.distillationMode).toBe("auto");
+  });
+
+  it("supports rule mode without a configured llm endpoint", async () => {
+    const { config } = makeDb({ distillationMode: "rule" });
+    const distiller = new LlmDistiller(config, { env: {} });
+    const result = await distiller.distill(makeCandidate());
+
+    expect(result.compact_hint).toBe("Use vitest as the terminal verification loop for the auth failure.");
+  });
+
+  it("uses rule mode by default when auto mode has no reusable host llm path", async () => {
+    const { config } = makeDb({ distillationMode: "auto" });
+    const distiller = new LlmDistiller(config, { env: {} });
+    const result = await distiller.distill(makeCandidate());
+
+    expect(result.compact_hint).toBe("Use vitest as the terminal verification loop for the auth failure.");
+  });
+
+  it("rejects distillation when llm mode is forced and no endpoint is configured", async () => {
+    const { config } = makeDb({ distillationMode: "llm" });
+    const distiller = new LlmDistiller(config, { env: {} });
+
+    await expect(distiller.distill(makeCandidate())).rejects.toThrow("configured LLM endpoint");
+  });
+
+  it("resolves auth-only Codex config to mediated distillation", () => {
+    const homeDir = mkdtempSync(join(tmpdir(), "experienceengine-codex-mediated-"));
+    tempDirs.push(homeDir);
+    writeCodexConfig(
+      homeDir,
+      `model = "gpt-5.4"
+`
+    );
+
+    const resolution = resolveDistillationResolution({
+      env: {
+        EXPERIENCE_ENGINE_USE_HOST_LLM: "true",
+        EXPERIENCE_ENGINE_ADAPTER: "codex"
+      },
+      homeDir,
+      distillationMode: "llm",
+      allowRuleFallback: false
+    });
+
+    expect(resolution.distillationMode).toBe("llm");
+    expect(resolution.distillationSource).toBe("host_mediated");
+    if (resolution.distillationMode === "llm") {
+      expect(resolution.host?.mode).toBe("mediated");
+    }
+  });
+
+  it("uses Codex mediated distillation for auth-only host configs", async () => {
+    const homeDir = mkdtempSync(join(tmpdir(), "experienceengine-codex-mediated-"));
+    tempDirs.push(homeDir);
+    writeCodexConfig(
+      homeDir,
+      `model = "gpt-5.4"
+`
+    );
+    const { config } = makeDb({ distillationMode: "llm" });
+
+    const distiller = new LlmDistiller(config, {
+      env: {
+        EXPERIENCE_ENGINE_USE_HOST_LLM: "true",
+        EXPERIENCE_ENGINE_ADAPTER: "codex"
+      },
+      homeDir,
+      codexExecRunner(command) {
+        const outputPathIndex = command.args.findIndex((value) => value === "--output-last-message");
+        const outputPath = outputPathIndex >= 0 ? command.args[outputPathIndex + 1] : undefined;
+        if (!outputPath) {
+          throw new Error("missing output path");
+        }
+        writeFileSync(
+          outputPath,
+          JSON.stringify({
+            compact_hint: "Run the smallest auth repro loop before every fix.",
+            trigger_conditions: "When Codex is iterating on an auth failure",
+            success_criteria: "The auth verification command passes",
+            risk_level: "medium",
+            recommended_steps: ["Run the auth repro", "Change one seam", "Run it again"],
+            avoid_steps: ["Do not widen the repro loop too early"],
+            fallback_steps: ["If the repro stays red, inspect the first auth assertion"],
+            evidence_summary: "Derived from a Codex-mediated auth debug loop."
+          }),
+          "utf8"
+        );
+        return {
+          stdout: "",
+          stderr: "",
+          exitCode: 0
+        };
+      }
+    });
+
+    const result = await distiller.distill(makeCandidate());
+
+    expect(result.compact_hint).toContain("smallest auth repro loop");
+    expect(result.distillation_mode_used).toBe("llm");
+    expect(result.distillation_source).toBe("host_mediated");
+  });
+
+  it("rejects mediated Codex output that is not strict JSON", async () => {
+    const homeDir = mkdtempSync(join(tmpdir(), "experienceengine-codex-mediated-"));
+    tempDirs.push(homeDir);
+    writeCodexConfig(
+      homeDir,
+      `model = "gpt-5.4"
+`
+    );
+    const { config } = makeDb({ distillationMode: "llm" });
+
+    const distiller = new LlmDistiller(config, {
+      env: {
+        EXPERIENCE_ENGINE_USE_HOST_LLM: "true",
+        EXPERIENCE_ENGINE_ADAPTER: "codex"
+      },
+      homeDir,
+      codexExecRunner(command) {
+        const outputPathIndex = command.args.findIndex((value) => value === "--output-last-message");
+        const outputPath = outputPathIndex >= 0 ? command.args[outputPathIndex + 1] : undefined;
+        if (!outputPath) {
+          throw new Error("missing output path");
+        }
+        writeFileSync(outputPath, "Not JSON at all", "utf8");
+        return {
+          stdout: "",
+          stderr: "",
+          exitCode: 0
+        };
+      }
+    });
+
+    await expect(distiller.distill(makeCandidate())).rejects.toThrow("strict JSON");
+  });
+
   it("falls back to passthrough distillation when no remote profile is configured", async () => {
     const { config } = makeDb({ distillationAllowPassthrough: true });
     const distiller = new LlmDistiller(config, { env: {} });
@@ -223,6 +371,9 @@ describe("DistillationQueueWorker", () => {
     expect(createdNode?.embedding_version).toBe("local-e5-v1");
     expect(createdNode?.embedding_dimensions).toBe(3);
     expect(createdNode?.embedding).toEqual([1, 0, 0]);
+    expect(createdNode?.distillation_mode_used).toBe("rule");
+    expect(createdNode?.distillation_source).toBe("rule");
+    expect(jobRepo.getById("job_distill_auth")?.distillation_source).toBe("rule");
   });
 
   it("discards candidates after retry exhaustion", async () => {
@@ -301,6 +452,51 @@ describe("DistillationQueueWorker", () => {
 
     expect(candidateRepo.getById("candidate_distill_auth")?.lifecycle_state).toBe("discarded");
     expect(jobRepo.getById("job_distill_auth")?.status).toBe("discarded");
+  });
+
+  it("records mediated invalid json failures with a stable failure bucket", async () => {
+    const homeDir = mkdtempSync(join(tmpdir(), "experienceengine-codex-mediated-"));
+    tempDirs.push(homeDir);
+    writeCodexConfig(
+      homeDir,
+      `model = "gpt-5.4"
+`
+    );
+    const { db, config } = makeDb({
+      distillationMode: "llm",
+      distillationAllowPassthrough: false
+    });
+    const candidateRepo = new CandidateRepository(db);
+    const jobRepo = new DistillationJobRepository(db);
+    const nodeRepo = new NodeRepository(db);
+    candidateRepo.upsert(makeCandidate({ id: "candidate_mediated_invalid", source_record_id: "input_mediated_invalid" }));
+    jobRepo.upsert(makeJob({ id: "job_mediated_invalid", candidate_id: "candidate_mediated_invalid" }));
+
+    const worker = new DistillationQueueWorker(config, candidateRepo, jobRepo, nodeRepo, {
+      env: {
+        EXPERIENCE_ENGINE_USE_HOST_LLM: "true",
+        EXPERIENCE_ENGINE_ADAPTER: "codex"
+      },
+      homeDir,
+      codexExecRunner(command) {
+        const outputPathIndex = command.args.findIndex((value) => value === "--output-last-message");
+        const outputPath = outputPathIndex >= 0 ? command.args[outputPathIndex + 1] : undefined;
+        if (!outputPath) {
+          throw new Error("missing output path");
+        }
+        writeFileSync(outputPath, "definitely not json", "utf8");
+        return {
+          stdout: "",
+          stderr: "",
+          exitCode: 0
+        };
+      }
+    });
+
+    await worker.drain();
+
+    expect(jobRepo.getById("job_mediated_invalid")?.status).toBe("failed");
+    expect(jobRepo.getById("job_mediated_invalid")?.failure_bucket).toBe("mediated_invalid_json");
   });
 
   it("requeues stale processing jobs instead of leaving them stuck forever", async () => {

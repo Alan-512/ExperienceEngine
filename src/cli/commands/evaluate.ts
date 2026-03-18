@@ -1,4 +1,9 @@
 import { resolve } from "node:path";
+import type {
+  BenchmarkSummary,
+  EffectivenessCounts,
+  ModeBenchmarkSummary
+} from "../../evaluation/benchmark-summary.js";
 import {
   renderOpenClawBaselineMarkdown,
   runOpenClawBaselineEvaluation
@@ -79,6 +84,77 @@ type EvaluateDependencies = {
   }) => OpenClawScenarioRunResult;
 };
 
+const formatRate = (value: number): string => value.toFixed(4);
+
+const printBenchmarkSummary = (input: {
+  benchmark: BenchmarkSummary;
+  effectiveness: EffectivenessCounts;
+  modeComparison?: {
+    live: ModeBenchmarkSummary;
+    shadow: ModeBenchmarkSummary;
+    holdout: ModeBenchmarkSummary;
+  };
+}): void => {
+  console.log(
+    `Benchmark: delivery=${formatRate(input.benchmark.deliveryRate)}`
+    + ` suppression=${formatRate(input.benchmark.suppressionRate)}`
+    + ` helpful=${formatRate(input.benchmark.helpfulRate)}`
+    + ` harmful=${formatRate(input.benchmark.harmfulRate)}`
+    + ` net=${formatRate(input.benchmark.netHelpfulRate)}`
+  );
+  console.log(`Verdict: ${input.benchmark.verdict}`);
+  console.log(`Suggested mode: ${input.benchmark.suggestedMode}`);
+  console.log(`Recommendation: ${input.benchmark.recommendation}`);
+  console.log(
+    `Effectiveness: decisions=${input.effectiveness.decisions}`
+    + ` delivered=${input.effectiveness.delivered}`
+    + ` suppressed=${input.effectiveness.suppressed}`
+    + ` live=${input.effectiveness.live}`
+    + ` shadow=${input.effectiveness.shadow}`
+    + ` holdout=${input.effectiveness.holdout}`
+    + ` auto_helped=${input.effectiveness.automaticHelped}`
+    + ` auto_harmed=${input.effectiveness.automaticHarmed}`
+  );
+  if (input.modeComparison) {
+    console.log("Mode comparison:");
+    for (const mode of ["live", "shadow", "holdout"] as const) {
+      const summary = input.modeComparison[mode];
+      console.log(
+        `- ${mode}: decisions=${summary.decisions}`
+        + ` delivered=${summary.delivered}`
+        + ` suppressed=${summary.suppressed}`
+        + ` helpful=${summary.automaticHelped}`
+        + ` harmed=${summary.automaticHarmed}`
+        + ` net=${formatRate(summary.netHelpfulRate)}`
+        + ` verdict=${summary.verdict}`
+      );
+    }
+  }
+};
+
+const printTrendSummary = (trend?: {
+  deltaNetHelpfulRate: number;
+  previousVerdict: string;
+  previousSuggestedMode: string;
+} , current?: {
+  verdict: string;
+  suggestedMode: string;
+}): void => {
+  if (!trend || !current) {
+    return;
+  }
+
+  const signedDelta = trend.deltaNetHelpfulRate >= 0
+    ? `+${formatRate(trend.deltaNetHelpfulRate)}`
+    : formatRate(trend.deltaNetHelpfulRate);
+
+  console.log(
+    `Trend vs previous: net=${signedDelta}`
+    + ` verdict=${trend.previousVerdict}->${current.verdict}`
+    + ` suggested=${trend.previousSuggestedMode}->${current.suggestedMode}`
+  );
+};
+
 export const runEvaluateCommand = (
   target?: string,
   args: string[] = [],
@@ -102,9 +178,46 @@ export const runEvaluateCommand = (
     });
 
     console.log(renderOpenClawScenarioMarkdown(result.report));
+    printBenchmarkSummary({
+      benchmark: result.report.aggregate.benchmark,
+      effectiveness: result.report.aggregate.effectiveness,
+      modeComparison: result.report.aggregate.modeComparison
+    });
+    printTrendSummary(result.summary?.trend, {
+      verdict: result.report.aggregate.benchmark.verdict,
+      suggestedMode: result.report.aggregate.benchmark.suggestedMode
+    });
     console.log(`Scenario directory: ${result.outputDir}`);
     console.log(`JSON: ${result.jsonPath}`);
     console.log(`Markdown: ${result.markdownPath}`);
+    if (result.summaryJsonPath && result.summaryMarkdownPath) {
+      console.log(`Summary JSON: ${result.summaryJsonPath}`);
+      console.log(`Summary Markdown: ${result.summaryMarkdownPath}`);
+    }
+    if (result.historyJsonPath && result.historyMarkdownPath) {
+      console.log(`History JSON: ${result.historyJsonPath}`);
+      console.log(`History Markdown: ${result.historyMarkdownPath}`);
+    }
+    if (result.benchmarkReportJsonPath && result.benchmarkReportMarkdownPath) {
+      console.log(`Benchmark report JSON: ${result.benchmarkReportJsonPath}`);
+      console.log(`Benchmark report Markdown: ${result.benchmarkReportMarkdownPath}`);
+    }
+    if (result.bundleJsonPath && result.bundleMarkdownPath) {
+      console.log(`Evaluation bundle JSON: ${result.bundleJsonPath}`);
+      console.log(`Evaluation bundle Markdown: ${result.bundleMarkdownPath}`);
+    }
+    if (result.caseStudyJsonPath && result.caseStudyMarkdownPath) {
+      console.log(`Case study JSON: ${result.caseStudyJsonPath}`);
+      console.log(`Case study Markdown: ${result.caseStudyMarkdownPath}`);
+    }
+    if (result.caseStudyIndexJsonPath && result.caseStudyIndexMarkdownPath) {
+      console.log(`Case study index JSON: ${result.caseStudyIndexJsonPath}`);
+      console.log(`Case study index Markdown: ${result.caseStudyIndexMarkdownPath}`);
+    }
+    if (result.evidencePackageJsonPath && result.evidencePackageMarkdownPath) {
+      console.log(`Evidence package JSON: ${result.evidencePackageJsonPath}`);
+      console.log(`Evidence package Markdown: ${result.evidencePackageMarkdownPath}`);
+    }
     if (result.baselineJsonPath && result.baselineMarkdownPath) {
       console.log(`Baseline JSON: ${result.baselineJsonPath}`);
       console.log(`Baseline Markdown: ${result.baselineMarkdownPath}`);
@@ -118,7 +231,40 @@ export const runEvaluateCommand = (
   });
 
   console.log(renderOpenClawBaselineMarkdown(result.summary));
+  printBenchmarkSummary({
+    benchmark: result.summary.benchmark,
+    effectiveness: result.summary.effectiveness,
+    modeComparison: result.summary.modeComparison
+  });
+  printTrendSummary(result.summary.trend, {
+    verdict: result.summary.benchmark.verdict,
+    suggestedMode: result.summary.benchmark.suggestedMode
+  });
   console.log(`Snapshot directory: ${result.outputDir}`);
   console.log(`JSON: ${result.jsonPath}`);
   console.log(`Markdown: ${result.markdownPath}`);
+  if (result.historyJsonPath && result.historyMarkdownPath) {
+    console.log(`History JSON: ${result.historyJsonPath}`);
+    console.log(`History Markdown: ${result.historyMarkdownPath}`);
+  }
+  if (result.benchmarkReportJsonPath && result.benchmarkReportMarkdownPath) {
+    console.log(`Benchmark report JSON: ${result.benchmarkReportJsonPath}`);
+    console.log(`Benchmark report Markdown: ${result.benchmarkReportMarkdownPath}`);
+  }
+  if (result.bundleJsonPath && result.bundleMarkdownPath) {
+    console.log(`Evaluation bundle JSON: ${result.bundleJsonPath}`);
+    console.log(`Evaluation bundle Markdown: ${result.bundleMarkdownPath}`);
+  }
+  if (result.caseStudyJsonPath && result.caseStudyMarkdownPath) {
+    console.log(`Case study JSON: ${result.caseStudyJsonPath}`);
+    console.log(`Case study Markdown: ${result.caseStudyMarkdownPath}`);
+  }
+  if (result.caseStudyIndexJsonPath && result.caseStudyIndexMarkdownPath) {
+    console.log(`Case study index JSON: ${result.caseStudyIndexJsonPath}`);
+    console.log(`Case study index Markdown: ${result.caseStudyIndexMarkdownPath}`);
+  }
+  if (result.evidencePackageJsonPath && result.evidencePackageMarkdownPath) {
+    console.log(`Evidence package JSON: ${result.evidencePackageJsonPath}`);
+    console.log(`Evidence package Markdown: ${result.evidencePackageMarkdownPath}`);
+  }
 };

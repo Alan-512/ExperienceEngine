@@ -33,9 +33,72 @@ describe("maintenance command", () => {
     );
   });
 
+  it("re-distills rule-promoted nodes when llm mode is available", async () => {
+    const redistillRuleNodes = vi.fn().mockResolvedValue({
+      attempted: 2,
+      upgraded: 1,
+      skippedNoCandidate: 1,
+      failed: 0
+    });
+
+    await runMaintenanceCommand("redistill-rule-nodes", {
+      loadConfig: () =>
+        ({
+          distillationMode: "auto",
+          distillationAllowPassthrough: true,
+          hostLlmMode: "auto"
+        }) as never,
+      resolveDistillationResolution: () =>
+        ({
+          distillationMode: "llm",
+          distillationSource: "host_mediated",
+          reason: "Resolved host-mediated Codex distillation."
+        }) as never,
+      redistillRuleNodes
+    });
+
+    expect(redistillRuleNodes).toHaveBeenCalledOnce();
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["[ExperienceEngine] Re-distilled rule-promoted nodes with source: host_mediated"],
+        ["[ExperienceEngine] Attempted: 2 | Upgraded: 1 | Skipped (no candidate): 1 | Failed: 0"]
+      ])
+    );
+  });
+
+  it("explains when rule node re-distillation cannot run without llm mode", async () => {
+    const redistillRuleNodes = vi.fn();
+
+    await runMaintenanceCommand("redistill-rule-nodes", {
+      loadConfig: () =>
+        ({
+          distillationMode: "auto",
+          distillationAllowPassthrough: true,
+          hostLlmMode: "auto"
+        }) as never,
+      resolveDistillationResolution: () =>
+        ({
+          distillationMode: "rule",
+          distillationSource: "rule",
+          reason: "No reusable host llm path is available."
+        }) as never,
+      redistillRuleNodes
+    });
+
+    expect(redistillRuleNodes).not.toHaveBeenCalled();
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["[ExperienceEngine] Rule node re-distillation requires llm mode; current mode is rule."],
+        ["[ExperienceEngine] No reusable host llm path is available."]
+      ])
+    );
+  });
+
   it("prints usage for unknown maintenance actions", async () => {
     await runMaintenanceCommand("unknown");
 
-    expect(consoleLogSpy).toHaveBeenCalledWith("Usage: ee maintenance embeddings-reset");
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      "Usage: ee maintenance embeddings-reset|redistill-rule-nodes"
+    );
   });
 });

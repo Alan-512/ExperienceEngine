@@ -3,12 +3,14 @@ import { join, resolve } from "node:path";
 import { resolveExperienceEnginePaths } from "../config/path-resolver.js";
 import { resolveExperienceEnginePackageRoot } from "./openclaw-cli.js";
 import { buildVersionStatus } from "../version/package-version.js";
+import { loadConfig } from "../config/load-config.js";
 import {
   buildClaudeGetCommand,
   parseClaudeMcpServerInfo,
   runClaudeCommand,
   type ClaudeCommandRunner
 } from "./claude-cli.js";
+import { resolveDistillationResolution, resolveHostLlmResolution } from "../distillation/host-llm.js";
 
 type ClaudeHookMatcher = {
   matcher?: string;
@@ -87,6 +89,24 @@ export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
     ? (JSON.parse(readFileSync(paths.installStatePath, "utf8")) as ClaudeInstallState)
     : null;
   const hostInfo = inspectClaudeHost(runner, options.cliEnv);
+  const config = loadConfig({}, { env: options.env ?? process.env, homeDir: options.homeDir });
+  const resolutionEnv: NodeJS.ProcessEnv = {
+    ...(options.env ?? process.env),
+    EXPERIENCE_ENGINE_USE_HOST_LLM: "true",
+    EXPERIENCE_ENGINE_ADAPTER: "claude-code"
+  };
+  const distillationResolution = resolveDistillationResolution({
+    env: resolutionEnv,
+    homeDir: options.homeDir,
+    distillationMode: config.distillationMode,
+    hostLlmMode: config.hostLlmMode,
+    allowRuleFallback: config.distillationAllowPassthrough
+  });
+  const hostResolution = resolveHostLlmResolution({
+    env: resolutionEnv,
+    homeDir: options.homeDir,
+    hostLlmMode: config.hostLlmMode
+  });
 
   return {
     adapter: "claude-code" as const,
@@ -110,6 +130,12 @@ export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
       transport: hostInfo?.transport ?? installState?.hostWiring?.transport,
       scope: hostInfo?.scope ?? installState?.hostWiring?.scope,
       status: hostInfo?.status ?? installState?.hostWiring?.status
+    },
+    distillationStatus: {
+      distillationMode: distillationResolution.distillationMode,
+      distillationSource: distillationResolution.distillationSource,
+      hostLlmMode: hostResolution.mode,
+      reason: distillationResolution.reason
     },
     hostState: hostInfo
   };

@@ -1,12 +1,21 @@
 import type { ExperienceCandidate, ExperienceCandidateDraft, ExperienceInput } from "../types/domain.js";
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import type { DistillationResult } from "./types.js";
-import { resolveDistillerEndpoint, type DistillerEndpoint } from "./host-llm.js";
+import {
+  resolveDistillationResolution,
+  resolveDistillerEndpoint,
+  type DistillationResolution,
+  type DistillerEndpoint
+} from "./host-llm.js";
+import { runCodexMediatedDistillation } from "./codex-mediated.js";
+import { DEFAULT_DISTILLER_SYSTEM_PROMPT, buildCandidatePayload } from "./prompt-contract.js";
+import type { CodexExecRunner } from "../install/codex-cli.js";
 
 type DistillerRuntimeOptions = {
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
   fetchImpl?: typeof fetch;
+  codexExecRunner?: CodexExecRunner;
 };
 
 type OpenAiMessage = {
@@ -15,54 +24,6 @@ type OpenAiMessage = {
 };
 
 const DISTILLATION_REQUEST_TIMEOUT_MS = 25_000;
-
-const DEFAULT_DISTILLER_SYSTEM_PROMPT = `You turn coding-task experience candidates into compact intervention hints.
-Use hindsight framing: if the agent knew one key fact earlier, what would it do differently?
-
-Return strict JSON with keys:
-- compact_hint
-- trigger_conditions
-- success_criteria
-- risk_level
-- recommended_steps
-- avoid_steps
-- fallback_steps
-- evidence_summary
-- goal (optional)
-- applicability_notes (optional)
-
-Rules:
-- Keep compact_hint to 1-2 sentences, action-oriented.
-- trigger_conditions describes when to apply the hint (short phrase).
-- success_criteria describes the terminal success evidence (short phrase).
-- risk_level must be one of: low, medium, high.
-- Preserve the original node_type intent (strategy or warning).
-- Keep recommendations specific to the candidate evidence.
-- Use sourceSignal (failure_signature, retry_count, correction_signals, tool_event_summary) to ground the hindsight.
-- Do not invent tools or outcomes not present in the candidate.
-- recommended_steps / avoid_steps / fallback_steps must be arrays of short strings.`;
-
-const buildCandidatePayload = (candidate: ExperienceCandidate): string =>
-  JSON.stringify(
-    {
-      nodeType: candidate.node_type,
-      taskType: candidate.task_type,
-      triggerPattern: candidate.trigger_pattern,
-      compactHintDraft: candidate.compact_hint,
-      goalDraft: candidate.goal,
-      applicabilityNotesDraft: candidate.applicability_notes,
-      recommendedStepsDraft: candidate.recommended_steps ?? [],
-      avoidStepsDraft: candidate.avoid_steps ?? [],
-      fallbackStepsDraft: candidate.fallback_steps ?? [],
-      successSignalDraft: candidate.success_signal,
-      stopConditionDraft: candidate.stop_condition,
-      escalationConditionDraft: candidate.escalation_condition,
-      evidenceSummaryDraft: candidate.evidence_summary,
-      sourceSignal: candidate.source_signal
-    },
-    null,
-    2
-  );
 
 const parseArray = (value: unknown): string[] | undefined =>
   Array.isArray(value)
@@ -169,8 +130,11 @@ const applyFallbacks = (
   };
 };
 
-const passthroughDistillation = (candidate: ExperienceCandidate): DistillationResult =>
-  applyFallbacks(candidate, {});
+const passthroughDistillation = (candidate: ExperienceCandidate): DistillationResult => ({
+  ...applyFallbacks(candidate, {}),
+  distillation_mode_used: "rule",
+  distillation_source: "rule"
+});
 
 const resolveTemperature = (profile: ExperienceEngineConfig["distillerProfile"]): number => {
   switch (profile) {
@@ -196,6 +160,16 @@ export class LlmDistiller {
 
   private get fetchImpl(): typeof fetch {
     return this.options.fetchImpl ?? fetch;
+  }
+
+  private resolveDistillation(): DistillationResolution {
+    return resolveDistillationResolution({
+      env: this.env,
+      homeDir: this.options.homeDir,
+      distillationMode: this.config.distillationMode,
+      hostLlmMode: this.config.hostLlmMode,
+      allowRuleFallback: this.config.distillationAllowPassthrough
+    });
   }
 
   private resolveEndpoint(): DistillerEndpoint | null {
@@ -253,12 +227,34 @@ export class LlmDistiller {
   }
 
   async distill(candidate: ExperienceCandidate): Promise<DistillationResult> {
-    const endpoint = this.resolveEndpoint();
-    if (!endpoint) {
-      if (this.config.distillationAllowPassthrough) {
-        return passthroughDistillation(candidate);
+    const resolution = this.resolveDistillation();
+    if (resolution.distillationMode === "disabled") {
+      if (this.config.distillationMode === "llm" || !this.config.distillationAllowPassthrough) {
+        throw new Error("Distillation requires a configured LLM endpoint");
       }
-      throw new Error("Distillation requires a configured LLM endpoint");
+      throw new Error(resolution.reason);
+    }
+
+    if (resolution.distillationMode === "rule") {
+      return passthroughDistillation(candidate);
+    }
+    const hostResolution = resolution.host;
+    if (hostResolution && hostResolution.mode === "mediated") {
+      const parsed = await runCodexMediatedDistillation(candidate, {
+        env: this.env,
+        timeoutMs: this.config.hostLlmMediatedTimeoutMs,
+        runner: this.options.codexExecRunner
+      });
+      const validated = validateDistillationPayload(parsed);
+      return {
+        ...applyFallbacks(candidate, parsed, validated),
+        distillation_mode_used: "llm",
+        distillation_source: resolution.distillationSource
+      };
+    }
+    const endpoint = resolution.endpoint;
+    if (!endpoint) {
+      throw new Error("Distillation resolution did not provide a reusable endpoint.");
     }
 
     if (endpoint.kind === "anthropic") {
@@ -288,7 +284,11 @@ export class LlmDistiller {
 
       const parsed = JSON.parse(text) as Record<string, unknown>;
       const validated = validateDistillationPayload(parsed);
-      return applyFallbacks(candidate, parsed, validated);
+      return {
+        ...applyFallbacks(candidate, parsed, validated),
+        distillation_mode_used: "llm",
+        distillation_source: resolution.distillationSource
+      };
     }
 
     const messages: OpenAiMessage[] = [
@@ -322,6 +322,10 @@ export class LlmDistiller {
 
     const parsed = JSON.parse(content) as Record<string, unknown>;
     const validated = validateDistillationPayload(parsed);
-    return applyFallbacks(candidate, parsed, validated);
+    return {
+      ...applyFallbacks(candidate, parsed, validated),
+      distillation_mode_used: "llm",
+      distillation_source: resolution.distillationSource
+    };
   }
 }

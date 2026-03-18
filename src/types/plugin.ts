@@ -1,4 +1,4 @@
-import type { ExperienceInput, InjectionMode, ToolEvent } from "./domain.js";
+import type { EvaluationMode, ExperienceInput, InjectionMode, InjectionScorecard, ToolEvent } from "./domain.js";
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
 
 export type HostPromptContext = {
@@ -27,6 +27,9 @@ export type PromptBuildResult = {
   mode: InjectionMode;
   text?: string;
   notice?: string;
+  scorecard?: InjectionScorecard;
+  deliveryMode?: EvaluationMode;
+  delivered?: boolean;
   input: ExperienceInput;
 };
 

@@ -9,6 +9,7 @@ import { DistillationJobRepository } from "../store/sqlite/repositories/distilla
 import { NodeRepository } from "../store/sqlite/repositories/node-repo.js";
 import { buildLegacyEmbedding, embedPassageText, withEmbeddingMetadata } from "../store/vector/embeddings.js";
 import { transitionState } from "../feedback/state-transition.js";
+import { getDistillationFailureBucket } from "./errors.js";
 
 const DISTILLATION_STALE_PROCESSING_MS = 60_000;
 
@@ -36,6 +37,14 @@ const distilledDraftToNode = (candidate: ExperienceCandidate, distilled: Experie
     ...distilled,
     retrieval_text: retrievalText,
     ...withEmbeddingMetadata(legacyEmbedding),
+    distillation_mode_used: distilled.distillation_mode_used ?? existing?.distillation_mode_used,
+    distillation_source: distilled.distillation_source ?? existing?.distillation_source,
+    redistilled_from:
+      existing?.distillation_source &&
+      distilled.distillation_source &&
+      existing.distillation_source !== distilled.distillation_source
+        ? existing.distillation_source
+        : existing?.redistilled_from,
     origin_record_ids: mergeIds(existing?.origin_record_ids, [candidate.source_record_id]),
     helped_record_ids: existing?.helped_record_ids ?? [],
     harmed_record_ids: existing?.harmed_record_ids ?? [],
@@ -107,7 +116,12 @@ export class DistillationQueueWorker {
     }
   }
 
-  private markJobFailure(job: DistillationJob, candidate: ExperienceCandidate, message: string): void {
+  private markJobFailure(
+    job: DistillationJob,
+    candidate: ExperienceCandidate,
+    message: string,
+    failureBucket = "distillation_failed"
+  ): void {
     const nextRetryCount = candidate.retry_count + 1;
     const failedAt = nowIso();
     const shouldDiscard = nextRetryCount > this.config.distillationMaxRetries;
@@ -124,6 +138,7 @@ export class DistillationQueueWorker {
     this.jobRepo.upsert({
       ...job,
       status: shouldDiscard ? "discarded" : "failed",
+      failure_bucket: failureBucket,
       retry_count: nextRetryCount,
       last_error: message,
       finished_at: failedAt,
@@ -180,13 +195,15 @@ export class DistillationQueueWorker {
       this.jobRepo.upsert({
         ...job,
         status: "succeeded",
+        distillation_source: node.distillation_source,
+        failure_bucket: undefined,
         last_error: undefined,
         finished_at: completedAt,
         updated_at: completedAt
       });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      this.markJobFailure(job, candidate, message);
+      this.markJobFailure(job, candidate, message, getDistillationFailureBucket(error));
     }
   }
 }

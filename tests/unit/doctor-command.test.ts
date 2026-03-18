@@ -3,34 +3,55 @@ import { runDoctorCommand } from "../../src/cli/commands/doctor.js";
 
 const consoleTableSpy = vi.spyOn(console, "table").mockImplementation(() => {});
 const consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+const originalEvaluationMode = process.env.EXPERIENCE_ENGINE_EVALUATION_MODE;
+const originalHoldoutRate = process.env.EXPERIENCE_ENGINE_HOLDOUT_RATE;
 
 afterEach(() => {
   consoleTableSpy.mockClear();
   consoleLogSpy.mockClear();
+  if (originalEvaluationMode === undefined) {
+    delete process.env.EXPERIENCE_ENGINE_EVALUATION_MODE;
+  } else {
+    process.env.EXPERIENCE_ENGINE_EVALUATION_MODE = originalEvaluationMode;
+  }
+  if (originalHoldoutRate === undefined) {
+    delete process.env.EXPERIENCE_ENGINE_HOLDOUT_RATE;
+  } else {
+    process.env.EXPERIENCE_ENGINE_HOLDOUT_RATE = originalHoldoutRate;
+  }
 });
+
+const codexStatus = (overrides: Record<string, unknown> = {}) =>
+  ({
+    adapter: "codex",
+    installed: true,
+    versionStatus: {
+      recordedVersion: "0.1.0",
+      currentVersion: "0.1.0",
+      state: "current",
+      updateAvailable: false
+    },
+    serverName: "experienceengine",
+    hostWiring: {
+      wired: true,
+      enabled: true,
+      transport: "stdio",
+      command: "node dist/cli/index.js codex-mcp-server"
+    },
+    distillationStatus: {
+      distillationMode: "rule",
+      distillationSource: "rule",
+      hostLlmMode: "disabled",
+      reason: "Codex does not expose a reusable provider endpoint in the current configuration."
+    },
+    captureDir: "/tmp/.experienceengine/adapters/codex/captures",
+    ...overrides
+  }) as never;
 
 describe("doctor command", () => {
   it("reports remote package updates separately from host wiring upgrades", async () => {
     await runDoctorCommand("codex", {
-      inspectCodexInstall: () =>
-        ({
-          adapter: "codex",
-          installed: true,
-          versionStatus: {
-            recordedVersion: "0.1.0",
-            currentVersion: "0.1.0",
-            state: "current",
-            updateAvailable: false
-          },
-          serverName: "experienceengine",
-          hostWiring: {
-            wired: true,
-            enabled: true,
-            transport: "stdio",
-            command: "node dist/cli/index.js codex-mcp-server"
-          },
-          captureDir: "/tmp/.experienceengine/adapters/codex/captures"
-        }) as never,
+      inspectCodexInstall: () => codexStatus(),
       fetchLatestGitHubReleaseStatus: async () => ({
         source: "github-releases",
         repository: "Alan-512/ExperienceEngine",
@@ -72,6 +93,12 @@ describe("doctor command", () => {
             postToolUse: true,
             postToolUseFailure: true,
             sessionEnd: true
+          },
+          distillationStatus: {
+            distillationMode: "rule",
+            distillationSource: "rule",
+            hostLlmMode: "disabled",
+            reason: "Claude Code does not expose a reusable endpoint in the current configuration."
           }
         }) as never,
       fetchLatestGitHubReleaseStatus: async () => ({
@@ -90,29 +117,20 @@ describe("doctor command", () => {
     expect(consoleLogSpy).toHaveBeenCalledWith(
       "Remote release check unavailable: GitHub latest release lookup failed with HTTP 404."
     );
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Distillation status:"],
+        ["- Mode: rule"],
+        ["- Source: rule"],
+        ["- Host LLM mode: disabled"],
+        ["- Reason: Claude Code does not expose a reusable endpoint in the current configuration."]
+      ])
+    );
   });
 
   it("prints registry advisories when npm or pnpm uses a non-official registry", async () => {
     await runDoctorCommand("codex", {
-      inspectCodexInstall: () =>
-        ({
-          adapter: "codex",
-          installed: true,
-          versionStatus: {
-            recordedVersion: "0.1.0",
-            currentVersion: "0.1.0",
-            state: "current",
-            updateAvailable: false
-          },
-          serverName: "experienceengine",
-          hostWiring: {
-            wired: true,
-            enabled: true,
-            transport: "stdio",
-            command: "node dist/cli/index.js codex-mcp-server"
-          },
-          captureDir: "/tmp/.experienceengine/adapters/codex/captures"
-        }) as never,
+      inspectCodexInstall: () => codexStatus(),
       fetchLatestGitHubReleaseStatus: async () => ({
         source: "github-releases",
         repository: "Alan-512/ExperienceEngine",
@@ -147,25 +165,7 @@ describe("doctor command", () => {
 
   it("prints a cold-start readiness summary when formal experience is still warming up", async () => {
     await runDoctorCommand("codex", {
-      inspectCodexInstall: () =>
-        ({
-          adapter: "codex",
-          installed: true,
-          versionStatus: {
-            recordedVersion: "0.1.0",
-            currentVersion: "0.1.0",
-            state: "current",
-            updateAvailable: false
-          },
-          serverName: "experienceengine",
-          hostWiring: {
-            wired: true,
-            enabled: true,
-            transport: "stdio",
-            command: "node dist/cli/index.js codex-mcp-server"
-          },
-          captureDir: "/tmp/.experienceengine/adapters/codex/captures"
-        }) as never,
+      inspectCodexInstall: () => codexStatus(),
       fetchLatestGitHubReleaseStatus: async () => ({
         source: "github-releases",
         repository: "Alan-512/ExperienceEngine",
@@ -195,6 +195,71 @@ describe("doctor command", () => {
         [
           "Recommended next step: Keep working in the same repo on a few similar tasks. ExperienceEngine will promote formal hints once it sees enough repeated evidence."
         ]
+      ])
+    );
+  });
+
+  it("prints distillation mode, source, and host llm diagnostics", async () => {
+    await runDoctorCommand("codex", {
+      inspectCodexInstall: () => codexStatus(),
+      fetchLatestGitHubReleaseStatus: async () => ({
+        source: "github-releases",
+        repository: "Alan-512/ExperienceEngine",
+        latestVersion: "0.1.0",
+        releaseUrl: null,
+        publishedAt: "2026-03-12T12:00:00Z",
+        state: "current",
+        updateAvailable: false
+      }),
+      inspectFirstValueReadiness: () => ({
+        rawRecords: 3,
+        taskRuns: 1,
+        candidates: 1,
+        nodes: 0,
+        nextStep: "Keep working in the same repo."
+      })
+    });
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Distillation status:"],
+        ["- Mode: rule"],
+        ["- Source: rule"],
+        ["- Host LLM mode: disabled"],
+        ["- Reason: Codex does not expose a reusable provider endpoint in the current configuration."]
+      ])
+    );
+  });
+
+  it("prints the current evaluation mode and holdout rate", async () => {
+    process.env.EXPERIENCE_ENGINE_EVALUATION_MODE = "holdout";
+    process.env.EXPERIENCE_ENGINE_HOLDOUT_RATE = "0.5";
+
+    await runDoctorCommand("codex", {
+      inspectCodexInstall: () => codexStatus(),
+      fetchLatestGitHubReleaseStatus: async () => ({
+        source: "github-releases",
+        repository: "Alan-512/ExperienceEngine",
+        latestVersion: "0.1.0",
+        releaseUrl: null,
+        publishedAt: "2026-03-12T12:00:00Z",
+        state: "current",
+        updateAvailable: false
+      }),
+      inspectFirstValueReadiness: () => ({
+        rawRecords: 1,
+        taskRuns: 1,
+        candidates: 0,
+        nodes: 0,
+        nextStep: "Keep working in the same repo."
+      })
+    });
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Evaluation mode:"],
+        ["- Mode: holdout"],
+        ["- Holdout rate: 0.5"]
       ])
     );
   });

@@ -79,6 +79,9 @@ CREATE TABLE IF NOT EXISTS experience_nodes (
   embedding_model TEXT,
   embedding_version TEXT,
   embedding_dimensions INTEGER,
+  distillation_mode_used TEXT,
+  distillation_source TEXT,
+  redistilled_from TEXT,
   source_kind TEXT NOT NULL,
   origin_record_ids_json TEXT NOT NULL DEFAULT '[]',
   helped_record_ids_json TEXT NOT NULL DEFAULT '[]',
@@ -138,6 +141,8 @@ CREATE TABLE IF NOT EXISTS distillation_jobs (
   candidate_id TEXT NOT NULL,
   status TEXT NOT NULL,
   extractor_profile TEXT NOT NULL,
+  distillation_source TEXT,
+  failure_bucket TEXT,
   retry_count INTEGER NOT NULL DEFAULT 0,
   last_error TEXT,
   created_at TEXT NOT NULL,
@@ -149,13 +154,19 @@ CREATE TABLE IF NOT EXISTS distillation_jobs (
 
 CREATE TABLE IF NOT EXISTS injection_events (
   injection_id TEXT PRIMARY KEY,
+  session_id TEXT,
   scope_id TEXT NOT NULL,
   task_type TEXT NOT NULL,
+  task_summary TEXT,
   mode TEXT NOT NULL,
+  delivery_mode TEXT NOT NULL DEFAULT 'live',
+  delivered INTEGER NOT NULL DEFAULT 1,
   injected_node_ids_json TEXT NOT NULL,
   injection_count INTEGER NOT NULL,
+  scorecard_json TEXT,
   was_successful INTEGER,
   harm_observed INTEGER,
+  attribution_reason TEXT,
   created_at TEXT NOT NULL,
   resolved_at TEXT
 );

@@ -5,6 +5,8 @@ export const configSchema = z.object({
   sqlitePath: z.string().default("./data/sqlite/experienceengine.db"),
   logLevel: z.enum(["debug", "info", "warn", "error"]).default("info"),
   noticesInline: z.boolean().default(true),
+  evaluationMode: z.enum(["live", "shadow", "holdout"]).default("live"),
+  holdoutRate: z.number().min(0).max(1).default(0.2),
   captureRawPayloads: z.boolean().default(false),
   captureDir: z.string().default("./data/runtime-captures"),
   maxHints: z.number().int().min(1).max(3).default(3),
@@ -13,6 +15,9 @@ export const configSchema = z.object({
   embeddingModel: z.string().default("Xenova/multilingual-e5-small"),
   embeddingDtype: z.enum(["q8", "fp32"]).default("q8"),
   embeddingCacheDir: z.string().default("./data/models/embeddings"),
+  distillationMode: z.enum(["auto", "llm", "rule", "disabled"]).default("auto"),
+  hostLlmMode: z.enum(["auto", "disabled", "endpoint", "mediated"]).default("auto"),
+  hostLlmMediatedTimeoutMs: z.number().int().min(1000).max(120000).default(25000),
   distillerProfile: z.enum(["fast", "balanced", "high_quality"]).default("balanced"),
   distillationAllowPassthrough: z.boolean().default(false),
   distillationMaxRetries: z.number().int().min(0).max(10).default(2),
@@ -42,6 +47,17 @@ export const pluginConfigJsonSchema = {
     noticesInline: {
       type: "boolean",
       description: "Emit one-line inline notices when ExperienceEngine injects guidance."
+    },
+    evaluationMode: {
+      type: "string",
+      enum: ["live", "shadow", "holdout"],
+      description: "Controls whether ExperienceEngine delivers interventions live, suppresses them in shadow mode, or randomly withholds them for holdout evaluation."
+    },
+    holdoutRate: {
+      type: "number",
+      minimum: 0,
+      maximum: 1,
+      description: "Fraction of eligible interventions withheld when evaluation mode is holdout."
     },
     captureRawPayloads: {
       type: "boolean",
@@ -80,6 +96,22 @@ export const pluginConfigJsonSchema = {
     embeddingCacheDir: {
       type: "string",
       description: "Directory used to cache managed embedding model files."
+    },
+    distillationMode: {
+      type: "string",
+      enum: ["auto", "llm", "rule", "disabled"],
+      description: "Controls whether ExperienceEngine uses host-backed LLM distillation, rule promotion, or disables candidate promotion."
+    },
+    hostLlmMode: {
+      type: "string",
+      enum: ["auto", "disabled", "endpoint", "mediated"],
+      description: "Controls whether ExperienceEngine reuses host LLM capability through a direct endpoint, mediated host execution, or disables host reuse."
+    },
+    hostLlmMediatedTimeoutMs: {
+      type: "integer",
+      minimum: 1000,
+      maximum: 120000,
+      description: "Timeout for one mediated host distillation invocation."
     },
     distillerProfile: {
       type: "string",
@@ -124,6 +156,12 @@ export const pluginUiHints = {
   noticesInline: {
     label: "Inline Notices"
   },
+  evaluationMode: {
+    label: "Evaluation Mode"
+  },
+  holdoutRate: {
+    label: "Holdout Rate"
+  },
   captureRawPayloads: {
     label: "Capture Raw Payloads"
   },
@@ -149,6 +187,15 @@ export const pluginUiHints = {
   embeddingCacheDir: {
     label: "Embedding Cache Directory",
     placeholder: "./data/models/embeddings"
+  },
+  distillationMode: {
+    label: "Distillation Mode"
+  },
+  hostLlmMode: {
+    label: "Host LLM Mode"
+  },
+  hostLlmMediatedTimeoutMs: {
+    label: "Host LLM Mediated Timeout"
   },
   distillerProfile: {
     label: "Distiller Profile"

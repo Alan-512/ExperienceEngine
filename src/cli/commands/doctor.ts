@@ -59,6 +59,13 @@ const logRegistryHealth = (health: RegistryHealth): void => {
 const inspectFirstValueReadiness = (): ExperienceFirstValueReadiness =>
   new ExperienceInteractionService(loadConfig()).inspectFirstValueReadiness();
 
+const logEvaluationMode = (): void => {
+  const config = loadConfig();
+  console.log("Evaluation mode:");
+  console.log(`- Mode: ${config.evaluationMode}`);
+  console.log(`- Holdout rate: ${config.holdoutRate}`);
+};
+
 const logFirstValueReadiness = (summary: ExperienceFirstValueReadiness): void => {
   console.log("First-value readiness:");
   console.log(`- Raw task records: ${summary.rawRecords}`);
@@ -66,6 +73,23 @@ const logFirstValueReadiness = (summary: ExperienceFirstValueReadiness): void =>
   console.log(`- Candidates waiting for promotion: ${summary.candidates}`);
   console.log(`- Formal experience nodes: ${summary.nodes}`);
   console.log(`Recommended next step: ${summary.nextStep}`);
+};
+
+const logDistillationStatus = (status?: {
+  distillationMode: "llm" | "rule" | "disabled";
+  distillationSource: string;
+  hostLlmMode: "endpoint" | "mediated" | "disabled";
+  reason: string;
+}): void => {
+  if (!status) {
+    return;
+  }
+
+  console.log("Distillation status:");
+  console.log(`- Mode: ${status.distillationMode}`);
+  console.log(`- Source: ${status.distillationSource}`);
+  console.log(`- Host LLM mode: ${status.hostLlmMode}`);
+  console.log(`- Reason: ${status.reason}`);
 };
 
 export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): Promise<void> => {
@@ -97,11 +121,13 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
         capture_dir: status.captureDir
       }
     ]);
+    logDistillationStatus(status.distillationStatus);
     if (status.versionStatus.updateAvailable) {
       console.log("Recommended next step: ee upgrade claude-code");
     }
     logRemoteReleaseStatus("claude-code", remoteStatus);
     logRegistryHealth(registryHealth);
+    logEvaluationMode();
     logFirstValueReadiness(firstValueReadiness);
     return;
   }
@@ -134,7 +160,9 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
       console.log("Recommended next step: ee upgrade codex");
     }
     logRemoteReleaseStatus("codex", remoteStatus);
+    logDistillationStatus(status.distillationStatus);
     logRegistryHealth(registryHealth);
+    logEvaluationMode();
     logFirstValueReadiness(firstValueReadiness);
     return;
   }
@@ -205,5 +233,6 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
 
   logRemoteReleaseStatus("openclaw", remoteStatus);
   logRegistryHealth(registryHealth);
+  logEvaluationMode();
   logFirstValueReadiness(firstValueReadiness);
 };

@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { resolveExperienceEnginePaths } from "../config/path-resolver.js";
+import type { DistillationMode, DistillationSource } from "../types/domain.js";
 
 type DistillerEndpoint = {
   kind: "openai" | "anthropic";
@@ -30,7 +31,52 @@ type CodexConfig = Record<string, unknown> & {
 type ResolveOptions = {
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
+  hostLlmMode?: "auto" | "disabled" | "endpoint" | "mediated";
 };
+
+type DistillationResolveOptions = ResolveOptions & {
+  distillationMode?: DistillationMode;
+  allowRuleFallback?: boolean;
+};
+
+export type HostLlmResolution =
+  | {
+      mode: "disabled";
+      reason: string;
+    }
+  | {
+      mode: "endpoint";
+      endpoint: DistillerEndpoint;
+      host: "codex" | "claude-code";
+      source: string;
+      reason: string;
+    }
+  | {
+      mode: "mediated";
+      host: "codex";
+      source: "codex";
+      model: string;
+      reason: string;
+    };
+
+export type DistillationResolution =
+  | {
+      distillationMode: "disabled";
+      distillationSource: "disabled";
+      reason: string;
+    }
+  | {
+      distillationMode: "rule";
+      distillationSource: "rule";
+      reason: string;
+    }
+  | {
+      distillationMode: "llm";
+      distillationSource: Extract<DistillationSource, "explicit_provider" | "host_endpoint" | "host_mediated">;
+      host?: HostLlmResolution;
+      endpoint?: DistillerEndpoint;
+      reason: string;
+    };
 
 export type CodexHostLlmBinding = {
   configPath: string;
@@ -263,6 +309,20 @@ export const resolveCodexHostLlmBinding = (options: ResolveOptions = {}): CodexH
   };
 };
 
+const resolveExplicitEndpointResolution = (env: NodeJS.ProcessEnv): DistillationResolution | null => {
+  const explicit = resolveExplicitEndpoint(env);
+  if (!explicit) {
+    return null;
+  }
+
+  return {
+    distillationMode: "llm",
+    distillationSource: "explicit_provider",
+    endpoint: explicit,
+    reason: "Resolved from explicit ExperienceEngine distiller provider configuration."
+  };
+};
+
 const resolveExplicitEndpoint = (env: NodeJS.ProcessEnv): DistillerEndpoint | null => {
   if (!env.EXPERIENCE_ENGINE_DISTILLER_MODEL || !env.EXPERIENCE_ENGINE_DISTILLER_API_KEY) {
     return null;
@@ -440,30 +500,85 @@ const resolveCodexEndpoint = (options: ResolveOptions): DistillerEndpoint | null
   };
 };
 
-export const resolveDistillerEndpoint = (options: ResolveOptions = {}): DistillerEndpoint | null => {
+export const resolveHostLlmResolution = (options: ResolveOptions = {}): HostLlmResolution => {
   const env = options.env ?? process.env;
-  const explicit = resolveExplicitEndpoint(env);
-  if (explicit) {
-    return explicit;
-  }
-
+  const requestedMode = options.hostLlmMode ?? "auto";
   if (options.env && options.env.EXPERIENCE_ENGINE_USE_HOST_LLM !== "true") {
-    return null;
+    return {
+      mode: "disabled",
+      reason: "Host LLM reuse is not enabled for the current environment."
+    };
   }
-
-  const isOpenClawHost = Boolean(
-    env.OPENCLAW_HOME || env.OPENCLAW_STATE_DIR || env.OPENCLAW_CONFIG_PATH
-  );
-  if (isOpenClawHost && env.EXPERIENCE_ENGINE_ADAPTER !== "claude-code" && env.EXPERIENCE_ENGINE_ADAPTER !== "codex") {
-    return null;
+  if (requestedMode === "disabled") {
+    return {
+      mode: "disabled",
+      reason: "Host LLM reuse is explicitly disabled."
+    };
   }
-
   const preferredAdapter = env.EXPERIENCE_ENGINE_ADAPTER;
+
   if (preferredAdapter === "claude-code") {
-    return resolveClaudeEndpoint(options);
+    if (requestedMode === "mediated") {
+      return {
+        mode: "disabled",
+        reason: "Claude Code mediated distillation is not implemented yet."
+      };
+    }
+    const endpoint = resolveClaudeEndpoint(options);
+    return endpoint
+      ? {
+          mode: "endpoint",
+          endpoint,
+          host: "claude-code",
+          source: endpoint.source,
+          reason: "Resolved reusable Claude Code endpoint configuration."
+        }
+      : {
+          mode: "disabled",
+          reason:
+            requestedMode === "endpoint"
+              ? "Claude Code endpoint reuse was forced, but no reusable endpoint is exposed in the current configuration."
+              : "Claude Code does not expose a reusable endpoint in the current configuration."
+        };
   }
+
   if (preferredAdapter === "codex") {
-    return resolveCodexEndpoint(options);
+    const binding = resolveCodexHostLlmBinding(options);
+    const endpoint = requestedMode === "mediated" ? null : resolveCodexEndpoint(options);
+    if (endpoint) {
+      return {
+        mode: "endpoint",
+        endpoint,
+        host: "codex",
+        source: endpoint.source,
+        reason: "Resolved reusable Codex provider configuration."
+      };
+    }
+
+    if (requestedMode === "endpoint") {
+      return {
+        mode: "disabled",
+        reason: "Codex endpoint reuse was forced, but no reusable provider endpoint is exposed in the current configuration."
+      };
+    }
+
+    if (binding?.model) {
+      return {
+        mode: "mediated",
+        host: "codex",
+        source: "codex",
+        model: binding.model,
+        reason: "Codex can execute the configured model, but no reusable provider endpoint is exposed."
+      };
+    }
+
+    return {
+      mode: "disabled",
+      reason:
+        requestedMode === "mediated"
+          ? "Codex mediated distillation was forced, but Codex does not expose a usable host model in the current configuration."
+          : "Codex does not expose a reusable provider endpoint in the current configuration."
+    };
   }
 
   const claudePaths = resolveExperienceEnginePaths({ adapter: "claude-code", env, homeDir: options.homeDir });
@@ -472,13 +587,145 @@ export const resolveDistillerEndpoint = (options: ResolveOptions = {}): Distille
   const hasCodex = existsSync(codexPaths.installStatePath);
 
   if (hasClaude && !hasCodex) {
-    return resolveClaudeEndpoint(options);
-  }
-  if (hasCodex && !hasClaude) {
-    return resolveCodexEndpoint(options);
+    if (requestedMode === "mediated") {
+      return {
+        mode: "disabled",
+        reason: "Claude Code mediated distillation is not implemented yet."
+      };
+    }
+    const endpoint = resolveClaudeEndpoint(options);
+    return endpoint
+      ? {
+          mode: "endpoint",
+          endpoint,
+          host: "claude-code",
+          source: endpoint.source,
+          reason: "Resolved reusable Claude Code endpoint configuration."
+        }
+      : {
+          mode: "disabled",
+          reason: "Claude Code is installed but does not expose a reusable endpoint in the current configuration."
+        };
   }
 
-  return resolveClaudeEndpoint(options) ?? resolveCodexEndpoint(options);
+  if (hasCodex && !hasClaude) {
+    return resolveHostLlmResolution({
+      ...options,
+      env: { ...env, EXPERIENCE_ENGINE_ADAPTER: "codex" }
+    });
+  }
+
+  if (requestedMode === "mediated") {
+    return {
+      mode: "disabled",
+      reason: "No installed host exposes mediated distillation in the current environment."
+    };
+  }
+
+  const claudeEndpoint = resolveClaudeEndpoint(options);
+  if (claudeEndpoint) {
+    return {
+      mode: "endpoint",
+      endpoint: claudeEndpoint,
+      host: "claude-code",
+      source: claudeEndpoint.source,
+      reason: "Resolved reusable Claude Code endpoint configuration."
+    };
+  }
+  const codexEndpoint = resolveCodexEndpoint(options);
+  if (codexEndpoint) {
+    return {
+      mode: "endpoint",
+      endpoint: codexEndpoint,
+      host: "codex",
+      source: codexEndpoint.source,
+      reason: "Resolved reusable Codex provider configuration."
+    };
+  }
+
+  return {
+    mode: "disabled",
+    reason: "No reusable host LLM endpoint is available in the current environment."
+  };
+};
+
+export const resolveDistillationResolution = (options: DistillationResolveOptions = {}): DistillationResolution => {
+  const env = options.env ?? process.env;
+  const requestedMode = options.distillationMode ?? "auto";
+  const allowRuleFallback = options.allowRuleFallback ?? true;
+  const hostLlmMode = options.hostLlmMode ?? "auto";
+
+  if (requestedMode === "disabled") {
+    return {
+      distillationMode: "disabled",
+      distillationSource: "disabled",
+      reason: "Distillation is explicitly disabled."
+    };
+  }
+
+  if (requestedMode === "rule") {
+    return {
+      distillationMode: "rule",
+      distillationSource: "rule",
+      reason: "Rule distillation is explicitly enabled."
+    };
+  }
+
+  const explicitResolution = resolveExplicitEndpointResolution(env);
+  if (explicitResolution) {
+    return explicitResolution;
+  }
+
+  const hostResolution = resolveHostLlmResolution({ ...options, hostLlmMode });
+  if (hostResolution.mode === "endpoint") {
+    return {
+      distillationMode: "llm",
+      distillationSource: "host_endpoint",
+      endpoint: hostResolution.endpoint,
+      host: hostResolution,
+      reason: hostResolution.reason
+    };
+  }
+  if (hostResolution.mode === "mediated") {
+    return {
+      distillationMode: "llm",
+      distillationSource: "host_mediated",
+      host: hostResolution,
+      reason: hostResolution.reason
+    };
+  }
+
+  if (requestedMode === "llm") {
+    return {
+      distillationMode: "disabled",
+      distillationSource: "disabled",
+      reason: `LLM distillation was forced, but ${hostResolution.reason}`
+    };
+  }
+
+  if (allowRuleFallback) {
+    return {
+      distillationMode: "rule",
+      distillationSource: "rule",
+      reason: hostResolution.reason
+    };
+  }
+
+  return {
+    distillationMode: "disabled",
+    distillationSource: "disabled",
+    reason: hostResolution.reason
+  };
+};
+
+export const resolveDistillerEndpoint = (options: ResolveOptions = {}): DistillerEndpoint | null => {
+  const resolution = resolveDistillationResolution({
+    ...options,
+    distillationMode: "llm",
+    allowRuleFallback: false
+  });
+
+  return resolution.distillationMode === "llm" ? resolution.endpoint ?? null : null;
 };
 
 export type { DistillerEndpoint };

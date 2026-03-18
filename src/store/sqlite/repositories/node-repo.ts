@@ -27,6 +27,9 @@ export class NodeRepository {
     embedding_model: string | null;
     embedding_version: string | null;
     embedding_dimensions: number | null;
+    distillation_mode_used: string | null;
+    distillation_source: string | null;
+    redistilled_from: string | null;
     source_kind: ExperienceNode["source_kind"];
     origin_record_ids_json: string;
     helped_record_ids_json: string;
@@ -65,6 +68,9 @@ export class NodeRepository {
       embedding_model: row.embedding_model ?? undefined,
       embedding_version: row.embedding_version ?? undefined,
       embedding_dimensions: row.embedding_dimensions ?? undefined,
+      distillation_mode_used: row.distillation_mode_used as ExperienceNode["distillation_mode_used"],
+      distillation_source: row.distillation_source as ExperienceNode["distillation_source"],
+      redistilled_from: row.redistilled_from as ExperienceNode["redistilled_from"],
       source_kind: row.source_kind,
       origin_record_ids: JSON.parse(row.origin_record_ids_json) as string[],
       helped_record_ids: JSON.parse(row.helped_record_ids_json) as string[],
@@ -106,6 +112,9 @@ export class NodeRepository {
       embedding_model: node.embedding_model ?? null,
       embedding_version: node.embedding_version ?? null,
       embedding_dimensions: node.embedding_dimensions ?? null,
+      distillation_mode_used: node.distillation_mode_used ?? null,
+      distillation_source: node.distillation_source ?? null,
+      redistilled_from: node.redistilled_from ?? null,
       source_kind: node.source_kind,
       origin_record_ids_json: JSON.stringify(node.origin_record_ids ?? []),
       helped_record_ids_json: JSON.stringify(node.helped_record_ids ?? []),
@@ -126,12 +135,12 @@ export class NodeRepository {
       .prepare(
         `INSERT INTO experience_nodes
           (id, node_type, scope_id, task_type, trigger_pattern, applicability_notes, env_signature, compact_hint, goal, recommended_steps_json,
-           avoid_steps_json, fallback_steps_json, success_signal, stop_condition, escalation_condition, evidence_summary, retrieval_text, embedding_json, embedding_provider, embedding_model, embedding_version, embedding_dimensions, source_kind,
+           avoid_steps_json, fallback_steps_json, success_signal, stop_condition, escalation_condition, evidence_summary, retrieval_text, embedding_json, embedding_provider, embedding_model, embedding_version, embedding_dimensions, distillation_mode_used, distillation_source, redistilled_from, source_kind,
            origin_record_ids_json, helped_record_ids_json, harmed_record_ids_json, state,
            usage_count, helped_count, harmed_count, support_count, last_used_at, last_helped_at, last_harmed_at, created_at, updated_at)
          VALUES
          (@id, @node_type, @scope_id, @task_type, @trigger_pattern, @applicability_notes, @env_signature, @compact_hint, @goal, @recommended_steps_json,
-           @avoid_steps_json, @fallback_steps_json, @success_signal, @stop_condition, @escalation_condition, @evidence_summary, @retrieval_text, @embedding_json, @embedding_provider, @embedding_model, @embedding_version, @embedding_dimensions, @source_kind,
+           @avoid_steps_json, @fallback_steps_json, @success_signal, @stop_condition, @escalation_condition, @evidence_summary, @retrieval_text, @embedding_json, @embedding_provider, @embedding_model, @embedding_version, @embedding_dimensions, @distillation_mode_used, @distillation_source, @redistilled_from, @source_kind,
            @origin_record_ids_json, @helped_record_ids_json, @harmed_record_ids_json, @state,
            @usage_count, @helped_count, @harmed_count, @support_count, @last_used_at, @last_helped_at, @last_harmed_at, @created_at, @updated_at)
          ON CONFLICT(id) DO UPDATE SET
@@ -153,6 +162,9 @@ export class NodeRepository {
           embedding_model = excluded.embedding_model,
           embedding_version = excluded.embedding_version,
           embedding_dimensions = excluded.embedding_dimensions,
+          distillation_mode_used = excluded.distillation_mode_used,
+          distillation_source = excluded.distillation_source,
+          redistilled_from = excluded.redistilled_from,
           source_kind = excluded.source_kind,
           origin_record_ids_json = excluded.origin_record_ids_json,
           helped_record_ids_json = excluded.helped_record_ids_json,
