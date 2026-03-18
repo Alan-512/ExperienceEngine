@@ -322,6 +322,13 @@ describe("Codex MCP behavior loop", () => {
       prompt: "Fix the failing auth test",
       sessionId: "codex-surface-view"
     });
+    await loop.recordToolResult({
+      sessionId: "codex-surface-view",
+      toolName: "Bash",
+      inputSummary: "pnpm test auth",
+      outputSummary: "auth test now passes",
+      status: "success"
+    });
     await loop.finalizeTask({
       sessionId: "codex-surface-view",
       cwd: "/repo",
@@ -336,6 +343,7 @@ describe("Codex MCP behavior loop", () => {
 
     expect(last?.sessionId).toBe("codex-surface-view");
     expect(last?.intervention).toBe("inject");
+    expect(last?.autoFeedback).toBe("helped");
     expect(last?.injectedNodes[0]?.sourceKind).toBe("system_derived");
     expect(last?.scorecard).toMatchObject({
       riskLevel: "low",
@@ -370,6 +378,13 @@ describe("Codex MCP behavior loop", () => {
       prompt: "Fix the failing auth test",
       sessionId: "codex-resource-view"
     });
+    await loop.recordToolResult({
+      sessionId: "codex-resource-view",
+      toolName: "Bash",
+      inputSummary: "pnpm test auth",
+      outputSummary: "auth test now passes",
+      status: "success"
+    });
     await loop.finalizeTask({
       sessionId: "codex-resource-view",
       cwd: "/repo",
@@ -401,6 +416,7 @@ describe("Codex MCP behavior loop", () => {
     expect(JSON.parse((lastPayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({
       sessionId: "codex-resource-view",
       intervention: "inject",
+      autoFeedback: "helped",
       scorecard: expect.objectContaining({
         riskLevel: "low"
       })

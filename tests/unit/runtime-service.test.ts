@@ -207,6 +207,13 @@ describe("ExperienceRuntimeService finalize transaction", () => {
       status: string;
       extractor_profile: string;
     };
+    const reviewRows = db
+      .prepare("SELECT event_type, source, task_run_id FROM review_events ORDER BY created_at ASC")
+      .all() as Array<{
+      event_type: string;
+      source: string;
+      task_run_id: string | null;
+    }>;
     const injectionRow = db.prepare(
       "SELECT session_id, task_summary, mode, scorecard_json, was_successful, harm_observed FROM injection_events LIMIT 1"
     ).get() as {
@@ -236,6 +243,13 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     expect(candidateRow.failure_signature).toBeTruthy();
     expect(jobRow.status).toBe("pending");
     expect(jobRow.extractor_profile).toBe("balanced");
+    expect(reviewRows).toEqual([
+      expect.objectContaining({
+        event_type: "mark_helped",
+        source: "automatic"
+      })
+    ]);
+    expect(reviewRows[0]?.task_run_id).toBeTruthy();
     expect(injectionRow.session_id).toBe("candidate-session");
     expect(injectionRow.task_summary).toContain("Fix the failing vitest auth test");
     expect(injectionRow.mode).toBe("inject");
@@ -316,12 +330,14 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     const latestRecord = db.prepare(
       "SELECT injected_node_ids_json FROM experience_input_records LIMIT 1"
     ).get() as { injected_node_ids_json: string };
+    const reviewCount = db.prepare("SELECT COUNT(*) AS count FROM review_events").get() as { count: number };
 
     expect(injectionRow.mode).toBe("inject");
     expect(injectionRow.delivery_mode).toBe("shadow");
     expect(injectionRow.delivered).toBe(0);
     expect(JSON.parse(injectionRow.injected_node_ids_json)).toEqual(["node_runtime_shadow"]);
     expect(JSON.parse(latestRecord.injected_node_ids_json)).toEqual([]);
+    expect(reviewCount.count).toBe(0);
   });
 
   it("suppresses delivery in holdout mode when the holdout bucket wins", async () => {
@@ -367,9 +383,11 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     const latestRecord = db.prepare(
       "SELECT injected_node_ids_json FROM experience_input_records LIMIT 1"
     ).get() as { injected_node_ids_json: string };
+    const reviewCount = db.prepare("SELECT COUNT(*) AS count FROM review_events").get() as { count: number };
 
     expect(injectionRow.delivery_mode).toBe("holdout");
     expect(injectionRow.delivered).toBe(0);
     expect(JSON.parse(latestRecord.injected_node_ids_json)).toEqual([]);
+    expect(reviewCount.count).toBe(0);
   });
 });

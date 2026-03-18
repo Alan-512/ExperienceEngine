@@ -197,8 +197,12 @@ describe("inspect command", () => {
 
     const nodeRepo = new NodeRepository(db);
     const inputRepo = new InputRecordRepository(db);
+    const taskRunRepo = new TaskRunRepository(db);
+    const reviewEventRepo = new ReviewEventRepository(db);
     nodeRepo.upsert(makeNode());
     inputRepo.upsert(makeRecord());
+    taskRunRepo.upsert(makeTaskRun());
+    reviewEventRepo.upsert(makeReviewEvent({ source: "automatic" }));
 
     runInspectCommand("--last");
 
@@ -218,6 +222,7 @@ describe("inspect command", () => {
         ["- Recommendation: Apply these hints normally, then mark helped or harmed after the task."],
         ["- Why it matched:"],
         ["  - Exact task-family match was found in historical experience."],
+        ["Automatic feedback: helped"],
         ["Hints:"],
         ["- Run the failing auth test before editing and verify after the fix."],
         ["Evidence:"],
@@ -278,6 +283,7 @@ describe("inspect command", () => {
       expect.arrayContaining([
         ["Session: session_shadow"],
         ["Intervention: shadow"],
+        ["Automatic feedback: none"],
         ["Injected nodes:"],
         ["- node_shadow strategy active system_derived"],
         ["Hints:"],

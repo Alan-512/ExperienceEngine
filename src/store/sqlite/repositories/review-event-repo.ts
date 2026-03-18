@@ -62,6 +62,13 @@ export class ReviewEventRepository {
       .map((row) => this.mapRow(row as ReviewEventRow));
   }
 
+  listByTaskRunId(taskRunId: string): ReviewEvent[] {
+    return this.db
+      .prepare("SELECT * FROM review_events WHERE task_run_id = ? ORDER BY created_at DESC")
+      .all(taskRunId)
+      .map((row) => this.mapRow(row as ReviewEventRow));
+  }
+
   count(): number {
     return (this.db.prepare("SELECT COUNT(*) AS count FROM review_events").get() as { count: number }).count;
   }

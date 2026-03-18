@@ -38,6 +38,7 @@ import { DistillationJobRepository } from "../store/sqlite/repositories/distilla
 import { InputRecordRepository } from "../store/sqlite/repositories/input-record-repo.js";
 import { NodeRepository } from "../store/sqlite/repositories/node-repo.js";
 import { OutcomeRecordRepository } from "../store/sqlite/repositories/outcome-record-repo.js";
+import { ReviewEventRepository } from "../store/sqlite/repositories/review-event-repo.js";
 import { ScopeRepository } from "../store/sqlite/repositories/scope-repo.js";
 import { StatsRepository } from "../store/sqlite/repositories/stats-repo.js";
 import { TaskRunRepository } from "../store/sqlite/repositories/task-run-repo.js";
@@ -272,6 +273,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly jobRepo;
   private readonly taskRunRepo;
   private readonly outcomeRepo;
+  private readonly reviewEventRepo;
   private readonly statsRepo;
   private readonly injectionRepo;
   private readonly distillationWorker;
@@ -291,6 +293,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     this.jobRepo = new DistillationJobRepository(this.db);
     this.taskRunRepo = new TaskRunRepository(this.db);
     this.outcomeRepo = new OutcomeRecordRepository(this.db);
+    this.reviewEventRepo = new ReviewEventRepository(this.db);
     this.statsRepo = new StatsRepository(this.db);
     this.injectionRepo = new InjectionRepository(this.db);
     this.distillationWorker = new DistillationQueueWorker(
@@ -393,7 +396,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     return persistedCandidates;
   }
 
-  private updateInjectedNodes(input: ExperienceInput, attributionRecordId: string): void {
+  private updateInjectedNodes(input: ExperienceInput, attributionRecordId: string, taskRunId?: string): void {
     if (!input.injected_node_ids.length) {
       return;
     }
@@ -402,8 +405,46 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       .map((id) => this.nodeRepo.getById(id))
       .filter((node): node is ExperienceNode => Boolean(node));
 
+    const automaticEvents = touched
+      .map((node) => {
+        if (input.outcome_signal === "success") {
+          return {
+            nodeId: node.id,
+            eventType: "mark_helped" as const
+          };
+        }
+
+        if (detectHarm(input, node)) {
+          return {
+            nodeId: node.id,
+            eventType: "mark_harmed" as const
+          };
+        }
+
+        return undefined;
+      })
+      .filter(
+        (
+          value
+        ): value is {
+          nodeId: string;
+          eventType: "mark_helped" | "mark_harmed";
+        } => Boolean(value)
+      );
+
     for (const node of applyFeedback(input, touched, attributionRecordId)) {
       this.nodeRepo.upsert(node);
+    }
+
+    for (const event of automaticEvents) {
+      this.reviewEventRepo.upsert({
+        id: createId("review"),
+        node_id: event.nodeId,
+        task_run_id: taskRunId,
+        event_type: event.eventType,
+        source: "automatic",
+        created_at: nowIso()
+      });
     }
   }
 
@@ -544,7 +585,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       this.taskRunRepo.upsert(taskRun);
       this.outcomeRepo.upsert(toOutcomeRecord(taskRun, input));
       this.persistCandidates(input, record.record_id, taskRun.id);
-      this.updateInjectedNodes(input, record.record_id);
+      this.updateInjectedNodes(input, record.record_id, taskRun.id);
       if (session.lastInjectionEvent) {
         const harmObserved = input.injected_node_ids
           .map((id) => this.nodeRepo.getById(id))

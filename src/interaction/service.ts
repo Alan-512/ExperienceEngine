@@ -65,6 +65,7 @@ export type ExperienceLastInspection = {
   intervention: "inject" | "skip" | "shadow" | "holdout";
   deliveryMode?: EvaluationMode;
   delivered?: boolean;
+  autoFeedback: "helped" | "harmed" | "none";
   outcome: ExperienceInputRecord["outcome_signal"];
   injectedNodes: ExperienceNodeSummary[];
   hints: string[];
@@ -202,6 +203,17 @@ const applyNodeFeedback = (node: ExperienceNode, feedback: FeedbackValue): Exper
   };
 };
 
+const summarizeAutomaticFeedback = (events: ReviewEvent[]): "helped" | "harmed" | "none" => {
+  const automatic = events.filter((event) => event.source === "automatic");
+  if (automatic.some((event) => event.event_type === "mark_harmed")) {
+    return "harmed";
+  }
+  if (automatic.some((event) => event.event_type === "mark_helped")) {
+    return "helped";
+  }
+  return "none";
+};
+
 export class ExperienceInteractionService {
   private readonly inputRepo;
   private readonly injectionRepo;
@@ -260,6 +272,9 @@ export class ExperienceInteractionService {
             record.session_id
           )
         : undefined);
+    const taskRun = record.session_id ? this.taskRunRepo.getLatestBySessionId(record.session_id) : undefined;
+    const autoFeedback =
+      taskRun?.id ? summarizeAutomaticFeedback(this.reviewEventRepo.listByTaskRunId(taskRun.id)) : "none";
     const intervention =
       selectedNodeIds.length === 0
         ? "skip"
@@ -275,6 +290,7 @@ export class ExperienceInteractionService {
       intervention,
       deliveryMode: injectionEvent?.delivery_mode,
       delivered: injectionEvent?.delivered,
+      autoFeedback,
       outcome: record.outcome_signal,
       injectedNodes: injectedNodes.map(toNodeSummary),
       hints: injectedNodes.map((node) => node.compact_hint),
