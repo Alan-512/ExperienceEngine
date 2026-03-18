@@ -81,6 +81,12 @@ describe("doctor command", () => {
             postToolUse: true,
             postToolUseFailure: true,
             sessionEnd: true
+          },
+          distillationStatus: {
+            distillationMode: "rule",
+            distillationSource: "rule",
+            hostLlmMode: "disabled",
+            reason: "Claude Code does not expose a reusable endpoint in the current configuration."
           }
         }) as never,
       fetchLatestGitHubReleaseStatus: async () => ({
@@ -98,6 +104,15 @@ describe("doctor command", () => {
     expect(consoleTableSpy).toHaveBeenCalled();
     expect(consoleLogSpy).toHaveBeenCalledWith(
       "Remote release check unavailable: GitHub latest release lookup failed with HTTP 404."
+    );
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Distillation status:"],
+        ["- Mode: rule"],
+        ["- Source: rule"],
+        ["- Host LLM mode: disabled"],
+        ["- Reason: Claude Code does not expose a reusable endpoint in the current configuration."]
+      ])
     );
   });
 

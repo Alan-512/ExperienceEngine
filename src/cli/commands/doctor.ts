@@ -114,6 +114,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
         capture_dir: status.captureDir
       }
     ]);
+    logDistillationStatus(status.distillationStatus);
     if (status.versionStatus.updateAvailable) {
       console.log("Recommended next step: ee upgrade claude-code");
     }
