@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -178,6 +178,66 @@ env_key = "OPENROUTER_API_KEY"
     expect(status.versionStatus.state).toBe("current");
     expect(status.hostWiring.wired).toBe(true);
     expect(status.hostWiring.transport).toBe("stdio");
+  });
+
+  it("reports mediated distillation status for auth-only Codex configs", () => {
+    const homeDir = makeTempDir();
+    mkdirSync(join(homeDir, ".codex"), { recursive: true });
+    const configPath = join(homeDir, ".codex", "config.toml");
+    writeFileSync(
+      configPath,
+      `model = "gpt-5.4"
+`,
+      "utf8"
+    );
+
+    installCodexAdapter({
+      homeDir,
+      env: {
+        CODEX_CONFIG_PATH: configPath
+      },
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        if (key === "codex mcp get experienceengine") {
+          return `experienceengine
+  enabled: true
+  transport: stdio
+  command: node
+  args: --no-warnings /tmp/experienceengine/dist/cli/index.js codex-mcp-server
+  cwd: -
+  env: EXPERIENCE_ENGINE_HOME=${join(homeDir, ".experienceengine")}
+  startup_timeout_sec: 120
+  remove: codex mcp remove experienceengine`;
+        }
+        return "";
+      }
+    });
+
+    const status = inspectCodexInstall({
+      homeDir,
+      env: {
+        CODEX_CONFIG_PATH: configPath
+      },
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        if (key === "codex mcp get experienceengine") {
+          return `experienceengine
+  enabled: true
+  transport: stdio
+  command: node
+  args: --no-warnings /tmp/experienceengine/dist/cli/index.js codex-mcp-server
+  cwd: -
+  env: EXPERIENCE_ENGINE_HOME=${join(homeDir, ".experienceengine")}
+  startup_timeout_sec: 120
+  remove: codex mcp remove experienceengine`;
+        }
+        return "";
+      }
+    });
+
+    expect(status.distillationStatus?.distillationMode).toBe("llm");
+    expect(status.distillationStatus?.distillationSource).toBe("host_mediated");
+    expect(status.distillationStatus?.hostLlmMode).toBe("mediated");
   });
 });
 

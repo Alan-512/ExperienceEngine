@@ -13,6 +13,9 @@ export const configSchema = z.object({
   embeddingModel: z.string().default("Xenova/multilingual-e5-small"),
   embeddingDtype: z.enum(["q8", "fp32"]).default("q8"),
   embeddingCacheDir: z.string().default("./data/models/embeddings"),
+  distillationMode: z.enum(["auto", "llm", "rule", "disabled"]).default("auto"),
+  hostLlmMode: z.enum(["auto", "disabled", "endpoint", "mediated"]).default("auto"),
+  hostLlmMediatedTimeoutMs: z.number().int().min(1000).max(120000).default(25000),
   distillerProfile: z.enum(["fast", "balanced", "high_quality"]).default("balanced"),
   distillationAllowPassthrough: z.boolean().default(false),
   distillationMaxRetries: z.number().int().min(0).max(10).default(2),
@@ -80,6 +83,22 @@ export const pluginConfigJsonSchema = {
     embeddingCacheDir: {
       type: "string",
       description: "Directory used to cache managed embedding model files."
+    },
+    distillationMode: {
+      type: "string",
+      enum: ["auto", "llm", "rule", "disabled"],
+      description: "Controls whether ExperienceEngine uses host-backed LLM distillation, rule promotion, or disables candidate promotion."
+    },
+    hostLlmMode: {
+      type: "string",
+      enum: ["auto", "disabled", "endpoint", "mediated"],
+      description: "Controls whether ExperienceEngine reuses host LLM capability through a direct endpoint, mediated host execution, or disables host reuse."
+    },
+    hostLlmMediatedTimeoutMs: {
+      type: "integer",
+      minimum: 1000,
+      maximum: 120000,
+      description: "Timeout for one mediated host distillation invocation."
     },
     distillerProfile: {
       type: "string",
@@ -149,6 +168,15 @@ export const pluginUiHints = {
   embeddingCacheDir: {
     label: "Embedding Cache Directory",
     placeholder: "./data/models/embeddings"
+  },
+  distillationMode: {
+    label: "Distillation Mode"
+  },
+  hostLlmMode: {
+    label: "Host LLM Mode"
+  },
+  hostLlmMediatedTimeoutMs: {
+    label: "Host LLM Mediated Timeout"
   },
   distillerProfile: {
     label: "Distiller Profile"

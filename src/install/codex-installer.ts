@@ -18,7 +18,8 @@ import {
   type ResolvedPathInfo
 } from "../config/path-resolver.js";
 import { resolveExperienceEnginePackageRoot } from "./openclaw-cli.js";
-import { resolveCodexHostLlmBinding } from "../distillation/host-llm.js";
+import { resolveCodexHostLlmBinding, resolveDistillationResolution, resolveHostLlmResolution } from "../distillation/host-llm.js";
+import { loadConfig } from "../config/load-config.js";
 import { buildVersionStatus, readCurrentPackageVersion } from "../version/package-version.js";
 
 type InstallerOptions = {
@@ -41,6 +42,12 @@ export type CodexInstallReport = {
     wired: boolean;
     command?: string;
     transport?: string;
+  };
+  distillationStatus?: {
+    distillationMode: "llm" | "rule" | "disabled";
+    distillationSource: string;
+    hostLlmMode: "endpoint" | "mediated" | "disabled";
+    reason: string;
   };
 };
 
@@ -152,6 +159,24 @@ export const inspectCodexInstall = (options: InstallerOptions = {}) => {
     : null;
   const packageRoot = resolveExperienceEnginePackageRoot();
   const hostInfo = inspectCodexHost(runner, options.cliEnv);
+  const config = loadConfig({}, { env: options.env ?? process.env, homeDir: options.homeDir });
+  const resolutionEnv: NodeJS.ProcessEnv = {
+    ...(options.env ?? process.env),
+    EXPERIENCE_ENGINE_USE_HOST_LLM: "true",
+    EXPERIENCE_ENGINE_ADAPTER: "codex"
+  };
+  const distillationResolution = resolveDistillationResolution({
+    env: resolutionEnv,
+    homeDir: options.homeDir,
+    distillationMode: config.distillationMode,
+    hostLlmMode: config.hostLlmMode,
+    allowRuleFallback: config.distillationAllowPassthrough
+  });
+  const hostResolution = resolveHostLlmResolution({
+    env: resolutionEnv,
+    homeDir: options.homeDir,
+    hostLlmMode: config.hostLlmMode
+  });
 
   return {
     adapter: "codex" as const,
@@ -166,6 +191,12 @@ export const inspectCodexInstall = (options: InstallerOptions = {}) => {
       command: hostInfo?.commandDisplay,
       transport: hostInfo?.transport,
       enabled: hostInfo?.enabled ?? false
+    },
+    distillationStatus: {
+      distillationMode: distillationResolution.distillationMode,
+      distillationSource: distillationResolution.distillationSource,
+      hostLlmMode: hostResolution.mode,
+      reason: distillationResolution.reason
     },
     hostState: hostInfo
   };

@@ -92,6 +92,8 @@ const distillationJob = (overrides: Partial<DistillationJob> = {}): Distillation
   candidate_id: "candidate_auth_fix",
   status: "pending",
   extractor_profile: "balanced",
+  distillation_source: "rule",
+  failure_bucket: undefined,
   retry_count: 0,
   last_error: undefined,
   created_at: "2026-03-15T10:00:00.000Z",
@@ -182,6 +184,7 @@ describe("DistillationJobRepository", () => {
       distillationJob({
         id: "job_auth_fix_failed",
         status: "failed",
+        failure_bucket: "endpoint_request_failed",
         retry_count: 1,
         last_error: "Model timeout",
         finished_at: "2026-03-15T10:02:00.000Z",
@@ -200,7 +203,9 @@ describe("DistillationJobRepository", () => {
     );
 
     expect(repo.getById("job_auth_fix")?.status).toBe("processing");
+    expect(repo.getById("job_auth_fix")?.distillation_source).toBe("rule");
     expect(repo.listByStatus("failed")[0]?.last_error).toBe("Model timeout");
+    expect(repo.listByStatus("failed")[0]?.failure_bucket).toBe("endpoint_request_failed");
     expect(repo.listByStatus("discarded")[0]?.retry_count).toBe(3);
   });
 });

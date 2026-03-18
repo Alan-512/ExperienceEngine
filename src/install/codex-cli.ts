@@ -1,4 +1,4 @@
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
@@ -12,6 +12,20 @@ export type CodexCommand = {
 };
 
 export type CodexCommandRunner = (command: CodexCommand) => string | void;
+
+export type CodexExecCommand = CodexCommand & {
+  cwd?: string;
+  input?: string;
+  timeoutMs?: number;
+};
+
+export type CodexExecResult = {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+};
+
+export type CodexExecRunner = (command: CodexExecCommand) => CodexExecResult;
 
 export type CodexMcpServerInfo = {
   name?: string;
@@ -72,6 +86,36 @@ export const buildCodexGetCommand = (cliEnv?: NodeJS.ProcessEnv): CodexCommand =
   env: cliEnv
 });
 
+export const buildCodexExecCommand = (options: {
+  prompt: string;
+  outputPath: string;
+  outputSchemaPath: string;
+  cliEnv?: NodeJS.ProcessEnv;
+  cwd?: string;
+  timeoutMs?: number;
+}): CodexExecCommand => ({
+  bin: "codex",
+  args: [
+    "exec",
+    "-c",
+    "mcp_servers={}",
+    "--skip-git-repo-check",
+    "--ephemeral",
+    "--color",
+    "never",
+    "--output-schema",
+    options.outputSchemaPath,
+    "--output-last-message",
+    options.outputPath,
+    "-"
+  ],
+  description: "Run a one-shot mediated distillation with Codex",
+  env: options.cliEnv,
+  cwd: options.cwd,
+  input: options.prompt,
+  timeoutMs: options.timeoutMs
+});
+
 export const resolveCodexConfigPath = (homeDir?: string): string =>
   join(homeDir ?? homedir(), ".codex", "config.toml");
 
@@ -129,6 +173,27 @@ export const defaultCodexCommandRunner: CodexCommandRunner = (command) =>
     encoding: "utf8",
     env: command.env ? { ...process.env, ...command.env } : process.env
   });
+
+export const defaultCodexExecRunner: CodexExecRunner = (command) => {
+  const result = spawnSync(command.bin, command.args, {
+    stdio: "pipe",
+    encoding: "utf8",
+    env: command.env ? { ...process.env, ...command.env } : process.env,
+    cwd: command.cwd,
+    input: command.input,
+    timeout: command.timeoutMs
+  });
+
+  if (result.error) {
+    throw result.error;
+  }
+
+  return {
+    stdout: result.stdout ?? "",
+    stderr: result.stderr ?? "",
+    exitCode: result.status ?? 1
+  };
+};
 
 export const runCodexCommand = (
   command: CodexCommand,

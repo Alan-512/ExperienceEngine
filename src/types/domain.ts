@@ -16,6 +16,14 @@ export type OutcomeSignal = "success" | "failure" | "unknown";
 export type ToolEventStatus = "success" | "failure" | "unknown";
 export type CandidateLifecycleState = "pending" | "distilled" | "failed" | "discarded";
 export type DistillationJobState = "pending" | "processing" | "succeeded" | "failed" | "discarded";
+export type DistillationMode = "auto" | "llm" | "rule" | "disabled";
+export type ResolvedDistillationMode = Exclude<DistillationMode, "auto">;
+export type DistillationSource =
+  | "explicit_provider"
+  | "host_endpoint"
+  | "host_mediated"
+  | "rule"
+  | "disabled";
 
 export type Scope = {
   scope_id: string;
@@ -120,6 +128,9 @@ export type ExperienceNode = {
   embedding_model?: string;
   embedding_version?: string;
   embedding_dimensions?: number;
+  distillation_mode_used?: ResolvedDistillationMode;
+  distillation_source?: DistillationSource;
+  redistilled_from?: DistillationSource;
   source_kind: "system_derived" | "user_authored_candidate_promoted";
   origin_record_ids: string[];
   helped_record_ids: string[];
@@ -217,6 +228,8 @@ export type DistillationJob = {
   candidate_id: string;
   status: DistillationJobState;
   extractor_profile: string;
+  distillation_source?: DistillationSource;
+  failure_bucket?: string;
   retry_count: number;
   last_error?: string;
   created_at: string;

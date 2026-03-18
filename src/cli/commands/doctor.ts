@@ -68,6 +68,23 @@ const logFirstValueReadiness = (summary: ExperienceFirstValueReadiness): void =>
   console.log(`Recommended next step: ${summary.nextStep}`);
 };
 
+const logDistillationStatus = (status?: {
+  distillationMode: "llm" | "rule" | "disabled";
+  distillationSource: string;
+  hostLlmMode: "endpoint" | "mediated" | "disabled";
+  reason: string;
+}): void => {
+  if (!status) {
+    return;
+  }
+
+  console.log("Distillation status:");
+  console.log(`- Mode: ${status.distillationMode}`);
+  console.log(`- Source: ${status.distillationSource}`);
+  console.log(`- Host LLM mode: ${status.hostLlmMode}`);
+  console.log(`- Reason: ${status.reason}`);
+};
+
 export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): Promise<void> => {
   const resolveRemoteStatus = deps.fetchLatestGitHubReleaseStatus ?? fetchLatestGitHubReleaseStatus;
   const registryHealth = (deps.readRegistryHealth ?? readRegistryHealth)();
@@ -134,6 +151,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
       console.log("Recommended next step: ee upgrade codex");
     }
     logRemoteReleaseStatus("codex", remoteStatus);
+    logDistillationStatus(status.distillationStatus);
     logRegistryHealth(registryHealth);
     logFirstValueReadiness(firstValueReadiness);
     return;

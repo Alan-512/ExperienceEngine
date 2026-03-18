@@ -9,28 +9,37 @@ afterEach(() => {
   consoleLogSpy.mockClear();
 });
 
+const codexStatus = (overrides: Record<string, unknown> = {}) =>
+  ({
+    adapter: "codex",
+    installed: true,
+    versionStatus: {
+      recordedVersion: "0.1.0",
+      currentVersion: "0.1.0",
+      state: "current",
+      updateAvailable: false
+    },
+    serverName: "experienceengine",
+    hostWiring: {
+      wired: true,
+      enabled: true,
+      transport: "stdio",
+      command: "node dist/cli/index.js codex-mcp-server"
+    },
+    distillationStatus: {
+      distillationMode: "rule",
+      distillationSource: "rule",
+      hostLlmMode: "disabled",
+      reason: "Codex does not expose a reusable provider endpoint in the current configuration."
+    },
+    captureDir: "/tmp/.experienceengine/adapters/codex/captures",
+    ...overrides
+  }) as never;
+
 describe("doctor command", () => {
   it("reports remote package updates separately from host wiring upgrades", async () => {
     await runDoctorCommand("codex", {
-      inspectCodexInstall: () =>
-        ({
-          adapter: "codex",
-          installed: true,
-          versionStatus: {
-            recordedVersion: "0.1.0",
-            currentVersion: "0.1.0",
-            state: "current",
-            updateAvailable: false
-          },
-          serverName: "experienceengine",
-          hostWiring: {
-            wired: true,
-            enabled: true,
-            transport: "stdio",
-            command: "node dist/cli/index.js codex-mcp-server"
-          },
-          captureDir: "/tmp/.experienceengine/adapters/codex/captures"
-        }) as never,
+      inspectCodexInstall: () => codexStatus(),
       fetchLatestGitHubReleaseStatus: async () => ({
         source: "github-releases",
         repository: "Alan-512/ExperienceEngine",
@@ -94,25 +103,7 @@ describe("doctor command", () => {
 
   it("prints registry advisories when npm or pnpm uses a non-official registry", async () => {
     await runDoctorCommand("codex", {
-      inspectCodexInstall: () =>
-        ({
-          adapter: "codex",
-          installed: true,
-          versionStatus: {
-            recordedVersion: "0.1.0",
-            currentVersion: "0.1.0",
-            state: "current",
-            updateAvailable: false
-          },
-          serverName: "experienceengine",
-          hostWiring: {
-            wired: true,
-            enabled: true,
-            transport: "stdio",
-            command: "node dist/cli/index.js codex-mcp-server"
-          },
-          captureDir: "/tmp/.experienceengine/adapters/codex/captures"
-        }) as never,
+      inspectCodexInstall: () => codexStatus(),
       fetchLatestGitHubReleaseStatus: async () => ({
         source: "github-releases",
         repository: "Alan-512/ExperienceEngine",
@@ -147,25 +138,7 @@ describe("doctor command", () => {
 
   it("prints a cold-start readiness summary when formal experience is still warming up", async () => {
     await runDoctorCommand("codex", {
-      inspectCodexInstall: () =>
-        ({
-          adapter: "codex",
-          installed: true,
-          versionStatus: {
-            recordedVersion: "0.1.0",
-            currentVersion: "0.1.0",
-            state: "current",
-            updateAvailable: false
-          },
-          serverName: "experienceengine",
-          hostWiring: {
-            wired: true,
-            enabled: true,
-            transport: "stdio",
-            command: "node dist/cli/index.js codex-mcp-server"
-          },
-          captureDir: "/tmp/.experienceengine/adapters/codex/captures"
-        }) as never,
+      inspectCodexInstall: () => codexStatus(),
       fetchLatestGitHubReleaseStatus: async () => ({
         source: "github-releases",
         repository: "Alan-512/ExperienceEngine",
@@ -195,6 +168,38 @@ describe("doctor command", () => {
         [
           "Recommended next step: Keep working in the same repo on a few similar tasks. ExperienceEngine will promote formal hints once it sees enough repeated evidence."
         ]
+      ])
+    );
+  });
+
+  it("prints distillation mode, source, and host llm diagnostics", async () => {
+    await runDoctorCommand("codex", {
+      inspectCodexInstall: () => codexStatus(),
+      fetchLatestGitHubReleaseStatus: async () => ({
+        source: "github-releases",
+        repository: "Alan-512/ExperienceEngine",
+        latestVersion: "0.1.0",
+        releaseUrl: null,
+        publishedAt: "2026-03-12T12:00:00Z",
+        state: "current",
+        updateAvailable: false
+      }),
+      inspectFirstValueReadiness: () => ({
+        rawRecords: 3,
+        taskRuns: 1,
+        candidates: 1,
+        nodes: 0,
+        nextStep: "Keep working in the same repo."
+      })
+    });
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Distillation status:"],
+        ["- Mode: rule"],
+        ["- Source: rule"],
+        ["- Host LLM mode: disabled"],
+        ["- Reason: Codex does not expose a reusable provider endpoint in the current configuration."]
       ])
     );
   });

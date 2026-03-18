@@ -6,6 +6,8 @@ type DistillationJobRow = {
   candidate_id: string;
   status: DistillationJob["status"];
   extractor_profile: string;
+  distillation_source: string | null;
+  failure_bucket: string | null;
   retry_count: number;
   last_error: string | null;
   created_at: string;
@@ -24,6 +26,8 @@ export class DistillationJobRepository {
       candidate_id: row.candidate_id,
       status: row.status,
       extractor_profile: row.extractor_profile,
+      distillation_source: row.distillation_source as DistillationJob["distillation_source"],
+      failure_bucket: row.failure_bucket ?? undefined,
       retry_count: row.retry_count,
       last_error: row.last_error ?? undefined,
       created_at: row.created_at,
@@ -40,6 +44,8 @@ export class DistillationJobRepository {
       candidate_id: job.candidate_id,
       status: job.status,
       extractor_profile: job.extractor_profile,
+      distillation_source: job.distillation_source ?? null,
+      failure_bucket: job.failure_bucket ?? null,
       retry_count: job.retry_count,
       last_error: job.last_error ?? null,
       created_at: job.created_at,
@@ -52,12 +58,14 @@ export class DistillationJobRepository {
     this.db
       .prepare(
         `INSERT INTO distillation_jobs
-          (id, candidate_id, status, extractor_profile, retry_count, last_error, created_at, updated_at, started_at, finished_at, discarded_at)
+          (id, candidate_id, status, extractor_profile, distillation_source, failure_bucket, retry_count, last_error, created_at, updated_at, started_at, finished_at, discarded_at)
          VALUES
-          (@id, @candidate_id, @status, @extractor_profile, @retry_count, @last_error, @created_at, @updated_at, @started_at, @finished_at, @discarded_at)
+          (@id, @candidate_id, @status, @extractor_profile, @distillation_source, @failure_bucket, @retry_count, @last_error, @created_at, @updated_at, @started_at, @finished_at, @discarded_at)
          ON CONFLICT(id) DO UPDATE SET
            status = excluded.status,
            extractor_profile = excluded.extractor_profile,
+           distillation_source = excluded.distillation_source,
+           failure_bucket = excluded.failure_bucket,
            retry_count = excluded.retry_count,
            last_error = excluded.last_error,
            updated_at = excluded.updated_at,
