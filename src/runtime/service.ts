@@ -1,6 +1,8 @@
 import { analyzeExperience } from "../analyzer/experience-analyzer.js";
 import { buildCandidateSignals } from "../analyzer/candidate-signals.js";
+import { buildInjectionScorecard } from "../controller/injection-scorecard.js";
 import { applyFeedback } from "../feedback/feedback-manager.js";
+import { detectHarm } from "../feedback/harm-detector.js";
 import { createEmptyStats, updateStats } from "../feedback/stats-updater.js";
 import { buildExperienceInput } from "../input/input-adapter.js";
 import { resolveScope } from "../input/scope-resolver.js";
@@ -11,10 +13,12 @@ import { createId, stableId } from "../utils/ids.js";
 import type {
   CandidateSourceSignal,
   DistillationJob,
+  EvaluationMode,
   ExperienceCandidate,
   ExperienceCandidateDraft,
   ExperienceInput,
   ExperienceInputRecord,
+  InjectionEvent,
   ExperienceNode,
   OutcomeRecord,
   TaskRun,
@@ -37,6 +41,7 @@ import { OutcomeRecordRepository } from "../store/sqlite/repositories/outcome-re
 import { ScopeRepository } from "../store/sqlite/repositories/scope-repo.js";
 import { StatsRepository } from "../store/sqlite/repositories/stats-repo.js";
 import { TaskRunRepository } from "../store/sqlite/repositories/task-run-repo.js";
+import { InjectionRepository } from "../store/sqlite/repositories/injection-repo.js";
 import { RuntimeCaptureWriter } from "../plugin/runtime-capture.js";
 import { normalizeToolResult } from "../plugin/hooks/tool-result-persist.js";
 import { extractToolResultsFromPayload } from "../plugin/runtime-helpers.js";
@@ -46,6 +51,7 @@ type SessionState = {
   toolEvents: ToolEvent[];
   toolEventKeys: Set<string>;
   injectedNodeIds: string[];
+  lastInjectionEvent?: InjectionEvent;
 };
 
 const toEvidence = (input: ExperienceInput): string[] =>
@@ -208,6 +214,52 @@ const buildToolEventKey = (toolEvent: ToolEvent, toolCallId?: string): string =>
     toolEvent.ended_at ?? ""
   ].join(":");
 
+const computeHoldoutBucket = (sessionId: string, taskSummary: string): number => {
+  const value = `${sessionId}:${taskSummary}`;
+  let hash = 0;
+  for (let index = 0; index < value.length; index += 1) {
+    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
+  }
+  return (hash % 10_000) / 10_000;
+};
+
+const resolveDeliveryMode = (
+  evaluationMode: ExperienceEngineConfig["evaluationMode"],
+  holdoutRate: number,
+  sessionId: string,
+  taskSummary: string,
+  hasInjection: boolean
+): {
+  deliveryMode: EvaluationMode;
+  delivered: boolean;
+} => {
+  if (!hasInjection) {
+    return {
+      deliveryMode: evaluationMode,
+      delivered: false
+    };
+  }
+
+  if (evaluationMode === "shadow") {
+    return {
+      deliveryMode: "shadow",
+      delivered: false
+    };
+  }
+
+  if (evaluationMode === "holdout") {
+    return {
+      deliveryMode: "holdout",
+      delivered: computeHoldoutBucket(sessionId, taskSummary) >= holdoutRate
+    };
+  }
+
+  return {
+    deliveryMode: "live",
+    delivered: true
+  };
+};
+
 export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly db;
   private readonly logger: OpenClawLogger;
@@ -221,6 +273,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly taskRunRepo;
   private readonly outcomeRepo;
   private readonly statsRepo;
+  private readonly injectionRepo;
   private readonly distillationWorker;
   readonly captureWriter;
 
@@ -239,6 +292,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     this.taskRunRepo = new TaskRunRepository(this.db);
     this.outcomeRepo = new OutcomeRecordRepository(this.db);
     this.statsRepo = new StatsRepository(this.db);
+    this.injectionRepo = new InjectionRepository(this.db);
     this.distillationWorker = new DistillationQueueWorker(
       config,
       this.candidateRepo,
@@ -363,6 +417,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
 
     if (existingScope?.is_disabled) {
       session.injectedNodeIds = [];
+      session.lastInjectionEvent = undefined;
       session.context = {
         ...session.context,
         injectedNodeIds: []
@@ -397,23 +452,61 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       this.config
     );
 
-    session.injectedNodeIds = decision.selected.map((node) => node.id);
+    const selectedNodeIds = decision.selected.map((node) => node.id);
+    const delivery = resolveDeliveryMode(
+      this.config.evaluationMode,
+      this.config.holdoutRate,
+      sessionId,
+      input.task_summary,
+      decision.mode !== "skip" && selectedNodeIds.length > 0
+    );
+    session.injectedNodeIds = delivery.delivered ? selectedNodeIds : [];
     session.context = {
       ...session.context,
       injectedNodeIds: session.injectedNodeIds
     };
 
+    if (decision.mode !== "skip") {
+      const scorecard = buildInjectionScorecard(input, decision.mode, decision.selected, sessionId);
+      const injectionEvent: InjectionEvent = {
+        injection_id: createId("inject"),
+        session_id: sessionId,
+        scope_id: input.scope_id,
+        task_type: input.task_type === "unknown" ? "general" : input.task_type,
+        task_summary: input.task_summary,
+        mode: decision.mode,
+        delivery_mode: delivery.deliveryMode,
+        delivered: delivery.delivered,
+        injected_node_ids: selectedNodeIds,
+        injection_count: selectedNodeIds.length,
+        scorecard,
+        was_successful: null,
+        harm_observed: null,
+        created_at: nowIso()
+      };
+      this.injectionRepo.upsert(injectionEvent);
+      session.lastInjectionEvent = injectionEvent;
+    } else {
+      session.lastInjectionEvent = undefined;
+    }
+
     this.logger.debug?.("experienceengine.before_prompt_build", {
       sessionId,
       mode: decision.mode,
-      injectedCount: session.injectedNodeIds.length
+      injectedCount: session.injectedNodeIds.length,
+      evaluationMode: this.config.evaluationMode,
+      delivered: delivery.delivered
     });
 
+    const deliveredMode = decision.mode !== "skip" && !delivery.delivered ? "skip" : decision.mode;
     return {
-      mode: decision.mode,
-      text: decision.text,
+      mode: deliveredMode,
+      text: deliveredMode === "skip" ? undefined : decision.text,
       notice:
-        decision.mode !== "skip" && this.config.noticesInline ? renderInlineNotice(decision.selected) : undefined,
+        deliveredMode !== "skip" && this.config.noticesInline ? renderInlineNotice(decision.selected) : undefined,
+      scorecard: decision.mode !== "skip" ? session.lastInjectionEvent?.scorecard : undefined,
+      deliveryMode: decision.mode !== "skip" ? delivery.deliveryMode : undefined,
+      delivered: decision.mode !== "skip" ? delivery.delivered : undefined,
       input: {
         ...input,
         injected_node_ids: session.injectedNodeIds
@@ -452,6 +545,17 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       this.outcomeRepo.upsert(toOutcomeRecord(taskRun, input));
       this.persistCandidates(input, record.record_id, taskRun.id);
       this.updateInjectedNodes(input, record.record_id);
+      if (session.lastInjectionEvent) {
+        const harmObserved = input.injected_node_ids
+          .map((id) => this.nodeRepo.getById(id))
+          .some((node) => detectHarm(input, node ?? undefined));
+        this.injectionRepo.upsert({
+          ...session.lastInjectionEvent,
+          was_successful: input.outcome_signal === "success",
+          harm_observed: harmObserved,
+          resolved_at: nowIso()
+        });
+      }
     });
     this.sessions.delete(sessionId);
 

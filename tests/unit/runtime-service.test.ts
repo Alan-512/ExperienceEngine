@@ -4,8 +4,12 @@ import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../../src/config/load-config.js";
+import { resolveScope } from "../../src/input/scope-resolver.js";
 import { ExperienceRuntimeService } from "../../src/runtime/service.js";
+import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
+import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
 import { clearEmbeddingProviderForTests, setEmbeddingProviderForTests } from "../../src/store/vector/embeddings.js";
+import { nowIso } from "../../src/utils/clock.js";
 
 const tempDirs: string[] = [];
 
@@ -29,6 +33,48 @@ beforeEach(() => {
     }
   });
 });
+
+const seedStrategyNode = (sqlitePath: string, cwd: string, id: string): void => {
+  const db = openDatabase(loadConfig({ sqlitePath }));
+  bootstrapDatabase(db);
+  const nodeRepo = new NodeRepository(db);
+  const scope = resolveScope(cwd);
+  const timestamp = nowIso();
+  nodeRepo.upsert({
+    id,
+    node_type: "strategy",
+    scope_id: scope.scope_id,
+    task_type: "test_debug",
+    trigger_pattern: "Fix the failing vitest auth test",
+    applicability_notes: "Use the same repo and test scope",
+    env_signature: undefined,
+    compact_hint: "Run the failing vitest auth test before editing and verify after the fix.",
+    goal: "Stabilize the failing vitest auth test",
+    recommended_steps: ["Run the failing test", "Apply the minimal fix", "Re-run the test"],
+    avoid_steps: [],
+    fallback_steps: [],
+    success_signal: "The targeted vitest test passes",
+    stop_condition: undefined,
+    escalation_condition: undefined,
+    evidence_summary: "Recovered the same vitest auth test in a prior task.",
+    retrieval_text:
+      "Fix the failing vitest auth test\nRun the failing vitest auth test before editing and verify after the fix.",
+    source_kind: "system_derived",
+    origin_record_ids: ["input_origin"],
+    helped_record_ids: [],
+    harmed_record_ids: [],
+    state: "active",
+    usage_count: 0,
+    helped_count: 0,
+    harmed_count: 0,
+    support_count: 1,
+    last_used_at: undefined,
+    last_helped_at: undefined,
+    last_harmed_at: undefined,
+    created_at: timestamp,
+    updated_at: timestamp
+  });
+};
 
 afterEach(() => {
   clearEmbeddingProviderForTests();
@@ -94,6 +140,7 @@ describe("ExperienceRuntimeService finalize transaction", () => {
   it("persists candidates and distillation jobs before promoting nodes asynchronously", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    seedStrategyNode(sqlitePath, "/repo", "node_runtime_scorecard");
     const service = new ExperienceRuntimeService(
       loadConfig({
         dataDir: join(runtimeDir, "data"),
@@ -160,7 +207,19 @@ describe("ExperienceRuntimeService finalize transaction", () => {
       status: string;
       extractor_profile: string;
     };
-    const nodeCountBeforeDrain = db.prepare("SELECT COUNT(*) AS count FROM experience_nodes").get() as { count: number };
+    const injectionRow = db.prepare(
+      "SELECT session_id, task_summary, mode, scorecard_json, was_successful, harm_observed FROM injection_events LIMIT 1"
+    ).get() as {
+      session_id: string | null;
+      task_summary: string;
+      mode: string;
+      scorecard_json: string | null;
+      was_successful: number | null;
+      harm_observed: number | null;
+    };
+    const nodeCountBeforeDrain = db
+      .prepare("SELECT COUNT(*) AS count FROM experience_nodes WHERE id != 'node_runtime_scorecard'")
+      .get() as { count: number };
 
     expect(taskRunRow.session_id).toBe("candidate-session");
     expect(taskRunRow.task_type).toBe("test_debug");
@@ -177,6 +236,21 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     expect(candidateRow.failure_signature).toBeTruthy();
     expect(jobRow.status).toBe("pending");
     expect(jobRow.extractor_profile).toBe("balanced");
+    expect(injectionRow.session_id).toBe("candidate-session");
+    expect(injectionRow.task_summary).toContain("Fix the failing vitest auth test");
+    expect(injectionRow.mode).toBe("inject");
+    expect(JSON.parse(injectionRow.scorecard_json ?? "{}")).toMatchObject({
+      riskLevel: "low",
+      nodes: [
+        expect.objectContaining({
+          riskLevel: "low",
+          helped: 0,
+          harmed: 0
+        })
+      ]
+    });
+    expect(injectionRow.was_successful).toBe(1);
+    expect(injectionRow.harm_observed).toBe(0);
     expect(nodeCountBeforeDrain.count).toBe(0);
 
     await service.drainDistillationQueue();
@@ -188,11 +262,114 @@ describe("ExperienceRuntimeService finalize transaction", () => {
       distilled_node_id: string | null;
     };
     const completedJob = db.prepare("SELECT status FROM distillation_jobs LIMIT 1").get() as { status: string };
-    const nodeCountAfterDrain = db.prepare("SELECT COUNT(*) AS count FROM experience_nodes").get() as { count: number };
+    const nodeCountAfterDrain = db
+      .prepare("SELECT COUNT(*) AS count FROM experience_nodes WHERE id != 'node_runtime_scorecard'")
+      .get() as { count: number };
 
     expect(distilledCandidate.lifecycle_state).toBe("distilled");
     expect(distilledCandidate.distilled_node_id).toBeTruthy();
     expect(completedJob.status).toBe("succeeded");
     expect(nodeCountAfterDrain.count).toBe(1);
+  });
+
+  it("suppresses delivery in shadow mode but persists the evaluated intervention", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    seedStrategyNode(sqlitePath, "/repo", "node_runtime_shadow");
+    const service = new ExperienceRuntimeService(
+      loadConfig({
+        dataDir: join(runtimeDir, "data"),
+        sqlitePath,
+        captureDir: join(runtimeDir, "captures"),
+        evaluationMode: "shadow"
+      })
+    );
+
+    const prompt = await service.beforePromptBuild({
+      sessionId: "shadow-session",
+      cwd: "/repo",
+      userMessage: "Fix the failing vitest auth test",
+      taskSummary: "Fix the failing vitest auth test"
+    });
+
+    expect(prompt.mode).toBe("skip");
+    expect(prompt.text).toBeUndefined();
+    expect(prompt.notice).toBeUndefined();
+    expect(prompt.scorecard?.mode).toBe("inject");
+
+    await service.finalizeTask({
+      sessionId: "shadow-session",
+      cwd: "/repo",
+      userMessage: "Fix the failing vitest auth test",
+      taskSummary: "Fix the failing vitest auth test"
+    });
+
+    const db = new DatabaseSync(sqlitePath);
+    const injectionRow = db.prepare(
+      "SELECT mode, delivery_mode, delivered, injected_node_ids_json FROM injection_events LIMIT 1"
+    ).get() as {
+      mode: string;
+      delivery_mode: string;
+      delivered: number;
+      injected_node_ids_json: string;
+    };
+    const latestRecord = db.prepare(
+      "SELECT injected_node_ids_json FROM experience_input_records LIMIT 1"
+    ).get() as { injected_node_ids_json: string };
+
+    expect(injectionRow.mode).toBe("inject");
+    expect(injectionRow.delivery_mode).toBe("shadow");
+    expect(injectionRow.delivered).toBe(0);
+    expect(JSON.parse(injectionRow.injected_node_ids_json)).toEqual(["node_runtime_shadow"]);
+    expect(JSON.parse(latestRecord.injected_node_ids_json)).toEqual([]);
+  });
+
+  it("suppresses delivery in holdout mode when the holdout bucket wins", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    seedStrategyNode(sqlitePath, "/repo", "node_runtime_holdout");
+    const service = new ExperienceRuntimeService(
+      loadConfig({
+        dataDir: join(runtimeDir, "data"),
+        sqlitePath,
+        captureDir: join(runtimeDir, "captures"),
+        evaluationMode: "holdout",
+        holdoutRate: 1
+      })
+    );
+
+    const prompt = await service.beforePromptBuild({
+      sessionId: "holdout-session",
+      cwd: "/repo",
+      userMessage: "Fix the failing vitest auth test",
+      taskSummary: "Fix the failing vitest auth test"
+    });
+
+    expect(prompt.mode).toBe("skip");
+    expect(prompt.text).toBeUndefined();
+    expect(prompt.notice).toBeUndefined();
+    expect(prompt.scorecard?.mode).toBe("inject");
+
+    await service.finalizeTask({
+      sessionId: "holdout-session",
+      cwd: "/repo",
+      userMessage: "Fix the failing vitest auth test",
+      taskSummary: "Fix the failing vitest auth test"
+    });
+
+    const db = new DatabaseSync(sqlitePath);
+    const injectionRow = db.prepare(
+      "SELECT delivery_mode, delivered FROM injection_events LIMIT 1"
+    ).get() as {
+      delivery_mode: string;
+      delivered: number;
+    };
+    const latestRecord = db.prepare(
+      "SELECT injected_node_ids_json FROM experience_input_records LIMIT 1"
+    ).get() as { injected_node_ids_json: string };
+
+    expect(injectionRow.delivery_mode).toBe("holdout");
+    expect(injectionRow.delivered).toBe(0);
+    expect(JSON.parse(latestRecord.injected_node_ids_json)).toEqual([]);
   });
 });

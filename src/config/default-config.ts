@@ -5,6 +5,8 @@ export const defaultConfig: ExperienceEngineConfig = {
   sqlitePath: "./data/sqlite/experienceengine.db",
   logLevel: "info",
   noticesInline: true,
+  evaluationMode: "live",
+  holdoutRate: 0.2,
   captureRawPayloads: false,
   captureDir: "./data/runtime-captures",
   maxHints: 3,

@@ -5,6 +5,8 @@ export const configSchema = z.object({
   sqlitePath: z.string().default("./data/sqlite/experienceengine.db"),
   logLevel: z.enum(["debug", "info", "warn", "error"]).default("info"),
   noticesInline: z.boolean().default(true),
+  evaluationMode: z.enum(["live", "shadow", "holdout"]).default("live"),
+  holdoutRate: z.number().min(0).max(1).default(0.2),
   captureRawPayloads: z.boolean().default(false),
   captureDir: z.string().default("./data/runtime-captures"),
   maxHints: z.number().int().min(1).max(3).default(3),
@@ -45,6 +47,17 @@ export const pluginConfigJsonSchema = {
     noticesInline: {
       type: "boolean",
       description: "Emit one-line inline notices when ExperienceEngine injects guidance."
+    },
+    evaluationMode: {
+      type: "string",
+      enum: ["live", "shadow", "holdout"],
+      description: "Controls whether ExperienceEngine delivers interventions live, suppresses them in shadow mode, or randomly withholds them for holdout evaluation."
+    },
+    holdoutRate: {
+      type: "number",
+      minimum: 0,
+      maximum: 1,
+      description: "Fraction of eligible interventions withheld when evaluation mode is holdout."
     },
     captureRawPayloads: {
       type: "boolean",
@@ -142,6 +155,12 @@ export const pluginUiHints = {
   },
   noticesInline: {
     label: "Inline Notices"
+  },
+  evaluationMode: {
+    label: "Evaluation Mode"
+  },
+  holdoutRate: {
+    label: "Holdout Rate"
   },
   captureRawPayloads: {
     label: "Capture Raw Payloads"

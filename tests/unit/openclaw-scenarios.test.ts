@@ -130,6 +130,8 @@ const node = (overrides: Partial<ExperienceNode> = {}): ExperienceNode => ({
   retrieval_text: "repo test verification",
   embedding: [1, 2, 3],
   source_kind: "system_derived",
+  distillation_mode_used: "rule",
+  distillation_source: "rule",
   origin_record_ids: ["record-ee-openclaw-high-confidence-test-debug-a-2026-03-16T10-00-00-000Z"],
   helped_record_ids: [],
   harmed_record_ids: [],
@@ -252,6 +254,7 @@ describe("runOpenClawScenarioEvaluation", () => {
     expect(matched?.candidates).toHaveLength(1);
     expect(matched?.jobs).toHaveLength(1);
     expect(matched?.injectedNodes[0]?.id).toBe("node-1");
+    expect(matched?.injectedNodes[0]?.distillationSource).toBe("rule");
     expect(matched?.runtime?.taskRunId).toBe(persistedTaskRun.id);
     expect(matched?.runtime?.outcomeIds).toEqual([`outcome-${persistedTaskRun.id}`]);
     expect(matched?.runtime?.reviewCount).toBe(1);
@@ -260,6 +263,7 @@ describe("runOpenClawScenarioEvaluation", () => {
     expect(result.report.aggregate.scenariosWithTaskRuns).toBe(1);
     expect(result.report.aggregate.scenariosWithOutcomes).toBe(1);
     expect(result.report.aggregate.scenariosWithReviews).toBe(1);
+    expect(result.report.aggregate.injectedNodeSources.rule).toBe(1);
     expect(result.baselineJsonPath).toBeTruthy();
   });
 });

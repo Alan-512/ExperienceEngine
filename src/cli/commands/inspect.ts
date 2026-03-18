@@ -63,6 +63,18 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
       }
     }
 
+    if (record.scorecard) {
+      console.log("Scorecard:");
+      console.log(`- Risk: ${record.scorecard.riskLevel}`);
+      console.log(`- Recommendation: ${record.scorecard.recommendation}`);
+      if (record.scorecard.reasons.length) {
+        console.log("- Why it matched:");
+        for (const reason of record.scorecard.reasons) {
+          console.log(`  - ${reason}`);
+        }
+      }
+    }
+
     if (record.evidence.length) {
       console.log("Evidence:");
       for (const evidence of record.evidence) {
@@ -132,6 +144,8 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
     console.table(summary.jobs);
     console.log("Formal nodes:");
     console.table(summary.nodes);
+    console.log("Node sources:");
+    console.table(summary.nodeSources);
     console.log("Runtime records:");
     console.table(summary.runtime);
     if (summary.latestRecordCreatedAt) {
@@ -212,6 +226,15 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
     console.log(`Node: ${node.id}`);
     console.log(`Type: ${node.type}`);
     console.log(`Source: ${node.sourceKind}`);
+    if (node.distillationMode) {
+      console.log(`Distillation mode: ${node.distillationMode}`);
+    }
+    if (node.distillationSource) {
+      console.log(`Distillation source: ${node.distillationSource}`);
+    }
+    if (node.redistilledFrom) {
+      console.log(`Redistilled from: ${node.redistilledFrom}`);
+    }
     console.log(`Task type: ${node.taskType}`);
     console.log(`State: ${node.state}`);
     console.log(`Scope: ${node.scopeId}`);

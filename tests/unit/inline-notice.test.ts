@@ -24,7 +24,7 @@ const makeNode = (overrides: Partial<ExperienceNode> = {}): ExperienceNode => ({
   origin_record_ids: [],
   helped_record_ids: [],
   harmed_record_ids: [],
-  state: "candidate",
+  state: "active",
   usage_count: 0,
   helped_count: 0,
   harmed_count: 0,
@@ -40,7 +40,7 @@ const makeNode = (overrides: Partial<ExperienceNode> = {}): ExperienceNode => ({
 describe("renderInlineNotice", () => {
   it("renders a strategy notice for injected strategy nodes", () => {
     expect(renderInlineNotice([makeNode()])).toBe(
-      "[ExperienceEngine] Injected 1 strategy hint for this task."
+      "[ExperienceEngine] Injected 1 strategy hint for this task (risk: low). Run ee inspect --last to review why it matched."
     );
   });
 
@@ -52,7 +52,9 @@ describe("renderInlineNotice", () => {
           node_type: "warning"
         })
       ])
-    ).toBe("[ExperienceEngine] Injected 1 caution hint for this task.");
+    ).toBe(
+      "[ExperienceEngine] Injected 1 caution hint for this task (risk: medium). Run ee inspect --last to review why it matched."
+    );
   });
 
   it("pluralizes multi-node notices", () => {
@@ -63,6 +65,8 @@ describe("renderInlineNotice", () => {
           id: "node_2"
         })
       ])
-    ).toBe("[ExperienceEngine] Injected 2 strategy hints for this task.");
+    ).toBe(
+      "[ExperienceEngine] Injected 2 strategy hints for this task (risk: low). Run ee inspect --last to review why it matched."
+    );
   });
 });

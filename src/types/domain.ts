@@ -12,6 +12,8 @@ export type ResolvedTaskType = TaskType | "unknown";
 export type ExperienceState = "candidate" | "active" | "cooling" | "retired";
 export type ExperienceNodeType = "strategy" | "warning";
 export type InjectionMode = "skip" | "inject_conservative" | "inject";
+export type InjectionRiskLevel = "low" | "medium" | "high";
+export type EvaluationMode = "live" | "shadow" | "holdout";
 export type OutcomeSignal = "success" | "failure" | "unknown";
 export type ToolEventStatus = "success" | "failure" | "unknown";
 export type CandidateLifecycleState = "pending" | "distilled" | "failed" | "discarded";
@@ -149,15 +151,48 @@ export type ExperienceNode = {
 
 export type InjectionEvent = {
   injection_id: string;
+  session_id?: string;
   scope_id: string;
   task_type: TaskType;
+  task_summary?: string;
   mode: Exclude<InjectionMode, "skip">;
+  delivery_mode: EvaluationMode;
+  delivered: boolean;
   injected_node_ids: string[];
   injection_count: number;
+  scorecard?: InjectionScorecard;
   was_successful: boolean | null;
   harm_observed: boolean | null;
   created_at: string;
   resolved_at?: string;
+};
+
+export type InjectionScorecardNode = {
+  id: string;
+  nodeType: ExperienceNodeType;
+  state: ExperienceState;
+  sourceKind: ExperienceNode["source_kind"];
+  distillationSource?: DistillationSource;
+  triggerPattern: string;
+  hint: string;
+  helped: number;
+  harmed: number;
+  supportCount: number;
+  riskLevel: InjectionRiskLevel;
+  whyMatched: string[];
+};
+
+export type InjectionScorecard = {
+  sessionId?: string;
+  scopeId: string;
+  taskType: TaskType;
+  taskSummary: string;
+  mode: Exclude<InjectionMode, "skip">;
+  riskLevel: InjectionRiskLevel;
+  recommendation: string;
+  reasons: string[];
+  nodes: InjectionScorecardNode[];
+  createdAt: string;
 };
 
 export type ScopeTaskStats = {

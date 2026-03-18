@@ -9,6 +9,7 @@ import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
 import { CandidateRepository } from "../../src/store/sqlite/repositories/candidate-repo.js";
 import { DistillationJobRepository } from "../../src/store/sqlite/repositories/distillation-job-repo.js";
 import { InputRecordRepository } from "../../src/store/sqlite/repositories/input-record-repo.js";
+import { InjectionRepository } from "../../src/store/sqlite/repositories/injection-repo.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
 import { OutcomeRecordRepository } from "../../src/store/sqlite/repositories/outcome-record-repo.js";
 import { ReviewEventRepository } from "../../src/store/sqlite/repositories/review-event-repo.js";
@@ -55,6 +56,8 @@ const makeNode = (overrides: Partial<ExperienceNode> = {}): ExperienceNode => ({
   evidence_summary: "Previously solved the same auth test failure.",
   retrieval_text: "Fix the failing auth test\nRun the failing auth test before editing and verify after the fix.",
   source_kind: "system_derived",
+  distillation_mode_used: "rule",
+  distillation_source: "rule",
   origin_record_ids: ["input_origin"],
   helped_record_ids: ["input_helped"],
   harmed_record_ids: ["input_harmed"],
@@ -210,11 +213,75 @@ describe("inspect command", () => {
         ["  Trigger: Fix the failing auth test"],
         ["  Origin records: input_origin"],
         ["  Evidence: Previously solved the same auth test failure."],
+        ["Scorecard:"],
+        ["- Risk: low"],
+        ["- Recommendation: Apply these hints normally, then mark helped or harmed after the task."],
+        ["- Why it matched:"],
+        ["  - Exact task-family match was found in historical experience."],
         ["Hints:"],
         ["- Run the failing auth test before editing and verify after the fix."],
         ["Evidence:"],
         ["- Bash: success: auth test now passes"],
         ["Outcome: success"]
+      ])
+    );
+  });
+
+  it("prints the most recent shadow evaluation when hints were suppressed", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+
+    const nodeRepo = new NodeRepository(db);
+    const inputRepo = new InputRecordRepository(db);
+    const injectionRepo = new InjectionRepository(db);
+    nodeRepo.upsert(makeNode({ id: "node_shadow" }));
+    inputRepo.upsert(
+      makeRecord({
+        record_id: "input_shadow",
+        session_id: "session_shadow",
+        injected_node_ids: []
+      })
+    );
+    injectionRepo.upsert({
+      injection_id: "inject_shadow",
+      session_id: "session_shadow",
+      scope_id: resolveScope("/repo").scope_id,
+      task_type: "test_debug",
+      task_summary: "Fix the failing auth test",
+      mode: "inject",
+      delivery_mode: "shadow",
+      delivered: false,
+      injected_node_ids: ["node_shadow"],
+      injection_count: 1,
+      scorecard: {
+        sessionId: "session_shadow",
+        scopeId: resolveScope("/repo").scope_id,
+        taskType: "test_debug",
+        taskSummary: "Fix the failing auth test",
+        mode: "inject",
+        riskLevel: "low",
+        recommendation: "Apply these hints normally, then mark helped or harmed after the task.",
+        reasons: ["Exact task-family match was found in historical experience."],
+        nodes: [],
+        createdAt: "2026-03-13T01:00:00.000Z"
+      },
+      was_successful: null,
+      harm_observed: null,
+      created_at: "2026-03-13T01:00:00.000Z"
+    });
+
+    runInspectCommand("--last");
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Session: session_shadow"],
+        ["Intervention: shadow"],
+        ["Injected nodes:"],
+        ["- node_shadow strategy active system_derived"],
+        ["Hints:"],
+        ["- Run the failing auth test before editing and verify after the fix."]
       ])
     );
   });
@@ -356,6 +423,8 @@ describe("inspect command", () => {
         ["Node: node_inspect"],
         ["Type: strategy"],
         ["Source: system_derived"],
+        ["Distillation mode: rule"],
+        ["Distillation source: rule"],
         ["Task type: test_debug"],
         ["State: active"],
         [`Scope: ${resolveScope("/repo").scope_id}`],
@@ -449,13 +518,20 @@ describe("inspect command", () => {
     runInspectCommand("learning");
 
     expect(consoleLogSpy.mock.calls).toEqual(
-      expect.arrayContaining([["Candidate lifecycle:"], ["Distillation jobs:"], ["Formal nodes:"], ["Runtime records:"]])
+      expect.arrayContaining([
+        ["Candidate lifecycle:"],
+        ["Distillation jobs:"],
+        ["Formal nodes:"],
+        ["Node sources:"],
+        ["Runtime records:"]
+      ])
     );
     expect(consoleTableSpy.mock.calls).toEqual(
       expect.arrayContaining([
         [expect.objectContaining({ pending: 1, distilled: 0, failed: 0, discarded: 0 })],
         [expect.objectContaining({ pending: 0, processing: 0, succeeded: 0, failed: 1, discarded: 0 })],
-        [expect.objectContaining({ active: 1, cooling: 0, retired: 0 })],
+        [expect.objectContaining({ candidate: 0, active: 1, cooling: 0, retired: 0 })],
+        [expect.objectContaining({ explicit_provider: 0, host_endpoint: 0, host_mediated: 0, rule: 1, disabled: 0 })],
         [expect.objectContaining({ taskRuns: 1, outcomes: 1, reviews: 1 })]
       ])
     );

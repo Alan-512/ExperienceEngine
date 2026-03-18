@@ -103,7 +103,7 @@ const main = async (): Promise<void> => {
         "Usage: ee <install openclaw|claude-code|codex|upgrade openclaw|claude-code|codex|repair openclaw|claude-hook|codex-mcp-server|doctor [claude-code|codex]|stats|inspect|feedback|disable|enable|cool|retire>"
         + " | helped|harmed"
         + " | backup|export|import <snapshot-path>|rollback <backup-id>"
-        + " | maintenance embeddings-reset"
+        + " | maintenance embeddings-reset|redistill-rule-nodes"
         + " | evaluate openclaw-baseline [--lookback-hours N] [--output-dir PATH]"
         + " | evaluate openclaw-scenarios --pack high-confidence [--repo-root PATH] [--output-dir PATH] [--dry-run]"
         + " | mcp-server"

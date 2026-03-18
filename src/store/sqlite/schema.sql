@@ -154,11 +154,16 @@ CREATE TABLE IF NOT EXISTS distillation_jobs (
 
 CREATE TABLE IF NOT EXISTS injection_events (
   injection_id TEXT PRIMARY KEY,
+  session_id TEXT,
   scope_id TEXT NOT NULL,
   task_type TEXT NOT NULL,
+  task_summary TEXT,
   mode TEXT NOT NULL,
+  delivery_mode TEXT NOT NULL DEFAULT 'live',
+  delivered INTEGER NOT NULL DEFAULT 1,
   injected_node_ids_json TEXT NOT NULL,
   injection_count INTEGER NOT NULL,
+  scorecard_json TEXT,
   was_successful INTEGER,
   harm_observed INTEGER,
   created_at TEXT NOT NULL,

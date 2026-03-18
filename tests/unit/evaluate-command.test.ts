@@ -42,7 +42,14 @@ describe("evaluate command", () => {
           scenariosWithReviews: 0,
           successfulRecords: 0,
           failedRecords: 0,
-          unknownRecords: 0
+          unknownRecords: 0,
+          injectedNodeSources: {
+            explicit_provider: 0,
+            host_endpoint: 0,
+            host_mediated: 0,
+            rule: 0,
+            disabled: 0
+          }
         }
       }
     }));

@@ -1,9 +1,11 @@
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
+import { buildInjectionScorecard } from "../controller/injection-scorecard.js";
 import { resolveScope } from "../input/scope-resolver.js";
 import { bootstrapDatabase, openDatabase } from "../store/sqlite/db.js";
 import { CandidateRepository } from "../store/sqlite/repositories/candidate-repo.js";
 import { DistillationJobRepository } from "../store/sqlite/repositories/distillation-job-repo.js";
 import { InputRecordRepository } from "../store/sqlite/repositories/input-record-repo.js";
+import { InjectionRepository } from "../store/sqlite/repositories/injection-repo.js";
 import { NodeRepository } from "../store/sqlite/repositories/node-repo.js";
 import { OutcomeRecordRepository } from "../store/sqlite/repositories/outcome-record-repo.js";
 import { ReviewEventRepository } from "../store/sqlite/repositories/review-event-repo.js";
@@ -11,8 +13,11 @@ import { ScopeRepository } from "../store/sqlite/repositories/scope-repo.js";
 import { TaskRunRepository } from "../store/sqlite/repositories/task-run-repo.js";
 import type {
   CandidateLifecycleState,
+  DistillationSource,
   DistillationJobState,
+  EvaluationMode,
   ExperienceInputRecord,
+  InjectionScorecard,
   ExperienceNode,
   ExperienceNodeType,
   ExperienceState,
@@ -28,6 +33,9 @@ export type ExperienceNodeSummary = {
   taskType: ExperienceNode["task_type"];
   state: ExperienceNode["state"];
   sourceKind: ExperienceNode["source_kind"];
+  distillationMode?: ExperienceNode["distillation_mode_used"];
+  distillationSource?: ExperienceNode["distillation_source"];
+  redistilledFrom?: ExperienceNode["redistilled_from"];
   triggerPattern: string;
   evidenceSummary: string;
   originRecordIds: string[];
@@ -54,11 +62,14 @@ export type ExperienceLastInspection = {
   sessionId?: string;
   scopeId: string;
   taskType: ExperienceInputRecord["task_type"];
-  intervention: "inject" | "skip";
+  intervention: "inject" | "skip" | "shadow" | "holdout";
+  deliveryMode?: EvaluationMode;
+  delivered?: boolean;
   outcome: ExperienceInputRecord["outcome_signal"];
   injectedNodes: ExperienceNodeSummary[];
   hints: string[];
   evidence: string[];
+  scorecard?: InjectionScorecard;
   summary: string;
   createdAt: string;
 };
@@ -109,6 +120,7 @@ export type ExperienceLearningSummary = {
   candidates: Record<CandidateLifecycleState, number>;
   jobs: Record<DistillationJobState, number>;
   nodes: Record<ExperienceState, number>;
+  nodeSources: Record<DistillationSource, number>;
   runtime: {
     records: number;
     taskRuns: number;
@@ -146,6 +158,9 @@ const toNodeSummary = (node: ExperienceNode): ExperienceNodeSummary => ({
   taskType: node.task_type,
   state: node.state,
   sourceKind: node.source_kind,
+  distillationMode: node.distillation_mode_used,
+  distillationSource: node.distillation_source,
+  redistilledFrom: node.redistilled_from,
   triggerPattern: node.trigger_pattern,
   evidenceSummary: node.evidence_summary,
   originRecordIds: node.origin_record_ids,
@@ -189,6 +204,7 @@ const applyNodeFeedback = (node: ExperienceNode, feedback: FeedbackValue): Exper
 
 export class ExperienceInteractionService {
   private readonly inputRepo;
+  private readonly injectionRepo;
   private readonly nodeRepo;
   private readonly candidateRepo;
   private readonly jobRepo;
@@ -201,6 +217,7 @@ export class ExperienceInteractionService {
     const db = openDatabase(config);
     bootstrapDatabase(db);
     this.inputRepo = new InputRecordRepository(db);
+    this.injectionRepo = new InjectionRepository(db);
     this.nodeRepo = new NodeRepository(db);
     this.candidateRepo = new CandidateRepository(db);
     this.jobRepo = new DistillationJobRepository(db);
@@ -216,16 +233,53 @@ export class ExperienceInteractionService {
       return undefined;
     }
 
-    const injectedNodes = this.nodeRepo.listByIds(record.injected_node_ids);
+    const injectionEvent = record.session_id
+      ? this.injectionRepo.getLatestBySessionId(record.session_id)
+      : record.injected_node_ids.length
+        ? this.injectionRepo.getLatest()
+        : undefined;
+    const selectedNodeIds = injectionEvent?.injected_node_ids?.length
+      ? injectionEvent.injected_node_ids
+      : record.injected_node_ids;
+    const injectedNodes = this.nodeRepo.listByIds(selectedNodeIds);
+    const scorecard =
+      injectionEvent?.scorecard ??
+      (selectedNodeIds.length
+        ? buildInjectionScorecard(
+            {
+              scope_id: record.scope_id,
+              task_type: record.task_type,
+              task_summary: record.task_summary,
+              tool_events: [],
+              outcome_signal: record.outcome_signal,
+              context_summary: record.context_summary,
+              injected_node_ids: selectedNodeIds
+            },
+            "inject",
+            injectedNodes,
+            record.session_id
+          )
+        : undefined);
+    const intervention =
+      selectedNodeIds.length === 0
+        ? "skip"
+        : injectionEvent && !injectionEvent.delivered
+          ? injectionEvent.delivery_mode === "holdout"
+            ? "holdout"
+            : "shadow"
+          : "inject";
     return {
       sessionId: record.session_id,
       scopeId: record.scope_id,
       taskType: record.task_type,
-      intervention: record.injected_node_ids.length ? "inject" : "skip",
+      intervention,
+      deliveryMode: injectionEvent?.delivery_mode,
+      delivered: injectionEvent?.delivered,
       outcome: record.outcome_signal,
       injectedNodes: injectedNodes.map(toNodeSummary),
       hints: injectedNodes.map((node) => node.compact_hint),
       evidence: record.evidence,
+      scorecard,
       summary: record.task_summary,
       createdAt: record.created_at
     };
@@ -267,7 +321,15 @@ export class ExperienceInteractionService {
     const candidateStates: CandidateLifecycleState[] = ["pending", "distilled", "failed", "discarded"];
     const jobStates: DistillationJobState[] = ["pending", "processing", "succeeded", "failed", "discarded"];
     const nodeStates: ExperienceState[] = ["candidate", "active", "cooling", "retired"];
+    const nodeSources: DistillationSource[] = [
+      "explicit_provider",
+      "host_endpoint",
+      "host_mediated",
+      "rule",
+      "disabled"
+    ];
     const latestRecord = this.inputRepo.getLatest();
+    const allNodes = this.nodeRepo.listAll();
 
     return {
       candidates: Object.fromEntries(
@@ -279,6 +341,12 @@ export class ExperienceInteractionService {
       nodes: Object.fromEntries(
         nodeStates.map((state) => [state, this.nodeRepo.listByState(state).length])
       ) as Record<ExperienceState, number>,
+      nodeSources: Object.fromEntries(
+        nodeSources.map((source) => [
+          source,
+          allNodes.filter((node) => (node.distillation_source ?? "disabled") === source).length
+        ])
+      ) as Record<DistillationSource, number>,
       runtime: {
         records: this.inputRepo.count(),
         taskRuns: this.taskRunRepo.count(),

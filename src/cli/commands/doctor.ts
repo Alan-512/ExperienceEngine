@@ -59,6 +59,13 @@ const logRegistryHealth = (health: RegistryHealth): void => {
 const inspectFirstValueReadiness = (): ExperienceFirstValueReadiness =>
   new ExperienceInteractionService(loadConfig()).inspectFirstValueReadiness();
 
+const logEvaluationMode = (): void => {
+  const config = loadConfig();
+  console.log("Evaluation mode:");
+  console.log(`- Mode: ${config.evaluationMode}`);
+  console.log(`- Holdout rate: ${config.holdoutRate}`);
+};
+
 const logFirstValueReadiness = (summary: ExperienceFirstValueReadiness): void => {
   console.log("First-value readiness:");
   console.log(`- Raw task records: ${summary.rawRecords}`);
@@ -120,6 +127,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     }
     logRemoteReleaseStatus("claude-code", remoteStatus);
     logRegistryHealth(registryHealth);
+    logEvaluationMode();
     logFirstValueReadiness(firstValueReadiness);
     return;
   }
@@ -154,6 +162,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     logRemoteReleaseStatus("codex", remoteStatus);
     logDistillationStatus(status.distillationStatus);
     logRegistryHealth(registryHealth);
+    logEvaluationMode();
     logFirstValueReadiness(firstValueReadiness);
     return;
   }
@@ -224,5 +233,6 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
 
   logRemoteReleaseStatus("openclaw", remoteStatus);
   logRegistryHealth(registryHealth);
+  logEvaluationMode();
   logFirstValueReadiness(firstValueReadiness);
 };

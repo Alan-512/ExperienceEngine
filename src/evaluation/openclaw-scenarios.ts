@@ -13,6 +13,7 @@ import { ReviewEventRepository } from "../store/sqlite/repositories/review-event
 import { TaskRunRepository } from "../store/sqlite/repositories/task-run-repo.js";
 import { runOpenClawBaselineEvaluation, type OpenClawBaselineSummary } from "./openclaw-baseline.js";
 import type {
+  DistillationSource,
   DistillationJob,
   ExperienceCandidate,
   ExperienceInputRecord,
@@ -71,6 +72,7 @@ export type OpenClawScenarioExecution = {
     id: string;
     state: ExperienceNode["state"];
     hint: string;
+    distillationSource?: DistillationSource;
   }>;
   runtime?: {
     taskRunId?: string;
@@ -101,6 +103,7 @@ export type OpenClawScenarioReport = {
     successfulRecords: number;
     failedRecords: number;
     unknownRecords: number;
+    injectedNodeSources: Record<DistillationSource, number>;
   };
   baseline?: OpenClawBaselineSummary;
 };
@@ -272,7 +275,8 @@ const collectScenarioExecution = (
     injectedNodes: injectedNodes.map((node) => ({
       id: node.id,
       state: node.state,
-      hint: node.compact_hint
+      hint: node.compact_hint,
+      distillationSource: node.distillation_source
     })),
     runtime: taskRun || outcomes.length > 0 || reviews.length > 0
       ? {
@@ -287,21 +291,38 @@ const collectScenarioExecution = (
 
 const aggregateScenarioResults = (
   scenarios: OpenClawScenarioExecution[]
-): OpenClawScenarioReport["aggregate"] => ({
-  total: scenarios.length,
-  recordsMatched: scenarios.filter((scenario) => scenario.record).length,
-  scenariosWithCandidates: scenarios.filter((scenario) => scenario.candidates.length > 0).length,
-  scenariosWithDistilledCandidates: scenarios.filter((scenario) =>
-    scenario.candidates.some((candidate) => candidate.lifecycle === "distilled")
-  ).length,
-  scenariosWithInjectedNodes: scenarios.filter((scenario) => scenario.injectedNodes.length > 0).length,
-  scenariosWithTaskRuns: scenarios.filter((scenario) => Boolean(scenario.runtime?.taskRunId)).length,
-  scenariosWithOutcomes: scenarios.filter((scenario) => (scenario.runtime?.outcomeIds.length ?? 0) > 0).length,
-  scenariosWithReviews: scenarios.filter((scenario) => (scenario.runtime?.reviewCount ?? 0) > 0).length,
-  successfulRecords: scenarios.filter((scenario) => scenario.record?.outcome === "success").length,
-  failedRecords: scenarios.filter((scenario) => scenario.record?.outcome === "failure").length,
-  unknownRecords: scenarios.filter((scenario) => scenario.record?.outcome === "unknown").length
-});
+): OpenClawScenarioReport["aggregate"] => {
+  const injectedNodeSources: Record<DistillationSource, number> = {
+    explicit_provider: 0,
+    host_endpoint: 0,
+    host_mediated: 0,
+    rule: 0,
+    disabled: 0
+  };
+
+  for (const scenario of scenarios) {
+    for (const node of scenario.injectedNodes) {
+      injectedNodeSources[node.distillationSource ?? "disabled"] += 1;
+    }
+  }
+
+  return {
+    total: scenarios.length,
+    recordsMatched: scenarios.filter((scenario) => scenario.record).length,
+    scenariosWithCandidates: scenarios.filter((scenario) => scenario.candidates.length > 0).length,
+    scenariosWithDistilledCandidates: scenarios.filter((scenario) =>
+      scenario.candidates.some((candidate) => candidate.lifecycle === "distilled")
+    ).length,
+    scenariosWithInjectedNodes: scenarios.filter((scenario) => scenario.injectedNodes.length > 0).length,
+    scenariosWithTaskRuns: scenarios.filter((scenario) => Boolean(scenario.runtime?.taskRunId)).length,
+    scenariosWithOutcomes: scenarios.filter((scenario) => (scenario.runtime?.outcomeIds.length ?? 0) > 0).length,
+    scenariosWithReviews: scenarios.filter((scenario) => (scenario.runtime?.reviewCount ?? 0) > 0).length,
+    successfulRecords: scenarios.filter((scenario) => scenario.record?.outcome === "success").length,
+    failedRecords: scenarios.filter((scenario) => scenario.record?.outcome === "failure").length,
+    unknownRecords: scenarios.filter((scenario) => scenario.record?.outcome === "unknown").length,
+    injectedNodeSources
+  };
+};
 
 export const renderOpenClawScenarioMarkdown = (report: OpenClawScenarioReport): string => {
   const lines = [
@@ -327,6 +348,14 @@ export const renderOpenClawScenarioMarkdown = (report: OpenClawScenarioReport): 
     `- Successful records: ${report.aggregate.successfulRecords}`,
     `- Failed records: ${report.aggregate.failedRecords}`,
     `- Unknown records: ${report.aggregate.unknownRecords}`,
+    "",
+    "## Injected Node Sources",
+    "",
+    `- explicit_provider: ${report.aggregate.injectedNodeSources.explicit_provider}`,
+    `- host_endpoint: ${report.aggregate.injectedNodeSources.host_endpoint}`,
+    `- host_mediated: ${report.aggregate.injectedNodeSources.host_mediated}`,
+    `- rule: ${report.aggregate.injectedNodeSources.rule}`,
+    `- disabled: ${report.aggregate.injectedNodeSources.disabled}`,
     "",
     "## Scenarios",
     ""

@@ -81,6 +81,11 @@ export const bootstrapDatabase = (db: DatabaseSync): void => {
   ensureColumn(db, "distillation_jobs", "started_at", "TEXT");
   ensureColumn(db, "distillation_jobs", "finished_at", "TEXT");
   ensureColumn(db, "distillation_jobs", "discarded_at", "TEXT");
+  ensureColumn(db, "injection_events", "session_id", "TEXT");
+  ensureColumn(db, "injection_events", "task_summary", "TEXT");
+  ensureColumn(db, "injection_events", "delivery_mode", "TEXT NOT NULL DEFAULT 'live'");
+  ensureColumn(db, "injection_events", "delivered", "INTEGER NOT NULL DEFAULT 1");
+  ensureColumn(db, "injection_events", "scorecard_json", "TEXT");
 };
 
 export const withTransaction = <T>(db: DatabaseSync, operation: () => T): T => {

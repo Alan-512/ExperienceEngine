@@ -112,6 +112,8 @@ const node = (overrides: Partial<ExperienceNode> = {}): ExperienceNode => ({
   success_signal: "vitest auth spec passes",
   evidence_summary: "vitest passed",
   source_kind: "system_derived",
+  distillation_mode_used: "rule",
+  distillation_source: "rule",
   origin_record_ids: ["record_1"],
   helped_record_ids: ["record_1"],
   harmed_record_ids: [],
@@ -184,6 +186,7 @@ describe("OpenClaw baseline evaluation", () => {
     expect(summary.candidates.distillationSuccessRate).toBe(1);
     expect(summary.distillationJobs.succeeded).toBe(1);
     expect(summary.nodes.active).toBe(1);
+    expect(summary.nodes.bySource.rule).toBe(1);
     expect(summary.nodes.totalHelpedCount).toBe(1);
     expect(summary.runtime.taskRuns).toBe(1);
     expect(summary.runtime.outcomes).toBe(1);
@@ -191,6 +194,7 @@ describe("OpenClaw baseline evaluation", () => {
     expect(summary.latest.recordId).toBe("record_1");
     expect(summary.latest.candidateId).toBe("candidate_1");
     expect(summary.latest.nodeId).toBe("node_1");
+    expect(summary.latest.nodeDistillationSource).toBe("rule");
     expect(summary.latest.taskRunId).toBe("taskrun_1");
     expect(summary.latest.outcomeId).toBe("outcome_1");
     expect(summary.latest.reviewEventId).toBe("review_1");
@@ -208,6 +212,7 @@ describe("OpenClaw baseline evaluation", () => {
     expect(markdown).toContain("# OpenClaw Baseline Snapshot");
     expect(markdown).toContain("- Total: 1");
     expect(markdown).toContain("- Adapter: openclaw");
+    expect(markdown).toContain("## Node Sources");
     expect(markdown).toContain("## Runtime Records");
   });
 });

@@ -215,7 +215,9 @@ describe("Claude hook capture", () => {
     );
 
     expect(result.hookOutput).toBeTruthy();
-    expect(result.notice).toBe("[ExperienceEngine] Injected 1 strategy hint for this task.");
+    expect(result.notice).toBe(
+      "[ExperienceEngine] Injected 1 strategy hint for this task (risk: high). Run ee inspect --last to review why it matched."
+    );
     expect(JSON.parse(result.hookOutput ?? "{}")).toEqual({
       hookSpecificOutput: {
         hookEventName: "UserPromptSubmit",

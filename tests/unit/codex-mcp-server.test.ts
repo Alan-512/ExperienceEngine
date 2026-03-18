@@ -143,8 +143,55 @@ describe("Codex MCP behavior loop", () => {
 
     expect(result.mode).toBe("inject_conservative");
     expect(result.text).toContain("Run the failing auth test before editing and verify after the fix.");
-    expect(result.notice).toBe("[ExperienceEngine] Injected 1 strategy hint for this task.");
+    expect(result.notice).toBe(
+      "[ExperienceEngine] Injected 1 strategy hint for this task (risk: high). Run ee inspect --last to review why it matched."
+    );
     expect(result.injectedNodeIds).toEqual(["node_codex_prompt_injection"]);
+    expect(result.scorecard).toMatchObject({
+      riskLevel: "high",
+      nodes: [
+        expect.objectContaining({
+          id: "node_codex_prompt_injection",
+          riskLevel: "high"
+        })
+      ]
+    });
+  });
+
+  it("returns shadow evaluation metadata when delivery is suppressed", async () => {
+    const homeDir = makeTempDir();
+    const env = {
+      EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine"),
+      EXPERIENCE_ENGINE_EVALUATION_MODE: "shadow"
+    };
+    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME }, { env });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_codex_shadow");
+
+    const loop = createCodexBehaviorLoop({ homeDir, env });
+    const result = await loop.lookupHints({
+      cwd: "/repo",
+      prompt: "Fix the failing auth test",
+      sessionId: "codex-session-shadow"
+    });
+
+    expect(result.mode).toBe("skip");
+    expect(result.text).toBeUndefined();
+    expect(result.notice).toBeUndefined();
+    expect(result.injectedNodeIds).toEqual([]);
+    expect(result.deliveryMode).toBe("shadow");
+    expect(result.delivered).toBe(false);
+    expect(result.scorecard).toMatchObject({
+      mode: "inject",
+      riskLevel: "low",
+      nodes: [
+        expect.objectContaining({
+          id: "node_codex_shadow"
+        })
+      ]
+    });
   });
 
   it("records a successful tool result and finalizes helped feedback", async () => {
@@ -290,6 +337,14 @@ describe("Codex MCP behavior loop", () => {
     expect(last?.sessionId).toBe("codex-surface-view");
     expect(last?.intervention).toBe("inject");
     expect(last?.injectedNodes[0]?.sourceKind).toBe("system_derived");
+    expect(last?.scorecard).toMatchObject({
+      riskLevel: "low",
+      nodes: [
+        expect.objectContaining({
+          id: "node_codex_surface_view"
+        })
+      ]
+    });
     expect(recent).toHaveLength(1);
     expect(activeNodes.map((entry) => entry.id)).toContain("node_codex_surface_view");
     expect(node?.id).toBe("node_codex_surface_view");
@@ -345,7 +400,10 @@ describe("Codex MCP behavior loop", () => {
 
     expect(JSON.parse((lastPayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({
       sessionId: "codex-resource-view",
-      intervention: "inject"
+      intervention: "inject",
+      scorecard: expect.objectContaining({
+        riskLevel: "low"
+      })
     });
     expect(JSON.parse((recentPayload as { contents: Array<{ text: string }> }).contents[0].text)).toHaveLength(1);
     expect(JSON.parse((learningPayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({

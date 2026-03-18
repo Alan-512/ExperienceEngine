@@ -4,6 +4,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { loadConfig } from "../config/load-config.js";
 import { resolveExperienceEnginePaths } from "../config/path-resolver.js";
 import { openDatabase } from "../store/sqlite/db.js";
+import type { DistillationSource } from "../types/domain.js";
 
 type CountRow = { value: string | null; count: number };
 
@@ -52,6 +53,7 @@ export type OpenClawBaselineSummary = {
     cooling: number;
     retired: number;
     candidateState: number;
+    bySource: Record<DistillationSource, number>;
     withHelpedFeedback: number;
     withHarmedFeedback: number;
     totalHelpedCount: number;
@@ -71,6 +73,7 @@ export type OpenClawBaselineSummary = {
     candidateLifecycle?: string;
     nodeId?: string;
     nodeState?: string;
+    nodeDistillationSource?: DistillationSource;
     taskRunId?: string;
     taskRunFinalStatus?: string;
     outcomeId?: string;
@@ -153,7 +156,7 @@ const getLatestSnapshot = (db: DatabaseSync): OpenClawBaselineSummary["latest"] 
 
   const latestNode = db
     .prepare(
-      `SELECT id, state
+      `SELECT id, state, distillation_source
        FROM experience_nodes
        ORDER BY updated_at DESC
        LIMIT 1`
@@ -162,6 +165,7 @@ const getLatestSnapshot = (db: DatabaseSync): OpenClawBaselineSummary["latest"] 
     | {
         id: string;
         state: string;
+        distillation_source: string | null;
       }
     | undefined;
 
@@ -216,6 +220,7 @@ const getLatestSnapshot = (db: DatabaseSync): OpenClawBaselineSummary["latest"] 
     candidateLifecycle: latestCandidate?.lifecycle_state,
     nodeId: latestNode?.id,
     nodeState: latestNode?.state,
+    nodeDistillationSource: (latestNode?.distillation_source as DistillationSource | null) ?? undefined,
     taskRunId: latestTaskRun?.id,
     taskRunFinalStatus: latestTaskRun?.final_status,
     outcomeId: latestOutcome?.id,
@@ -262,6 +267,7 @@ export const collectOpenClawBaselineSummary = (
 
   const nodeTotal = getCount(db, "experience_nodes", nodeFilter);
   const nodeStates = getDistribution(db, "experience_nodes", "state", nodeFilter);
+  const nodeSources = getDistribution(db, "experience_nodes", "distillation_source", nodeFilter);
   const nodeFeedbackStats = db
     .prepare(
       `SELECT
@@ -326,6 +332,13 @@ export const collectOpenClawBaselineSummary = (
       cooling: nodeStates.cooling ?? 0,
       retired: nodeStates.retired ?? 0,
       candidateState: nodeStates.candidate ?? 0,
+      bySource: {
+        explicit_provider: nodeSources.explicit_provider ?? 0,
+        host_endpoint: nodeSources.host_endpoint ?? 0,
+        host_mediated: nodeSources.host_mediated ?? 0,
+        rule: nodeSources.rule ?? 0,
+        disabled: nodeSources.disabled ?? 0
+      },
       withHelpedFeedback: nodeFeedbackStats.with_helped_feedback ?? 0,
       withHarmedFeedback: nodeFeedbackStats.with_harmed_feedback ?? 0,
       totalHelpedCount: nodeFeedbackStats.total_helped_count ?? 0,
@@ -399,6 +412,14 @@ export const renderOpenClawBaselineMarkdown = (
 - Total helped count: ${summary.nodes.totalHelpedCount}
 - Total harmed count: ${summary.nodes.totalHarmedCount}
 
+## Node Sources
+
+- explicit_provider: ${summary.nodes.bySource.explicit_provider}
+- host_endpoint: ${summary.nodes.bySource.host_endpoint}
+- host_mediated: ${summary.nodes.bySource.host_mediated}
+- rule: ${summary.nodes.bySource.rule}
+- disabled: ${summary.nodes.bySource.disabled}
+
 ## Runtime Records
 
 - Task runs: ${summary.runtime.taskRuns}
@@ -415,6 +436,7 @@ export const renderOpenClawBaselineMarkdown = (
 - Candidate lifecycle: ${summary.latest.candidateLifecycle ?? "n/a"}
 - Node id: ${summary.latest.nodeId ?? "n/a"}
 - Node state: ${summary.latest.nodeState ?? "n/a"}
+- Node distillation source: ${summary.latest.nodeDistillationSource ?? "n/a"}
 - Task run id: ${summary.latest.taskRunId ?? "n/a"}
 - Task run final status: ${summary.latest.taskRunFinalStatus ?? "n/a"}
 - Outcome id: ${summary.latest.outcomeId ?? "n/a"}

@@ -3,10 +3,22 @@ import { runDoctorCommand } from "../../src/cli/commands/doctor.js";
 
 const consoleTableSpy = vi.spyOn(console, "table").mockImplementation(() => {});
 const consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+const originalEvaluationMode = process.env.EXPERIENCE_ENGINE_EVALUATION_MODE;
+const originalHoldoutRate = process.env.EXPERIENCE_ENGINE_HOLDOUT_RATE;
 
 afterEach(() => {
   consoleTableSpy.mockClear();
   consoleLogSpy.mockClear();
+  if (originalEvaluationMode === undefined) {
+    delete process.env.EXPERIENCE_ENGINE_EVALUATION_MODE;
+  } else {
+    process.env.EXPERIENCE_ENGINE_EVALUATION_MODE = originalEvaluationMode;
+  }
+  if (originalHoldoutRate === undefined) {
+    delete process.env.EXPERIENCE_ENGINE_HOLDOUT_RATE;
+  } else {
+    process.env.EXPERIENCE_ENGINE_HOLDOUT_RATE = originalHoldoutRate;
+  }
 });
 
 const codexStatus = (overrides: Record<string, unknown> = {}) =>
@@ -215,6 +227,39 @@ describe("doctor command", () => {
         ["- Source: rule"],
         ["- Host LLM mode: disabled"],
         ["- Reason: Codex does not expose a reusable provider endpoint in the current configuration."]
+      ])
+    );
+  });
+
+  it("prints the current evaluation mode and holdout rate", async () => {
+    process.env.EXPERIENCE_ENGINE_EVALUATION_MODE = "holdout";
+    process.env.EXPERIENCE_ENGINE_HOLDOUT_RATE = "0.5";
+
+    await runDoctorCommand("codex", {
+      inspectCodexInstall: () => codexStatus(),
+      fetchLatestGitHubReleaseStatus: async () => ({
+        source: "github-releases",
+        repository: "Alan-512/ExperienceEngine",
+        latestVersion: "0.1.0",
+        releaseUrl: null,
+        publishedAt: "2026-03-12T12:00:00Z",
+        state: "current",
+        updateAvailable: false
+      }),
+      inspectFirstValueReadiness: () => ({
+        rawRecords: 1,
+        taskRuns: 1,
+        candidates: 0,
+        nodes: 0,
+        nextStep: "Keep working in the same repo."
+      })
+    });
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Evaluation mode:"],
+        ["- Mode: holdout"],
+        ["- Holdout rate: 0.5"]
       ])
     );
   });

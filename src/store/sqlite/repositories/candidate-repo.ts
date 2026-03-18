@@ -199,4 +199,11 @@ export class CandidateRepository {
       .all(sourceRecordId)
       .map((row) => this.mapCandidate(row as CandidateRow));
   }
+
+  listByDistilledNodeId(distilledNodeId: string): ExperienceCandidate[] {
+    return this.db
+      .prepare("SELECT * FROM experience_candidates WHERE distilled_node_id = ? ORDER BY updated_at DESC")
+      .all(distilledNodeId)
+      .map((row) => this.mapCandidate(row as CandidateRow));
+  }
 }

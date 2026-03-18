@@ -30,6 +30,13 @@ export const loadConfig = (
     sqlitePath: paths.sqlitePath,
     logLevel: env.EXPERIENCE_ENGINE_LOG_LEVEL ?? overrides.logLevel ?? defaultConfig.logLevel,
     noticesInline,
+    evaluationMode:
+      (env.EXPERIENCE_ENGINE_EVALUATION_MODE as ExperienceEngineConfig["evaluationMode"] | undefined) ??
+      overrides.evaluationMode ??
+      defaultConfig.evaluationMode,
+    holdoutRate: env.EXPERIENCE_ENGINE_HOLDOUT_RATE
+      ? Number(env.EXPERIENCE_ENGINE_HOLDOUT_RATE)
+      : overrides.holdoutRate ?? defaultConfig.holdoutRate,
     captureRawPayloads,
     captureDir: paths.captureDir,
     maxHints: env.EXPERIENCE_ENGINE_MAX_HINTS
