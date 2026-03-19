@@ -130,4 +130,23 @@ describe("pack CLI command", () => {
       })
     ]);
   });
+
+  it("compiles a published pack into AGENTS.md-style output", () => {
+    const homeDir = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(homeDir, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+
+    nodeRepo.upsert(makeNode());
+    runPackCommand(["draft", "create", "auth-debug-pack", "node_auth_strategy", "Auth", "Debug", "Pack"]);
+    runPackCommand(["review", "auth-debug-pack", "Reviewed", "auth", "debugging", "pack"]);
+    runPackCommand(["publish", "auth-debug-pack"]);
+    runPackCommand(["compile", "auth-debug-pack"]);
+
+    const output = consoleLogSpy.mock.calls.flat().join("\n");
+    expect(output).toContain("Compiled experience pack auth-debug-pack");
+    expect(output).toContain("AGENTS.md:");
+    expect(output).toContain("compile-report.json:");
+  });
 });

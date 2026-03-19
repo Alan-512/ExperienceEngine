@@ -1,4 +1,5 @@
 import { loadConfig } from "../../config/load-config.js";
+import { compilePackToAgents } from "../../compiler/compiler.js";
 import { resolveExperienceEnginePaths } from "../../config/path-resolver.js";
 import { ExperiencePackRegistry } from "../../packs/fs-registry.js";
 import { ExperiencePackIndexSync } from "../../packs/index-sync.js";
@@ -12,7 +13,7 @@ const ALL_HOSTS = ["openclaw", "claude-code", "codex"] as const;
 
 const usage = (): void => {
   console.log(
-    "Usage: ee pack <list|inspect <pack-id>|draft create <pack-id> <node-id[,node-id...]> [name...]|review <pack-id> <description...>|publish <pack-id>|rollback <pack-id> <version>>"
+    "Usage: ee pack <list|inspect <pack-id>|draft create <pack-id> <node-id[,node-id...]> [name...]|review <pack-id> <description...>|publish <pack-id>|compile <pack-id> [version]|rollback <pack-id> <version>>"
   );
 };
 
@@ -156,6 +157,26 @@ export const runPackCommand = (args: string[]): void => {
     registry.publishPack(packId);
     indexSync.syncPack(packId);
     console.log(`[ExperienceEngine] Published experience pack ${packId}.`);
+    return;
+  }
+
+  if (action === "compile") {
+    const packId = rest[0];
+    const version = rest[1];
+    if (!packId) {
+      usage();
+      return;
+    }
+
+    const paths = resolveExperienceEnginePaths();
+    const result = compilePackToAgents({
+      packsDir: paths.packsDir,
+      packId,
+      version
+    });
+    console.log(`[ExperienceEngine] Compiled experience pack ${packId}.`);
+    console.log(`AGENTS.md: ${result.outputPath}`);
+    console.log(`compile-report.json: ${result.reportPath}`);
     return;
   }
 
