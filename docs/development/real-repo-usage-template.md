@@ -148,6 +148,10 @@ Current targets:
 - `claude` -> `CLAUDE.md`
 - `github` -> GitHub agent profile markdown
 
+If you are unsure which target to use, see:
+
+- [docs/development/compiler-target-selection-guide.md](compiler-target-selection-guide.md)
+
 ### 7. Check Deploy Status Before Writing
 
 Inspect the destination first:
