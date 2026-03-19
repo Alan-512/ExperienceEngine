@@ -12,6 +12,7 @@ export type DeployCompiledPackInput = {
   repoPath: string;
   dryRun?: boolean;
   force?: boolean;
+  statusOnly?: boolean;
 };
 
 export type DeployCompiledPackResult = {
@@ -21,6 +22,7 @@ export type DeployCompiledPackResult = {
   dryRun: boolean;
   overwritten: boolean;
   deploymentStatus: "missing" | "up_to_date" | "drifted";
+  statusOnly: boolean;
 };
 
 const resolveDestinationPath = (
@@ -74,7 +76,7 @@ export const deployCompiledPack = (input: DeployCompiledPackInput): DeployCompil
     throw new Error(`Destination differs from compiled artifact: ${destinationPath}`);
   }
 
-  if (!input.dryRun && deploymentStatus !== "up_to_date") {
+  if (!input.dryRun && !input.statusOnly && deploymentStatus !== "up_to_date") {
     mkdirSync(dirname(destinationPath), { recursive: true });
     copyFileSync(compileResult.outputPath, destinationPath);
   }
@@ -85,6 +87,7 @@ export const deployCompiledPack = (input: DeployCompiledPackInput): DeployCompil
     sourcePath: compileResult.outputPath,
     dryRun: input.dryRun ?? false,
     overwritten,
-    deploymentStatus
+    deploymentStatus,
+    statusOnly: input.statusOnly ?? false
   };
 };

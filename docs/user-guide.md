@@ -130,7 +130,7 @@ ee pack publish <pack-id>
 ee pack compile <pack-id> [version]
 ee pack compile <pack-id> [version] codex
 ee pack compile <pack-id> [version] github
-ee pack deploy <pack-id> [version] [agents|codex|github] [repo-path] [--dry-run] [--force]
+ee pack deploy <pack-id> [version] [agents|codex|github] [repo-path] [--dry-run] [--force] [--status-only]
 ee pack rollback <pack-id> <version>
 ```
 
@@ -155,6 +155,7 @@ ee pack compile auth-debug-pack github
 ee pack deploy auth-debug-pack agents /path/to/repo --dry-run
 ee pack deploy auth-debug-pack codex /path/to/repo
 ee pack deploy github-pack github /path/to/repo --force
+ee pack deploy auth-debug-pack agents /path/to/repo --status-only
 ```
 
 Default output location:
@@ -176,7 +177,7 @@ Deploying compiled artifacts:
 - `codex` target writes to `<repo>/CODEX.md`
 - `github` target writes to `<repo>/.github/agents/<pack-id>.md`
 
-Use `--dry-run` to preview the destination without writing files. Existing files are protected by default; use `--force` only when you intentionally want to overwrite the destination.
+Use `--dry-run` to preview the destination without writing files. Existing files are protected by default; use `--force` only when you intentionally want to overwrite the destination. Use `--status-only` to inspect whether the destination is `missing`, `up_to_date`, or `drifted` without writing anything.
 
 Compiler visibility is also exposed through:
 

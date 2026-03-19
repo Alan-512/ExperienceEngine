@@ -292,4 +292,32 @@ describe("pack CLI command", () => {
     expect(output).toContain("Status: up_to_date");
     expect(output).toContain("Overwrote existing file: false");
   });
+
+  it("supports deploy status-only checks without writing files", () => {
+    const homeDir = makeTempDir();
+    const targetRepo = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(homeDir, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+
+    nodeRepo.upsert(makeNode());
+    runPackCommand(["draft", "create", "deploy-pack", "node_auth_strategy", "Deploy", "Pack"]);
+    runPackCommand(["review", "deploy-pack", "Reviewed", "deploy", "pack"]);
+    runPackCommand(["publish", "deploy-pack"]);
+
+    runPackCommand(["deploy", "deploy-pack", "agents", targetRepo, "--status-only"]);
+    let output = consoleLogSpy.mock.calls.flat().join("\n");
+    expect(output).toContain("Status: missing");
+    expect(output).toContain("Status only: true");
+    expect(existsSync(join(targetRepo, "AGENTS.md"))).toBe(false);
+
+    consoleLogSpy.mockClear();
+    runPackCommand(["deploy", "deploy-pack", "agents", targetRepo]);
+    consoleLogSpy.mockClear();
+    runPackCommand(["deploy", "deploy-pack", "agents", targetRepo, "--status-only"]);
+    output = consoleLogSpy.mock.calls.flat().join("\n");
+    expect(output).toContain("Status: up_to_date");
+    expect(output).toContain("Status only: true");
+  });
 });
