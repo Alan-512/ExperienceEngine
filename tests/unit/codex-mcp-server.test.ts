@@ -1117,6 +1117,7 @@ describe("Codex MCP behavior loop", () => {
 
   it("registers MCP prompts for review and control workflows", async () => {
     const server = createCodexMcpServer();
+    const reviewCapabilitiesPrompt = getRegisteredPrompt(server, "experienceengine_review_capabilities");
     const showLastPrompt = getRegisteredPrompt(server, "experienceengine_show_last_intervention");
     const recentPrompt = getRegisteredPrompt(server, "experienceengine_review_recent_injected");
     const pausePrompt = getRegisteredPrompt(server, "experienceengine_pause_current_project");
@@ -1126,6 +1127,9 @@ describe("Codex MCP behavior loop", () => {
     const preparePackRollbackPrompt = getRegisteredPrompt(server, "experienceengine_prepare_pack_rollback");
     const preparePackDeployPrompt = getRegisteredPrompt(server, "experienceengine_prepare_pack_deploy");
 
+    const reviewCapabilities = (await reviewCapabilitiesPrompt.callback({})) as {
+      messages: Array<{ role: string; content: { type: string; text?: string; uri?: string } }>;
+    };
     const showLast = (await showLastPrompt.callback({})) as {
       messages: Array<{ role: string; content: { type: string; text?: string; uri?: string } }>;
     };
@@ -1163,6 +1167,8 @@ describe("Codex MCP behavior loop", () => {
     })) as {
       messages: Array<{ role: string; content: { type: string; text?: string } }>;
     };
+    expect(reviewCapabilities.messages[0].content.text).toContain("experienceengine://capabilities");
+    expect(reviewCapabilities.messages[0].content.text).toContain("direct low-risk tools");
     expect(showLast.messages[0].content.text).toContain("Summarize whether guidance was injected");
     expect(showLast.messages[1].content).toMatchObject({
       type: "resource_link",
@@ -1197,11 +1203,17 @@ describe("Codex MCP behavior loop", () => {
       );
 
     const server = createCodexMcpServer({ fetchImpl });
+    const capabilitiesResource = getRegisteredResource(server, "experienceengine://capabilities");
     const doctorResource = getRegisteredResourceTemplate(server, "experienceengine_doctor");
     const updateResource = getRegisteredResourceTemplate(server, "experienceengine_updates_latest");
+    const capabilitiesTool = getRegisteredTool(server, "experienceengine_get_capabilities");
     const doctorTool = getRegisteredTool(server, "experienceengine_doctor");
     const updateTool = getRegisteredTool(server, "experienceengine_check_update");
 
+    const capabilitiesPayload = await capabilitiesResource.readCallback(
+      new URL("experienceengine://capabilities"),
+      {}
+    );
     const doctorPayload = await doctorResource.readCallback(
       new URL("experienceengine://doctor/codex"),
       { adapter: "codex" },
@@ -1212,6 +1224,13 @@ describe("Codex MCP behavior loop", () => {
       { adapter: "codex" },
       {}
     );
+    const capabilitiesToolPayload = parseTextPayload<{
+      model: string;
+      compiler: { targets: string[] };
+      packs: { directTools: string[] };
+    }>((await capabilitiesTool.handler({})) as {
+      content: Array<{ type: string; text?: string }>;
+    });
     const doctorToolPayload = parseTextPayload<{ adapter: string }>(
       (await doctorTool.handler({ adapter: "codex" })) as {
         content: Array<{ type: string; text?: string }>;
@@ -1223,6 +1242,18 @@ describe("Codex MCP behavior loop", () => {
       }
     );
 
+    expect(JSON.parse((capabilitiesPayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({
+      model: "agent-first",
+      compiler: {
+        targets: ["agents", "codex", "github", "claude"]
+      }
+    });
+    expect(capabilitiesToolPayload).toMatchObject({
+      model: "agent-first",
+      packs: {
+        directTools: expect.arrayContaining(["experienceengine_pack_list", "experienceengine_pack_status"])
+      }
+    });
     expect(JSON.parse((doctorPayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({
       adapter: "codex"
     });

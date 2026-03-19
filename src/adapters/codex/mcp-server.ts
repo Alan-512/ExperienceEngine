@@ -67,6 +67,58 @@ const EXPERIENCE_ADAPTERS = ["openclaw", "claude-code", "codex"] as const;
 const HIGH_IMPACT_OPERATIONS = ["install", "repair", "upgrade"] as const satisfies readonly HighImpactOperation[];
 const COMPILER_TARGETS = ["agents", "codex", "github", "claude"] as const satisfies readonly CompilerTarget[];
 
+const buildExperienceCapabilities = () => ({
+  model: "agent-first",
+  principles: [
+    "Users should talk to the host agent instead of memorizing ee CLI commands.",
+    "Low-risk read and preview operations should be direct MCP tools.",
+    "High-risk write operations should use plan -> review -> confirm flows."
+  ],
+  packs: {
+    directTools: [
+      "experienceengine_pack_list",
+      "experienceengine_pack_inspect",
+      "experienceengine_pack_status",
+      "experienceengine_pack_enable",
+      "experienceengine_pack_disable"
+    ],
+    guardedTools: [
+      "experienceengine_plan_pack_publish",
+      "experienceengine_plan_pack_rollback",
+      "experienceengine_execute_planned_pack_operation"
+    ]
+  },
+  compiler: {
+    directTools: [
+      "experienceengine_pack_compile",
+      "experienceengine_pack_deploy_preview"
+    ],
+    guardedTools: [
+      "experienceengine_plan_pack_deploy",
+      "experienceengine_execute_planned_pack_operation"
+    ],
+    targets: [...COMPILER_TARGETS]
+  },
+  prompts: [
+    "experienceengine_review_pack_status",
+    "experienceengine_prepare_pack_publish",
+    "experienceengine_prepare_pack_rollback",
+    "experienceengine_prepare_pack_deploy"
+  ],
+  resources: [
+    "experienceengine://capabilities",
+    "experienceengine://packs",
+    "experienceengine://pack/{id}",
+    "experienceengine://last",
+    "experienceengine://learning/summary"
+  ],
+  cliFallbacks: [
+    "install / repair / upgrade",
+    "backup / export / import / rollback",
+    "maintenance commands"
+  ]
+});
+
 const createCodexRuntime = (options: CodexServerOptions = {}): ExperienceRuntimeService => {
   const paths = resolveExperienceEnginePaths({
     adapter: "codex",
@@ -516,6 +568,17 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
   );
 
   server.registerResource(
+    "experienceengine_capabilities",
+    "experienceengine://capabilities",
+    {
+      title: "ExperienceEngine Capabilities",
+      description: "Agent-first overview of ExperienceEngine MCP tools, guarded flows, prompts, and fallback boundaries.",
+      mimeType: "application/json"
+    },
+    async (uri) => toJsonResourceResult(uri.toString(), buildExperienceCapabilities())
+  );
+
+  server.registerResource(
     "experienceengine_packs",
     "experienceengine://packs",
     {
@@ -618,6 +681,26 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
           nodeType: parseNodeType(String(variables.type))
         })
       )
+  );
+
+  server.registerPrompt(
+    "experienceengine_review_capabilities",
+    {
+      title: "ExperienceEngine Review Capabilities",
+      description: "Guide the host agent to review ExperienceEngine's agent-first MCP surface before operating packs or compiler targets."
+    },
+    async () => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text:
+              "First read the experienceengine://capabilities resource. Then summarize which ExperienceEngine operations are direct low-risk tools, which require confirmation, and which CLI fallbacks remain outside the normal host-agent flow."
+          }
+        }
+      ]
+    })
   );
 
   server.registerPrompt(
@@ -1280,6 +1363,20 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
       toStructuredToolResult(
         await interactionSurface.deployPackPreview({ packId, version, target, repoPath })
       )
+  );
+
+  server.registerTool(
+    "experienceengine_get_capabilities",
+    {
+      title: "ExperienceEngine Capabilities",
+      description: "Read the current ExperienceEngine MCP capabilities, including direct tools, guarded flows, prompts, and CLI-only fallbacks.",
+      inputSchema: z.object({}),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false
+      }
+    },
+    async () => toStructuredToolResult(buildExperienceCapabilities())
   );
 
   server.registerTool(
