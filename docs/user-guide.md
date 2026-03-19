@@ -124,6 +124,7 @@ Current CLI surface:
 ```bash
 ee pack list
 ee pack inspect <pack-id>
+ee pack status <pack-id> [version] [agents|codex|github] [repo-path]
 ee pack draft create <pack-id> <node-id[,node-id...]> [name...]
 ee pack review <pack-id> <description...>
 ee pack publish <pack-id>
@@ -156,6 +157,7 @@ ee pack deploy auth-debug-pack agents /path/to/repo --dry-run
 ee pack deploy auth-debug-pack codex /path/to/repo
 ee pack deploy github-pack github /path/to/repo --force
 ee pack deploy auth-debug-pack agents /path/to/repo --status-only
+ee pack status auth-debug-pack agents /path/to/repo
 ```
 
 Default output location:
@@ -178,6 +180,12 @@ Deploying compiled artifacts:
 - `github` target writes to `<repo>/.github/agents/<pack-id>.md`
 
 Use `--dry-run` to preview the destination without writing files. Existing files are protected by default; use `--force` only when you intentionally want to overwrite the destination. Use `--status-only` to inspect whether the destination is `missing`, `up_to_date`, or `drifted` without writing anything.
+
+If you only want the deployment state without invoking the deploy command shape, use:
+
+```bash
+ee pack status <pack-id> [version] [agents|codex|github] [repo-path]
+```
 
 Compiler visibility is also exposed through:
 

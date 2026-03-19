@@ -15,7 +15,7 @@ const ALL_HOSTS = ["openclaw", "claude-code", "codex"] as const;
 
 const usage = (): void => {
   console.log(
-    "Usage: ee pack <list|inspect <pack-id>|draft create <pack-id> <node-id[,node-id...]> [name...]|review <pack-id> <description...>|publish <pack-id>|compile <pack-id> [version] [agents|codex|github]|deploy <pack-id> [version] [agents|codex|github] [repo-path] [--dry-run] [--force] [--status-only]|rollback <pack-id> <version>>"
+    "Usage: ee pack <list|inspect <pack-id>|status <pack-id> [version] [agents|codex|github] [repo-path]|draft create <pack-id> <node-id[,node-id...]> [name...]|review <pack-id> <description...>|publish <pack-id>|compile <pack-id> [version] [agents|codex|github]|deploy <pack-id> [version] [agents|codex|github] [repo-path] [--dry-run] [--force] [--status-only]|rollback <pack-id> <version>>"
   );
 };
 
@@ -207,6 +207,38 @@ export const runPackCommand = (args: string[]): void => {
     console.log(`[ExperienceEngine] Compiled experience pack ${packId}.`);
     console.log(`${basename(result.outputPath)}: ${result.outputPath}`);
     console.log(`compile-report.json: ${result.reportPath}`);
+    return;
+  }
+
+  if (action === "status") {
+    const compileTarget = (value: string | undefined): "agents" | "codex" | "github" | undefined =>
+      value === "agents" || value === "codex" || value === "github" ? value : undefined;
+    const packId = rest[0];
+    const arg2Target = compileTarget(rest[1]);
+    const arg3Target = compileTarget(rest[2]);
+    const version = arg2Target ? undefined : rest[1];
+    const target = arg2Target ?? arg3Target ?? "agents";
+    const repoPath = rest[arg2Target ? 2 : arg3Target ? 3 : version ? 2 : 1] ?? process.cwd();
+    if (!packId) {
+      usage();
+      return;
+    }
+
+    const paths = resolveExperienceEnginePaths();
+    const result = deployCompiledPack({
+      packsDir: paths.packsDir,
+      packId,
+      version,
+      target,
+      repoPath,
+      statusOnly: true
+    });
+    console.log(`Pack status: ${packId}`);
+    console.log(`Target: ${result.target}`);
+    console.log(`Source: ${result.sourcePath}`);
+    console.log(`Destination: ${result.destinationPath}`);
+    console.log(`Status: ${result.deploymentStatus}`);
+    console.log(`Status only: ${result.statusOnly}`);
     return;
   }
 
