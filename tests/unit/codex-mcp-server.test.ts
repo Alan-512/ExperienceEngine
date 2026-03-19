@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -956,6 +956,67 @@ describe("Codex MCP behavior loop", () => {
     });
   });
 
+  it("registers plan-and-confirm MCP tools for pack deploy", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    seedPack(homeDir, db, nodeRepo, "/repo", nowIso(), "pack_deploy_plan", "node_deploy_plan");
+
+    const server = createCodexMcpServer({ homeDir, env });
+    const planDeployTool = getRegisteredTool(server, "experienceengine_plan_pack_deploy");
+    const executeTool = getRegisteredTool(server, "experienceengine_execute_planned_pack_operation");
+    const repoPath = join(homeDir, "target-repo");
+
+    const deployPlan = parseTextPayload<{
+      planId: string;
+      confirmationToken: string;
+      commandHint: string;
+      summary: string;
+    }>(
+      (await planDeployTool.handler({
+        packId: "pack_deploy_plan",
+        target: "codex",
+        repoPath
+      })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+
+    expect(deployPlan.commandHint).toContain("pack deploy pack_deploy_plan");
+    expect(deployPlan.summary).toContain("Deploy Experience Pack");
+
+    const deployExecution = parseTextPayload<{
+      status: string;
+      operation: string;
+      result: {
+        target: string;
+        destinationPath: string;
+        deploymentStatus: string;
+      };
+    }>(
+      (await executeTool.handler({
+        planId: deployPlan.planId,
+        confirmationToken: deployPlan.confirmationToken
+      })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+
+    expect(deployExecution).toMatchObject({
+      status: "executed",
+      operation: "deploy",
+      result: {
+        target: "codex",
+        destinationPath: join(repoPath, "CODEX.md"),
+        deploymentStatus: "missing"
+      }
+    });
+    expect(existsSync(join(repoPath, "CODEX.md"))).toBe(true);
+  });
+
   it("registers low-risk MCP tools for feedback and scope toggles", async () => {
     const homeDir = makeTempDir();
     const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
@@ -1120,8 +1181,8 @@ describe("Codex MCP behavior loop", () => {
     expect(preparePackPublish.messages[0].content.text).toContain("experienceengine_execute_planned_pack_operation");
     expect(preparePackRollback.messages[0].content.text).toContain("experienceengine_plan_pack_rollback");
     expect(preparePackRollback.messages[0].content.text).toContain("v1");
-    expect(preparePackDeploy.messages[0].content.text).toContain("experienceengine_pack_status");
-    expect(preparePackDeploy.messages[0].content.text).toContain("experienceengine_pack_deploy_preview");
+    expect(preparePackDeploy.messages[0].content.text).toContain("experienceengine_plan_pack_deploy");
+    expect(preparePackDeploy.messages[0].content.text).toContain("experienceengine_execute_planned_pack_operation");
   });
 
   it("registers operational MCP resources and read-only tools", async () => {

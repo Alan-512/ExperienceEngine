@@ -762,7 +762,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
     "experienceengine_prepare_pack_deploy",
     {
       title: "ExperienceEngine Prepare Pack Deploy",
-      description: "Guide the agent through a low-risk pack deploy review before any file-writing action.",
+      description: "Guide the agent through the confirmation flow for deploying a compiled Experience Pack into a repository.",
       argsSchema: {
         packId: z.string().min(1),
         target: z.enum(COMPILER_TARGETS),
@@ -776,7 +776,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
           content: {
             type: "text",
             text:
-              `First call experienceengine_pack_status with packId=${packId}, target=${target}, and repoPath=${repoPath}. Then call experienceengine_pack_deploy_preview with the same inputs. Review whether the destination is missing, up to date, or drifted, and explain what would happen before asking the user whether to proceed with any real deploy action.`
+              `First call experienceengine_plan_pack_deploy with packId=${packId}, target=${target}, and repoPath=${repoPath}. Review the returned summary, effects, and commandHint with the user. Only if the user explicitly confirms should you call experienceengine_execute_planned_pack_operation with the returned planId and confirmationToken.`
           }
         }
       ]
@@ -1142,10 +1142,26 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
   );
 
   server.registerTool(
+    "experienceengine_plan_pack_deploy",
+    {
+      title: "ExperienceEngine Plan Pack Deploy",
+      description: "Create a structured confirmation plan for deploying a compiled Experience Pack into a repository.",
+      inputSchema: z.object({
+        packId: z.string().min(1),
+        version: z.string().optional(),
+        target: z.enum(COMPILER_TARGETS),
+        repoPath: z.string().min(1)
+      })
+    },
+    async ({ packId, version, target, repoPath }) =>
+      toStructuredToolResult(packActions.planDeploy(packId, target, repoPath, version))
+  );
+
+  server.registerTool(
     "experienceengine_execute_planned_pack_operation",
     {
       title: "ExperienceEngine Execute Planned Pack Operation",
-      description: "Execute a previously planned pack publish or rollback after explicit confirmation.",
+      description: "Execute a previously planned pack publish, rollback, or deploy after explicit confirmation.",
       inputSchema: z.object({
         planId: z.string().min(1),
         confirmationToken: z.string().min(1)
