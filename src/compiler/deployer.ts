@@ -1,7 +1,8 @@
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readFileSync } from "node:fs";
 import { dirname, resolve, join } from "node:path";
 import { compilePack } from "./compiler.js";
 import type { CompilerTarget } from "./types.js";
+import { ExperiencePackRegistry } from "../packs/fs-registry.js";
 
 export type DeployCompiledPackInput = {
   packsDir: string;
@@ -19,6 +20,7 @@ export type DeployCompiledPackResult = {
   sourcePath: string;
   dryRun: boolean;
   overwritten: boolean;
+  deploymentStatus: "missing" | "up_to_date" | "drifted";
 };
 
 const resolveDestinationPath = (
@@ -38,20 +40,41 @@ const resolveDestinationPath = (
 };
 
 export const deployCompiledPack = (input: DeployCompiledPackInput): DeployCompiledPackResult => {
-  const compileResult = compilePack({
-    packsDir: input.packsDir,
-    packId: input.packId,
-    version: input.version,
-    target: input.target
-  });
+  const registry = new ExperiencePackRegistry({ packsDir: input.packsDir });
+  const pack = registry.readPack(input.packId);
+  const version = input.version ?? pack.currentVersion;
+  const existingArtifact = registry
+    .listCompiledArtifacts(input.packId)
+    .find((artifact) => artifact.version === version && artifact.target === input.target);
+  const compileResult = existingArtifact
+    ? {
+        ...existingArtifact,
+        packId: input.packId,
+        riskLevel: registry.readVersionManifest(input.packId, version).riskLevel,
+        sourceNodeIds: registry.readVersionManifest(input.packId, version).sourceNodeIds,
+        outputDir: dirname(existingArtifact.outputPath),
+        status: pack.status
+      }
+    : compilePack({
+        packsDir: input.packsDir,
+        packId: input.packId,
+        version,
+        target: input.target
+      });
   const destinationPath = resolve(resolveDestinationPath(input.repoPath, input.packId, input.target));
-  const overwritten = existsSync(destinationPath);
+  const destinationExists = existsSync(destinationPath);
+  const deploymentStatus: DeployCompiledPackResult["deploymentStatus"] = !destinationExists
+    ? "missing"
+    : readFileSync(destinationPath, "utf8") === readFileSync(compileResult.outputPath, "utf8")
+      ? "up_to_date"
+      : "drifted";
+  const overwritten = deploymentStatus === "drifted";
 
-  if (overwritten && !input.force) {
-    throw new Error(`Destination already exists: ${destinationPath}`);
+  if (deploymentStatus === "drifted" && !input.force) {
+    throw new Error(`Destination differs from compiled artifact: ${destinationPath}`);
   }
 
-  if (!input.dryRun) {
+  if (!input.dryRun && deploymentStatus !== "up_to_date") {
     mkdirSync(dirname(destinationPath), { recursive: true });
     copyFileSync(compileResult.outputPath, destinationPath);
   }
@@ -61,6 +84,7 @@ export const deployCompiledPack = (input: DeployCompiledPackInput): DeployCompil
     destinationPath,
     sourcePath: compileResult.outputPath,
     dryRun: input.dryRun ?? false,
-    overwritten
+    overwritten,
+    deploymentStatus
   };
 };

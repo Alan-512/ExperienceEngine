@@ -241,6 +241,7 @@ export const runPackCommand = (args: string[]): void => {
     console.log(`Deploy target: ${result.target}`);
     console.log(`Source: ${result.sourcePath}`);
     console.log(`Destination: ${result.destinationPath}`);
+    console.log(`Status: ${result.deploymentStatus}`);
     console.log(`Dry run: ${result.dryRun}`);
     console.log(`Overwrote existing file: ${result.overwritten}`);
     return;

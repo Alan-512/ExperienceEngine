@@ -219,6 +219,7 @@ describe("pack CLI command", () => {
     const output = consoleLogSpy.mock.calls.flat().join("\n");
     expect(output).toContain("Deploy target: agents");
     expect(output).toContain(`Destination: ${join(targetRepo, "AGENTS.md")}`);
+    expect(output).toContain("Status: missing");
     expect(output).toContain("Dry run: true");
     expect(existsSync(join(targetRepo, "AGENTS.md"))).toBe(false);
 
@@ -244,7 +245,7 @@ describe("pack CLI command", () => {
 
     writeFileSync(join(targetRepo, "CODEX.md"), "custom local content\n");
     expect(() => runPackCommand(["deploy", "deploy-pack", "codex", targetRepo])).toThrow(
-      "Destination already exists"
+      "Destination differs from compiled artifact"
     );
 
     runPackCommand(["deploy", "deploy-pack", "codex", targetRepo, "--force"]);
@@ -268,5 +269,27 @@ describe("pack CLI command", () => {
     const destination = join(targetRepo, ".github", "agents", "github-pack.md");
     expect(existsSync(destination)).toBe(true);
     expect(readFileSync(destination, "utf8")).toContain("# GitHub Copilot Custom Agent Profile");
+  });
+
+  it("treats an unchanged deployed target as up to date and avoids rewriting it", () => {
+    const homeDir = makeTempDir();
+    const targetRepo = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(homeDir, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+
+    nodeRepo.upsert(makeNode());
+    runPackCommand(["draft", "create", "deploy-pack", "node_auth_strategy", "Deploy", "Pack"]);
+    runPackCommand(["review", "deploy-pack", "Reviewed", "deploy", "pack"]);
+    runPackCommand(["publish", "deploy-pack"]);
+    runPackCommand(["deploy", "deploy-pack", "agents", targetRepo]);
+
+    consoleLogSpy.mockClear();
+    runPackCommand(["deploy", "deploy-pack", "agents", targetRepo]);
+
+    const output = consoleLogSpy.mock.calls.flat().join("\n");
+    expect(output).toContain("Status: up_to_date");
+    expect(output).toContain("Overwrote existing file: false");
   });
 });
