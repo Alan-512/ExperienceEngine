@@ -2,6 +2,7 @@ import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import { ExperiencePackRegistry } from "../packs/fs-registry.js";
 import type {
   ExperiencePackCompiledArtifact,
+  ExperiencePackCompileStatus,
   ExperiencePackSummary,
   ExperiencePackVersionManifest
 } from "../packs/types.js";
@@ -163,6 +164,7 @@ export type ExperienceLearningSummary = {
   compiler: {
     publishedPacks: number;
     compiledTargets: number;
+    stalePublishedPacks: number;
     latestCompiledArtifact?: (ExperiencePackCompiledArtifact & { packId: string }) | undefined;
   };
   latestRecordCreatedAt?: string;
@@ -246,6 +248,7 @@ export type ExperiencePackDetailView = ExperiencePackSummary & {
   manifest: ExperiencePackVersionManifest;
   nodeIds: string[];
   compiledArtifacts: ExperiencePackCompiledArtifact[];
+  compileStatus: ExperiencePackCompileStatus;
   activations: Array<{
     scopeId: string;
     enabled: boolean;
@@ -271,6 +274,7 @@ export type ExperienceScopePackStatusView = {
   compiler: {
     publishedPacks: number;
     compiledTargets: number;
+    stalePublishedPacks: number;
     latestCompiledArtifact?: (ExperiencePackCompiledArtifact & { packId: string }) | undefined;
   };
 };
@@ -411,6 +415,32 @@ const toCompiledArtifactWithPack = (packId: string, artifact: ExperiencePackComp
   ...artifact,
   packId
 });
+
+const summarizePackCompiler = (
+  registry: ExperiencePackRegistry,
+  packIds: string[],
+  versionByPackId: Map<string, string>
+): {
+  publishedPacks: number;
+  compiledTargets: number;
+  stalePublishedPacks: number;
+  latestCompiledArtifact?: (ExperiencePackCompiledArtifact & { packId: string }) | undefined;
+} => {
+  const compiledArtifacts = packIds.flatMap((packId) =>
+    registry.listCompiledArtifacts(packId).map((artifact) => toCompiledArtifactWithPack(packId, artifact))
+  );
+  const stalePublishedPacks = packIds.filter((packId) => {
+    const currentVersion = versionByPackId.get(packId);
+    return currentVersion ? registry.getCompileStatus(packId, currentVersion).stale : false;
+  }).length;
+
+  return {
+    publishedPacks: packIds.length,
+    compiledTargets: compiledArtifacts.length,
+    stalePublishedPacks,
+    latestCompiledArtifact: compiledArtifacts[0]
+  };
+};
 
 export class ExperienceInteractionService {
   private readonly inputRepo;
@@ -606,6 +636,7 @@ export class ExperienceInteractionService {
       manifest,
       nodeIds: nodes.map((node) => node.id),
       compiledArtifacts: this.packRegistry.listCompiledArtifacts(packId),
+      compileStatus: this.packRegistry.getCompileStatus(packId, pack.current_version),
       activations: this.packRepo.listActivationsByPack(packId).map((activation) => ({
         scopeId: activation.scope_id,
         enabled: activation.enabled,
@@ -631,19 +662,21 @@ export class ExperienceInteractionService {
           .map((activation) => activation.packId)
       )
     );
-    const compiledArtifacts = publishedPackIds.flatMap((packId) =>
-      this.packRegistry.listCompiledArtifacts(packId).map((artifact) => toCompiledArtifactWithPack(packId, artifact))
+    const compiler = summarizePackCompiler(
+      this.packRegistry,
+      publishedPackIds,
+      new Map(
+        activations
+          .filter((activation) => activation.status === "published" || activation.status === "rolled_back")
+          .map((activation) => [activation.packId, activation.currentVersion])
+      )
     );
 
     return {
       scopeId,
       enabledCount: activations.filter((activation) => activation.enabled).length,
       activations,
-      compiler: {
-        publishedPacks: publishedPackIds.length,
-        compiledTargets: compiledArtifacts.length,
-        latestCompiledArtifact: compiledArtifacts[0]
-      }
+      compiler
     };
   }
 
@@ -677,12 +710,13 @@ export class ExperienceInteractionService {
     ];
     const latestRecord = this.inputRepo.getLatest();
     const allNodes = this.nodeRepo.listAll();
-    const publishedPackIds = this.packRepo
+    const publishedPacks = this.packRepo
       .listPacks()
-      .filter((pack) => pack.status === "published" || pack.status === "rolled_back")
-      .map((pack) => pack.pack_id);
-    const compiledArtifacts = publishedPackIds.flatMap((packId) =>
-      this.packRegistry.listCompiledArtifacts(packId).map((artifact) => toCompiledArtifactWithPack(packId, artifact))
+      .filter((pack) => pack.status === "published" || pack.status === "rolled_back");
+    const compiler = summarizePackCompiler(
+      this.packRegistry,
+      publishedPacks.map((pack) => pack.pack_id),
+      new Map(publishedPacks.map((pack) => [pack.pack_id, pack.current_version]))
     );
 
     const effectiveness = {
@@ -723,11 +757,7 @@ export class ExperienceInteractionService {
         outcomes: this.outcomeRepo.count(),
         reviews: this.reviewEventRepo.count()
       },
-      compiler: {
-        publishedPacks: publishedPackIds.length,
-        compiledTargets: compiledArtifacts.length,
-        latestCompiledArtifact: compiledArtifacts[0]
-      },
+      compiler,
       latestRecordCreatedAt: latestRecord?.created_at
     };
   }

@@ -213,5 +213,13 @@ describe("ExperiencePackRegistry", () => {
         renderedNodeCount: 1
       })
     ]);
+    expect(registry.getCompileStatus("auth-debug-pack", "v1")).toMatchObject({
+      currentVersionCompiledTargets: ["agents", "codex"],
+      stale: false,
+      latestArtifact: expect.objectContaining({
+        target: "codex",
+        version: "v1"
+      })
+    });
   });
 });

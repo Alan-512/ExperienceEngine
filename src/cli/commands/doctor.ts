@@ -37,6 +37,7 @@ type DoctorDeps = {
     compiler: {
       publishedPacks: number;
       compiledTargets: number;
+      stalePublishedPacks: number;
       latestCompiledArtifact?: {
         packId: string;
         target: string;
@@ -111,6 +112,7 @@ const logScopePackStatus = (status: {
   compiler: {
     publishedPacks: number;
     compiledTargets: number;
+    stalePublishedPacks: number;
     latestCompiledArtifact?: {
       packId: string;
       target: string;
@@ -130,6 +132,7 @@ const logScopePackStatus = (status: {
   console.log("Pack compiler:");
   console.log(`- Published packs: ${status.compiler.publishedPacks}`);
   console.log(`- Compiled targets: ${status.compiler.compiledTargets}`);
+  console.log(`- Stale published packs: ${status.compiler.stalePublishedPacks}`);
   if (status.compiler.latestCompiledArtifact) {
     const latest = status.compiler.latestCompiledArtifact;
     console.log(

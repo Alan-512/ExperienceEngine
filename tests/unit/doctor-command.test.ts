@@ -298,6 +298,7 @@ describe("doctor command", () => {
         compiler: {
           publishedPacks: 1,
           compiledTargets: 2,
+          stalePublishedPacks: 0,
           latestCompiledArtifact: {
             packId: "auth-pack",
             target: "codex",
@@ -317,6 +318,7 @@ describe("doctor command", () => {
         ["Pack compiler:"],
         ["- Published packs: 1"],
         ["- Compiled targets: 2"],
+        ["- Stale published packs: 0"],
         ["- Latest compile: auth-pack@v1 -> codex (1 nodes)"]
       ])
     );

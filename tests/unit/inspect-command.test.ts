@@ -308,13 +308,15 @@ describe("inspect command", () => {
         [`- Scope: ${resolveScope(process.cwd()).scope_id}`],
         ["- Enabled packs: 1"],
         ["- auth-pack@v1 [published enabled]"],
-        ["- Latest compiled target: auth-pack@v1 -> agents (1 nodes)"]
+        ["- Latest compiled target: auth-pack@v1 -> agents (1 nodes)"],
+        ["- Stale published packs: 0"]
       ])
     );
     expect(consoleTableSpy).toHaveBeenCalledWith(
       expect.objectContaining({
         publishedPacks: 1,
         compiledTargets: 1,
+        stalePublishedPacks: 0,
         latestCompiledArtifact: expect.objectContaining({
           packId: "auth-pack",
           target: "agents",

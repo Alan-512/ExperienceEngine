@@ -50,13 +50,20 @@ export const runPackCommand = (args: string[]): void => {
     }
 
     console.table(
-      packs.map((pack) => ({
-        pack_id: pack.packId,
-        status: pack.status,
-        current_version: pack.currentVersion,
-        owner: pack.owner,
-        updated_at: pack.updatedAt
-      }))
+      packs.map((pack) => {
+        const compileStatus = registry.getCompileStatus(pack.packId, pack.currentVersion);
+        return {
+          pack_id: pack.packId,
+          status: pack.status,
+          current_version: pack.currentVersion,
+          current_version_compiled: compileStatus.currentVersionCompiledTargets.join(", ") || "none",
+          stale: compileStatus.stale,
+          latest_compile_target: compileStatus.latestArtifact?.target ?? "",
+          latest_compile_at: compileStatus.latestArtifact?.generatedAt ?? "",
+          owner: pack.owner,
+          updated_at: pack.updatedAt
+        };
+      })
     );
     return;
   }
@@ -94,6 +101,11 @@ export const runPackCommand = (args: string[]): void => {
     console.log(`Evidence: ${current.evidenceSummary}`);
     console.log(`Nodes: ${nodes.map((node) => node.id).join(", ")}`);
     console.log(`Activations: ${activationSummary}`);
+    const compileStatus = registry.getCompileStatus(packId, pack.currentVersion);
+    console.log(
+      `Current version compiled targets: ${compileStatus.currentVersionCompiledTargets.join(", ") || "none"}`
+    );
+    console.log(`Compile stale: ${compileStatus.stale}`);
     const compiledArtifacts = registry.listCompiledArtifacts(packId);
     if (compiledArtifacts.length) {
       console.log("Compiled targets:");

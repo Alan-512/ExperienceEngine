@@ -195,6 +195,7 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
         `- Latest compiled target: ${latest.packId}@${latest.version} -> ${latest.target} (${latest.renderedNodeCount} nodes)`
       );
     }
+    console.log(`- Stale published packs: ${scopePacks.compiler.stalePublishedPacks}`);
     if (summary.latestRecordCreatedAt) {
       console.log(`Latest task record: ${summary.latestRecordCreatedAt}`);
     }

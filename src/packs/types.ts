@@ -79,3 +79,9 @@ export type ExperiencePackCompiledArtifact = {
   reportPath: string;
   renderedNodeCount: number;
 };
+
+export type ExperiencePackCompileStatus = {
+  currentVersionCompiledTargets: string[];
+  latestArtifact?: ExperiencePackCompiledArtifact;
+  stale: boolean;
+};

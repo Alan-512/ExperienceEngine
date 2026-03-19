@@ -4,6 +4,7 @@ import type { ExperienceNode } from "../types/domain.js";
 import { nowIso } from "../utils/clock.js";
 import type {
   ExperiencePackCompiledArtifact,
+  ExperiencePackCompileStatus,
   ExperiencePackDraftCreateInput,
   ExperiencePackRiskLevel,
   ExperiencePackNodeSnapshot,
@@ -195,6 +196,23 @@ export class ExperiencePackRegistry {
       left.target.localeCompare(right.target) ||
       left.version.localeCompare(right.version)
     );
+  }
+
+  getCompileStatus(packId: string, currentVersion: string): ExperiencePackCompileStatus {
+    const artifacts = this.listCompiledArtifacts(packId);
+    const currentVersionCompiledTargets = Array.from(
+      new Set(
+        artifacts
+          .filter((artifact) => artifact.version === currentVersion)
+          .map((artifact) => artifact.target)
+      )
+    ).sort();
+
+    return {
+      currentVersionCompiledTargets,
+      latestArtifact: artifacts[0],
+      stale: artifacts.length > 0 && currentVersionCompiledTargets.length === 0
+    };
   }
 
   reviewPack(

@@ -111,9 +111,19 @@ describe("pack CLI command", () => {
       })
     ]);
     expect(consoleTableSpy).toHaveBeenCalled();
+    expect(consoleTableSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        pack_id: "auth-debug-pack",
+        current_version_compiled: "agents",
+        stale: false,
+        latest_compile_target: "agents"
+      })
+    ]);
     expect(consoleLogSpy.mock.calls.flat().join("\n")).toContain("Pack: auth-debug-pack");
     expect(consoleLogSpy.mock.calls.flat().join("\n")).toContain("Status: published");
     expect(consoleLogSpy.mock.calls.flat().join("\n")).toContain("Activations: scope_ee@v1 [enabled]");
+    expect(consoleLogSpy.mock.calls.flat().join("\n")).toContain("Current version compiled targets: agents");
+    expect(consoleLogSpy.mock.calls.flat().join("\n")).toContain("Compile stale: false");
     expect(consoleLogSpy.mock.calls.flat().join("\n")).toContain("Compiled targets:");
     expect(consoleLogSpy.mock.calls.flat().join("\n")).toContain("agents@v1");
 
