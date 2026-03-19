@@ -11,6 +11,10 @@ In practice, this means:
 - noisy or harmful prior patterns can be cooled or retired
 - the system gradually learns which guidance is actually useful
 
+For a practical end-to-end workflow on a real repository, see:
+
+- [docs/development/real-repo-usage-template.md](development/real-repo-usage-template.md)
+
 ## Core Learning Baseline
 
 ExperienceEngine currently treats `OpenClaw` as the primary baseline host for validating the learning core:
