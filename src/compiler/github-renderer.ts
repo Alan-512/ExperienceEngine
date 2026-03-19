@@ -1,6 +1,20 @@
 import { selectRenderableNodes } from "./agents-renderer.js";
 import type { RenderAgentsMarkdownInput } from "./types.js";
 
+const shortenTitle = (value: string): string => {
+  const marker = value.indexOf(": ");
+  const raw = marker >= 0 ? value.slice(marker + 2) : value;
+  return raw.length <= 72 ? raw : `${raw.slice(0, 69).trimEnd()}...`;
+};
+
+const shortenApplicability = (value: string, taskType: string): string => {
+  if (value.length <= 96) {
+    return value;
+  }
+
+  return `${taskType} tasks matching the same historical signal`;
+};
+
 const renderSection = (
   title: string,
   nodes: Array<ReturnType<typeof selectRenderableNodes>[number]>
@@ -11,8 +25,8 @@ const renderSection = (
 
   const lines: string[] = [`## ${title}`, ""];
   for (const node of nodes) {
-    lines.push(`### ${node.title}`);
-    lines.push(`- Applies to: ${node.applicability}`);
+    lines.push(`### ${shortenTitle(node.title)}`);
+    lines.push(`- Applies to: ${shortenApplicability(node.applicability, node.taskType)}`);
     lines.push(`- Confidence: ${node.confidence}`);
     lines.push(`- Instruction: ${node.guidance}`);
     lines.push("");

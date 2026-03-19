@@ -260,7 +260,12 @@ describe("Experience Compiler v1", () => {
         createdAt: "2026-03-19T00:00:00.000Z",
         publishedAt: "2026-03-19T00:00:00.000Z"
       },
-      nodes: [makeNode()]
+      nodes: [
+        makeNode({
+          trigger_pattern:
+            "Simulate an API integration fix. Use the exec tool only. Step 1: run pnpm test api. Step 2: run pnpm test api again after the smallest change."
+        })
+      ]
     });
 
     expect(markdown).toContain("---");
@@ -268,6 +273,9 @@ describe("Experience Compiler v1", () => {
     expect(markdown).toContain("tools:");
     expect(markdown).toContain("# GitHub Copilot Custom Agent Profile");
     expect(markdown).toContain("## Preferred Strategies");
+    expect(markdown).toContain("- Applies to: test_debug tasks matching the same historical signal");
+    expect(markdown).not.toContain("### test_debug:");
+    expect(markdown).not.toContain("Step 1: run pnpm test api");
   });
 
   it("supports generic compile target selection", () => {
