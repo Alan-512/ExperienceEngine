@@ -687,6 +687,103 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
   );
 
   server.registerPrompt(
+    "experienceengine_review_pack_status",
+    {
+      title: "ExperienceEngine Review Pack Status",
+      description: "Guide the agent to inspect one pack, its compile state, and current repo deployment status.",
+      argsSchema: {
+        packId: z.string().min(1),
+        target: z.enum(COMPILER_TARGETS),
+        repoPath: z.string().min(1)
+      }
+    },
+    async ({ packId, target, repoPath }) => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text:
+              `Review the Experience Pack ${packId}. First call experienceengine_pack_inspect to inspect the pack itself. Then call experienceengine_pack_status with target=${target} and repoPath=${repoPath} to inspect whether the current repository is missing, up to date, or drifted. Summarize the pack state, compile state, deployment state, and the next recommended action.`
+          }
+        }
+      ]
+    })
+  );
+
+  server.registerPrompt(
+    "experienceengine_prepare_pack_publish",
+    {
+      title: "ExperienceEngine Prepare Pack Publish",
+      description: "Guide the agent through the confirmation flow for publishing an Experience Pack.",
+      argsSchema: {
+        packId: z.string().min(1)
+      }
+    },
+    async ({ packId }) => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text:
+              `First call experienceengine_plan_pack_publish with packId=${packId}. Review the returned summary, effects, and commandHint with the user. Only if the user explicitly confirms should you call experienceengine_execute_planned_pack_operation with the returned planId and confirmationToken.`
+          }
+        }
+      ]
+    })
+  );
+
+  server.registerPrompt(
+    "experienceengine_prepare_pack_rollback",
+    {
+      title: "ExperienceEngine Prepare Pack Rollback",
+      description: "Guide the agent through the confirmation flow for rolling an Experience Pack back to a selected version.",
+      argsSchema: {
+        packId: z.string().min(1),
+        version: z.string().min(1)
+      }
+    },
+    async ({ packId, version }) => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text:
+              `First call experienceengine_plan_pack_rollback with packId=${packId} and version=${version}. Review the returned summary, effects, and commandHint with the user. Only if the user explicitly confirms should you call experienceengine_execute_planned_pack_operation with the returned planId and confirmationToken.`
+          }
+        }
+      ]
+    })
+  );
+
+  server.registerPrompt(
+    "experienceengine_prepare_pack_deploy",
+    {
+      title: "ExperienceEngine Prepare Pack Deploy",
+      description: "Guide the agent through a low-risk pack deploy review before any file-writing action.",
+      argsSchema: {
+        packId: z.string().min(1),
+        target: z.enum(COMPILER_TARGETS),
+        repoPath: z.string().min(1)
+      }
+    },
+    async ({ packId, target, repoPath }) => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text:
+              `First call experienceengine_pack_status with packId=${packId}, target=${target}, and repoPath=${repoPath}. Then call experienceengine_pack_deploy_preview with the same inputs. Review whether the destination is missing, up to date, or drifted, and explain what would happen before asking the user whether to proceed with any real deploy action.`
+          }
+        }
+      ]
+    })
+  );
+
+  server.registerPrompt(
     "experienceengine_show_last_intervention",
     {
       title: "ExperienceEngine Show Last Intervention",

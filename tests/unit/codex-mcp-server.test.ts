@@ -1060,6 +1060,10 @@ describe("Codex MCP behavior loop", () => {
     const recentPrompt = getRegisteredPrompt(server, "experienceengine_review_recent_injected");
     const pausePrompt = getRegisteredPrompt(server, "experienceengine_pause_current_project");
     const harmfulPrompt = getRegisteredPrompt(server, "experienceengine_mark_last_experience_harmful");
+    const reviewPackStatusPrompt = getRegisteredPrompt(server, "experienceengine_review_pack_status");
+    const preparePackPublishPrompt = getRegisteredPrompt(server, "experienceengine_prepare_pack_publish");
+    const preparePackRollbackPrompt = getRegisteredPrompt(server, "experienceengine_prepare_pack_rollback");
+    const preparePackDeployPrompt = getRegisteredPrompt(server, "experienceengine_prepare_pack_deploy");
 
     const showLast = (await showLastPrompt.callback({})) as {
       messages: Array<{ role: string; content: { type: string; text?: string; uri?: string } }>;
@@ -1071,6 +1075,31 @@ describe("Codex MCP behavior loop", () => {
       messages: Array<{ role: string; content: { type: string; text?: string } }>;
     };
     const harmful = (await harmfulPrompt.callback({})) as {
+      messages: Array<{ role: string; content: { type: string; text?: string } }>;
+    };
+    const reviewPackStatus = (await reviewPackStatusPrompt.callback({
+      packId: "compiler-blackbox-pack",
+      target: "codex",
+      repoPath: "/repo"
+    })) as {
+      messages: Array<{ role: string; content: { type: string; text?: string } }>;
+    };
+    const preparePackPublish = (await preparePackPublishPrompt.callback({
+      packId: "compiler-blackbox-pack"
+    })) as {
+      messages: Array<{ role: string; content: { type: string; text?: string } }>;
+    };
+    const preparePackRollback = (await preparePackRollbackPrompt.callback({
+      packId: "compiler-blackbox-pack",
+      version: "v1"
+    })) as {
+      messages: Array<{ role: string; content: { type: string; text?: string } }>;
+    };
+    const preparePackDeploy = (await preparePackDeployPrompt.callback({
+      packId: "compiler-blackbox-pack",
+      target: "codex",
+      repoPath: "/repo"
+    })) as {
       messages: Array<{ role: string; content: { type: string; text?: string } }>;
     };
     expect(showLast.messages[0].content.text).toContain("Summarize whether guidance was injected");
@@ -1085,6 +1114,14 @@ describe("Codex MCP behavior loop", () => {
     expect(pause.messages[0].content.text).toContain("experienceengine_disable_scope");
     expect(pause.messages[0].content.text).toContain("/repo");
     expect(harmful.messages[0].content.text).toContain("feedback=harmed");
+    expect(reviewPackStatus.messages[0].content.text).toContain("experienceengine_pack_status");
+    expect(reviewPackStatus.messages[0].content.text).toContain("experienceengine_pack_inspect");
+    expect(preparePackPublish.messages[0].content.text).toContain("experienceengine_plan_pack_publish");
+    expect(preparePackPublish.messages[0].content.text).toContain("experienceengine_execute_planned_pack_operation");
+    expect(preparePackRollback.messages[0].content.text).toContain("experienceengine_plan_pack_rollback");
+    expect(preparePackRollback.messages[0].content.text).toContain("v1");
+    expect(preparePackDeploy.messages[0].content.text).toContain("experienceengine_pack_status");
+    expect(preparePackDeploy.messages[0].content.text).toContain("experienceengine_pack_deploy_preview");
   });
 
   it("registers operational MCP resources and read-only tools", async () => {
