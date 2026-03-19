@@ -284,6 +284,13 @@ export type ExperienceScopePackStatusView = {
 
 export type ExperiencePackCompileView = CompileResult;
 export type ExperiencePackDeploymentStatusView = DeployCompiledPackResult;
+export type ExperiencePackActivationResult = {
+  scopeId: string;
+  packId: string;
+  enabled: boolean;
+  pinnedVersion?: string;
+  updatedAt: string;
+};
 
 const summarizeAutomaticFeedback = (events: ReviewEvent[]): "helped" | "harmed" | "none" => {
   const automatic = events.filter((event) => event.source === "automatic");
@@ -651,6 +658,55 @@ export class ExperienceInteractionService {
         pinnedVersion: activation.pinned_version,
         updatedAt: activation.updated_at
       }))
+    };
+  }
+
+  enablePack(args: { packId: string; cwd?: string }): ExperiencePackActivationResult {
+    const scopeId = resolveScope(args.cwd).scope_id;
+    const pack = this.packRepo.getPack(args.packId);
+    if (!pack) {
+      throw new Error(`Unknown experience pack: ${args.packId}`);
+    }
+
+    const existing = this.packRepo.listActivations(scopeId).find((activation) => activation.pack_id === args.packId);
+    const updatedAt = nowIso();
+    this.packRepo.upsertActivation({
+      scope_id: scopeId,
+      pack_id: args.packId,
+      enabled: true,
+      pinned_version: pack.current_version,
+      created_at: existing?.created_at ?? updatedAt,
+      updated_at: updatedAt
+    });
+
+    return {
+      scopeId,
+      packId: args.packId,
+      enabled: true,
+      pinnedVersion: pack.current_version,
+      updatedAt
+    };
+  }
+
+  disablePack(args: { packId: string; cwd?: string }): ExperiencePackActivationResult {
+    const scopeId = resolveScope(args.cwd).scope_id;
+    const existing = this.packRepo.listActivations(scopeId).find((activation) => activation.pack_id === args.packId);
+    const updatedAt = nowIso();
+    this.packRepo.upsertActivation({
+      scope_id: scopeId,
+      pack_id: args.packId,
+      enabled: false,
+      pinned_version: existing?.pinned_version,
+      created_at: existing?.created_at ?? updatedAt,
+      updated_at: updatedAt
+    });
+
+    return {
+      scopeId,
+      packId: args.packId,
+      enabled: false,
+      pinnedVersion: existing?.pinned_version,
+      updatedAt
     };
   }
 

@@ -693,6 +693,101 @@ describe("Codex MCP behavior loop", () => {
     });
   });
 
+  it("registers pack list and inspect MCP tools", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    seedPack(homeDir, db, nodeRepo, "/repo", nowIso(), "pack_tool_views", "node_pack_tool_views");
+
+    const server = createCodexMcpServer({ homeDir, env });
+    const listTool = getRegisteredTool(server, "experienceengine_pack_list");
+    const inspectTool = getRegisteredTool(server, "experienceengine_pack_inspect");
+
+    const listResult = parseTextPayload<{ packs: Array<{ packId: string; status: string }> }>(
+      (await listTool.handler({})) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+    const inspectResult = parseTextPayload<{ packId: string; nodeIds: string[] }>(
+      (await inspectTool.handler({ packId: "pack_tool_views" })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+
+    expect(listResult).toMatchObject({
+      packs: [
+        expect.objectContaining({
+          packId: "pack_tool_views",
+          status: "published"
+        })
+      ]
+    });
+    expect(inspectResult).toMatchObject({
+      packId: "pack_tool_views",
+      nodeIds: ["node_pack_tool_views"]
+    });
+  });
+
+  it("supports enabling and disabling a pack for the current scope through the codex interaction surface and MCP tools", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    seedPack(homeDir, db, nodeRepo, "/repo", nowIso(), "pack_toggle_scope", "node_pack_toggle_scope");
+
+    const surface = createCodexInteractionSurface({ homeDir, env });
+    const enabled = await surface.enablePack({
+      packId: "pack_toggle_scope",
+      cwd: "/repo"
+    });
+    const disabled = await surface.disablePack({
+      packId: "pack_toggle_scope",
+      cwd: "/repo"
+    });
+
+    expect(enabled).toMatchObject({
+      scopeId: resolveScope("/repo").scope_id,
+      packId: "pack_toggle_scope",
+      enabled: true,
+      pinnedVersion: "v1"
+    });
+    expect(disabled).toMatchObject({
+      scopeId: resolveScope("/repo").scope_id,
+      packId: "pack_toggle_scope",
+      enabled: false,
+      pinnedVersion: "v1"
+    });
+
+    const server = createCodexMcpServer({ homeDir, env });
+    const enableTool = getRegisteredTool(server, "experienceengine_pack_enable");
+    const disableTool = getRegisteredTool(server, "experienceengine_pack_disable");
+
+    const enabledViaTool = parseTextPayload<{ enabled: boolean; packId: string }>(
+      (await enableTool.handler({ packId: "pack_toggle_scope", cwd: "/repo" })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+    const disabledViaTool = parseTextPayload<{ enabled: boolean; packId: string }>(
+      (await disableTool.handler({ packId: "pack_toggle_scope", cwd: "/repo" })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+
+    expect(enabledViaTool).toMatchObject({
+      packId: "pack_toggle_scope",
+      enabled: true
+    });
+    expect(disabledViaTool).toMatchObject({
+      packId: "pack_toggle_scope",
+      enabled: false
+    });
+  });
+
   it("registers low-risk MCP tools for feedback and scope toggles", async () => {
     const homeDir = makeTempDir();
     const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };

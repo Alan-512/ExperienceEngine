@@ -325,6 +325,14 @@ export const createCodexInteractionSurface = (options: CodexServerOptions = {}) 
       return interaction.inspectPack(args.packId);
     },
 
+    async enablePack(args: { packId: string; cwd?: string }) {
+      return interaction.enablePack(args);
+    },
+
+    async disablePack(args: { packId: string; cwd?: string }) {
+      return interaction.disablePack(args);
+    },
+
     async inspectPackDeploymentStatus(args: {
       packId: string;
       version?: string;
@@ -997,6 +1005,62 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
       }
     },
     async ({ adapter }) => toTextToolResult(await operationalSurface.checkUpdate(adapter))
+  );
+
+  server.registerTool(
+    "experienceengine_pack_list",
+    {
+      title: "ExperienceEngine Pack List",
+      description: "List local Experience Packs available in the shared registry.",
+      inputSchema: z.object({}),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false
+      }
+    },
+    async () => toStructuredToolResult({ packs: await interactionSurface.listPacks() })
+  );
+
+  server.registerTool(
+    "experienceengine_pack_inspect",
+    {
+      title: "ExperienceEngine Pack Inspect",
+      description: "Inspect one Experience Pack, including its current version, nodes, activations, and compiled artifacts.",
+      inputSchema: z.object({
+        packId: z.string().min(1)
+      }),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false
+      }
+    },
+    async ({ packId }) => toStructuredToolResult(await interactionSurface.inspectPack({ packId }))
+  );
+
+  server.registerTool(
+    "experienceengine_pack_enable",
+    {
+      title: "ExperienceEngine Pack Enable",
+      description: "Enable an Experience Pack for the current repository scope.",
+      inputSchema: z.object({
+        packId: z.string().min(1),
+        cwd: z.string().optional()
+      })
+    },
+    async ({ packId, cwd }) => toStructuredToolResult(await interactionSurface.enablePack({ packId, cwd }))
+  );
+
+  server.registerTool(
+    "experienceengine_pack_disable",
+    {
+      title: "ExperienceEngine Pack Disable",
+      description: "Disable an Experience Pack for the current repository scope.",
+      inputSchema: z.object({
+        packId: z.string().min(1),
+        cwd: z.string().optional()
+      })
+    },
+    async ({ packId, cwd }) => toStructuredToolResult(await interactionSurface.disablePack({ packId, cwd }))
   );
 
   server.registerTool(
