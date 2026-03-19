@@ -1,0 +1,133 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { runPackCommand } from "../../src/cli/commands/pack.js";
+import { loadConfig } from "../../src/config/load-config.js";
+import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
+import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
+import { ExperiencePackRepository } from "../../src/store/sqlite/repositories/pack-repo.js";
+import type { ExperienceNode } from "../../src/types/domain.js";
+
+const tempDirs: string[] = [];
+const originalHome = process.env.EXPERIENCE_ENGINE_HOME;
+const consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+const consoleTableSpy = vi.spyOn(console, "table").mockImplementation(() => {});
+
+const makeTempDir = (): string => {
+  const dir = mkdtempSync(join(tmpdir(), "experienceengine-pack-command-"));
+  tempDirs.push(dir);
+  return dir;
+};
+
+const makeNode = (overrides: Partial<ExperienceNode> = {}): ExperienceNode => ({
+  id: "node_auth_strategy",
+  node_type: "strategy",
+  scope_id: "scope_auth",
+  task_type: "test_debug",
+  trigger_pattern: "Auth vitest keeps failing",
+  applicability_notes: "Use for repeated auth test debugging loops.",
+  env_signature: undefined,
+  compact_hint: "Keep the auth reproduction loop tight with vitest.",
+  goal: "Restore passing auth tests.",
+  recommended_steps: ["Run the auth vitest first", "Re-run after the smallest edit"],
+  avoid_steps: [],
+  fallback_steps: [],
+  success_signal: "Auth vitest passes",
+  stop_condition: undefined,
+  escalation_condition: undefined,
+  evidence_summary: "Auth vitest passed after a narrow fix.",
+  retrieval_text: "Auth vitest keeps failing\nAuth vitest passed after a narrow fix.",
+  embedding: undefined,
+  embedding_provider: undefined,
+  embedding_model: undefined,
+  embedding_version: undefined,
+  embedding_dimensions: undefined,
+  distillation_mode_used: "llm",
+  distillation_source: "host_mediated",
+  redistilled_from: undefined,
+  source_kind: "system_derived",
+  origin_record_ids: ["input_auth_fix"],
+  helped_record_ids: [],
+  harmed_record_ids: [],
+  state: "active",
+  usage_count: 2,
+  helped_count: 1,
+  harmed_count: 0,
+  support_count: 1,
+  last_used_at: "2026-03-19T00:00:00.000Z",
+  last_helped_at: "2026-03-19T00:00:00.000Z",
+  last_harmed_at: undefined,
+  created_at: "2026-03-19T00:00:00.000Z",
+  updated_at: "2026-03-19T00:00:00.000Z",
+  ...overrides
+});
+
+afterEach(() => {
+  while (tempDirs.length) {
+    rmSync(tempDirs.pop()!, { recursive: true, force: true });
+  }
+
+  if (originalHome === undefined) {
+    delete process.env.EXPERIENCE_ENGINE_HOME;
+  } else {
+    process.env.EXPERIENCE_ENGINE_HOME = originalHome;
+  }
+
+  consoleLogSpy.mockClear();
+  consoleTableSpy.mockClear();
+});
+
+describe("pack CLI command", () => {
+  it("creates, reviews, publishes, lists, inspects, and rolls back a pack", () => {
+    const homeDir = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(homeDir, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    const packRepo = new ExperiencePackRepository(db);
+
+    nodeRepo.upsert(makeNode());
+    nodeRepo.upsert(makeNode({ id: "node_auth_warning", node_type: "warning", compact_hint: "Check the auth mock startup before retrying vitest." }));
+
+    runPackCommand(["draft", "create", "auth-debug-pack", "node_auth_strategy,node_auth_warning", "Auth", "Debug", "Pack"]);
+    runPackCommand(["review", "auth-debug-pack", "Reviewed", "auth", "debugging", "pack"]);
+    runPackCommand(["publish", "auth-debug-pack"]);
+    runPackCommand(["enable", "auth-debug-pack", "scope_ee"]);
+    runPackCommand(["list"]);
+    runPackCommand(["inspect", "auth-debug-pack"]);
+
+    expect(packRepo.getPack("auth-debug-pack")).toMatchObject({
+      pack_id: "auth-debug-pack",
+      status: "published",
+      current_version: "v1"
+    });
+    expect(packRepo.listActivations("scope_ee")).toEqual([
+      expect.objectContaining({
+        pack_id: "auth-debug-pack",
+        enabled: true,
+        pinned_version: "v1"
+      })
+    ]);
+    expect(consoleTableSpy).toHaveBeenCalled();
+    expect(consoleLogSpy.mock.calls.flat().join("\n")).toContain("Pack: auth-debug-pack");
+    expect(consoleLogSpy.mock.calls.flat().join("\n")).toContain("Status: published");
+    expect(consoleLogSpy.mock.calls.flat().join("\n")).toContain("Activations: scope_ee@v1 [enabled]");
+
+    runPackCommand(["draft", "create", "auth-debug-pack", "node_auth_strategy", "Auth", "Debug", "Pack"]);
+    runPackCommand(["publish", "auth-debug-pack"]);
+    runPackCommand(["rollback", "auth-debug-pack", "v1"]);
+    runPackCommand(["disable", "auth-debug-pack", "scope_ee"]);
+
+    expect(packRepo.getPack("auth-debug-pack")).toMatchObject({
+      status: "rolled_back",
+      current_version: "v1"
+    });
+    expect(packRepo.listActivations("scope_ee")).toEqual([
+      expect.objectContaining({
+        pack_id: "auth-debug-pack",
+        enabled: false
+      })
+    ]);
+  });
+});

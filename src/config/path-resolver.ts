@@ -13,6 +13,7 @@ export type ResolvedPathInfo = {
   dataDir: string;
   sqlitePath: string;
   captureDir: string;
+  packsDir: string;
   installStatePath: string;
   usedInstallState: boolean;
 };
@@ -72,6 +73,7 @@ export const resolveExperienceEnginePaths = (options: ResolvePathOptions = {}): 
         overrides.sqlitePath ?? join(activeHome, "sqlite", "experienceengine.db")
       ),
       captureDir: resolve(captureDir),
+      packsDir: resolve(join(activeHome, "packs")),
       installStatePath,
       usedInstallState: hasInstallState
     };
@@ -98,6 +100,7 @@ export const resolveExperienceEnginePaths = (options: ResolvePathOptions = {}): 
     dataDir: activeHome,
     sqlitePath: join(activeHome, "sqlite", "experienceengine.db"),
     captureDir,
+    packsDir: join(productHome, "packs"),
     installStatePath,
     usedInstallState: hasInstallState
   };

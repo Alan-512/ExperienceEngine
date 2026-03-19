@@ -34,6 +34,9 @@ export type FeedbackAttributionReason =
   | "no_relevant_failure"
   | "suppressed_delivery"
   | "unknown_outcome";
+export type ExperiencePackStatus = "draft" | "review" | "published" | "rolled_back";
+export type ExperiencePackHost = "openclaw" | "claude-code" | "codex";
+export type ExperiencePackRiskLevel = "low" | "medium" | "high";
 
 export type Scope = {
   scope_id: string;
@@ -213,6 +216,52 @@ export type ScopeTaskStats = {
   unknown_tasks: number;
   injected_tasks: number;
   injected_success_tasks: number;
+  updated_at: string;
+};
+
+export type ExperiencePackSummaryRecord = {
+  pack_id: string;
+  name: string;
+  description: string;
+  owner: string;
+  status: ExperiencePackStatus;
+  current_version: string;
+  scope_hints: string[];
+  task_families: TaskType[];
+  host_compatibility: ExperiencePackHost[];
+  created_at: string;
+  updated_at: string;
+  published_at?: string;
+  rolled_back_at?: string;
+};
+
+export type ExperiencePackVersionRecord = {
+  pack_id: string;
+  version: string;
+  status_snapshot: ExperiencePackStatus;
+  evidence_summary: string;
+  benchmark_summary?: string;
+  risk_level: ExperiencePackRiskLevel;
+  ttl?: string;
+  host_compatibility: ExperiencePackHost[];
+  created_at: string;
+  published_at?: string;
+  rolled_back_from?: string;
+};
+
+export type ExperiencePackMembership = {
+  pack_id: string;
+  version: string;
+  node_id: string;
+  created_at: string;
+};
+
+export type ExperiencePackActivation = {
+  scope_id: string;
+  pack_id: string;
+  enabled: boolean;
+  pinned_version?: string;
+  created_at: string;
   updated_at: string;
 };
 

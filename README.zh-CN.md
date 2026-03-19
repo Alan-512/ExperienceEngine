@@ -43,6 +43,7 @@ ExperienceEngine 不是通用记忆库，也不是 context engine 的替代品�
 当前治理面形态：
 - CLI + MCP 是当前最小可用的治理与审查交互面。
 - 完整的独立 review UI 仍然延后到后续产品阶段。
+- `Experience Pack v1` 新增了本机共享目录 registry，用于 `draft -> review -> publish -> rollback` 的经验资产流程。
 
 ## 快速开始
 
@@ -119,6 +120,7 @@ ee install codex
 - doctor 的首次价值 readiness 摘要，以及 install 完成后的冷启动提示
 - `ee inspect --last` 的来源/证据展示，以及 `ee helped` / `ee harmed` 快速反馈入口
 - `ee maintenance embeddings-reset` 的缓存清理与重建方式
+- `ee pack list|inspect|draft create|review|publish|rollback` 的本地经验包工作流
 
 ## 校验
 

@@ -155,22 +155,54 @@ describe("OpenClaw doctor host-state parsing", () => {
 
   it("detects install drift when the copied plugin bundle is stale", () => {
     const homeDir = makeTempDir();
+    const packageRoot = join(homeDir, "ExperienceEngine");
     const installPath = join(homeDir, ".openclaw", "extensions", "experienceengine");
+    const installStateDir = join(homeDir, ".experienceengine", "adapters", "openclaw");
 
-    installOpenClawAdapter({
-      homeDir,
-      runner() {
-        return "";
-      }
-    });
-
+    mkdirSync(join(packageRoot, "dist", "plugin"), { recursive: true });
+    mkdirSync(join(packageRoot, "dist", "runtime"), { recursive: true });
+    mkdirSync(join(packageRoot, "dist", "store", "sqlite", "repositories"), { recursive: true });
+    mkdirSync(join(installPath, "dist", "plugin"), { recursive: true });
     mkdirSync(join(installPath, "dist", "runtime"), { recursive: true });
+    mkdirSync(join(installPath, "dist", "store", "sqlite", "repositories"), { recursive: true });
+    mkdirSync(installStateDir, { recursive: true });
+
+    writeFileSync(join(packageRoot, "dist", "plugin", "openclaw-plugin.js"), "// bundle\n", "utf8");
+    writeFileSync(join(packageRoot, "dist", "runtime", "service.js"), "// bundle\n", "utf8");
+    writeFileSync(join(packageRoot, "dist", "store", "sqlite", "db.js"), "// bundle\n", "utf8");
+    writeFileSync(
+      join(packageRoot, "dist", "store", "sqlite", "repositories", "injection-repo.js"),
+      "// bundle\n",
+      "utf8"
+    );
+
+    writeFileSync(join(installPath, "dist", "plugin", "openclaw-plugin.js"), "// bundle\n", "utf8");
     writeFileSync(join(installPath, "dist", "runtime", "service.js"), "// stale bundle\n", "utf8");
+    writeFileSync(join(installPath, "dist", "store", "sqlite", "db.js"), "// bundle\n", "utf8");
+    writeFileSync(
+      join(installPath, "dist", "store", "sqlite", "repositories", "injection-repo.js"),
+      "// bundle\n",
+      "utf8"
+    );
+    writeFileSync(
+      join(installStateDir, "install.json"),
+      JSON.stringify({
+        adapter: "openclaw",
+        installedAt: "2026-03-19T00:00:00.000Z",
+        installedVersion: "0.1.0",
+        packageRoot,
+        hostWiring: { wired: true, restartRecommended: false },
+        dataDir: join(homeDir, ".experienceengine"),
+        sqlitePath: join(homeDir, ".experienceengine", "sqlite", "experienceengine.db"),
+        captureDir: join(homeDir, ".experienceengine", "captures")
+      }),
+      "utf8"
+    );
 
     const pluginInfo = `ExperienceEngine
 id: experienceengine
 Status: loaded
-Source path: ${installPath}
+Source path: ${packageRoot}
 Install path: ${installPath}
 `;
     const pluginConfig = `{
