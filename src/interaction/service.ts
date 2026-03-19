@@ -1,4 +1,7 @@
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
+import { compilePack } from "../compiler/compiler.js";
+import { deployCompiledPack, type DeployCompiledPackResult } from "../compiler/deployer.js";
+import type { CompilerTarget, CompileResult } from "../compiler/types.js";
 import { ExperiencePackRegistry } from "../packs/fs-registry.js";
 import type {
   ExperiencePackCompiledArtifact,
@@ -279,6 +282,9 @@ export type ExperienceScopePackStatusView = {
   };
 };
 
+export type ExperiencePackCompileView = CompileResult;
+export type ExperiencePackDeploymentStatusView = DeployCompiledPackResult;
+
 const summarizeAutomaticFeedback = (events: ReviewEvent[]): "helped" | "harmed" | "none" => {
   const automatic = events.filter((event) => event.source === "automatic");
   if (automatic.some((event) => event.event_type === "mark_harmed")) {
@@ -454,6 +460,7 @@ export class ExperienceInteractionService {
   private readonly scopeRepo;
   private readonly packRepo;
   private readonly packRegistry;
+  private readonly packsDir: string;
 
   constructor(config: ExperienceEngineConfig, options: { packsDir?: string } = {}) {
     const db = openDatabase(config);
@@ -468,8 +475,9 @@ export class ExperienceInteractionService {
     this.reviewEventRepo = new ReviewEventRepository(db);
     this.scopeRepo = new ScopeRepository(db);
     this.packRepo = new ExperiencePackRepository(db);
+    this.packsDir = options.packsDir ?? `${config.dataDir}/packs`;
     this.packRegistry = new ExperiencePackRegistry({
-      packsDir: options.packsDir ?? `${config.dataDir}/packs`
+      packsDir: this.packsDir
     });
   }
 
@@ -644,6 +652,51 @@ export class ExperienceInteractionService {
         updatedAt: activation.updated_at
       }))
     };
+  }
+
+  compilePack(args: {
+    packId: string;
+    version?: string;
+    target: CompilerTarget;
+  }): ExperiencePackCompileView {
+    return compilePack({
+      packsDir: this.packsDir,
+      packId: args.packId,
+      version: args.version,
+      target: args.target
+    });
+  }
+
+  inspectPackDeploymentStatus(args: {
+    packId: string;
+    version?: string;
+    target: CompilerTarget;
+    repoPath: string;
+  }): ExperiencePackDeploymentStatusView {
+    return deployCompiledPack({
+      packsDir: this.packsDir,
+      packId: args.packId,
+      version: args.version,
+      target: args.target,
+      repoPath: args.repoPath,
+      statusOnly: true
+    });
+  }
+
+  deployPackPreview(args: {
+    packId: string;
+    version?: string;
+    target: CompilerTarget;
+    repoPath: string;
+  }): ExperiencePackDeploymentStatusView {
+    return deployCompiledPack({
+      packsDir: this.packsDir,
+      packId: args.packId,
+      version: args.version,
+      target: args.target,
+      repoPath: args.repoPath,
+      dryRun: true
+    });
   }
 
   inspectScopePackStatus(cwd: string = process.cwd()): ExperienceScopePackStatusView {

@@ -20,6 +20,7 @@ import { ExperienceStateArtifactService } from "../../interaction/state-artifact
 import { ExperienceRuntimeService } from "../../runtime/service.js";
 import type { ExperienceNodeType, ExperienceState, ToolEventStatus } from "../../types/domain.js";
 import { fetchLatestGitHubReleaseStatus } from "../../version/remote-release.js";
+import type { CompilerTarget } from "../../compiler/types.js";
 
 type CodexLookupArgs = {
   cwd?: string;
@@ -62,6 +63,7 @@ const NODE_STATES: ExperienceState[] = ["candidate", "active", "cooling", "retir
 const NODE_TYPES: ExperienceNodeType[] = ["strategy", "warning"];
 const EXPERIENCE_ADAPTERS = ["openclaw", "claude-code", "codex"] as const;
 const HIGH_IMPACT_OPERATIONS = ["install", "repair", "upgrade"] as const satisfies readonly HighImpactOperation[];
+const COMPILER_TARGETS = ["agents", "codex", "github", "claude"] as const satisfies readonly CompilerTarget[];
 
 const createCodexRuntime = (options: CodexServerOptions = {}): ExperienceRuntimeService => {
   const paths = resolveExperienceEnginePaths({
@@ -321,6 +323,32 @@ export const createCodexInteractionSurface = (options: CodexServerOptions = {}) 
 
     async inspectPack(args: { packId: string }) {
       return interaction.inspectPack(args.packId);
+    },
+
+    async inspectPackDeploymentStatus(args: {
+      packId: string;
+      version?: string;
+      target: CompilerTarget;
+      repoPath: string;
+    }) {
+      return interaction.inspectPackDeploymentStatus(args);
+    },
+
+    async compilePack(args: {
+      packId: string;
+      version?: string;
+      target: CompilerTarget;
+    }) {
+      return interaction.compilePack(args);
+    },
+
+    async deployPackPreview(args: {
+      packId: string;
+      version?: string;
+      target: CompilerTarget;
+      repoPath: string;
+    }) {
+      return interaction.deployPackPreview(args);
     },
 
     async listNodesByState(args: { state: ExperienceState }) {
@@ -969,6 +997,61 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
       }
     },
     async ({ adapter }) => toTextToolResult(await operationalSurface.checkUpdate(adapter))
+  );
+
+  server.registerTool(
+    "experienceengine_pack_status",
+    {
+      title: "ExperienceEngine Pack Status",
+      description: "Inspect whether a compiled Experience Pack target is missing, up to date, or drifted in a repository.",
+      inputSchema: z.object({
+        packId: z.string().min(1),
+        version: z.string().optional(),
+        target: z.enum(COMPILER_TARGETS),
+        repoPath: z.string().min(1)
+      }),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false
+      }
+    },
+    async ({ packId, version, target, repoPath }) =>
+      toStructuredToolResult(
+        await interactionSurface.inspectPackDeploymentStatus({ packId, version, target, repoPath })
+      )
+  );
+
+  server.registerTool(
+    "experienceengine_pack_compile",
+    {
+      title: "ExperienceEngine Pack Compile",
+      description: "Compile a published Experience Pack into a host-friendly artifact without deploying it.",
+      inputSchema: z.object({
+        packId: z.string().min(1),
+        version: z.string().optional(),
+        target: z.enum(COMPILER_TARGETS)
+      })
+    },
+    async ({ packId, version, target }) =>
+      toStructuredToolResult(await interactionSurface.compilePack({ packId, version, target }))
+  );
+
+  server.registerTool(
+    "experienceengine_pack_deploy_preview",
+    {
+      title: "ExperienceEngine Pack Deploy Preview",
+      description: "Preview where a compiled Experience Pack artifact would deploy and whether it would overwrite drifted content.",
+      inputSchema: z.object({
+        packId: z.string().min(1),
+        version: z.string().optional(),
+        target: z.enum(COMPILER_TARGETS),
+        repoPath: z.string().min(1)
+      })
+    },
+    async ({ packId, version, target, repoPath }) =>
+      toStructuredToolResult(
+        await interactionSurface.deployPackPreview({ packId, version, target, repoPath })
+      )
   );
 
   server.registerTool(

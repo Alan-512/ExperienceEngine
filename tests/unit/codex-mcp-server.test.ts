@@ -590,6 +590,109 @@ describe("Codex MCP behavior loop", () => {
     });
   });
 
+  it("supports pack status, compile, and deploy preview through the codex interaction surface", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    seedPack(homeDir, db, nodeRepo, "/repo", nowIso(), "pack_compile_flow", "node_pack_compile_flow");
+    const repoPath = join(homeDir, "target-repo");
+    mkdirSync(repoPath, { recursive: true });
+
+    const surface = createCodexInteractionSurface({ homeDir, env });
+    const initialStatus = await surface.inspectPackDeploymentStatus({
+      packId: "pack_compile_flow",
+      target: "codex",
+      repoPath
+    });
+    const compiled = await surface.compilePack({
+      packId: "pack_compile_flow",
+      target: "codex"
+    });
+    const preview = await surface.deployPackPreview({
+      packId: "pack_compile_flow",
+      target: "codex",
+      repoPath
+    });
+
+    expect(initialStatus).toMatchObject({
+      target: "codex",
+      deploymentStatus: "missing",
+      statusOnly: true
+    });
+    expect(compiled).toMatchObject({
+      packId: "pack_compile_flow",
+      version: "v1",
+      target: "codex"
+    });
+    expect(preview).toMatchObject({
+      target: "codex",
+      deploymentStatus: "missing",
+      dryRun: true,
+      statusOnly: false
+    });
+  });
+
+  it("registers pack management MCP tools for status, compile, and deploy preview", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    seedPack(homeDir, db, nodeRepo, "/repo", nowIso(), "pack_codex_tools", "node_pack_codex_tools");
+    const repoPath = join(homeDir, "repo-under-test");
+    mkdirSync(repoPath, { recursive: true });
+
+    const server = createCodexMcpServer({ homeDir, env });
+    const statusTool = getRegisteredTool(server, "experienceengine_pack_status");
+    const compileTool = getRegisteredTool(server, "experienceengine_pack_compile");
+    const deployPreviewTool = getRegisteredTool(server, "experienceengine_pack_deploy_preview");
+
+    const statusResult = parseTextPayload<{ deploymentStatus: string; statusOnly: boolean }>(
+      (await statusTool.handler({
+        packId: "pack_codex_tools",
+        target: "codex",
+        repoPath
+      })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+    const compileResult = parseTextPayload<{ packId: string; version: string; target: string }>(
+      (await compileTool.handler({
+        packId: "pack_codex_tools",
+        target: "codex"
+      })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+    const deployPreviewResult = parseTextPayload<{ deploymentStatus: string; dryRun: boolean }>(
+      (await deployPreviewTool.handler({
+        packId: "pack_codex_tools",
+        target: "codex",
+        repoPath
+      })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+
+    expect(statusResult).toMatchObject({
+      deploymentStatus: "missing",
+      statusOnly: true
+    });
+    expect(compileResult).toMatchObject({
+      packId: "pack_codex_tools",
+      version: "v1",
+      target: "codex"
+    });
+    expect(deployPreviewResult).toMatchObject({
+      deploymentStatus: "missing",
+      dryRun: true
+    });
+  });
+
   it("registers low-risk MCP tools for feedback and scope toggles", async () => {
     const homeDir = makeTempDir();
     const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
