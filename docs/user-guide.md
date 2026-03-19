@@ -147,17 +147,19 @@ Example:
 
 ```bash
 ee pack compile auth-debug-pack
+ee pack compile auth-debug-pack codex
 ```
 
 Default output location:
 
 ```text
-~/.experienceengine/packs/<pack-id>/compiled/agents/<version>/
+~/.experienceengine/packs/<pack-id>/compiled/<target>/<version>/
 ```
 
 Artifacts produced:
 
-- `AGENTS.md`
+- `AGENTS.md` for `agents` target
+- `CODEX.md` for `codex` target
 - `compile-report.json`
 
 ## Host-Specific Setup

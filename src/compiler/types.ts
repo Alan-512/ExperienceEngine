@@ -10,14 +10,18 @@ import type {
   ExperiencePackVersionManifest
 } from "../packs/types.js";
 
-export type CompilerTarget = "agents";
+export type CompilerTarget = "agents" | "codex";
 
-export type CompilePackToAgentsInput = {
+export type CompilePackInput = {
   packsDir: string;
   packId: string;
   version?: string;
+  target?: CompilerTarget;
   generatedAt?: string;
 };
+
+export type CompilePackToAgentsInput = Omit<CompilePackInput, "target">;
+export type CompilePackToCodexInput = Omit<CompilePackInput, "target">;
 
 export type ConfidenceLevel = "high" | "medium" | "low";
 

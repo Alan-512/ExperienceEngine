@@ -1,5 +1,5 @@
 import { loadConfig } from "../../config/load-config.js";
-import { compilePackToAgents } from "../../compiler/compiler.js";
+import { compilePack } from "../../compiler/compiler.js";
 import { resolveExperienceEnginePaths } from "../../config/path-resolver.js";
 import { ExperiencePackRegistry } from "../../packs/fs-registry.js";
 import { ExperiencePackIndexSync } from "../../packs/index-sync.js";
@@ -13,7 +13,7 @@ const ALL_HOSTS = ["openclaw", "claude-code", "codex"] as const;
 
 const usage = (): void => {
   console.log(
-    "Usage: ee pack <list|inspect <pack-id>|draft create <pack-id> <node-id[,node-id...]> [name...]|review <pack-id> <description...>|publish <pack-id>|compile <pack-id> [version]|rollback <pack-id> <version>>"
+    "Usage: ee pack <list|inspect <pack-id>|draft create <pack-id> <node-id[,node-id...]> [name...]|review <pack-id> <description...>|publish <pack-id>|compile <pack-id> [version] [agents|codex]|rollback <pack-id> <version>>"
   );
 };
 
@@ -162,20 +162,26 @@ export const runPackCommand = (args: string[]): void => {
 
   if (action === "compile") {
     const packId = rest[0];
-    const version = rest[1];
+    const compileTarget = (value: string | undefined): "agents" | "codex" | undefined =>
+      value === "agents" || value === "codex" ? value : undefined;
+    const arg2Target = compileTarget(rest[1]);
+    const arg3Target = compileTarget(rest[2]);
+    const version = arg2Target ? undefined : rest[1];
+    const target = arg2Target ?? arg3Target ?? "agents";
     if (!packId) {
       usage();
       return;
     }
 
     const paths = resolveExperienceEnginePaths();
-    const result = compilePackToAgents({
+    const result = compilePack({
       packsDir: paths.packsDir,
       packId,
-      version
+      version,
+      target
     });
     console.log(`[ExperienceEngine] Compiled experience pack ${packId}.`);
-    console.log(`AGENTS.md: ${result.outputPath}`);
+    console.log(`${target.toUpperCase()}.md: ${result.outputPath}`);
     console.log(`compile-report.json: ${result.reportPath}`);
     return;
   }

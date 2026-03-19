@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
-import { compilePackToAgents } from "../../src/compiler/compiler.js";
+import { compilePack, compilePackToAgents, compilePackToCodex } from "../../src/compiler/compiler.js";
 import { renderAgentsMarkdown } from "../../src/compiler/agents-renderer.js";
 import { resolveExperienceEnginePaths } from "../../src/config/path-resolver.js";
 import { ExperiencePackRegistry } from "../../src/packs/fs-registry.js";
@@ -190,6 +190,75 @@ describe("Experience Compiler v1", () => {
       target: "agents",
       outputPath: result.outputPath
     });
+  });
+
+  it("compiles a published pack into codex instructions output", () => {
+    const homeDir = makeTempDir();
+    const paths = resolveExperienceEnginePaths({ homeDir });
+    const registry = new ExperiencePackRegistry({ packsDir: paths.packsDir });
+
+    registry.createDraft({
+      packId: "codex-pack",
+      name: "Codex Pack",
+      description: "Codex target export.",
+      owner: "seed",
+      scopeHints: ["repo:experienceengine"],
+      taskFamilies: ["test_debug"],
+      hostCompatibility: ["codex"],
+      nodes: [makeNode()]
+    });
+    registry.reviewPack("codex-pack", {
+      description: "Reviewed codex pack.",
+      evidenceSummary: "Reviewed codex evidence.",
+      riskLevel: "low"
+    });
+    registry.publishPack("codex-pack");
+
+    const result = compilePackToCodex({
+      packsDir: paths.packsDir,
+      packId: "codex-pack",
+      generatedAt: "2026-03-19T12:30:00.000Z"
+    });
+
+    expect(result.target).toBe("codex");
+    expect(result.outputDir).toBe(join(paths.packsDir, "codex-pack", "compiled", "codex", "v1"));
+    expect(result.outputPath).toBe(join(paths.packsDir, "codex-pack", "compiled", "codex", "v1", "CODEX.md"));
+    const markdown = readFileSync(result.outputPath, "utf8");
+    expect(markdown).toContain("# Codex Instructions: Codex Pack");
+    expect(markdown).toContain("## Preferred Strategies");
+  });
+
+  it("supports generic compile target selection", () => {
+    const homeDir = makeTempDir();
+    const paths = resolveExperienceEnginePaths({ homeDir });
+    const registry = new ExperiencePackRegistry({ packsDir: paths.packsDir });
+
+    registry.createDraft({
+      packId: "generic-pack",
+      name: "Generic Pack",
+      description: "Generic compile path.",
+      owner: "seed",
+      scopeHints: ["repo:experienceengine"],
+      taskFamilies: ["test_debug"],
+      hostCompatibility: ["codex"],
+      nodes: [makeNode()]
+    });
+    registry.reviewPack("generic-pack", {
+      description: "Reviewed generic pack.",
+      evidenceSummary: "Reviewed generic evidence.",
+      riskLevel: "low"
+    });
+    registry.publishPack("generic-pack");
+
+    const result = compilePack({
+      packsDir: paths.packsDir,
+      packId: "generic-pack",
+      target: "codex",
+      generatedAt: "2026-03-19T12:40:00.000Z"
+    });
+
+    expect(result.target).toBe("codex");
+    expect(result.outputPath).toContain("/compiled/codex/v1/CODEX.md");
   });
 
   it("fails when compiling a non-published pack", () => {

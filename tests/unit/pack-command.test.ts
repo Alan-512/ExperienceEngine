@@ -149,4 +149,23 @@ describe("pack CLI command", () => {
     expect(output).toContain("AGENTS.md:");
     expect(output).toContain("compile-report.json:");
   });
+
+  it("compiles a published pack into CODEX.md output when target is codex", () => {
+    const homeDir = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(homeDir, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+
+    nodeRepo.upsert(makeNode());
+    runPackCommand(["draft", "create", "codex-pack", "node_auth_strategy", "Codex", "Pack"]);
+    runPackCommand(["review", "codex-pack", "Reviewed", "codex", "pack"]);
+    runPackCommand(["publish", "codex-pack"]);
+    runPackCommand(["compile", "codex-pack", "codex"]);
+
+    const output = consoleLogSpy.mock.calls.flat().join("\n");
+    expect(output).toContain("Compiled experience pack codex-pack");
+    expect(output).toContain("CODEX.md:");
+    expect(output).toContain("compile-report.json:");
+  });
 });
