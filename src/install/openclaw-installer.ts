@@ -164,6 +164,17 @@ const removeExistingOpenClawInstallPath = (installPath: string): void => {
   }
 };
 
+export const buildOpenClawPackagedDependencies = (rawPackageJson: Record<string, unknown>): Record<string, string> => {
+  const dependencies =
+    rawPackageJson.dependencies && typeof rawPackageJson.dependencies === "object"
+      ? (rawPackageJson.dependencies as Record<string, string>)
+      : {};
+
+  return {
+    zod: dependencies.zod
+  };
+};
+
 const protectOpenClawReinstallPath = (installPath: string, packageRoot: string, homeDir?: string): void => {
   const normalizedInstallPath = resolve(expandHomePath(installPath, homeDir));
   const normalizedPackageRoot = resolve(expandHomePath(packageRoot, homeDir));
@@ -189,7 +200,7 @@ const protectOpenClawReinstallPath = (installPath: string, packageRoot: string, 
   }
 };
 
-const createOpenClawInstallTarball = (packageRoot: string, paths: ResolvedPathInfo): string => {
+export const createOpenClawInstallTarball = (packageRoot: string, paths: ResolvedPathInfo): string => {
   const tempRoot = mkdtempSync(join(resolveProductStateDir(paths), "openclaw-package-"));
   const stageDir = join(tempRoot, "experienceengine-openclaw");
   mkdirSync(stageDir, { recursive: true });
@@ -204,7 +215,7 @@ const createOpenClawInstallTarball = (packageRoot: string, paths: ResolvedPathIn
     description: rawPackageJson.description,
     openclaw: rawPackageJson.openclaw,
     engines: rawPackageJson.engines,
-    dependencies: rawPackageJson.dependencies
+    dependencies: buildOpenClawPackagedDependencies(rawPackageJson)
   };
   writeFileSync(join(stageDir, "package.json"), `${JSON.stringify(packagedManifest, null, 2)}\n`, "utf8");
 

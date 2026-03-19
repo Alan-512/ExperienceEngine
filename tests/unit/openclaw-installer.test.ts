@@ -1,8 +1,13 @@
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
-import { inspectOpenClawInstall, installOpenClawAdapter } from "../../src/install/openclaw-installer.js";
+import { resolveExperienceEnginePaths } from "../../src/config/path-resolver.js";
+import {
+  createOpenClawInstallTarball,
+  inspectOpenClawInstall,
+  installOpenClawAdapter
+} from "../../src/install/openclaw-installer.js";
 import { readCurrentPackageVersion } from "../../src/version/package-version.js";
 
 const tempDirs: string[] = [];
@@ -96,6 +101,21 @@ describe("OpenClaw installer", () => {
     expect(payload.packageRoot).toBe(report.packageRoot);
     expect(payload.installSource).toBe(report.installSource);
     expect(payload.hostWiring.wired).toBe(true);
+  });
+
+  it("packages a minimal OpenClaw manifest for plugin install", () => {
+    const homeDir = makeTempDir();
+    const paths = resolveExperienceEnginePaths({ homeDir });
+    mkdirSync(join(paths.productHome, "adapters", "openclaw"), { recursive: true });
+    const tarballPath = createOpenClawInstallTarball(process.cwd(), paths);
+    const manifestPath = join(dirname(tarballPath), "experienceengine-openclaw", "package.json");
+    const packagedManifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+      dependencies: Record<string, string>;
+    };
+
+    expect(packagedManifest.dependencies).toEqual({
+      zod: "^3.25.76"
+    });
   });
 
   it("reports install status and resolved paths for doctor output", () => {
