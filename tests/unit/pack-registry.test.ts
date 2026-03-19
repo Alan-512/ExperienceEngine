@@ -222,4 +222,54 @@ describe("ExperiencePackRegistry", () => {
       })
     });
   });
+
+  it("marks compile status as stale when a newer current version has not been compiled yet", () => {
+    const homeDir = makeTempDir();
+    const paths = resolveExperienceEnginePaths({ homeDir });
+    const registry = new ExperiencePackRegistry({ packsDir: paths.packsDir });
+
+    registry.createDraft({
+      packId: "auth-debug-pack",
+      name: "Auth Debug Pack",
+      description: "Reusable auth test debugging tactics.",
+      owner: "seed",
+      scopeHints: ["repo:experienceengine"],
+      taskFamilies: ["test_debug"],
+      hostCompatibility: ["codex"],
+      nodes: [makeNode()]
+    });
+    registry.reviewPack("auth-debug-pack", {
+      description: "Reviewed auth debugging pack.",
+      evidenceSummary: "Repeated auth vitest passes after narrow fixes.",
+      riskLevel: "low"
+    });
+    registry.publishPack("auth-debug-pack");
+    compilePack({
+      packsDir: paths.packsDir,
+      packId: "auth-debug-pack",
+      target: "agents",
+      generatedAt: "2026-03-19T03:00:00.000Z"
+    });
+
+    registry.createDraft({
+      packId: "auth-debug-pack",
+      name: "Auth Debug Pack",
+      description: "Second version of the auth tactics.",
+      owner: "seed",
+      scopeHints: ["repo:experienceengine"],
+      taskFamilies: ["test_debug"],
+      hostCompatibility: ["codex"],
+      nodes: [makeNode({ id: "node_auth_strategy_v2" })]
+    });
+    registry.publishPack("auth-debug-pack");
+
+    expect(registry.getCompileStatus("auth-debug-pack", "v2")).toMatchObject({
+      currentVersionCompiledTargets: [],
+      stale: true,
+      latestArtifact: expect.objectContaining({
+        target: "agents",
+        version: "v1"
+      })
+    });
+  });
 });

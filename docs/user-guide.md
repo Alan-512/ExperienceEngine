@@ -128,6 +128,8 @@ ee pack draft create <pack-id> <node-id[,node-id...]> [name...]
 ee pack review <pack-id> <description...>
 ee pack publish <pack-id>
 ee pack compile <pack-id> [version]
+ee pack compile <pack-id> [version] codex
+ee pack compile <pack-id> [version] github
 ee pack rollback <pack-id> <version>
 ```
 
@@ -135,7 +137,7 @@ Use this when you want to turn a set of proven nodes into a managed local asset 
 
 ### Compiler v1
 
-Compiler v1 turns a published or rolled-back Experience Pack into a host-friendly `AGENTS.md`-style artifact.
+Compiler v1 turns a published or rolled-back Experience Pack into host-friendly static artifacts.
 
 It is intentionally conservative:
 
@@ -148,6 +150,7 @@ Example:
 ```bash
 ee pack compile auth-debug-pack
 ee pack compile auth-debug-pack codex
+ee pack compile auth-debug-pack github
 ```
 
 Default output location:
@@ -160,7 +163,17 @@ Artifacts produced:
 
 - `AGENTS.md` for `agents` target
 - `CODEX.md` for `codex` target
+- `<pack-id>.agent.md` for `github` target
 - `compile-report.json`
+
+Compiler visibility is also exposed through:
+
+- `ee pack list`
+- `ee pack inspect <pack-id>`
+- `ee inspect learning`
+- `ee doctor <adapter>`
+
+These surfaces show which targets the current Pack version has already compiled, whether a published Pack is stale, and the latest compile target/time.
 
 ## Host-Specific Setup
 
