@@ -120,7 +120,7 @@ ee install codex
 - doctor 的首次价值 readiness 摘要，以及 install 完成后的冷启动提示
 - `ee inspect --last` 的来源/证据展示，以及 `ee helped` / `ee harmed` 快速反馈入口
 - `ee maintenance embeddings-reset` 的缓存清理与重建方式
-- `ee pack list|inspect|draft create|review|publish|compile|rollback` 的本地经验包工作流，以及宿主指令导出（`AGENTS.md`、`CODEX.md`、GitHub agent profile markdown）
+- `ee pack list|inspect|draft create|review|publish|compile|deploy|rollback` 的本地经验包工作流、宿主指令导出（`AGENTS.md`、`CODEX.md`、GitHub agent profile markdown），以及带 `--dry-run` / `--force` 的受控落地
 
 ## 校验
 

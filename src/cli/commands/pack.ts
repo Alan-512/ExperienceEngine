@@ -1,5 +1,6 @@
 import { loadConfig } from "../../config/load-config.js";
 import { compilePack } from "../../compiler/compiler.js";
+import { deployCompiledPack } from "../../compiler/deployer.js";
 import { resolveExperienceEnginePaths } from "../../config/path-resolver.js";
 import { ExperiencePackRegistry } from "../../packs/fs-registry.js";
 import { ExperiencePackIndexSync } from "../../packs/index-sync.js";
@@ -14,7 +15,7 @@ const ALL_HOSTS = ["openclaw", "claude-code", "codex"] as const;
 
 const usage = (): void => {
   console.log(
-    "Usage: ee pack <list|inspect <pack-id>|draft create <pack-id> <node-id[,node-id...]> [name...]|review <pack-id> <description...>|publish <pack-id>|compile <pack-id> [version] [agents|codex|github]|rollback <pack-id> <version>>"
+    "Usage: ee pack <list|inspect <pack-id>|draft create <pack-id> <node-id[,node-id...]> [name...]|review <pack-id> <description...>|publish <pack-id>|compile <pack-id> [version] [agents|codex|github]|deploy <pack-id> [version] [agents|codex|github] [repo-path] [--dry-run] [--force]|rollback <pack-id> <version>>"
   );
 };
 
@@ -206,6 +207,42 @@ export const runPackCommand = (args: string[]): void => {
     console.log(`[ExperienceEngine] Compiled experience pack ${packId}.`);
     console.log(`${basename(result.outputPath)}: ${result.outputPath}`);
     console.log(`compile-report.json: ${result.reportPath}`);
+    return;
+  }
+
+  if (action === "deploy") {
+    const compileTarget = (value: string | undefined): "agents" | "codex" | "github" | undefined =>
+      value === "agents" || value === "codex" || value === "github" ? value : undefined;
+    const positional = rest.filter((value) => value !== "--dry-run" && value !== "--force");
+    const packId = positional[0];
+    const arg2Target = compileTarget(positional[1]);
+    const arg3Target = compileTarget(positional[2]);
+    const version = arg2Target ? undefined : positional[1];
+    const target = arg2Target ?? arg3Target ?? "agents";
+    const repoPath = positional[arg2Target ? 2 : arg3Target ? 3 : version ? 2 : 1] ?? process.cwd();
+    const dryRun = rest.includes("--dry-run");
+    const force = rest.includes("--force");
+    if (!packId) {
+      usage();
+      return;
+    }
+
+    const paths = resolveExperienceEnginePaths();
+    const result = deployCompiledPack({
+      packsDir: paths.packsDir,
+      packId,
+      version,
+      target,
+      repoPath,
+      dryRun,
+      force
+    });
+    console.log(`[ExperienceEngine] Deployed compiled pack ${packId}.`);
+    console.log(`Deploy target: ${result.target}`);
+    console.log(`Source: ${result.sourcePath}`);
+    console.log(`Destination: ${result.destinationPath}`);
+    console.log(`Dry run: ${result.dryRun}`);
+    console.log(`Overwrote existing file: ${result.overwritten}`);
     return;
   }
 

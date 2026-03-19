@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -199,5 +199,74 @@ describe("pack CLI command", () => {
     expect(output).toContain("Compiled experience pack github-pack");
     expect(output).toContain("github-pack.agent.md:");
     expect(output).toContain("compile-report.json:");
+  });
+
+  it("deploys a compiled agents target into the target repo with dry-run support", () => {
+    const homeDir = makeTempDir();
+    const targetRepo = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(homeDir, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+
+    nodeRepo.upsert(makeNode());
+    runPackCommand(["draft", "create", "deploy-pack", "node_auth_strategy", "Deploy", "Pack"]);
+    runPackCommand(["review", "deploy-pack", "Reviewed", "deploy", "pack"]);
+    runPackCommand(["publish", "deploy-pack"]);
+
+    runPackCommand(["deploy", "deploy-pack", "agents", targetRepo, "--dry-run"]);
+
+    const output = consoleLogSpy.mock.calls.flat().join("\n");
+    expect(output).toContain("Deploy target: agents");
+    expect(output).toContain(`Destination: ${join(targetRepo, "AGENTS.md")}`);
+    expect(output).toContain("Dry run: true");
+    expect(existsSync(join(targetRepo, "AGENTS.md"))).toBe(false);
+
+    consoleLogSpy.mockClear();
+    runPackCommand(["deploy", "deploy-pack", "agents", targetRepo]);
+    expect(existsSync(join(targetRepo, "AGENTS.md"))).toBe(true);
+    expect(readFileSync(join(targetRepo, "AGENTS.md"), "utf8")).toContain("# Experience Pack: Deploy Pack");
+  });
+
+  it("refuses to overwrite an existing deployed target unless force is set", () => {
+    const homeDir = makeTempDir();
+    const targetRepo = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(homeDir, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+
+    nodeRepo.upsert(makeNode());
+    runPackCommand(["draft", "create", "deploy-pack", "node_auth_strategy", "Deploy", "Pack"]);
+    runPackCommand(["review", "deploy-pack", "Reviewed", "deploy", "pack"]);
+    runPackCommand(["publish", "deploy-pack"]);
+    runPackCommand(["deploy", "deploy-pack", "codex", targetRepo]);
+
+    writeFileSync(join(targetRepo, "CODEX.md"), "custom local content\n");
+    expect(() => runPackCommand(["deploy", "deploy-pack", "codex", targetRepo])).toThrow(
+      "Destination already exists"
+    );
+
+    runPackCommand(["deploy", "deploy-pack", "codex", targetRepo, "--force"]);
+    expect(readFileSync(join(targetRepo, "CODEX.md"), "utf8")).toContain("# Codex Instructions: Deploy Pack");
+  });
+
+  it("deploys a github target into .github/agents using the pack id", () => {
+    const homeDir = makeTempDir();
+    const targetRepo = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(homeDir, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+
+    nodeRepo.upsert(makeNode());
+    runPackCommand(["draft", "create", "github-pack", "node_auth_strategy", "GitHub", "Pack"]);
+    runPackCommand(["review", "github-pack", "Reviewed", "github", "pack"]);
+    runPackCommand(["publish", "github-pack"]);
+
+    runPackCommand(["deploy", "github-pack", "github", targetRepo]);
+    const destination = join(targetRepo, ".github", "agents", "github-pack.md");
+    expect(existsSync(destination)).toBe(true);
+    expect(readFileSync(destination, "utf8")).toContain("# GitHub Copilot Custom Agent Profile");
   });
 });
