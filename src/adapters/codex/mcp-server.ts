@@ -17,6 +17,7 @@ import {
   type OperationalActionsDeps,
 } from "../../interaction/operational-actions-service.js";
 import { ExperienceStateArtifactService } from "../../interaction/state-artifact-service.js";
+import { ExperiencePackActionsService } from "../../interaction/pack-actions-service.js";
 import { ExperienceRuntimeService } from "../../runtime/service.js";
 import type { ExperienceNodeType, ExperienceState, ToolEventStatus } from "../../types/domain.js";
 import { fetchLatestGitHubReleaseStatus } from "../../version/remote-release.js";
@@ -51,6 +52,7 @@ type CodexServerOptions = {
   fetchImpl?: typeof fetch;
   operationalActionsDeps?: OperationalActionsDeps;
   operationalActionsService?: ExperienceOperationalActionsService;
+  packActionsService?: ExperiencePackActionsService;
   stateArtifactService?: ExperienceStateArtifactService;
 };
 
@@ -140,6 +142,15 @@ const createCodexStateArtifactService = (
 ): ExperienceStateArtifactService =>
   options.stateArtifactService ??
   new ExperienceStateArtifactService({
+    env: options.env ?? process.env,
+    homeDir: options.homeDir
+  });
+
+const createCodexPackActionsService = (
+  options: CodexServerOptions = {}
+): ExperiencePackActionsService =>
+  options.packActionsService ??
+  new ExperiencePackActionsService({
     env: options.env ?? process.env,
     homeDir: options.homeDir
   });
@@ -411,6 +422,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
   const interactionSurface = createCodexInteractionSurface(options);
   const operationalSurface = createCodexOperationalService(options);
   const operationalActions = createCodexOperationalActionsService(options);
+  const packActions = createCodexPackActionsService(options);
   const stateArtifacts = createCodexStateArtifactService(options);
   const server = new McpServer({
     name: "experienceengine",
@@ -1005,6 +1017,45 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
       }
     },
     async ({ adapter }) => toTextToolResult(await operationalSurface.checkUpdate(adapter))
+  );
+
+  server.registerTool(
+    "experienceengine_plan_pack_publish",
+    {
+      title: "ExperienceEngine Plan Pack Publish",
+      description: "Create a structured confirmation plan for publishing an Experience Pack.",
+      inputSchema: z.object({
+        packId: z.string().min(1)
+      })
+    },
+    async ({ packId }) => toStructuredToolResult(packActions.planPublish(packId))
+  );
+
+  server.registerTool(
+    "experienceengine_plan_pack_rollback",
+    {
+      title: "ExperienceEngine Plan Pack Rollback",
+      description: "Create a structured confirmation plan for rolling an Experience Pack back to an earlier version.",
+      inputSchema: z.object({
+        packId: z.string().min(1),
+        version: z.string().min(1)
+      })
+    },
+    async ({ packId, version }) => toStructuredToolResult(packActions.planRollback(packId, version))
+  );
+
+  server.registerTool(
+    "experienceengine_execute_planned_pack_operation",
+    {
+      title: "ExperienceEngine Execute Planned Pack Operation",
+      description: "Execute a previously planned pack publish or rollback after explicit confirmation.",
+      inputSchema: z.object({
+        planId: z.string().min(1),
+        confirmationToken: z.string().min(1)
+      })
+    },
+    async ({ planId, confirmationToken }) =>
+      toStructuredToolResult(packActions.executePlannedOperation({ planId, confirmationToken }))
   );
 
   server.registerTool(

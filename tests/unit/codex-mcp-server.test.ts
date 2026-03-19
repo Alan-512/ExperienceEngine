@@ -175,6 +175,103 @@ const seedPack = (
   });
 };
 
+const seedReviewedPack = (
+  homeDir: string,
+  db: ReturnType<typeof openDatabase>,
+  nodeRepo: NodeRepository,
+  cwd: string,
+  timestamp: string,
+  packId: string,
+  nodeId: string
+): void => {
+  seedStrategyNode(nodeRepo, cwd, timestamp, nodeId);
+  const registry = new ExperiencePackRegistry({
+    packsDir: join(homeDir, ".experienceengine", "packs")
+  });
+  const packRepo = new ExperiencePackRepository(db);
+  const indexSync = new ExperiencePackIndexSync(registry, packRepo);
+  const node = nodeRepo.getById(nodeId);
+
+  if (!node) {
+    throw new Error(`Missing seeded node ${nodeId}`);
+  }
+
+  registry.createDraft({
+    packId,
+    name: "Reviewed Pack",
+    description: "Needs publish confirmation",
+    owner: "tester",
+    scopeHints: [`scope:${resolveScope(cwd).scope_id}`],
+    taskFamilies: [node.task_type],
+    hostCompatibility: ["codex"],
+    nodes: [node]
+  });
+  registry.reviewPack(packId, {
+    description: "Reviewed pack waiting for publish",
+    evidenceSummary: "Reviewed once",
+    riskLevel: "medium"
+  });
+  indexSync.syncPack(packId);
+};
+
+const seedRollbackablePack = (
+  homeDir: string,
+  db: ReturnType<typeof openDatabase>,
+  nodeRepo: NodeRepository,
+  cwd: string,
+  timestamp: string,
+  packId: string
+): void => {
+  seedStrategyNode(nodeRepo, cwd, timestamp, `${packId}_node_v1`);
+  seedStrategyNode(nodeRepo, cwd, timestamp, `${packId}_node_v2`);
+  const registry = new ExperiencePackRegistry({
+    packsDir: join(homeDir, ".experienceengine", "packs")
+  });
+  const packRepo = new ExperiencePackRepository(db);
+  const indexSync = new ExperiencePackIndexSync(registry, packRepo);
+  const nodeV1 = nodeRepo.getById(`${packId}_node_v1`);
+  const nodeV2 = nodeRepo.getById(`${packId}_node_v2`);
+
+  if (!nodeV1 || !nodeV2) {
+    throw new Error("Missing rollbackable seeded nodes");
+  }
+
+  registry.createDraft({
+    packId,
+    name: "Rollback Pack",
+    description: "Rollback pack",
+    owner: "tester",
+    scopeHints: [`scope:${resolveScope(cwd).scope_id}`],
+    taskFamilies: [nodeV1.task_type],
+    hostCompatibility: ["codex"],
+    nodes: [nodeV1]
+  });
+  registry.reviewPack(packId, {
+    description: "Rollback pack v1",
+    evidenceSummary: "First reviewed version",
+    riskLevel: "medium"
+  });
+  registry.publishPack(packId);
+
+  registry.createDraft({
+    packId,
+    name: "Rollback Pack",
+    description: "Rollback pack v2",
+    owner: "tester",
+    scopeHints: [`scope:${resolveScope(cwd).scope_id}`],
+    taskFamilies: [nodeV2.task_type],
+    hostCompatibility: ["codex"],
+    nodes: [nodeV2]
+  });
+  registry.reviewPack(packId, {
+    description: "Rollback pack v2",
+    evidenceSummary: "Second reviewed version",
+    riskLevel: "medium"
+  });
+  registry.publishPack(packId);
+  indexSync.syncPack(packId);
+};
+
 describe("Codex MCP behavior loop", () => {
   it("looks up experience hints through the shared core runtime", async () => {
     const homeDir = makeTempDir();
@@ -785,6 +882,77 @@ describe("Codex MCP behavior loop", () => {
     expect(disabledViaTool).toMatchObject({
       packId: "pack_toggle_scope",
       enabled: false
+    });
+  });
+
+  it("registers plan-and-confirm MCP tools for pack publish and rollback", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    seedReviewedPack(homeDir, db, nodeRepo, "/repo", nowIso(), "pack_publish_plan", "node_publish_plan");
+    seedRollbackablePack(homeDir, db, nodeRepo, "/repo", nowIso(), "pack_rollback_plan");
+
+    const server = createCodexMcpServer({ homeDir, env });
+    const planPublishTool = getRegisteredTool(server, "experienceengine_plan_pack_publish");
+    const planRollbackTool = getRegisteredTool(server, "experienceengine_plan_pack_rollback");
+    const executeTool = getRegisteredTool(server, "experienceengine_execute_planned_pack_operation");
+    const inspectSurface = createCodexInteractionSurface({ homeDir, env });
+
+    const publishPlan = parseTextPayload<{ planId: string; confirmationToken: string; commandHint: string }>(
+      (await planPublishTool.handler({ packId: "pack_publish_plan" })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+    const publishExecution = parseTextPayload<{ status: string; result: { currentVersion: string; status: string } }>(
+      (await executeTool.handler({
+        planId: publishPlan.planId,
+        confirmationToken: publishPlan.confirmationToken
+      })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+
+    expect(publishPlan.commandHint).toContain("pack publish pack_publish_plan");
+    expect(publishExecution).toMatchObject({
+      status: "executed",
+      result: {
+        currentVersion: "v1",
+        status: "published"
+      }
+    });
+
+    const rollbackPlan = parseTextPayload<{ planId: string; confirmationToken: string; commandHint: string }>(
+      (await planRollbackTool.handler({ packId: "pack_rollback_plan", version: "v1" })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+    const rollbackExecution = parseTextPayload<{ status: string; result: { currentVersion: string; status: string } }>(
+      (await executeTool.handler({
+        planId: rollbackPlan.planId,
+        confirmationToken: rollbackPlan.confirmationToken
+      })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+
+    expect(rollbackPlan.commandHint).toContain("pack rollback pack_rollback_plan v1");
+    expect(rollbackExecution).toMatchObject({
+      status: "executed",
+      result: {
+        currentVersion: "v1",
+        status: "rolled_back"
+      }
+    });
+
+    const publishedPack = await inspectSurface.inspectPack({ packId: "pack_publish_plan" });
+    const rolledBackPack = await inspectSurface.inspectPack({ packId: "pack_rollback_plan" });
+    expect(publishedPack?.status).toBe("published");
+    expect(rolledBackPack).toMatchObject({
+      status: "rolled_back",
+      currentVersion: "v1"
     });
   });
 
