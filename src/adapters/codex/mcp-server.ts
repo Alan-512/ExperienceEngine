@@ -105,7 +105,10 @@ const createCodexInteractionService = (
         env: options.env ?? process.env,
         homeDir: options.homeDir
       }
-    )
+    ),
+    {
+      packsDir: paths.packsDir
+    }
   );
 };
 
@@ -312,6 +315,14 @@ export const createCodexInteractionSurface = (options: CodexServerOptions = {}) 
       return interaction.inspectNode(args.nodeId);
     },
 
+    async listPacks() {
+      return interaction.listPacks();
+    },
+
+    async inspectPack(args: { packId: string }) {
+      return interaction.inspectPack(args.packId);
+    },
+
     async listNodesByState(args: { state: ExperienceState }) {
       return interaction.listNodesByState(args.state);
     },
@@ -454,6 +465,31 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
           limit: parsePositiveLimit(String(variables.limit ?? "10"))
         })
       )
+  );
+
+  server.registerResource(
+    "experienceengine_packs",
+    "experienceengine://packs",
+    {
+      title: "ExperienceEngine Packs",
+      description: "Published and draft local Experience Pack assets in the shared registry.",
+      mimeType: "application/json"
+    },
+    async (uri) => toJsonResourceResult(uri.toString(), await interactionSurface.listPacks())
+  );
+
+  server.registerResource(
+    "experienceengine_pack",
+    new ResourceTemplate("experienceengine://pack/{id}", {
+      list: undefined
+    }),
+    {
+      title: "ExperienceEngine Pack Detail",
+      description: "A single Experience Pack and its current version detail.",
+      mimeType: "application/json"
+    },
+    async (uri, variables) =>
+      toJsonResourceResult(uri.toString(), await interactionSurface.inspectPack({ packId: String(variables.id) }))
   );
 
   server.registerResource(

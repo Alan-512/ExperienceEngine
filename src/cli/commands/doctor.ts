@@ -24,6 +24,17 @@ type DoctorDeps = {
   inspectOpenClawInstall?: typeof inspectOpenClawInstall;
   readRegistryHealth?: typeof readRegistryHealth;
   inspectFirstValueReadiness?: () => ExperienceFirstValueReadiness;
+  inspectScopePackStatus?: () => {
+    scopeId: string;
+    enabledCount: number;
+    activations: Array<{
+      packId: string;
+      status: string;
+      currentVersion: string;
+      pinnedVersion?: string;
+      enabled: boolean;
+    }>;
+  };
 };
 
 const logRemoteReleaseStatus = (target: string, remoteStatus: RemoteReleaseStatus): void => {
@@ -59,6 +70,8 @@ const logRegistryHealth = (health: RegistryHealth): void => {
 const inspectFirstValueReadiness = (): ExperienceFirstValueReadiness =>
   new ExperienceInteractionService(loadConfig()).inspectFirstValueReadiness();
 
+const inspectScopePackStatus = () => new ExperienceInteractionService(loadConfig()).inspectScopePackStatus();
+
 const logEvaluationMode = (): void => {
   const config = loadConfig();
   console.log("Evaluation mode:");
@@ -73,6 +86,27 @@ const logFirstValueReadiness = (summary: ExperienceFirstValueReadiness): void =>
   console.log(`- Candidates waiting for promotion: ${summary.candidates}`);
   console.log(`- Formal experience nodes: ${summary.nodes}`);
   console.log(`Recommended next step: ${summary.nextStep}`);
+};
+
+const logScopePackStatus = (status: {
+  scopeId: string;
+  enabledCount: number;
+  activations: Array<{
+    packId: string;
+    status: string;
+    currentVersion: string;
+    pinnedVersion?: string;
+    enabled: boolean;
+  }>;
+}): void => {
+  console.log("Current scope packs:");
+  console.log(`- Scope: ${status.scopeId}`);
+  console.log(`- Enabled packs: ${status.enabledCount}`);
+  for (const activation of status.activations.filter((entry) => entry.enabled)) {
+    console.log(
+      `- ${activation.packId}@${activation.pinnedVersion ?? activation.currentVersion} [${activation.status} enabled]`
+    );
+  }
 };
 
 const logDistillationStatus = (status?: {
@@ -96,6 +130,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
   const resolveRemoteStatus = deps.fetchLatestGitHubReleaseStatus ?? fetchLatestGitHubReleaseStatus;
   const registryHealth = (deps.readRegistryHealth ?? readRegistryHealth)();
   const firstValueReadiness = (deps.inspectFirstValueReadiness ?? inspectFirstValueReadiness)();
+  const scopePackStatus = (deps.inspectScopePackStatus ?? inspectScopePackStatus)();
   if (target === "claude-code") {
     const status = (deps.inspectClaudeCodeInstall ?? inspectClaudeCodeInstall)();
     const remoteStatus = await resolveRemoteStatus({
@@ -129,6 +164,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     logRegistryHealth(registryHealth);
     logEvaluationMode();
     logFirstValueReadiness(firstValueReadiness);
+    logScopePackStatus(scopePackStatus);
     return;
   }
 
@@ -164,6 +200,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     logRegistryHealth(registryHealth);
     logEvaluationMode();
     logFirstValueReadiness(firstValueReadiness);
+    logScopePackStatus(scopePackStatus);
     return;
   }
 
@@ -240,4 +277,5 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
   logRegistryHealth(registryHealth);
   logEvaluationMode();
   logFirstValueReadiness(firstValueReadiness);
+  logScopePackStatus(scopePackStatus);
 };

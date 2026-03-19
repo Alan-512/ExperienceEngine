@@ -1,0 +1,219 @@
+import { loadConfig } from "../../config/load-config.js";
+import { resolveExperienceEnginePaths } from "../../config/path-resolver.js";
+import { ExperiencePackRegistry } from "../../packs/fs-registry.js";
+import { ExperiencePackIndexSync } from "../../packs/index-sync.js";
+import { bootstrapDatabase, openDatabase } from "../../store/sqlite/db.js";
+import { NodeRepository } from "../../store/sqlite/repositories/node-repo.js";
+import { ExperiencePackRepository } from "../../store/sqlite/repositories/pack-repo.js";
+import { resolveScope } from "../../input/scope-resolver.js";
+import { nowIso } from "../../utils/clock.js";
+
+const ALL_HOSTS = ["openclaw", "claude-code", "codex"] as const;
+
+const usage = (): void => {
+  console.log(
+    "Usage: ee pack <list|inspect <pack-id>|draft create <pack-id> <node-id[,node-id...]> [name...]|review <pack-id> <description...>|publish <pack-id>|rollback <pack-id> <version>>"
+  );
+};
+
+const openServices = () => {
+  const config = loadConfig();
+  const paths = resolveExperienceEnginePaths();
+  const db = openDatabase(config);
+  bootstrapDatabase(db);
+  const nodeRepo = new NodeRepository(db);
+  const packRepo = new ExperiencePackRepository(db);
+  const registry = new ExperiencePackRegistry({ packsDir: paths.packsDir });
+  const indexSync = new ExperiencePackIndexSync(registry, packRepo);
+
+  return { nodeRepo, packRepo, registry, indexSync };
+};
+
+const unique = <T>(values: T[]): T[] => Array.from(new Set(values));
+
+export const runPackCommand = (args: string[]): void => {
+  const [action, ...rest] = args;
+  const { nodeRepo, packRepo, registry, indexSync } = openServices();
+
+  if (!action || action === "help") {
+    usage();
+    return;
+  }
+
+  if (action === "list") {
+    const packs = registry.listPacks();
+    if (!packs.length) {
+      console.log("No experience packs created yet.");
+      return;
+    }
+
+    console.table(
+      packs.map((pack) => ({
+        pack_id: pack.packId,
+        status: pack.status,
+        current_version: pack.currentVersion,
+        owner: pack.owner,
+        updated_at: pack.updatedAt
+      }))
+    );
+    return;
+  }
+
+  if (action === "inspect") {
+    const packId = rest[0];
+    if (!packId) {
+      usage();
+      return;
+    }
+
+    const pack = registry.readPack(packId);
+    const versions = registry.listVersions(packId);
+    const current = registry.readVersionManifest(packId, pack.currentVersion);
+    const nodes = registry.readVersionNodes(packId, pack.currentVersion);
+    const activations = packRepo.listActivationsByPack(packId);
+    const activationSummary = activations.length
+      ? activations
+          .map(
+            (activation) =>
+              `${activation.scope_id}@${activation.pinned_version ?? pack.currentVersion} [${activation.enabled ? "enabled" : "disabled"}]`
+          )
+          .join(", ")
+      : "none";
+
+    console.log(`Pack: ${pack.packId}`);
+    console.log(`Name: ${pack.name}`);
+    console.log(`Status: ${pack.status}`);
+    console.log(`Current version: ${pack.currentVersion}`);
+    console.log(`Owner: ${pack.owner}`);
+    console.log(`Description: ${pack.description}`);
+    console.log(`Task families: ${pack.taskFamilies.join(", ")}`);
+    console.log(`Hosts: ${pack.hostCompatibility.join(", ")}`);
+    console.log(`Version count: ${versions.length}`);
+    console.log(`Evidence: ${current.evidenceSummary}`);
+    console.log(`Nodes: ${nodes.map((node) => node.id).join(", ")}`);
+    console.log(`Activations: ${activationSummary}`);
+    return;
+  }
+
+  if (action === "draft" && rest[0] === "create") {
+    const packId = rest[1];
+    const nodeIdsCsv = rest[2];
+    const name = rest.slice(3).join(" ").trim() || packId;
+    if (!packId || !nodeIdsCsv) {
+      usage();
+      return;
+    }
+
+    const nodeIds = nodeIdsCsv.split(",").map((value) => value.trim()).filter(Boolean);
+    const nodes = nodeIds
+      .map((id) => nodeRepo.getById(id))
+      .filter((node): node is NonNullable<typeof node> => Boolean(node));
+    if (nodes.length !== nodeIds.length) {
+      throw new Error(`Unknown node id in pack draft: ${nodeIds.join(", ")}`);
+    }
+
+    const typedNodes = nodes;
+    registry.createDraft({
+      packId,
+      name,
+      description: name,
+      owner: process.env.USER ?? process.env.USERNAME ?? "unknown",
+      scopeHints: unique(typedNodes.map((node) => `scope:${node.scope_id}`)),
+      taskFamilies: unique(typedNodes.map((node) => node.task_type)),
+      hostCompatibility: [...ALL_HOSTS],
+      nodes: typedNodes
+    });
+    indexSync.syncPack(packId);
+    console.log(`[ExperienceEngine] Drafted experience pack ${packId}.`);
+    return;
+  }
+
+  if (action === "review") {
+    const packId = rest[0];
+    const description = rest.slice(1).join(" ").trim();
+    if (!packId || !description) {
+      usage();
+      return;
+    }
+
+    registry.reviewPack(packId, {
+      description,
+      evidenceSummary: description,
+      riskLevel: "medium"
+    });
+    indexSync.syncPack(packId);
+    console.log(`[ExperienceEngine] Reviewed experience pack ${packId}.`);
+    return;
+  }
+
+  if (action === "publish") {
+    const packId = rest[0];
+    if (!packId) {
+      usage();
+      return;
+    }
+
+    registry.publishPack(packId);
+    indexSync.syncPack(packId);
+    console.log(`[ExperienceEngine] Published experience pack ${packId}.`);
+    return;
+  }
+
+  if (action === "enable") {
+    const packId = rest[0];
+    const scopeId = rest[1] ?? resolveScope(process.cwd()).scope_id;
+    if (!packId) {
+      usage();
+      return;
+    }
+
+    const pack = registry.readPack(packId);
+    packRepo.upsertActivation({
+      scope_id: scopeId,
+      pack_id: packId,
+      enabled: true,
+      pinned_version: pack.currentVersion,
+      created_at: nowIso(),
+      updated_at: nowIso()
+    });
+    console.log(`[ExperienceEngine] Enabled experience pack ${packId} for scope ${scopeId}.`);
+    return;
+  }
+
+  if (action === "disable") {
+    const packId = rest[0];
+    const scopeId = rest[1] ?? resolveScope(process.cwd()).scope_id;
+    if (!packId) {
+      usage();
+      return;
+    }
+
+    const existing = packRepo.listActivations(scopeId).find((activation) => activation.pack_id === packId);
+    packRepo.upsertActivation({
+      scope_id: scopeId,
+      pack_id: packId,
+      enabled: false,
+      pinned_version: existing?.pinned_version,
+      created_at: existing?.created_at ?? nowIso(),
+      updated_at: nowIso()
+    });
+    console.log(`[ExperienceEngine] Disabled experience pack ${packId} for scope ${scopeId}.`);
+    return;
+  }
+
+  if (action === "rollback") {
+    const packId = rest[0];
+    const version = rest[1];
+    if (!packId || !version) {
+      usage();
+      return;
+    }
+
+    registry.rollbackPack(packId, version);
+    indexSync.syncPack(packId);
+    console.log(`[ExperienceEngine] Rolled back experience pack ${packId} to ${version}.`);
+    return;
+  }
+
+  usage();
+};

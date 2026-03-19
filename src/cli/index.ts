@@ -19,6 +19,7 @@ import { runEnableCommand } from "./commands/enable.js";
 import { runFeedbackCommand, runQuickFeedbackCommand } from "./commands/feedback.js";
 import { runInspectCommand } from "./commands/inspect.js";
 import { runMaintenanceCommand } from "./commands/maintenance.js";
+import { runPackCommand } from "./commands/pack.js";
 import { runStatsCommand } from "./commands/stats.js";
 
 const main = async (): Promise<void> => {
@@ -86,6 +87,9 @@ const main = async (): Promise<void> => {
     case "maintenance":
       await runMaintenanceCommand(args[0]);
       break;
+    case "pack":
+      runPackCommand(args);
+      break;
     case "disable":
       runDisableCommand(args[0], args[1]);
       break;
@@ -102,6 +106,7 @@ const main = async (): Promise<void> => {
       console.log(
         "Usage: ee <install openclaw|claude-code|codex|upgrade openclaw|claude-code|codex|repair openclaw|claude-hook|codex-mcp-server|doctor [claude-code|codex]|stats|inspect|feedback|disable|enable|cool|retire>"
         + " | helped|harmed"
+        + " | pack <list|inspect|draft create|review|publish|rollback>"
         + " | backup|export|import <snapshot-path>|rollback <backup-id>"
         + " | maintenance embeddings-reset|redistill-rule-nodes"
         + " | evaluate openclaw-baseline [--lookback-hours N] [--output-dir PATH]"

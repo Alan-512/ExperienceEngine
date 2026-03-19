@@ -79,6 +79,20 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
       }
     }
 
+    if (record.activePacks.length) {
+      console.log("Active packs:");
+      for (const pack of record.activePacks) {
+        console.log(`- ${pack.packId}@${pack.pinnedVersion ?? pack.currentVersion} [${pack.status} enabled]`);
+      }
+    }
+
+    if (record.matchedPacks.length) {
+      console.log("Matched packs:");
+      for (const pack of record.matchedPacks) {
+        console.log(`- ${pack.packId}@${pack.pinnedVersion ?? pack.currentVersion}`);
+      }
+    }
+
     if (record.timeline.length) {
       console.log("Timeline:");
       for (const entry of record.timeline) {
@@ -149,6 +163,7 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
 
   if (target === "learning") {
     const summary = interaction.inspectLearningSummary();
+    const scopePacks = interaction.inspectScopePackStatus();
     console.log("Candidate lifecycle:");
     console.table(summary.candidates);
     console.log("Distillation jobs:");
@@ -166,6 +181,12 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
     console.table(summary.attributionReasons);
     console.log("Runtime records:");
     console.table(summary.runtime);
+    console.log("Current scope packs:");
+    console.log(`- Scope: ${scopePacks.scopeId}`);
+    console.log(`- Enabled packs: ${scopePacks.enabledCount}`);
+    for (const pack of scopePacks.activations.filter((activation) => activation.enabled)) {
+      console.log(`- ${pack.packId}@${pack.pinnedVersion ?? pack.currentVersion} [${pack.status} enabled]`);
+    }
     if (summary.latestRecordCreatedAt) {
       console.log(`Latest task record: ${summary.latestRecordCreatedAt}`);
     }

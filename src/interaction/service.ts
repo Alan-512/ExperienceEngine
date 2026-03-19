@@ -1,4 +1,6 @@
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
+import { ExperiencePackRegistry } from "../packs/fs-registry.js";
+import type { ExperiencePackSummary, ExperiencePackVersionManifest } from "../packs/types.js";
 import { buildInjectionScorecard } from "../controller/injection-scorecard.js";
 import { buildBenchmarkSummary, type BenchmarkSummary } from "../evaluation/benchmark-summary.js";
 import { resolveScope } from "../input/scope-resolver.js";
@@ -12,6 +14,7 @@ import { OutcomeRecordRepository } from "../store/sqlite/repositories/outcome-re
 import { ReviewEventRepository } from "../store/sqlite/repositories/review-event-repo.js";
 import { ScopeRepository } from "../store/sqlite/repositories/scope-repo.js";
 import { TaskRunRepository } from "../store/sqlite/repositories/task-run-repo.js";
+import { ExperiencePackRepository } from "../store/sqlite/repositories/pack-repo.js";
 import type {
   CandidateLifecycleState,
   DistillationSource,
@@ -82,6 +85,8 @@ export type ExperienceLastInspection = {
   evidence: string[];
   scorecard?: InjectionScorecard;
   timeline: ExperienceTimelineEntry[];
+  activePacks: ExperienceScopePackActivationView[];
+  matchedPacks: ExperienceScopePackActivationView[];
   summary: string;
   createdAt: string;
 };
@@ -226,6 +231,35 @@ const applyNodeFeedback = (node: ExperienceNode, feedback: FeedbackValue): Exper
   };
 };
 
+export type ExperiencePackSummaryView = ExperiencePackSummary;
+
+export type ExperiencePackDetailView = ExperiencePackSummary & {
+  manifest: ExperiencePackVersionManifest;
+  nodeIds: string[];
+  activations: Array<{
+    scopeId: string;
+    enabled: boolean;
+    pinnedVersion?: string;
+    updatedAt: string;
+  }>;
+};
+
+export type ExperienceScopePackActivationView = {
+  scopeId: string;
+  packId: string;
+  status: ExperiencePackSummary["status"];
+  currentVersion: string;
+  pinnedVersion?: string;
+  enabled: boolean;
+  updatedAt: string;
+};
+
+export type ExperienceScopePackStatusView = {
+  scopeId: string;
+  enabledCount: number;
+  activations: ExperienceScopePackActivationView[];
+};
+
 const summarizeAutomaticFeedback = (events: ReviewEvent[]): "helped" | "harmed" | "none" => {
   const automatic = events.filter((event) => event.source === "automatic");
   if (automatic.some((event) => event.event_type === "mark_harmed")) {
@@ -339,6 +373,25 @@ const buildLatestTimeline = (input: {
   return entries.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
 };
 
+const toScopePackActivation = (
+  pack: ReturnType<ExperiencePackRepository["getPack"]>,
+  activation: ReturnType<ExperiencePackRepository["listActivations"]>[number]
+): ExperienceScopePackActivationView | undefined => {
+  if (!pack) {
+    return undefined;
+  }
+
+  return {
+    scopeId: activation.scope_id,
+    packId: activation.pack_id,
+    status: pack.status,
+    currentVersion: pack.current_version,
+    pinnedVersion: activation.pinned_version,
+    enabled: activation.enabled,
+    updatedAt: activation.updated_at
+  };
+};
+
 export class ExperienceInteractionService {
   private readonly inputRepo;
   private readonly injectionRepo;
@@ -349,8 +402,10 @@ export class ExperienceInteractionService {
   private readonly outcomeRepo;
   private readonly reviewEventRepo;
   private readonly scopeRepo;
+  private readonly packRepo;
+  private readonly packRegistry;
 
-  constructor(config: ExperienceEngineConfig) {
+  constructor(config: ExperienceEngineConfig, options: { packsDir?: string } = {}) {
     const db = openDatabase(config);
     bootstrapDatabase(db);
     this.inputRepo = new InputRecordRepository(db);
@@ -362,6 +417,10 @@ export class ExperienceInteractionService {
     this.outcomeRepo = new OutcomeRecordRepository(db);
     this.reviewEventRepo = new ReviewEventRepository(db);
     this.scopeRepo = new ScopeRepository(db);
+    this.packRepo = new ExperiencePackRepository(db);
+    this.packRegistry = new ExperiencePackRegistry({
+      packsDir: options.packsDir ?? `${config.dataDir}/packs`
+    });
   }
 
   inspectLast(): ExperienceLastInspection | undefined {
@@ -410,6 +469,16 @@ export class ExperienceInteractionService {
           : "inject";
     const outcomeRecord = taskRun?.id ? this.outcomeRepo.listByTaskRunId(taskRun.id)[0] : undefined;
     const latestAutomaticFeedback = reviewEvents.find((event) => event.source === "automatic");
+    const scopePackStatus = this.inspectScopePackStatusByScopeId(record.scope_id);
+    const matchedPackIds = new Set<string>();
+    for (const activation of scopePackStatus.activations.filter((entry) => entry.enabled)) {
+      const version = activation.pinnedVersion ?? activation.currentVersion;
+      for (const membership of this.packRepo.listMemberships(activation.packId, version)) {
+        if (selectedNodeIds.includes(membership.node_id)) {
+          matchedPackIds.add(activation.packId);
+        }
+      }
+    }
     const autoFeedbackReason = inferAutoFeedbackReason({
       explicitReason: injectionEvent?.attribution_reason,
       autoFeedback,
@@ -442,6 +511,8 @@ export class ExperienceInteractionService {
         autoFeedback,
         autoFeedbackCreatedAt: latestAutomaticFeedback?.created_at
       }),
+      activePacks: scopePackStatus.activations.filter((activation) => activation.enabled),
+      matchedPacks: scopePackStatus.activations.filter((activation) => matchedPackIds.has(activation.packId)),
       summary: record.task_summary,
       createdAt: record.created_at
     };
@@ -469,6 +540,75 @@ export class ExperienceInteractionService {
   inspectNode(nodeId: string): ExperienceNodeDetail | undefined {
     const node = this.nodeRepo.getById(nodeId);
     return node ? toNodeDetail(node) : undefined;
+  }
+
+  listPacks(): ExperiencePackSummaryView[] {
+    return this.packRepo.listPacks().map((pack) => ({
+      packId: pack.pack_id,
+      name: pack.name,
+      description: pack.description,
+      owner: pack.owner,
+      status: pack.status,
+      currentVersion: pack.current_version,
+      createdAt: pack.created_at,
+      updatedAt: pack.updated_at,
+      publishedAt: pack.published_at,
+      rolledBackAt: pack.rolled_back_at,
+      scopeHints: pack.scope_hints,
+      taskFamilies: pack.task_families,
+      hostCompatibility: pack.host_compatibility
+    }));
+  }
+
+  inspectPack(packId: string): ExperiencePackDetailView | undefined {
+    const pack = this.packRepo.getPack(packId);
+    if (!pack) {
+      return undefined;
+    }
+
+    const manifest = this.packRegistry.readVersionManifest(packId, pack.current_version);
+    const nodes = this.packRegistry.readVersionNodes(packId, pack.current_version);
+
+    return {
+      packId: pack.pack_id,
+      name: pack.name,
+      description: pack.description,
+      owner: pack.owner,
+      status: pack.status,
+      currentVersion: pack.current_version,
+      createdAt: pack.created_at,
+      updatedAt: pack.updated_at,
+      publishedAt: pack.published_at,
+      rolledBackAt: pack.rolled_back_at,
+      scopeHints: pack.scope_hints,
+      taskFamilies: pack.task_families,
+      hostCompatibility: pack.host_compatibility,
+      manifest,
+      nodeIds: nodes.map((node) => node.id),
+      activations: this.packRepo.listActivationsByPack(packId).map((activation) => ({
+        scopeId: activation.scope_id,
+        enabled: activation.enabled,
+        pinnedVersion: activation.pinned_version,
+        updatedAt: activation.updated_at
+      }))
+    };
+  }
+
+  inspectScopePackStatus(cwd: string = process.cwd()): ExperienceScopePackStatusView {
+    return this.inspectScopePackStatusByScopeId(resolveScope(cwd).scope_id);
+  }
+
+  private inspectScopePackStatusByScopeId(scopeId: string): ExperienceScopePackStatusView {
+    const activations = this.packRepo
+      .listActivations(scopeId)
+      .map((activation) => toScopePackActivation(this.packRepo.getPack(activation.pack_id), activation))
+      .filter((activation): activation is ExperienceScopePackActivationView => Boolean(activation));
+
+    return {
+      scopeId,
+      enabledCount: activations.filter((activation) => activation.enabled).length,
+      activations
+    };
   }
 
   listNodesByState(state: ExperienceState): ExperienceNodeSummary[] {

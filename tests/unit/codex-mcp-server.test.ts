@@ -10,8 +10,11 @@ import {
 import { loadConfig } from "../../src/config/load-config.js";
 import { ExperienceStateArtifactService } from "../../src/interaction/state-artifact-service.js";
 import { resolveScope } from "../../src/input/scope-resolver.js";
+import { ExperiencePackRegistry } from "../../src/packs/fs-registry.js";
+import { ExperiencePackIndexSync } from "../../src/packs/index-sync.js";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
+import { ExperiencePackRepository } from "../../src/store/sqlite/repositories/pack-repo.js";
 import { ScopeRepository } from "../../src/store/sqlite/repositories/scope-repo.js";
 import { clearEmbeddingProviderForTests, setEmbeddingProviderForTests } from "../../src/store/vector/embeddings.js";
 import { nowIso } from "../../src/utils/clock.js";
@@ -119,6 +122,54 @@ const seedStrategyNode = (
     last_used_at: undefined,
     last_helped_at: undefined,
     last_harmed_at: undefined,
+    created_at: timestamp,
+    updated_at: timestamp
+  });
+};
+
+const seedPack = (
+  homeDir: string,
+  db: ReturnType<typeof openDatabase>,
+  nodeRepo: NodeRepository,
+  cwd: string,
+  timestamp: string,
+  packId: string,
+  nodeId: string
+): void => {
+  seedStrategyNode(nodeRepo, cwd, timestamp, nodeId);
+  const registry = new ExperiencePackRegistry({
+    packsDir: join(homeDir, ".experienceengine", "packs")
+  });
+  const packRepo = new ExperiencePackRepository(db);
+  const indexSync = new ExperiencePackIndexSync(registry, packRepo);
+  const node = nodeRepo.getById(nodeId);
+
+  if (!node) {
+    throw new Error(`Missing seeded node ${nodeId}`);
+  }
+
+  registry.createDraft({
+    packId,
+    name: "Auth Recovery Pack",
+    description: "Recover the auth test flow",
+    owner: "tester",
+    scopeHints: [`scope:${resolveScope(cwd).scope_id}`],
+    taskFamilies: [node.task_type],
+    hostCompatibility: ["codex", "claude-code"],
+    nodes: [node]
+  });
+  registry.reviewPack(packId, {
+      description: "Reviewed auth recovery guidance",
+      evidenceSummary: "Recovered the auth test failure twice",
+      riskLevel: "medium"
+  });
+  registry.publishPack(packId);
+  indexSync.syncPack(packId);
+  packRepo.upsertActivation({
+    scope_id: resolveScope(cwd).scope_id,
+    pack_id: packId,
+    enabled: true,
+    pinned_version: "v1",
     created_at: timestamp,
     updated_at: timestamp
   });
@@ -468,6 +519,74 @@ describe("Codex MCP behavior loop", () => {
       type: "strategy",
       sourceKind: "system_derived",
       originRecordIds: ["input_origin"]
+    });
+  });
+
+  it("serves pack views through the codex interaction surface and MCP resources", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    seedPack(homeDir, db, nodeRepo, "/repo", nowIso(), "pack_auth_recovery", "node_pack_auth_recovery");
+
+    const surface = createCodexInteractionSurface({ homeDir, env });
+    const packs = await surface.listPacks();
+    const pack = await surface.inspectPack({ packId: "pack_auth_recovery" });
+
+    expect(packs).toEqual([
+      expect.objectContaining({
+        packId: "pack_auth_recovery",
+        status: "published",
+        currentVersion: "v1"
+      })
+    ]);
+    expect(pack).toMatchObject({
+      packId: "pack_auth_recovery",
+      status: "published",
+      currentVersion: "v1",
+      manifest: expect.objectContaining({
+        version: "v1",
+        statusSnapshot: "published"
+      }),
+      nodeIds: ["node_pack_auth_recovery"],
+      activations: [
+        expect.objectContaining({
+          enabled: true,
+          pinnedVersion: "v1"
+        })
+      ]
+    });
+
+    const server = createCodexMcpServer({ homeDir, env });
+    const packsResource = getRegisteredResource(server, "experienceengine://packs");
+    const packResource = getRegisteredResourceTemplate(server, "experienceengine_pack");
+
+    const packsPayload = await packsResource.readCallback(new URL("experienceengine://packs"), {});
+    const packPayload = await packResource.readCallback(
+      new URL("experienceengine://pack/pack_auth_recovery"),
+      { id: "pack_auth_recovery" },
+      {}
+    );
+
+    expect(JSON.parse((packsPayload as { contents: Array<{ text: string }> }).contents[0].text)).toEqual([
+      expect.objectContaining({
+        packId: "pack_auth_recovery",
+        status: "published"
+      })
+    ]);
+    expect(JSON.parse((packPayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({
+      packId: "pack_auth_recovery",
+      manifest: expect.objectContaining({
+        version: "v1"
+      }),
+      nodeIds: ["node_pack_auth_recovery"],
+      activations: [
+        expect.objectContaining({
+          enabled: true
+        })
+      ]
     });
   });
 

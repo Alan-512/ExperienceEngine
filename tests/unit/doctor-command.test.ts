@@ -264,6 +264,50 @@ describe("doctor command", () => {
     );
   });
 
+  it("prints current scope pack activations when packs are enabled", async () => {
+    await runDoctorCommand("codex", {
+      inspectCodexInstall: () => codexStatus(),
+      fetchLatestGitHubReleaseStatus: async () => ({
+        source: "github-releases",
+        repository: "Alan-512/ExperienceEngine",
+        latestVersion: "0.1.0",
+        releaseUrl: null,
+        publishedAt: "2026-03-12T12:00:00Z",
+        state: "current",
+        updateAvailable: false
+      }),
+      inspectFirstValueReadiness: () => ({
+        rawRecords: 1,
+        taskRuns: 1,
+        candidates: 0,
+        nodes: 1,
+        nextStep: "Keep working in the same repo."
+      }),
+      inspectScopePackStatus: () => ({
+        scopeId: "scope_repo",
+        enabledCount: 1,
+        activations: [
+          {
+            packId: "auth-pack",
+            status: "published",
+            currentVersion: "v1",
+            pinnedVersion: "v1",
+            enabled: true
+          }
+        ]
+      })
+    });
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Current scope packs:"],
+        ["- Scope: scope_repo"],
+        ["- Enabled packs: 1"],
+        ["- auth-pack@v1 [published enabled]"]
+      ])
+    );
+  });
+
   it("reports openclaw install drift and recommends repair", async () => {
     await runDoctorCommand("openclaw", {
       inspectOpenClawInstall: () =>

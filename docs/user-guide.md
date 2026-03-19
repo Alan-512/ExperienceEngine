@@ -102,6 +102,36 @@ Today, ExperienceEngine's minimal governance surface is:
 
 A dedicated standalone review UI is still deferred. The current product shape is intentionally CLI/MCP-first rather than UI-first.
 
+## Experience Pack v1
+
+Experience Pack v1 is a **local shared-directory registry** for reusable experience assets.
+
+It lets you take a group of already-validated nodes and move them through a minimal lifecycle:
+
+```text
+draft -> review -> publish -> rollback
+```
+
+Pack v1 is intentionally local-first:
+
+- packs live under `~/.experienceengine/packs`
+- packs are host-agnostic assets, not host-specific config fragments
+- multiple local repos can reuse the same published pack
+- there is no team sync, remote distribution, or UI workflow in v1
+
+Current CLI surface:
+
+```bash
+ee pack list
+ee pack inspect <pack-id>
+ee pack draft create <pack-id> <node-id[,node-id...]> [name...]
+ee pack review <pack-id> <description...>
+ee pack publish <pack-id>
+ee pack rollback <pack-id> <version>
+```
+
+Use this when you want to turn a set of proven nodes into a managed local asset instead of leaving them only in SQLite state.
+
 ## Host-Specific Setup
 
 Before installing any adapter, make sure the host CLI itself already works on this machine:

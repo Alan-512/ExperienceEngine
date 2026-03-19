@@ -44,6 +44,7 @@ import { ScopeRepository } from "../store/sqlite/repositories/scope-repo.js";
 import { StatsRepository } from "../store/sqlite/repositories/stats-repo.js";
 import { TaskRunRepository } from "../store/sqlite/repositories/task-run-repo.js";
 import { InjectionRepository } from "../store/sqlite/repositories/injection-repo.js";
+import { ExperiencePackRepository } from "../store/sqlite/repositories/pack-repo.js";
 import { RuntimeCaptureWriter } from "../plugin/runtime-capture.js";
 import { normalizeToolResult } from "../plugin/hooks/tool-result-persist.js";
 import { extractToolResultsFromPayload } from "../plugin/runtime-helpers.js";
@@ -277,6 +278,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly reviewEventRepo;
   private readonly statsRepo;
   private readonly injectionRepo;
+  private readonly packRepo;
   private readonly distillationWorker;
   readonly captureWriter;
 
@@ -297,6 +299,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     this.reviewEventRepo = new ReviewEventRepository(this.db);
     this.statsRepo = new StatsRepository(this.db);
     this.injectionRepo = new InjectionRepository(this.db);
+    this.packRepo = new ExperiencePackRepository(this.db);
     this.distillationWorker = new DistillationQueueWorker(
       config,
       this.candidateRepo,
@@ -331,6 +334,34 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
 
     session.toolEventKeys.add(key);
     session.toolEvents.push(toolEvent);
+  }
+
+  private resolveScopedNodes(scopeId: string): ExperienceNode[] {
+    const scopedNodes = this.nodeRepo.listInjectableByScope(scopeId);
+    const activations = this.packRepo
+      .listActivations(scopeId)
+      .filter((activation) => activation.enabled);
+
+    if (!activations.length) {
+      return scopedNodes;
+    }
+
+    const allowedNodeIds = new Set<string>();
+    for (const activation of activations) {
+      const version = activation.pinned_version ?? this.packRepo.getPack(activation.pack_id)?.current_version;
+      if (!version) {
+        continue;
+      }
+      for (const membership of this.packRepo.listMemberships(activation.pack_id, version)) {
+        allowedNodeIds.add(membership.node_id);
+      }
+    }
+
+    if (!allowedNodeIds.size) {
+      return [];
+    }
+
+    return scopedNodes.filter((node) => allowedNodeIds.has(node.id));
   }
 
   recoverToolEvents(sessionId: string, payload: unknown): void {
@@ -484,7 +515,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
 
     const stats =
       input.task_type !== "unknown" ? this.statsRepo.get(input.scope_id, input.task_type) : undefined;
-    const nodes = input.task_type !== "unknown" ? this.nodeRepo.listInjectableByScope(input.scope_id) : [];
+    const nodes = input.task_type !== "unknown" ? this.resolveScopedNodes(input.scope_id) : [];
     const decision = await decideIntervention(
       input,
       nodes,

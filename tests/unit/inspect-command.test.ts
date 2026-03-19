@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { runInspectCommand } from "../../src/cli/commands/inspect.js";
 import { loadConfig } from "../../src/config/load-config.js";
 import { resolveScope } from "../../src/input/scope-resolver.js";
+import { ExperiencePackRegistry } from "../../src/packs/fs-registry.js";
+import { ExperiencePackIndexSync } from "../../src/packs/index-sync.js";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
 import { CandidateRepository } from "../../src/store/sqlite/repositories/candidate-repo.js";
 import { DistillationJobRepository } from "../../src/store/sqlite/repositories/distillation-job-repo.js";
@@ -12,6 +14,7 @@ import { InputRecordRepository } from "../../src/store/sqlite/repositories/input
 import { InjectionRepository } from "../../src/store/sqlite/repositories/injection-repo.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
 import { OutcomeRecordRepository } from "../../src/store/sqlite/repositories/outcome-record-repo.js";
+import { ExperiencePackRepository } from "../../src/store/sqlite/repositories/pack-repo.js";
 import { ReviewEventRepository } from "../../src/store/sqlite/repositories/review-event-repo.js";
 import { TaskRunRepository } from "../../src/store/sqlite/repositories/task-run-repo.js";
 import { nowIso } from "../../src/utils/clock.js";
@@ -170,6 +173,39 @@ const makeJob = (overrides: Partial<DistillationJob> = {}): DistillationJob => (
   ...overrides
 });
 
+const seedPackActivation = (home: string, db: ReturnType<typeof openDatabase>, node: ExperienceNode): void => {
+  const registry = new ExperiencePackRegistry({
+    packsDir: join(home, ".experienceengine", "packs")
+  });
+  const packRepo = new ExperiencePackRepository(db);
+  const indexSync = new ExperiencePackIndexSync(registry, packRepo);
+  registry.createDraft({
+    packId: "auth-pack",
+    name: "Auth Pack",
+    description: "Auth Pack",
+    owner: "tester",
+    scopeHints: [`scope:${node.scope_id}`],
+    taskFamilies: [node.task_type],
+    hostCompatibility: ["codex"],
+    nodes: [node]
+  });
+  registry.reviewPack("auth-pack", {
+    description: "Reviewed auth pack",
+    evidenceSummary: "Reviewed auth pack",
+    riskLevel: "medium"
+  });
+  registry.publishPack("auth-pack");
+  indexSync.syncPack("auth-pack");
+  packRepo.upsertActivation({
+    scope_id: node.scope_id,
+    pack_id: "auth-pack",
+    enabled: true,
+    pinned_version: "v1",
+    created_at: nowIso(),
+    updated_at: nowIso()
+  });
+};
+
 afterEach(() => {
   while (tempDirs.length) {
     const dir = tempDirs.pop();
@@ -200,11 +236,13 @@ describe("inspect command", () => {
     const taskRunRepo = new TaskRunRepository(db);
     const outcomeRepo = new OutcomeRecordRepository(db);
     const reviewEventRepo = new ReviewEventRepository(db);
-    nodeRepo.upsert(makeNode());
+    const node = makeNode();
+    nodeRepo.upsert(node);
     inputRepo.upsert(makeRecord());
     taskRunRepo.upsert(makeTaskRun());
     outcomeRepo.upsert(makeOutcomeRecord());
     reviewEventRepo.upsert(makeReviewEvent({ source: "automatic" }));
+    seedPackActivation(home, db, node);
 
     runInspectCommand("--last");
 
@@ -224,6 +262,10 @@ describe("inspect command", () => {
         ["- Recommendation: Apply these hints normally, then mark helped or harmed after the task."],
         ["- Why it matched:"],
         ["  - Exact task-family match was found in historical experience."],
+        ["Active packs:"],
+        ["- auth-pack@v1 [published enabled]"],
+        ["Matched packs:"],
+        ["- auth-pack@v1"],
         ["Automatic feedback: helped"],
         ["Automatic feedback reason: success_outcome"],
         ["Timeline:"],

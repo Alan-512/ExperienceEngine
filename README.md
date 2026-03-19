@@ -46,6 +46,7 @@ What is already implemented and validated:
 Current governance surface:
 - CLI + MCP is the current minimal governance and review surface.
 - A full standalone review UI remains deferred for a later product phase.
+- Experience Pack v1 adds a local shared-directory registry for `draft -> review -> publish -> rollback` experience assets.
 
 ## Quick Start
 
@@ -124,6 +125,7 @@ The user guide includes:
 - doctor first-value readiness output and the install-time cold-start guidance
 - `ee inspect --last` provenance details and quick feedback commands (`ee helped` / `ee harmed`)
 - `ee maintenance embeddings-reset` for clearing and rebuilding the managed embedding cache
+- `ee pack list|inspect|draft create|review|publish|rollback` for the local Experience Pack workflow
 
 ## Validation
 
