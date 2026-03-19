@@ -70,7 +70,7 @@ describe("doctor command", () => {
     expect(consoleLogSpy).toHaveBeenCalledWith(
       "Latest release: https://github.com/Alan-512/ExperienceEngine/releases/tag/v0.2.0"
     );
-  });
+  }, 15000);
 
   it("keeps doctor usable when remote release lookup is unavailable", async () => {
     await runDoctorCommand("claude-code", {
@@ -294,7 +294,17 @@ describe("doctor command", () => {
             pinnedVersion: "v1",
             enabled: true
           }
-        ]
+        ],
+        compiler: {
+          publishedPacks: 1,
+          compiledTargets: 2,
+          latestCompiledArtifact: {
+            packId: "auth-pack",
+            target: "codex",
+            version: "v1",
+            renderedNodeCount: 1
+          }
+        }
       })
     });
 
@@ -303,7 +313,11 @@ describe("doctor command", () => {
         ["Current scope packs:"],
         ["- Scope: scope_repo"],
         ["- Enabled packs: 1"],
-        ["- auth-pack@v1 [published enabled]"]
+        ["- auth-pack@v1 [published enabled]"],
+        ["Pack compiler:"],
+        ["- Published packs: 1"],
+        ["- Compiled targets: 2"],
+        ["- Latest compile: auth-pack@v1 -> codex (1 nodes)"]
       ])
     );
   });

@@ -1,6 +1,10 @@
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import { ExperiencePackRegistry } from "../packs/fs-registry.js";
-import type { ExperiencePackSummary, ExperiencePackVersionManifest } from "../packs/types.js";
+import type {
+  ExperiencePackCompiledArtifact,
+  ExperiencePackSummary,
+  ExperiencePackVersionManifest
+} from "../packs/types.js";
 import { buildInjectionScorecard } from "../controller/injection-scorecard.js";
 import { buildBenchmarkSummary, type BenchmarkSummary } from "../evaluation/benchmark-summary.js";
 import { resolveScope } from "../input/scope-resolver.js";
@@ -156,6 +160,11 @@ export type ExperienceLearningSummary = {
     outcomes: number;
     reviews: number;
   };
+  compiler: {
+    publishedPacks: number;
+    compiledTargets: number;
+    latestCompiledArtifact?: (ExperiencePackCompiledArtifact & { packId: string }) | undefined;
+  };
   latestRecordCreatedAt?: string;
 };
 
@@ -236,6 +245,7 @@ export type ExperiencePackSummaryView = ExperiencePackSummary;
 export type ExperiencePackDetailView = ExperiencePackSummary & {
   manifest: ExperiencePackVersionManifest;
   nodeIds: string[];
+  compiledArtifacts: ExperiencePackCompiledArtifact[];
   activations: Array<{
     scopeId: string;
     enabled: boolean;
@@ -258,6 +268,11 @@ export type ExperienceScopePackStatusView = {
   scopeId: string;
   enabledCount: number;
   activations: ExperienceScopePackActivationView[];
+  compiler: {
+    publishedPacks: number;
+    compiledTargets: number;
+    latestCompiledArtifact?: (ExperiencePackCompiledArtifact & { packId: string }) | undefined;
+  };
 };
 
 const summarizeAutomaticFeedback = (events: ReviewEvent[]): "helped" | "harmed" | "none" => {
@@ -391,6 +406,11 @@ const toScopePackActivation = (
     updatedAt: activation.updated_at
   };
 };
+
+const toCompiledArtifactWithPack = (packId: string, artifact: ExperiencePackCompiledArtifact) => ({
+  ...artifact,
+  packId
+});
 
 export class ExperienceInteractionService {
   private readonly inputRepo;
@@ -585,6 +605,7 @@ export class ExperienceInteractionService {
       hostCompatibility: pack.host_compatibility,
       manifest,
       nodeIds: nodes.map((node) => node.id),
+      compiledArtifacts: this.packRegistry.listCompiledArtifacts(packId),
       activations: this.packRepo.listActivationsByPack(packId).map((activation) => ({
         scopeId: activation.scope_id,
         enabled: activation.enabled,
@@ -603,11 +624,26 @@ export class ExperienceInteractionService {
       .listActivations(scopeId)
       .map((activation) => toScopePackActivation(this.packRepo.getPack(activation.pack_id), activation))
       .filter((activation): activation is ExperienceScopePackActivationView => Boolean(activation));
+    const publishedPackIds = Array.from(
+      new Set(
+        activations
+          .filter((activation) => activation.status === "published" || activation.status === "rolled_back")
+          .map((activation) => activation.packId)
+      )
+    );
+    const compiledArtifacts = publishedPackIds.flatMap((packId) =>
+      this.packRegistry.listCompiledArtifacts(packId).map((artifact) => toCompiledArtifactWithPack(packId, artifact))
+    );
 
     return {
       scopeId,
       enabledCount: activations.filter((activation) => activation.enabled).length,
-      activations
+      activations,
+      compiler: {
+        publishedPacks: publishedPackIds.length,
+        compiledTargets: compiledArtifacts.length,
+        latestCompiledArtifact: compiledArtifacts[0]
+      }
     };
   }
 
@@ -641,6 +677,13 @@ export class ExperienceInteractionService {
     ];
     const latestRecord = this.inputRepo.getLatest();
     const allNodes = this.nodeRepo.listAll();
+    const publishedPackIds = this.packRepo
+      .listPacks()
+      .filter((pack) => pack.status === "published" || pack.status === "rolled_back")
+      .map((pack) => pack.pack_id);
+    const compiledArtifacts = publishedPackIds.flatMap((packId) =>
+      this.packRegistry.listCompiledArtifacts(packId).map((artifact) => toCompiledArtifactWithPack(packId, artifact))
+    );
 
     const effectiveness = {
       decisions: this.injectionRepo.count(),
@@ -679,6 +722,11 @@ export class ExperienceInteractionService {
         taskRuns: this.taskRunRepo.count(),
         outcomes: this.outcomeRepo.count(),
         reviews: this.reviewEventRepo.count()
+      },
+      compiler: {
+        publishedPacks: publishedPackIds.length,
+        compiledTargets: compiledArtifacts.length,
+        latestCompiledArtifact: compiledArtifacts[0]
       },
       latestRecordCreatedAt: latestRecord?.created_at
     };

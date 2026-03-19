@@ -181,11 +181,19 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
     console.table(summary.attributionReasons);
     console.log("Runtime records:");
     console.table(summary.runtime);
+    console.log("Compiler:");
+    console.table(summary.compiler);
     console.log("Current scope packs:");
     console.log(`- Scope: ${scopePacks.scopeId}`);
     console.log(`- Enabled packs: ${scopePacks.enabledCount}`);
     for (const pack of scopePacks.activations.filter((activation) => activation.enabled)) {
       console.log(`- ${pack.packId}@${pack.pinnedVersion ?? pack.currentVersion} [${pack.status} enabled]`);
+    }
+    if (scopePacks.compiler.latestCompiledArtifact) {
+      const latest = scopePacks.compiler.latestCompiledArtifact;
+      console.log(
+        `- Latest compiled target: ${latest.packId}@${latest.version} -> ${latest.target} (${latest.renderedNodeCount} nodes)`
+      );
     }
     if (summary.latestRecordCreatedAt) {
       console.log(`Latest task record: ${summary.latestRecordCreatedAt}`);

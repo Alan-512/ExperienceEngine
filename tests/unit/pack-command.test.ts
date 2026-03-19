@@ -94,6 +94,7 @@ describe("pack CLI command", () => {
     runPackCommand(["review", "auth-debug-pack", "Reviewed", "auth", "debugging", "pack"]);
     runPackCommand(["publish", "auth-debug-pack"]);
     runPackCommand(["enable", "auth-debug-pack", "scope_ee"]);
+    runPackCommand(["compile", "auth-debug-pack"]);
     runPackCommand(["list"]);
     runPackCommand(["inspect", "auth-debug-pack"]);
 
@@ -113,6 +114,8 @@ describe("pack CLI command", () => {
     expect(consoleLogSpy.mock.calls.flat().join("\n")).toContain("Pack: auth-debug-pack");
     expect(consoleLogSpy.mock.calls.flat().join("\n")).toContain("Status: published");
     expect(consoleLogSpy.mock.calls.flat().join("\n")).toContain("Activations: scope_ee@v1 [enabled]");
+    expect(consoleLogSpy.mock.calls.flat().join("\n")).toContain("Compiled targets:");
+    expect(consoleLogSpy.mock.calls.flat().join("\n")).toContain("agents@v1");
 
     runPackCommand(["draft", "create", "auth-debug-pack", "node_auth_strategy", "Auth", "Debug", "Pack"]);
     runPackCommand(["publish", "auth-debug-pack"]);
@@ -166,6 +169,25 @@ describe("pack CLI command", () => {
     const output = consoleLogSpy.mock.calls.flat().join("\n");
     expect(output).toContain("Compiled experience pack codex-pack");
     expect(output).toContain("CODEX.md:");
+    expect(output).toContain("compile-report.json:");
+  });
+
+  it("compiles a published pack into a GitHub custom agent profile when target is github", () => {
+    const homeDir = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(homeDir, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+
+    nodeRepo.upsert(makeNode());
+    runPackCommand(["draft", "create", "github-pack", "node_auth_strategy", "GitHub", "Pack"]);
+    runPackCommand(["review", "github-pack", "Reviewed", "github", "pack"]);
+    runPackCommand(["publish", "github-pack"]);
+    runPackCommand(["compile", "github-pack", "github"]);
+
+    const output = consoleLogSpy.mock.calls.flat().join("\n");
+    expect(output).toContain("Compiled experience pack github-pack");
+    expect(output).toContain("github-pack.agent.md:");
     expect(output).toContain("compile-report.json:");
   });
 });

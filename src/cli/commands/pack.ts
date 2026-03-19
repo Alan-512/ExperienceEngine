@@ -3,6 +3,7 @@ import { compilePack } from "../../compiler/compiler.js";
 import { resolveExperienceEnginePaths } from "../../config/path-resolver.js";
 import { ExperiencePackRegistry } from "../../packs/fs-registry.js";
 import { ExperiencePackIndexSync } from "../../packs/index-sync.js";
+import { basename } from "node:path";
 import { bootstrapDatabase, openDatabase } from "../../store/sqlite/db.js";
 import { NodeRepository } from "../../store/sqlite/repositories/node-repo.js";
 import { ExperiencePackRepository } from "../../store/sqlite/repositories/pack-repo.js";
@@ -13,7 +14,7 @@ const ALL_HOSTS = ["openclaw", "claude-code", "codex"] as const;
 
 const usage = (): void => {
   console.log(
-    "Usage: ee pack <list|inspect <pack-id>|draft create <pack-id> <node-id[,node-id...]> [name...]|review <pack-id> <description...>|publish <pack-id>|compile <pack-id> [version] [agents|codex]|rollback <pack-id> <version>>"
+    "Usage: ee pack <list|inspect <pack-id>|draft create <pack-id> <node-id[,node-id...]> [name...]|review <pack-id> <description...>|publish <pack-id>|compile <pack-id> [version] [agents|codex|github]|rollback <pack-id> <version>>"
   );
 };
 
@@ -93,6 +94,16 @@ export const runPackCommand = (args: string[]): void => {
     console.log(`Evidence: ${current.evidenceSummary}`);
     console.log(`Nodes: ${nodes.map((node) => node.id).join(", ")}`);
     console.log(`Activations: ${activationSummary}`);
+    const compiledArtifacts = registry.listCompiledArtifacts(packId);
+    if (compiledArtifacts.length) {
+      console.log("Compiled targets:");
+      for (const artifact of compiledArtifacts) {
+        console.log(`- ${artifact.target}@${artifact.version} (${artifact.renderedNodeCount} nodes)`);
+        console.log(`  Output: ${artifact.outputPath}`);
+      }
+    } else {
+      console.log("Compiled targets: none");
+    }
     return;
   }
 
@@ -162,8 +173,8 @@ export const runPackCommand = (args: string[]): void => {
 
   if (action === "compile") {
     const packId = rest[0];
-    const compileTarget = (value: string | undefined): "agents" | "codex" | undefined =>
-      value === "agents" || value === "codex" ? value : undefined;
+    const compileTarget = (value: string | undefined): "agents" | "codex" | "github" | undefined =>
+      value === "agents" || value === "codex" || value === "github" ? value : undefined;
     const arg2Target = compileTarget(rest[1]);
     const arg3Target = compileTarget(rest[2]);
     const version = arg2Target ? undefined : rest[1];
@@ -181,7 +192,7 @@ export const runPackCommand = (args: string[]): void => {
       target
     });
     console.log(`[ExperienceEngine] Compiled experience pack ${packId}.`);
-    console.log(`${target.toUpperCase()}.md: ${result.outputPath}`);
+    console.log(`${basename(result.outputPath)}: ${result.outputPath}`);
     console.log(`compile-report.json: ${result.reportPath}`);
     return;
   }

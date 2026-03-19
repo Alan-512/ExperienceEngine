@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { resolveExperienceEnginePaths } from "../../src/config/path-resolver.js";
 import { ExperiencePackRegistry } from "../../src/packs/fs-registry.js";
+import { compilePack } from "../../src/compiler/compiler.js";
 import type { ExperienceNode } from "../../src/types/domain.js";
 
 const tempDirs: string[] = [];
@@ -162,5 +163,55 @@ describe("ExperiencePackRegistry", () => {
     expect(v1Manifest.statusSnapshot).toBe("published");
     expect(v1Manifest.publishedAt).toBeTruthy();
     expect(v2Manifest.version).toBe("v2");
+  });
+
+  it("lists compiled artifacts for a pack by target and version", () => {
+    const homeDir = makeTempDir();
+    const paths = resolveExperienceEnginePaths({ homeDir });
+    const registry = new ExperiencePackRegistry({ packsDir: paths.packsDir });
+
+    registry.createDraft({
+      packId: "auth-debug-pack",
+      name: "Auth Debug Pack",
+      description: "Reusable auth test debugging tactics.",
+      owner: "seed",
+      scopeHints: ["repo:experienceengine"],
+      taskFamilies: ["test_debug"],
+      hostCompatibility: ["codex"],
+      nodes: [makeNode()]
+    });
+    registry.reviewPack("auth-debug-pack", {
+      description: "Reviewed auth debugging pack.",
+      evidenceSummary: "Repeated auth vitest passes after narrow fixes.",
+      riskLevel: "low"
+    });
+    registry.publishPack("auth-debug-pack");
+    compilePack({
+      packsDir: paths.packsDir,
+      packId: "auth-debug-pack",
+      target: "agents",
+      generatedAt: "2026-03-19T03:00:00.000Z"
+    });
+    compilePack({
+      packsDir: paths.packsDir,
+      packId: "auth-debug-pack",
+      target: "codex",
+      generatedAt: "2026-03-19T04:00:00.000Z"
+    });
+
+    expect(registry.listCompiledArtifacts("auth-debug-pack")).toEqual([
+      expect.objectContaining({
+        target: "codex",
+        version: "v1",
+        generatedAt: "2026-03-19T04:00:00.000Z",
+        renderedNodeCount: 1
+      }),
+      expect.objectContaining({
+        target: "agents",
+        version: "v1",
+        generatedAt: "2026-03-19T03:00:00.000Z",
+        renderedNodeCount: 1
+      })
+    ]);
   });
 });

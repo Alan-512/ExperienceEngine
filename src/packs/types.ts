@@ -70,3 +70,12 @@ export type ExperiencePackDraftCreateInput = {
   hostCompatibility: ExperiencePackHost[];
   nodes: ExperienceNode[];
 };
+
+export type ExperiencePackCompiledArtifact = {
+  target: string;
+  version: string;
+  generatedAt: string;
+  outputPath: string;
+  reportPath: string;
+  renderedNodeCount: number;
+};

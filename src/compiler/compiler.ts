@@ -4,6 +4,7 @@ import { ExperiencePackRegistry } from "../packs/fs-registry.js";
 import { nowIso } from "../utils/clock.js";
 import { renderAgentsMarkdown, selectRenderableNodes } from "./agents-renderer.js";
 import { renderCodexMarkdown } from "./codex-renderer.js";
+import { renderGitHubAgentMarkdown } from "./github-renderer.js";
 import type {
   CompilePackInput,
   CompilePackToAgentsInput,
@@ -18,7 +19,17 @@ const ensureCompilablePackStatus = (status: string): void => {
   }
 };
 
-const targetOutput = (target: "agents" | "codex"): { fileName: string; renderer: typeof renderAgentsMarkdown } => {
+const targetOutput = (
+  target: "agents" | "codex" | "github",
+  packId: string
+): { fileName: string; renderer: typeof renderAgentsMarkdown } => {
+  if (target === "github") {
+    return {
+      fileName: `${packId}.agent.md`,
+      renderer: renderGitHubAgentMarkdown
+    };
+  }
+
   if (target === "codex") {
     return {
       fileName: "CODEX.md",
@@ -51,7 +62,7 @@ export const compilePack = (input: CompilePackInput): CompileResult => {
     throw new Error(`No renderable nodes in pack version: ${input.packId}@${version}`);
   }
 
-  const { fileName, renderer } = targetOutput(target);
+  const { fileName, renderer } = targetOutput(target, input.packId);
   const outputDir = resolve(join(input.packsDir, input.packId, "compiled", target, version));
   const outputPath = join(outputDir, fileName);
   const reportPath = join(outputDir, "compile-report.json");

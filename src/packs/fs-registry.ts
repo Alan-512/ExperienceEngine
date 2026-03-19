@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import type { ExperienceNode } from "../types/domain.js";
 import { nowIso } from "../utils/clock.js";
 import type {
+  ExperiencePackCompiledArtifact,
   ExperiencePackDraftCreateInput,
   ExperiencePackRiskLevel,
   ExperiencePackNodeSnapshot,
@@ -62,6 +63,10 @@ export class ExperiencePackRegistry {
 
   private versionDir(packId: string, version: string): string {
     return join(this.packDir(packId), "versions", version);
+  }
+
+  private compiledRoot(packId: string): string {
+    return join(this.packDir(packId), "compiled");
   }
 
   private readJson<T>(path: string): T {
@@ -148,6 +153,47 @@ export class ExperiencePackRegistry {
   readVersionNodes(packId: string, version: string): ExperiencePackNodeSnapshot[] {
     return this.readJson<ExperiencePackNodeSnapshot[]>(
       join(this.versionDir(packId, version), "nodes.json")
+    );
+  }
+
+  listCompiledArtifacts(packId: string): ExperiencePackCompiledArtifact[] {
+    const compiledRoot = this.compiledRoot(packId);
+    if (!existsSync(compiledRoot)) {
+      return [];
+    }
+
+    const artifacts: ExperiencePackCompiledArtifact[] = [];
+    for (const targetEntry of readdirSync(compiledRoot, { withFileTypes: true }).filter((entry) => entry.isDirectory())) {
+      const targetRoot = join(compiledRoot, targetEntry.name);
+      for (const versionEntry of readdirSync(targetRoot, { withFileTypes: true }).filter((entry) => entry.isDirectory())) {
+        const reportPath = join(targetRoot, versionEntry.name, "compile-report.json");
+        if (!existsSync(reportPath)) {
+          continue;
+        }
+
+        const report = this.readJson<{
+          target: string;
+          version: string;
+          generatedAt: string;
+          outputPath: string;
+          renderedNodeCount: number;
+        }>(reportPath);
+
+        artifacts.push({
+          target: report.target,
+          version: report.version,
+          generatedAt: report.generatedAt,
+          outputPath: report.outputPath,
+          reportPath,
+          renderedNodeCount: report.renderedNodeCount
+        });
+      }
+    }
+
+    return artifacts.sort((left, right) =>
+      right.generatedAt.localeCompare(left.generatedAt) ||
+      left.target.localeCompare(right.target) ||
+      left.version.localeCompare(right.version)
     );
   }
 

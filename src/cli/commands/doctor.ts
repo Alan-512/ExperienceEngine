@@ -34,6 +34,16 @@ type DoctorDeps = {
       pinnedVersion?: string;
       enabled: boolean;
     }>;
+    compiler: {
+      publishedPacks: number;
+      compiledTargets: number;
+      latestCompiledArtifact?: {
+        packId: string;
+        target: string;
+        version: string;
+        renderedNodeCount: number;
+      };
+    };
   };
 };
 
@@ -98,6 +108,16 @@ const logScopePackStatus = (status: {
     pinnedVersion?: string;
     enabled: boolean;
   }>;
+  compiler: {
+    publishedPacks: number;
+    compiledTargets: number;
+    latestCompiledArtifact?: {
+      packId: string;
+      target: string;
+      version: string;
+      renderedNodeCount: number;
+    };
+  };
 }): void => {
   console.log("Current scope packs:");
   console.log(`- Scope: ${status.scopeId}`);
@@ -105,6 +125,15 @@ const logScopePackStatus = (status: {
   for (const activation of status.activations.filter((entry) => entry.enabled)) {
     console.log(
       `- ${activation.packId}@${activation.pinnedVersion ?? activation.currentVersion} [${activation.status} enabled]`
+    );
+  }
+  console.log("Pack compiler:");
+  console.log(`- Published packs: ${status.compiler.publishedPacks}`);
+  console.log(`- Compiled targets: ${status.compiler.compiledTargets}`);
+  if (status.compiler.latestCompiledArtifact) {
+    const latest = status.compiler.latestCompiledArtifact;
+    console.log(
+      `- Latest compile: ${latest.packId}@${latest.version} -> ${latest.target} (${latest.renderedNodeCount} nodes)`
     );
   }
 };

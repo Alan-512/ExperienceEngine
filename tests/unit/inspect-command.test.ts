@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runInspectCommand } from "../../src/cli/commands/inspect.js";
+import { compilePack } from "../../src/compiler/compiler.js";
 import { loadConfig } from "../../src/config/load-config.js";
 import { resolveScope } from "../../src/input/scope-resolver.js";
 import { ExperiencePackRegistry } from "../../src/packs/fs-registry.js";
@@ -278,6 +279,48 @@ describe("inspect command", () => {
         ["- Bash: success: auth test now passes"],
         ["Outcome: success"]
       ])
+    );
+  });
+
+  it("prints compiler visibility in learning summary", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+
+    const nodeRepo = new NodeRepository(db);
+    const node = makeNode({ scope_id: resolveScope(process.cwd()).scope_id });
+    nodeRepo.upsert(node);
+    seedPackActivation(home, db, node);
+    compilePack({
+      packsDir: join(home, ".experienceengine", "packs"),
+      packId: "auth-pack",
+      target: "agents",
+      generatedAt: "2026-03-19T05:00:00.000Z"
+    });
+
+    runInspectCommand("learning");
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Compiler:"],
+        ["Current scope packs:"],
+        [`- Scope: ${resolveScope(process.cwd()).scope_id}`],
+        ["- Enabled packs: 1"],
+        ["- auth-pack@v1 [published enabled]"],
+        ["- Latest compiled target: auth-pack@v1 -> agents (1 nodes)"]
+      ])
+    );
+    expect(consoleTableSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        publishedPacks: 1,
+        compiledTargets: 1,
+        latestCompiledArtifact: expect.objectContaining({
+          packId: "auth-pack",
+          target: "agents",
+          version: "v1"
+        })
+      })
     );
   });
 

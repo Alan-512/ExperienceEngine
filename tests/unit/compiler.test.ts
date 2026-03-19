@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { compilePack, compilePackToAgents, compilePackToCodex } from "../../src/compiler/compiler.js";
 import { renderAgentsMarkdown } from "../../src/compiler/agents-renderer.js";
+import { renderGitHubAgentMarkdown } from "../../src/compiler/github-renderer.js";
 import { resolveExperienceEnginePaths } from "../../src/config/path-resolver.js";
 import { ExperiencePackRegistry } from "../../src/packs/fs-registry.js";
 import type { ExperienceNode } from "../../src/types/domain.js";
@@ -228,6 +229,47 @@ describe("Experience Compiler v1", () => {
     expect(markdown).toContain("## Preferred Strategies");
   });
 
+  it("renders a github custom agent profile with frontmatter and guidance sections", () => {
+    const markdown = renderGitHubAgentMarkdown({
+      generatedAt: "2026-03-19T12:35:00.000Z",
+      pack: {
+        packId: "github-pack",
+        name: "GitHub Pack",
+        description: "GitHub target export.",
+        owner: "seed",
+        status: "published",
+        currentVersion: "v1",
+        createdAt: "2026-03-19T00:00:00.000Z",
+        updatedAt: "2026-03-19T00:00:00.000Z",
+        publishedAt: "2026-03-19T00:00:00.000Z",
+        rolledBackAt: undefined,
+        scopeHints: ["repo:experienceengine"],
+        taskFamilies: ["test_debug"],
+        hostCompatibility: ["codex", "claude-code"]
+      },
+      manifest: {
+        packId: "github-pack",
+        version: "v1",
+        statusSnapshot: "published",
+        sourceNodeIds: ["node_auth_strategy"],
+        evidenceSummary: "GitHub agent evidence",
+        benchmarkSummary: "healthy",
+        riskLevel: "medium",
+        ttl: undefined,
+        hostCompatibility: ["codex"],
+        createdAt: "2026-03-19T00:00:00.000Z",
+        publishedAt: "2026-03-19T00:00:00.000Z"
+      },
+      nodes: [makeNode()]
+    });
+
+    expect(markdown).toContain("---");
+    expect(markdown).toContain("name: GitHub Pack");
+    expect(markdown).toContain("tools:");
+    expect(markdown).toContain("# GitHub Copilot Custom Agent Profile");
+    expect(markdown).toContain("## Preferred Strategies");
+  });
+
   it("supports generic compile target selection", () => {
     const homeDir = makeTempDir();
     const paths = resolveExperienceEnginePaths({ homeDir });
@@ -259,6 +301,42 @@ describe("Experience Compiler v1", () => {
 
     expect(result.target).toBe("codex");
     expect(result.outputPath).toContain("/compiled/codex/v1/CODEX.md");
+  });
+
+  it("supports github custom agent profile output", () => {
+    const homeDir = makeTempDir();
+    const paths = resolveExperienceEnginePaths({ homeDir });
+    const registry = new ExperiencePackRegistry({ packsDir: paths.packsDir });
+
+    registry.createDraft({
+      packId: "github-pack",
+      name: "GitHub Pack",
+      description: "GitHub custom agent export.",
+      owner: "seed",
+      scopeHints: ["repo:experienceengine"],
+      taskFamilies: ["test_debug"],
+      hostCompatibility: ["codex"],
+      nodes: [makeNode()]
+    });
+    registry.reviewPack("github-pack", {
+      description: "Reviewed GitHub pack.",
+      evidenceSummary: "Reviewed GitHub evidence.",
+      riskLevel: "low"
+    });
+    registry.publishPack("github-pack");
+
+    const result = compilePack({
+      packsDir: paths.packsDir,
+      packId: "github-pack",
+      target: "github",
+      generatedAt: "2026-03-19T12:50:00.000Z"
+    });
+
+    expect(result.target).toBe("github");
+    expect(result.outputPath).toContain("/compiled/github/v1/github-pack.agent.md");
+    const markdown = readFileSync(result.outputPath, "utf8");
+    expect(markdown).toContain("name: GitHub Pack");
+    expect(markdown).toContain("# GitHub Copilot Custom Agent Profile");
   });
 
   it("fails when compiling a non-published pack", () => {
