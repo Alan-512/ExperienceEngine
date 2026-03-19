@@ -1,4 +1,6 @@
 import { loadConfig } from "../../config/load-config.js";
+import { deployCompiledPack } from "../../compiler/deployer.js";
+import { resolveExperienceEnginePaths } from "../../config/path-resolver.js";
 import {
   ExperienceInteractionService,
   type ExperienceFirstValueReadiness
@@ -46,6 +48,10 @@ type DoctorDeps = {
       };
     };
   };
+  inspectPackDeploymentStatus?: (packId: string, target: "agents" | "codex" | "github", repoPath: string) => {
+    target: "agents" | "codex" | "github";
+    deploymentStatus: "missing" | "up_to_date" | "drifted";
+  };
 };
 
 const logRemoteReleaseStatus = (target: string, remoteStatus: RemoteReleaseStatus): void => {
@@ -82,6 +88,25 @@ const inspectFirstValueReadiness = (): ExperienceFirstValueReadiness =>
   new ExperienceInteractionService(loadConfig()).inspectFirstValueReadiness();
 
 const inspectScopePackStatus = () => new ExperienceInteractionService(loadConfig()).inspectScopePackStatus();
+const inspectPackDeploymentStatus = (
+  packId: string,
+  target: "agents" | "codex" | "github",
+  repoPath: string
+) => {
+  const paths = resolveExperienceEnginePaths();
+  const result = deployCompiledPack({
+    packsDir: paths.packsDir,
+    packId,
+    target,
+    repoPath,
+    statusOnly: true
+  });
+
+  return {
+    target: result.target,
+    deploymentStatus: result.deploymentStatus
+  };
+};
 
 const logEvaluationMode = (): void => {
   const config = loadConfig();
@@ -120,7 +145,7 @@ const logScopePackStatus = (status: {
       renderedNodeCount: number;
     };
   };
-}): void => {
+}, deploymentStatus?: { target: "agents" | "codex" | "github"; deploymentStatus: "missing" | "up_to_date" | "drifted" }): void => {
   console.log("Current scope packs:");
   console.log(`- Scope: ${status.scopeId}`);
   console.log(`- Enabled packs: ${status.enabledCount}`);
@@ -138,6 +163,9 @@ const logScopePackStatus = (status: {
     console.log(
       `- Latest compile: ${latest.packId}@${latest.version} -> ${latest.target} (${latest.renderedNodeCount} nodes)`
     );
+  }
+  if (deploymentStatus) {
+    console.log(`- Current repo target status: ${deploymentStatus.target} ${deploymentStatus.deploymentStatus}`);
   }
 };
 
@@ -163,6 +191,14 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
   const registryHealth = (deps.readRegistryHealth ?? readRegistryHealth)();
   const firstValueReadiness = (deps.inspectFirstValueReadiness ?? inspectFirstValueReadiness)();
   const scopePackStatus = (deps.inspectScopePackStatus ?? inspectScopePackStatus)();
+  const resolvePackDeploymentStatus = deps.inspectPackDeploymentStatus ?? inspectPackDeploymentStatus;
+  const latestScopeDeploymentStatus = scopePackStatus.compiler.latestCompiledArtifact
+    ? resolvePackDeploymentStatus(
+        scopePackStatus.compiler.latestCompiledArtifact.packId,
+        scopePackStatus.compiler.latestCompiledArtifact.target as "agents" | "codex" | "github",
+        process.cwd()
+      )
+    : undefined;
   if (target === "claude-code") {
     const status = (deps.inspectClaudeCodeInstall ?? inspectClaudeCodeInstall)();
     const remoteStatus = await resolveRemoteStatus({
@@ -196,7 +232,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     logRegistryHealth(registryHealth);
     logEvaluationMode();
     logFirstValueReadiness(firstValueReadiness);
-    logScopePackStatus(scopePackStatus);
+    logScopePackStatus(scopePackStatus, latestScopeDeploymentStatus);
     return;
   }
 
@@ -232,7 +268,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     logRegistryHealth(registryHealth);
     logEvaluationMode();
     logFirstValueReadiness(firstValueReadiness);
-    logScopePackStatus(scopePackStatus);
+    logScopePackStatus(scopePackStatus, latestScopeDeploymentStatus);
     return;
   }
 
@@ -309,5 +345,5 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
   logRegistryHealth(registryHealth);
   logEvaluationMode();
   logFirstValueReadiness(firstValueReadiness);
-  logScopePackStatus(scopePackStatus);
+  logScopePackStatus(scopePackStatus, latestScopeDeploymentStatus);
 };

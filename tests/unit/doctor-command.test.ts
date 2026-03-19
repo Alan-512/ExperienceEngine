@@ -306,6 +306,10 @@ describe("doctor command", () => {
             renderedNodeCount: 1
           }
         }
+      }),
+      inspectPackDeploymentStatus: () => ({
+        target: "codex",
+        deploymentStatus: "up_to_date"
       })
     });
 
@@ -319,7 +323,8 @@ describe("doctor command", () => {
         ["- Published packs: 1"],
         ["- Compiled targets: 2"],
         ["- Stale published packs: 0"],
-        ["- Latest compile: auth-pack@v1 -> codex (1 nodes)"]
+        ["- Latest compile: auth-pack@v1 -> codex (1 nodes)"],
+        ["- Current repo target status: codex up_to_date"]
       ])
     );
   });
