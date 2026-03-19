@@ -8,6 +8,8 @@ Use this checklist whenever candidate capture, async distillation, or governance
 - `openclaw` CLI is installed and the local gateway can load `experienceengine`
 - `ee doctor openclaw` reports the plugin wiring as healthy
 - Distillation environment variables are configured if remote LLM distillation should be exercised
+- if OpenClaw loads ExperienceEngine from `~/.openclaw/extensions/experienceengine`, confirm the copied plugin tree is not world-writable
+- if `ee doctor openclaw` reports `install_drift = true`, run `ee repair openclaw` before trusting any live-host result
 
 ## Core Learning Baseline
 

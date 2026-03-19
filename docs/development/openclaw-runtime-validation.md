@@ -53,6 +53,16 @@ Run runtime validation when:
 5. Promote the sanitized payloads into `tests/fixtures/openclaw/`.
 6. Run replay validation locally and ensure `pnpm check` stays green.
 
+## Copied Plugin Installs
+
+If OpenClaw is loading ExperienceEngine from `~/.openclaw/extensions/experienceengine` instead of directly from the repository root:
+
+1. treat that copied install as the real runtime source of truth
+2. keep the copied tree synchronized with the package you are validating
+3. make sure the install root and key plugin files are not world-writable
+
+`ee doctor openclaw` now reports `install_drift` when the copied bundle no longer matches the current package, and it will recommend `ee repair openclaw` when drift is detected.
+
 ## Capturing Payloads
 
 Preferred approach:

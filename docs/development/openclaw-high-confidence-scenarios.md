@@ -41,6 +41,11 @@ Artifacts include:
 - `raw/*.json`
 - `baseline/summary.json`
 - `baseline/summary.md`
+- `evaluation-summary.json/.md`
+- `benchmark-report.json/.md`
+- `evaluation-bundle.json/.md`
+- `case-study.json/.md`
+- `evidence-package.json/.md`
 
 ## What The Pack Covers
 
@@ -56,3 +61,26 @@ The repeated pairs are there to make second-turn injection observable after cand
 - `scenariosWithCandidates = 0` after repeated successful tasks usually means the current candidate gate is too narrow or the task evidence is still too weak.
 - `scenariosWithDistilledCandidates = 0` means the async distillation chain is not yet producing final nodes for that pack.
 - `scenariosWithInjectedNodes > 0` on the second repeated task family is the main positive signal for this phase.
+
+## Latest Real-Host Reference
+
+The latest verified local OpenClaw run used:
+
+```bash
+ee evaluate openclaw-scenarios --pack high-confidence --repo-root /mnt/d/project/experienceengine --output-dir ./artifacts/evaluations/openclaw/real-high-confidence-postfix-3
+```
+
+Observed result:
+
+- `recordsMatched = 5 / 5`
+- `scenariosWithInjectedNodes = 4`
+- `scenariosWithTaskRuns = 5`
+- `scenariosWithOutcomes = 5`
+- `scenariosWithReviews = 4`
+- `benchmark.verdict = healthy`
+- `benchmark.suggestedMode = live`
+
+This run also confirmed two host-level hardening changes:
+
+- `ee doctor openclaw` can now detect copied-plugin drift and blocked installs
+- the scenario evaluator now has a hard invoker timeout, so host-side tool loops do not hang evaluation forever
