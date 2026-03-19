@@ -75,8 +75,10 @@ This checklist validates `Codex` as a supported product host. It does **not** re
 
 ## Repository Verification
 
+- [ ] for any substantial change that should affect the live Codex experience, rerun `pnpm build` before real-host validation so Codex reads the latest `dist/`
 - [ ] run `pnpm check`
 - [ ] confirm repository verification stays green after the Codex validation fixes
+- [ ] after the build, run at least one real Codex host session against the updated MCP server instead of relying on tests alone
 
 ## Validation Record
 

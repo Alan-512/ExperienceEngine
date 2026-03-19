@@ -6,17 +6,10 @@ ExperienceEngine is a local experience-intervention layer for coding agents.
 
 It learns short, task-specific guidance from real coding work, injects that guidance into later similar tasks, and records whether the intervention helped or harmed the outcome.
 
-Current core-learning baseline:
-- `OpenClaw` is the primary validation host for candidate capture, async distillation, injection, feedback, and retirement.
-- `Claude Code` and `Codex` remain supported product hosts and reuse shared ExperienceEngine interaction surfaces.
-- See [docs/development/openclaw-core-validation-checklist.md](docs/development/openclaw-core-validation-checklist.md) for the baseline acceptance flow.
-- See [docs/development/openclaw-baseline-evaluation.md](docs/development/openclaw-baseline-evaluation.md) for the baseline snapshot workflow.
-- See [docs/development/openclaw-high-confidence-scenarios.md](docs/development/openclaw-high-confidence-scenarios.md) for repeatable high-confidence OpenClaw scenario runs.
-
-Current validated hosts:
-- `OpenClaw` for runtime/plugin integration
-- `Claude Code` for hooks + MCP interaction
-- `Codex` for MCP-first runtime and interaction
+Supported hosts today:
+- `OpenClaw`
+- `Claude Code`
+- `Codex`
 
 ## What It Does
 
@@ -28,25 +21,42 @@ It focuses on four things:
 - decide whether to inject guidance for a similar task
 - update node state from real `helped` / `harmed` outcomes
 
-## Current Product State
+## Why It Is Not Just Memory
 
-The current repository is past the scaffold phase.
+Most agent memory systems answer:
 
-What is already implemented and validated:
-- real runtime integration on OpenClaw
-- real runtime integration on Claude Code
-- real runtime integration on Codex
-- OpenClaw-first baseline for core learning validation
-- MCP-native interaction surface with `Resources`, `Prompts`, and `Tools`
-- CLI fallback for inspection, feedback, management, install, repair, and upgrade
-- MCP `plan + confirm` workflows for:
-  - install / repair / upgrade
-  - backup / export / import / rollback
+- what facts should be remembered
+- what user preferences should be carried forward
+- what repository context should be loaded next time
 
-Current governance surface:
-- CLI + MCP is the current minimal governance and review surface.
-- A full standalone review UI remains deferred for a later product phase.
-- Experience Pack v1 adds a local shared-directory registry for `draft -> review -> publish -> rollback` experience assets.
+ExperienceEngine answers a different question:
+
+- when should prior experience intervene
+- which `strategy` or `warning` should be injected
+- whether that intervention actually helped
+- whether the experience should stay active, cool down, or retire
+
+In practice:
+- memory keeps facts and preferences
+- ExperienceEngine governs reusable coding tactics and failure-avoidance guidance
+
+## What You Can Use Today
+
+Already available in the repository:
+- host integration for `OpenClaw`, `Claude Code`, and `Codex`
+- MCP-native interaction surfaces plus CLI fallback
+- local embedding-based retrieval
+- quick inspection and feedback commands such as `ee inspect --last`, `ee helped`, and `ee harmed`
+- local Experience Pack workflow:
+  - `draft`
+  - `review`
+  - `publish`
+  - `rollback`
+- compiler and deploy workflow for host instruction files:
+  - `AGENTS.md`
+  - `CODEX.md`
+  - `CLAUDE.md`
+  - GitHub agent profile markdown
 
 ## Quick Start
 
@@ -110,29 +120,4 @@ See the full user guide here:
 
 - [ExperienceEngine User Guide](./docs/user-guide.md)
 
-The user guide includes:
-- host-specific prerequisites
-- which local files ExperienceEngine modifies during installation
-- first-run validation steps
-- MCP vs CLI fallback usage
-- backup / export / import / rollback workflows
-- troubleshooting notes for OpenClaw, Claude Code, and Codex
-- OpenClaw baseline evaluation workflow
-- OpenClaw high-confidence scenario evaluation workflow
-- Codex real-host validation workflow and checklist
-- local embedding retrieval design, managed model behavior, and fallback diagnostics
-- registry advisory behavior during `install` / `doctor`
-- doctor first-value readiness output and the install-time cold-start guidance
-- `ee inspect --last` provenance details and quick feedback commands (`ee helped` / `ee harmed`)
-- `ee maintenance embeddings-reset` for clearing and rebuilding the managed embedding cache
-- `ee pack list|inspect|draft create|review|publish|compile|deploy|rollback` for the local Experience Pack workflow, host instruction exports (`AGENTS.md`, `CODEX.md`, `CLAUDE.md`, GitHub agent profile markdown), and controlled repo deployment with `--dry-run` / `--force`
-
-## Validation
-
-The repository currently validates with:
-
-```bash
-pnpm check
-openspec validate --specs
-openspec validate --changes --strict
-```
+The user guide covers installation, host-specific notes, first-run validation, pack workflows, compiler/deploy commands, troubleshooting, and maintenance operations.

@@ -6,10 +6,6 @@ ExperienceEngine 是一个面向编程 Agent 的本地经验介入层。
 
 它会从真实编码任务中学习简短、任务相关的经验，在后续相似任务中注入这些经验，并记录这次介入到底是帮到了还是干扰了结果。
 
-当前经验内核的验证基线：
-- `OpenClaw` 是 candidate 捕获、异步提炼、注入、反馈、退役的主验证宿主。
-- `Claude Code` 和 `Codex` 继续作为受支持的产品宿主，复用 ExperienceEngine 的共享交互面。
-
 当前已验证的宿主：
 - `OpenClaw`：runtime / plugin 集成
 - `Claude Code`：hooks + MCP 交互
@@ -25,25 +21,45 @@ ExperienceEngine 不是通用记忆库，也不是 context engine 的替代品�
 - 判断当前任务是否值得注入经验
 - 根据真实 `helped` / `harmed` 结果更新节点状态
 
-## 当前产品状态
+## 它和 Memory 有什么不同
 
-当前仓库已经不再是初始化脚手架。
+大多数 agent memory 系统解决的是：
 
-已经实现并验证的能力：
-- OpenClaw 真实 runtime 集成
-- Claude Code 真实 runtime 集成
-- Codex 真实 runtime 集成
-- OpenClaw-first 的经验内核验证路径
-- 基于 MCP 的 `Resources / Prompts / Tools` 主交互面
-- `inspect / feedback / 管理 / install / repair / upgrade` 的 CLI fallback
-- 以下高影响操作的 MCP `plan + confirm` 流程：
-  - install / repair / upgrade
-  - backup / export / import / rollback
+- 记住哪些事实
+- 记住哪些用户偏好
+- 下次会话该带上哪些仓库上下文
 
-当前治理面形态：
-- CLI + MCP 是当前最小可用的治理与审查交互面。
-- 完整的独立 review UI 仍然延后到后续产品阶段。
-- `Experience Pack v1` 新增了本机共享目录 registry，用于 `draft -> review -> publish -> rollback` 的经验资产流程。
+ExperienceEngine 解决的是另一层问题：
+
+- 什么时候该让历史经验介入
+- 该注入哪条 `strategy` 或 `warning`
+- 这次介入到底有没有帮到任务
+- 这条经验是否应该继续保留、降温或退役
+
+简单说：
+- memory 更像“记住事实和偏好”
+- ExperienceEngine 更像“治理可复用的编码经验”
+
+## 当前能直接使用的能力
+
+当前仓库已经实现并可用：
+- `OpenClaw`、`Claude Code`、`Codex` 三个宿主接入
+- 基于 MCP 的主交互面，以及 CLI fallback
+- 基于本地 embedding 的检索
+- 快速查看与反馈：
+  - `ee inspect --last`
+  - `ee helped`
+  - `ee harmed`
+- 本机共享目录的 `Experience Pack` 工作流：
+  - `draft`
+  - `review`
+  - `publish`
+  - `rollback`
+- 面向宿主文件的编译与部署：
+  - `AGENTS.md`
+  - `CODEX.md`
+  - `CLAUDE.md`
+  - GitHub agent profile markdown
 
 ## 快速开始
 
@@ -107,27 +123,4 @@ ee install codex
 
 - [ExperienceEngine 用户手册](./docs/user-guide.md)
 
-用户手册中包含：
-- 不同宿主的前置条件
-- 安装时会修改哪些本地文件
-- 首次安装后的验收步骤
-- `MCP` 与 `ee` CLI fallback 的分工
-- backup / export / import / rollback 使用方式
-- OpenClaw、Claude Code、Codex 的故障排查说明
-- Codex 真实宿主验收流程与检查清单
-- 本地 embedding 检索设计、模型缓存行为与降级告警
-- `install / doctor` 的 registry 告警行为
-- doctor 的首次价值 readiness 摘要，以及 install 完成后的冷启动提示
-- `ee inspect --last` 的来源/证据展示，以及 `ee helped` / `ee harmed` 快速反馈入口
-- `ee maintenance embeddings-reset` 的缓存清理与重建方式
-- `ee pack list|inspect|draft create|review|publish|compile|deploy|rollback` 的本地经验包工作流、宿主指令导出（`AGENTS.md`、`CODEX.md`、`CLAUDE.md`、GitHub agent profile markdown），以及带 `--dry-run` / `--force` 的受控落地
-
-## 校验
-
-当前仓库的主要校验命令：
-
-```bash
-pnpm check
-openspec validate --specs
-openspec validate --changes --strict
-```
+用户手册里包含安装、宿主差异、首次验证、pack 工作流、compiler/deploy 命令、维护命令和故障排查说明。
