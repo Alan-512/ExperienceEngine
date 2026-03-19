@@ -64,7 +64,7 @@ class OpenClawExperiencePlugin implements ExperiencePlugin {
       return payload;
     });
 
-    api.on?.("tool_result_persist", async (payload, hookContext) => {
+    api.on?.("tool_result_persist", (payload, hookContext) => {
       const source = mergeHookPayload(payload, hookContext);
       this.runtime.captureWriter.capture("tool_result_persist", extractSessionKey(source), { payload, context: hookContext });
       const normalized = normalizeToolPayload(source);
@@ -73,7 +73,12 @@ class OpenClawExperiencePlugin implements ExperiencePlugin {
       }
 
       const sessionId = extractSessionKey(source);
-      await this.persistToolResult({ ...normalized, sessionId } as HostToolResult & { sessionId: string });
+      void this.persistToolResult({ ...normalized, sessionId } as HostToolResult & { sessionId: string }).catch((error) => {
+        (api.logger ?? api.log)?.warn?.("experienceengine.tool_result_persist_failed", {
+          sessionId,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      });
       return payload;
     });
 

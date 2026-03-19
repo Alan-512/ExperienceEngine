@@ -213,6 +213,7 @@ type RunOptions = {
   repoRoot?: string;
   dryRun?: boolean;
   invoker?: (args: string[]) => OpenClawScenarioInvocation;
+  invokerTimeoutMs?: number;
   now?: () => string;
 };
 
@@ -227,10 +228,26 @@ const mkdirIfMissing = (path: string): void => {
 const defaultOutputDir = (): string =>
   resolve("artifacts", "evaluations", "openclaw", sanitizeStamp(new Date().toISOString()));
 
-const defaultInvoker = (args: string[]): OpenClawScenarioInvocation => {
+const DEFAULT_OPENCLAW_SCENARIO_TIMEOUT_MS = 120_000;
+
+const defaultInvoker = (
+  args: string[],
+  options: { env?: NodeJS.ProcessEnv; timeoutMs?: number } = {}
+): OpenClawScenarioInvocation => {
   const result = spawnSync("openclaw", args, {
-    encoding: "utf8"
+    encoding: "utf8",
+    env: options.env,
+    timeout: options.timeoutMs ?? DEFAULT_OPENCLAW_SCENARIO_TIMEOUT_MS
   });
+
+  if (result.error?.name === "TimeoutError" || result.error?.message?.includes("ETIMEDOUT")) {
+    const timeoutMs = options.timeoutMs ?? DEFAULT_OPENCLAW_SCENARIO_TIMEOUT_MS;
+    return {
+      exitCode: 124,
+      stdout: result.stdout ?? "",
+      stderr: `OpenClaw scenario command timed out after ${timeoutMs}ms.`
+    };
+  }
 
   return {
     exitCode: result.status ?? 1,
@@ -742,7 +759,13 @@ export const runOpenClawScenarioEvaluation = (options: RunOptions = {}): OpenCla
   const repoRoot = resolve(options.repoRoot ?? process.cwd());
   const outputDir = options.outputDir ? resolve(options.outputDir) : defaultOutputDir();
   const rawDir = resolve(outputDir, "raw");
-  const invoker = options.invoker ?? defaultInvoker;
+  const invoker =
+    options.invoker ??
+    ((args: string[]) =>
+      defaultInvoker(args, {
+        env: options.env,
+        timeoutMs: options.invokerTimeoutMs
+      }));
   const generatedAt = options.now?.() ?? new Date().toISOString();
   const runStamp = sanitizeStamp(generatedAt);
 

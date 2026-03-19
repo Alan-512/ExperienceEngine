@@ -1,5 +1,7 @@
+import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { basename, dirname, join } from "node:path";
+import { homedir } from "node:os";
+import { basename, dirname, join, resolve } from "node:path";
 import { resolveExperienceEnginePaths, resolveProductStateDir, type ResolvedPathInfo } from "../config/path-resolver.js";
 import {
   buildOpenClawInstallCommands,
@@ -52,6 +54,71 @@ type HostState = {
   enabled?: boolean;
   configMatches: boolean;
   liveConfig?: Record<string, unknown>;
+  driftDetected?: boolean;
+  driftReason?: string;
+};
+
+const OPENCLAW_DRIFT_SENTINELS = [
+  "dist/plugin/openclaw-plugin.js",
+  "dist/runtime/service.js",
+  "dist/store/sqlite/db.js",
+  "dist/store/sqlite/repositories/injection-repo.js"
+] as const;
+
+const sha256File = (path: string): string =>
+  createHash("sha256").update(readFileSync(path)).digest("hex");
+
+const expandHomePath = (value: string, homeDir?: string): string => {
+  const resolvedHome = homeDir ? resolve(homeDir) : resolve(homedir());
+  return value === "~" ? resolvedHome : value.startsWith("~/") ? join(resolvedHome, value.slice(2)) : value;
+};
+
+const inspectInstalledOpenClawBundleDrift = (
+  packageRoot: string | undefined,
+  installPath: string | undefined,
+  homeDir?: string
+): { detected: boolean; reason?: string } => {
+  if (!packageRoot || !installPath) {
+    return { detected: false };
+  }
+
+  const normalizedPackageRoot = resolve(expandHomePath(packageRoot, homeDir));
+  const normalizedInstallPath = resolve(expandHomePath(installPath, homeDir));
+  if (normalizedPackageRoot === normalizedInstallPath) {
+    return { detected: false };
+  }
+
+  if (!existsSync(normalizedInstallPath)) {
+    return {
+      detected: true,
+      reason: `Installed OpenClaw plugin path is missing: ${normalizedInstallPath}.`
+    };
+  }
+
+  for (const relativePath of OPENCLAW_DRIFT_SENTINELS) {
+    const packageFile = join(normalizedPackageRoot, relativePath);
+    const installFile = join(normalizedInstallPath, relativePath);
+
+    if (!existsSync(packageFile)) {
+      continue;
+    }
+
+    if (!existsSync(installFile)) {
+      return {
+        detected: true,
+        reason: `Installed OpenClaw plugin bundle is missing ${relativePath}.`
+      };
+    }
+
+    if (sha256File(packageFile) !== sha256File(installFile)) {
+      return {
+        detected: true,
+        reason: `Installed OpenClaw plugin bundle differs from the current ExperienceEngine package at ${relativePath}.`
+      };
+    }
+  }
+
+  return { detected: false };
 };
 
 const inferOpenClawInstallAction = (
@@ -93,17 +160,18 @@ export type ClassifiedOpenClawWarnings = {
 
 export const isOpenClawRepairRecommended = (inspection: {
   installed: boolean;
-  hostState: Pick<HostState, "status" | "enabled" | "configMatches" | "error">;
+  hostState: Pick<HostState, "status" | "enabled" | "configMatches" | "error" | "driftDetected">;
 }): boolean =>
   !inspection.installed ||
   inspection.hostState.enabled !== true ||
   inspection.hostState.configMatches !== true ||
+  inspection.hostState.driftDetected === true ||
   Boolean(inspection.hostState.error) ||
   (inspection.hostState.status !== undefined && inspection.hostState.status.toLowerCase() !== "loaded");
 
 export const getOpenClawRepairHint = (inspection: {
   installed: boolean;
-  hostState: Pick<HostState, "status" | "enabled" | "configMatches" | "error">;
+  hostState: Pick<HostState, "status" | "enabled" | "configMatches" | "error" | "driftDetected">;
 }): string | null => (isOpenClawRepairRecommended(inspection) ? "ee repair openclaw" : null);
 
 const normalizeWarningNeedles = (inspection: {
@@ -381,6 +449,10 @@ export const inspectOpenClawInstall = (options: InstallerOptions = {}) => {
         liveConfig?.sqlitePath === expected?.sqlitePath &&
         liveConfig?.captureDir === expected?.captureDir
     };
+
+    const drift = inspectInstalledOpenClawBundleDrift(state?.packageRoot, info.installPath, options.homeDir);
+    hostState.driftDetected = drift.detected;
+    hostState.driftReason = drift.reason;
   } catch (error) {
     hostState = {
       warnings: [],

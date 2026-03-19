@@ -188,6 +188,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
       host_enabled: status.hostState.enabled ?? false,
       config_matches: status.hostState.configMatches,
       restart_recommended: status.hostWiring.restartRecommended,
+      install_drift: status.hostState.driftDetected ?? false,
       path_mode: status.pathMode,
       package_root: status.packageRoot ?? "",
       host_source_path: status.hostState.sourcePath ?? "",
@@ -199,6 +200,10 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
 
   if (status.hostState.error) {
     console.log(`Host error: ${status.hostState.error}`);
+  }
+
+  if (status.hostState.driftDetected && status.hostState.driftReason) {
+    console.log(`Host drift: ${status.hostState.driftReason}`);
   }
 
   if (warnings.owned.length) {

@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -28,7 +28,7 @@ const tempDirs: string[] = [];
 const createRuntime = () => {
   const runtimeDir = mkdtempSync(join(tmpdir(), "experienceengine-openclaw-scenarios-"));
   tempDirs.push(runtimeDir);
-  const env = {
+  const env: NodeJS.ProcessEnv = {
     ...process.env,
     EXPERIENCE_ENGINE_HOME: runtimeDir
   };
@@ -209,6 +209,36 @@ describe("runOpenClawScenarioEvaluation", () => {
     expect(result.report.dryRun).toBe(true);
     expect(result.report.scenarios).toHaveLength(5);
     expect(result.report.aggregate.recordsMatched).toBe(0);
+  });
+
+  it("applies a hard timeout to the default OpenClaw invoker", () => {
+    const { env, runtimeDir } = createRuntime();
+    const binDir = join(runtimeDir, "bin");
+    const fakeOpenClaw = join(binDir, "openclaw");
+    mkdirSync(binDir, { recursive: true });
+    writeFileSync(
+      fakeOpenClaw,
+      "#!/usr/bin/env bash\nsleep 2\nprintf '{\"ok\":true}\\n'\n",
+      "utf8"
+    );
+    chmodSync(fakeOpenClaw, 0o755);
+
+    const result = runOpenClawScenarioEvaluation({
+      env: {
+        ...env,
+        PATH: `${binDir}:${env.PATH ?? ""}`
+      },
+      homeDir: runtimeDir,
+      pack: "high-confidence",
+      repoRoot: "/mnt/d/project/experienceengine",
+      outputDir: join(runtimeDir, "artifacts"),
+      now: () => "2026-03-16T10:00:00.000Z",
+      invokerTimeoutMs: 10
+    });
+
+    expect(result.report.scenarios[0]?.cli.exitCode).toBe(124);
+    expect(result.report.scenarios[0]?.cli.parsed).toBe(false);
+    expect(result.report.scenarios[0]?.cli.stderr).toContain("timed out after 10ms");
   });
 
   it("joins session ids back to records, candidates, jobs, and injected nodes", () => {

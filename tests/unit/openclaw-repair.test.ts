@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { afterEach } from "vitest";
 import {
+  resolveExperienceEnginePackageRoot
+} from "../../src/install/openclaw-cli.js";
+import {
   getOpenClawRepairHint,
   inspectOpenClawInstall,
   installOpenClawAdapter,
@@ -147,6 +150,7 @@ describe("OpenClaw repair recommendation", () => {
 
   it("marks a healthy host as not needing repair after aligned inspection", () => {
     const homeDir = makeTempDir();
+    const packageRoot = resolveExperienceEnginePackageRoot();
 
     installOpenClawAdapter({
       homeDir,
@@ -163,8 +167,8 @@ describe("OpenClaw repair recommendation", () => {
           return `ExperienceEngine
 id: experienceengine
 Status: loaded
-Source path: ~/workspace/ExperienceEngine
-Install path: ~/workspace/ExperienceEngine
+Source path: ${packageRoot}
+Install path: ${packageRoot}
 `;
         }
 

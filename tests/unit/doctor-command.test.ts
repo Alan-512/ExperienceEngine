@@ -263,4 +263,66 @@ describe("doctor command", () => {
       ])
     );
   });
+
+  it("reports openclaw install drift and recommends repair", async () => {
+    await runDoctorCommand("openclaw", {
+      inspectOpenClawInstall: () =>
+        ({
+          adapter: "openclaw",
+          installed: true,
+          versionStatus: {
+            recordedVersion: "0.1.0",
+            currentVersion: "0.1.0",
+            state: "current",
+            updateAvailable: false
+          },
+          pathMode: "product",
+          activeHome: "/tmp/.experienceengine",
+          sqlitePath: "/tmp/.experienceengine/adapters/openclaw/sqlite/experienceengine.db",
+          captureDir: "/tmp/.experienceengine/adapters/openclaw/captures",
+          installStatePath: "/tmp/.experienceengine/install-state/openclaw.json",
+          packageRoot: "/mnt/d/project/experienceengine",
+          installMode: "copied-plugin",
+          hostWiring: {
+            wired: true,
+            restartRecommended: false
+          },
+          hostState: {
+            warnings: [],
+            configMatches: true,
+            status: "loaded",
+            enabled: true,
+            sourcePath: "/home/seed/.openclaw/extensions/experienceengine",
+            installPath: "/home/seed/.openclaw/extensions/experienceengine",
+            driftDetected: true,
+            driftReason:
+              "Installed OpenClaw plugin bundle differs from the current ExperienceEngine package at dist/runtime/service.js."
+          }
+        }) as never,
+      fetchLatestGitHubReleaseStatus: async () => ({
+        source: "github-releases",
+        repository: "Alan-512/ExperienceEngine",
+        latestVersion: "0.1.0",
+        releaseUrl: null,
+        publishedAt: "2026-03-12T12:00:00Z",
+        state: "current",
+        updateAvailable: false
+      }),
+      inspectFirstValueReadiness: () => ({
+        rawRecords: 2,
+        taskRuns: 1,
+        candidates: 0,
+        nodes: 1,
+        nextStep: "Keep working in the same repo."
+      })
+    });
+
+    expect(consoleTableSpy).toHaveBeenCalled();
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Host drift: Installed OpenClaw plugin bundle differs from the current ExperienceEngine package at dist/runtime/service.js."],
+        ["Recommended next step: ee repair openclaw"]
+      ])
+    );
+  });
 });

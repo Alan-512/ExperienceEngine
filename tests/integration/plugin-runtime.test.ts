@@ -134,6 +134,14 @@ describe("OpenClaw plugin runtime", () => {
     expect(persistToolResult).toBeTypeOf("function");
     expect(finalize).toBeTypeOf("function");
 
+    const syncPersistResult = persistToolResult?.({
+      sessionKey: "sess_probe",
+      tool: { name: "pnpm test", args: ["probe"] },
+      result: { exitCode: 0, output: "probe" },
+      success: true
+    });
+    expect(syncPersistResult).not.toBeInstanceOf(Promise);
+
     const firstTurnPayload = {
       session: { key: "sess_1" },
       workspace: { cwd: "/tmp/repo" },
