@@ -28,7 +28,9 @@ export const openDatabase = (config: ExperienceEngineConfig): DatabaseSync => {
     mkdirSync(dbDir, { recursive: true });
   }
 
-  return new DatabaseSync(dbPath);
+  const db = new DatabaseSync(dbPath);
+  db.exec("PRAGMA busy_timeout = 5000");
+  return db;
 };
 
 const columnExists = (db: DatabaseSync, table: string, column: string): boolean => {
@@ -89,15 +91,44 @@ export const bootstrapDatabase = (db: DatabaseSync): void => {
   ensureColumn(db, "injection_events", "attribution_reason", "TEXT");
 };
 
+const isBusyLockError = (error: unknown): boolean => {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  const sqliteError = error as Error & { code?: string; errstr?: string };
+  const message = `${error.message} ${sqliteError.errstr ?? ""}`.toLowerCase();
+
+  return sqliteError.code === "ERR_SQLITE_ERROR" && (
+    message.includes("database is locked") ||
+    message.includes("database table is locked") ||
+    message.includes("busy")
+  );
+};
+
 export const withTransaction = <T>(db: DatabaseSync, operation: () => T): T => {
-  db.exec("BEGIN IMMEDIATE");
+  let begun = false;
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      db.exec("BEGIN IMMEDIATE");
+      begun = true;
+      break;
+    } catch (error) {
+      if (!isBusyLockError(error) || attempt === 4) {
+        throw error;
+      }
+    }
+  }
 
   try {
     const result = operation();
     db.exec("COMMIT");
     return result;
   } catch (error) {
-    db.exec("ROLLBACK");
+    if (begun) {
+      db.exec("ROLLBACK");
+    }
     throw error;
   }
 };

@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it } from "vitest";
-import { bootstrapDatabase, resolveSQLiteSchemaPath } from "../../src/store/sqlite/db.js";
+import { bootstrapDatabase, resolveSQLiteSchemaPath, withTransaction } from "../../src/store/sqlite/db.js";
 
 const tempDirs: string[] = [];
 
@@ -120,5 +120,32 @@ describe("bootstrapDatabase", () => {
     expect(tableNames).toContain("task_runs");
     expect(tableNames).toContain("outcome_records");
     expect(tableNames).toContain("review_events");
+  });
+});
+
+describe("withTransaction", () => {
+  it("retries BEGIN IMMEDIATE when sqlite reports a temporary busy lock", () => {
+    const calls: string[] = [];
+    let beginAttempts = 0;
+    const db = {
+      exec(sql: string) {
+        calls.push(sql);
+        if (sql === "BEGIN IMMEDIATE") {
+          beginAttempts += 1;
+          if (beginAttempts < 3) {
+            const error = new Error("database is locked") as Error & { code?: string; errstr?: string };
+            error.code = "ERR_SQLITE_ERROR";
+            error.errstr = "database is locked";
+            throw error;
+          }
+        }
+      }
+    } as unknown as DatabaseSync;
+
+    const result = withTransaction(db, () => "ok");
+
+    expect(result).toBe("ok");
+    expect(calls.filter((sql) => sql === "BEGIN IMMEDIATE")).toHaveLength(3);
+    expect(calls.at(-1)).toBe("COMMIT");
   });
 });
