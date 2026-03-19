@@ -198,6 +198,10 @@ Use these to answer:
 - is it improving over time?
 - should the repo stay in `live`, or move to `shadow` / `holdout`?
 
+If you want to turn that pass into a reusable write-up, use:
+
+- [docs/development/case-study-template.md](case-study-template.md)
+
 ## Suggested Cadence
 
 For a repository you use regularly:
