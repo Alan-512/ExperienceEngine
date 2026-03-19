@@ -14,6 +14,7 @@ In practice, this means:
 For a practical end-to-end workflow on a real repository, see:
 
 - [docs/development/real-repo-usage-template.md](development/real-repo-usage-template.md)
+- [docs/development/experienceengine-self-hosted-case-study.md](development/experienceengine-self-hosted-case-study.md)
 
 ## Core Learning Baseline
 
