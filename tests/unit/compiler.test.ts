@@ -103,7 +103,8 @@ describe("Experience Compiler v1", () => {
           id: "node_auth_warning",
           node_type: "warning",
           compact_hint: "Check the auth mock startup before rerunning vitest.",
-          trigger_pattern: "Auth mock is flaky",
+          trigger_pattern:
+            "Auth mock is flaky. First run `cd /home/alice/project` then run `pnpm test auth` and inspect /home/alice/project/packages/auth/mock.ts before retrying.",
           helped_count: 0,
           harmed_count: 1,
           usage_count: 1
@@ -123,6 +124,11 @@ describe("Experience Compiler v1", () => {
     expect(markdown).toContain("Confidence: low");
     expect(markdown).toContain("Pack ID: auth-debug-pack");
     expect(markdown).toContain("Version: v1");
+    expect(markdown).not.toContain("/home/alice/project");
+    expect(markdown).not.toContain("pnpm test auth");
+    expect(markdown).not.toContain("`cd /home/alice/project`");
+    expect(markdown).not.toContain("First run");
+    expect(markdown).not.toContain(". .");
     expect(markdown).not.toContain("Retired node should not render.");
   });
 

@@ -1,5 +1,6 @@
 import type { ExperiencePackNodeSnapshot } from "../packs/types.js";
 import type { ExperienceNodeType } from "../types/domain.js";
+import { normalizeWhitespace, stripInlineCodeSpans, stripShellLikeTaskCommands, truncate } from "../utils/text.js";
 import type {
   ConfidenceLevel,
   RenderAgentsMarkdownInput,
@@ -17,6 +18,16 @@ const nodeTypeOrder: Record<ExperienceNodeType, number> = {
   warning: 1
 };
 
+const ABSOLUTE_PATH_PATTERN = /(?:[A-Za-z]:)?\/(?:[^\s"'`]+\/)*[^\s"'`]+/g;
+
+const sanitizeInstructionText = (value: string, maxLength: number): string => {
+  const normalized = normalizeWhitespace(value).replace(ABSOLUTE_PATH_PATTERN, "/redacted/path");
+  const withoutCode = stripInlineCodeSpans(normalized);
+  const withoutShellNoise = stripShellLikeTaskCommands(withoutCode);
+  const compactedPunctuation = withoutShellNoise.replace(/([.!?])(?:\s*[.!?])+/g, "$1");
+  return truncate(normalizeWhitespace(compactedPunctuation), maxLength);
+};
+
 const toConfidence = (node: ExperiencePackNodeSnapshot): ConfidenceLevel => {
   const score = node.helped_count - node.harmed_count;
   if (score >= 2 && node.harmed_count === 0) {
@@ -29,7 +40,7 @@ const toConfidence = (node: ExperiencePackNodeSnapshot): ConfidenceLevel => {
 };
 
 const toTitle = (node: ExperiencePackNodeSnapshot): string => {
-  const pattern = node.trigger_pattern.trim();
+  const pattern = sanitizeInstructionText(node.trigger_pattern, 120);
   if (pattern.length > 0) {
     return `${node.task_type}: ${pattern}`;
   }
@@ -37,8 +48,9 @@ const toTitle = (node: ExperiencePackNodeSnapshot): string => {
 };
 
 const toApplicability = (node: ExperiencePackNodeSnapshot): string => {
-  if (node.trigger_pattern.trim().length > 0) {
-    return `${node.task_type} tasks matching "${node.trigger_pattern.trim()}"`;
+  const triggerPattern = sanitizeInstructionText(node.trigger_pattern, 160);
+  if (triggerPattern.length > 0) {
+    return `${node.task_type} tasks matching "${triggerPattern}"`;
   }
   return `${node.task_type} tasks`;
 };
@@ -49,7 +61,7 @@ const toRenderedNode = (node: ExperiencePackNodeSnapshot): RenderedAgentsNode =>
   title: toTitle(node),
   applicability: toApplicability(node),
   guidanceLabel: node.node_type === "warning" ? "Avoid" : "Guidance",
-  guidance: node.compact_hint.trim(),
+  guidance: sanitizeInstructionText(node.compact_hint, 220),
   confidence: toConfidence(node),
   taskType: node.task_type
 });
