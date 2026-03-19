@@ -1,5 +1,5 @@
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { inspectCodexInstall, installCodexAdapter } from "../../src/install/codex-installer.js";
@@ -9,6 +9,14 @@ const tempDirs: string[] = [];
 
 const makeTempDir = (): string => {
   const dir = mkdtempSync(join(tmpdir(), "experienceengine-codex-install-"));
+  tempDirs.push(dir);
+  return dir;
+};
+
+const makeMountedTempDir = (): string => {
+  const root = join(resolve("."), ".tmp-codex-install");
+  mkdirSync(root, { recursive: true });
+  const dir = mkdtempSync(join(root, "case-"));
   tempDirs.push(dir);
   return dir;
 };
@@ -238,6 +246,48 @@ env_key = "OPENROUTER_API_KEY"
     expect(status.distillationStatus?.distillationMode).toBe("llm");
     expect(status.distillationStatus?.distillationSource).toBe("host_mediated");
     expect(status.distillationStatus?.hostLlmMode).toBe("mediated");
+  });
+
+  it("writes windows-compatible launcher commands when runtime target is windows", () => {
+    const homeDir = makeMountedTempDir();
+    const commands: string[] = [];
+
+    const report = installCodexAdapter({
+      homeDir,
+      runtimeTarget: "windows",
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        commands.push(key);
+        if (key === "codex mcp get experienceengine") {
+          if (commands.length === 1) {
+            throw new Error("missing");
+          }
+
+          return `experienceengine
+  enabled: true
+  transport: stdio
+  command: cmd.exe
+  args: /c D:\\ExperienceEngineData\\.experienceengine\\bin\\experienceengine-codex-mcp-server.cmd
+  cwd: -
+  env: EXPERIENCE_ENGINE_HOME=${join(homeDir, ".experienceengine")}
+  startup_timeout_sec: 120
+  remove: codex mcp remove experienceengine`;
+        }
+        return "";
+      }
+    });
+
+    const payload = JSON.parse(readFileSync(report.paths.installStatePath, "utf8")) as {
+      runtimeTarget?: string;
+      launcherPaths?: { mcpServer?: string };
+    };
+
+    expect(commands[1]).toContain("cmd.exe /c");
+    expect(commands[1]).toContain("experienceengine-codex-mcp-server.cmd");
+    expect(payload.runtimeTarget).toBe("windows");
+    expect(payload.launcherPaths?.mcpServer).toContain("experienceengine-codex-mcp-server.cmd");
+    expect(report.runtimeTarget).toBe("windows");
+    expect(readFileSync(payload.launcherPaths?.mcpServer ?? "", "utf8")).toContain("wsl.exe bash -lc");
   });
 });
 

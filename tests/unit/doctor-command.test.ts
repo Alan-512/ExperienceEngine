@@ -214,7 +214,13 @@ describe("doctor command", () => {
 
   it("prints distillation mode, source, and host llm diagnostics", async () => {
     await runDoctorCommand("codex", {
-      inspectCodexInstall: () => codexStatus(),
+      inspectCodexInstall: () =>
+        codexStatus({
+          runtimeTarget: "windows",
+          launcherPaths: {
+            mcpServer: "D:\\ExperienceEngineData\\.experienceengine\\bin\\experienceengine-codex-mcp-server.cmd"
+          }
+        }),
       fetchLatestGitHubReleaseStatus: async () => ({
         source: "github-releases",
         repository: "Alan-512/ExperienceEngine",
@@ -239,7 +245,12 @@ describe("doctor command", () => {
         ["- Mode: rule"],
         ["- Source: rule"],
         ["- Host LLM mode: disabled"],
-        ["- Reason: Codex does not expose a reusable provider endpoint in the current configuration."]
+        ["- Reason: Codex does not expose a reusable provider endpoint in the current configuration."],
+        ["Codex runtime target:"],
+        ["- Target: windows"],
+        [
+          "- MCP launcher: D:\\ExperienceEngineData\\.experienceengine\\bin\\experienceengine-codex-mcp-server.cmd"
+        ]
       ])
     );
   });

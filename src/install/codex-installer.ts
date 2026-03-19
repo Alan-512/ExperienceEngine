@@ -13,6 +13,11 @@ import {
   type CodexMcpServerInfo
 } from "./codex-cli.js";
 import {
+  ensureCodexLaunchers,
+  resolveCodexRuntimeTarget,
+  type CodexRuntimeTarget
+} from "./codex-runtime-target.js";
+import {
   resolveExperienceEnginePaths,
   resolveProductStateDir,
   type ResolvedPathInfo
@@ -27,6 +32,7 @@ type InstallerOptions = {
   homeDir?: string;
   cliEnv?: NodeJS.ProcessEnv;
   runner?: CodexCommandRunner;
+  runtimeTarget?: CodexRuntimeTarget | string;
 };
 
 export type CodexInstallReport = {
@@ -37,6 +43,10 @@ export type CodexInstallReport = {
   installedVersion: string;
   serverName: string;
   serverCommand: string;
+  runtimeTarget: CodexRuntimeTarget;
+  launcherPaths: {
+    mcpServer: string;
+  };
   captureDir: string;
   hostWiring: {
     wired: boolean;
@@ -58,6 +68,10 @@ type CodexInstallState = {
   packageRoot: string;
   serverName: string;
   serverCommand: string;
+  runtimeTarget?: CodexRuntimeTarget;
+  launcherPaths?: {
+    mcpServer?: string;
+  };
   captureDir: string;
   hostWiring: {
     wired: boolean;
@@ -86,6 +100,14 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
   });
   const packageRoot = resolveExperienceEnginePackageRoot();
   const installedVersion = readCurrentPackageVersion(packageRoot);
+  const runtimeTarget = resolveCodexRuntimeTarget({
+    requested: options.runtimeTarget,
+    env: options.env ?? process.env
+  });
+  const launchers = ensureCodexLaunchers({
+    productHome: paths.productHome,
+    packageRoot
+  });
   const existing = inspectCodexHost(runner, options.cliEnv);
 
   mkdirSync(paths.dataDir, { recursive: true });
@@ -111,7 +133,10 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
     runCodexCommand(buildCodexRemoveCommand(options.cliEnv), runner);
   }
 
-  runCodexCommand(buildCodexAddCommand(packageRoot, paths.productHome, options.cliEnv, serverEnv), runner);
+  runCodexCommand(
+    buildCodexAddCommand(packageRoot, paths.productHome, options.cliEnv, serverEnv, runtimeTarget),
+    runner
+  );
   ensureCodexMcpServerStartupTimeout("experienceengine", CODEX_EXPERIENCEENGINE_STARTUP_TIMEOUT_SEC, {
     homeDir: options.homeDir
   });
@@ -123,7 +148,17 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
     installedVersion,
     packageRoot,
     serverName: "experienceengine",
-    serverCommand: hostInfo?.commandDisplay ?? buildCodexMcpServerCommand(packageRoot).join(" "),
+    serverCommand:
+      hostInfo?.commandDisplay ??
+      buildCodexMcpServerCommand(packageRoot, {
+        productHome: paths.productHome,
+        runtimeTarget,
+        env: options.cliEnv
+      }).join(" "),
+    runtimeTarget,
+    launcherPaths: {
+      mcpServer: runtimeTarget === "windows" ? launchers.windowsMcpServer : launchers.mcpServer
+    },
     captureDir: paths.captureDir,
     hostWiring: {
       wired: Boolean(hostInfo?.commandDisplay),
@@ -142,6 +177,10 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
     installedVersion,
     serverName: state.serverName,
     serverCommand: state.serverCommand,
+    runtimeTarget,
+    launcherPaths: {
+      mcpServer: runtimeTarget === "windows" ? launchers.windowsMcpServer : launchers.mcpServer
+    },
     captureDir: paths.captureDir,
     hostWiring: state.hostWiring
   };
@@ -186,6 +225,8 @@ export const inspectCodexInstall = (options: InstallerOptions = {}) => {
     captureDir: paths.captureDir,
     serverName: installState?.serverName ?? "experienceengine",
     serverCommand: installState?.serverCommand,
+    runtimeTarget: installState?.runtimeTarget,
+    launcherPaths: installState?.launcherPaths,
     hostWiring: {
       wired: Boolean(hostInfo?.commandDisplay),
       command: hostInfo?.commandDisplay,

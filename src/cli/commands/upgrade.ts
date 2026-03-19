@@ -21,6 +21,15 @@ const readClaudeRuntimeTarget = (args: string[]): string | undefined => {
   return undefined;
 };
 
+const readCodexRuntimeTarget = (args: string[]): string | undefined => {
+  const flagIndex = args.findIndex((value) => value === "--runtime-target");
+  if (flagIndex >= 0) {
+    return args[flagIndex + 1];
+  }
+
+  return undefined;
+};
+
 export const runUpgradeCommand = (
   target?: string,
   argsOrDeps: string[] | UpgradeDeps = [],
@@ -60,9 +69,10 @@ export const runUpgradeCommand = (
     const inspect = deps.inspectCodexInstall ?? inspectCodexInstall;
     const install = deps.installCodexAdapter ?? installCodexAdapter;
     const before = inspect();
-    const report = install();
+    const report = install({ runtimeTarget: readCodexRuntimeTarget(args) });
     console.log(`Upgraded ${report.adapter} adapter.`);
     console.log(`Version: ${before.versionStatus.recordedVersion ?? "unknown"} -> ${report.installedVersion}`);
+    console.log(`Runtime target: ${report.runtimeTarget}`);
     console.log(`Server name: ${report.serverName}`);
     console.log("New Codex MCP connections will use the updated server command.");
     return;

@@ -23,6 +23,15 @@ const readClaudeRuntimeTarget = (args: string[]): string | undefined => {
   return undefined;
 };
 
+const readCodexRuntimeTarget = (args: string[]): string | undefined => {
+  const flagIndex = args.findIndex((value) => value === "--runtime-target");
+  if (flagIndex >= 0) {
+    return args[flagIndex + 1];
+  }
+
+  return undefined;
+};
+
 const logRegistryHealth = (health: RegistryHealth): void => {
   if (!health.hasNonOfficialRegistry) {
     return;
@@ -86,10 +95,13 @@ export const runInstallCommand = (
   }
 
   if (target === "codex") {
-    const report = (deps.installCodexAdapter ?? installCodexAdapter)();
+    const report = (deps.installCodexAdapter ?? installCodexAdapter)({
+      runtimeTarget: readCodexRuntimeTarget(args)
+    });
     console.log(`Installed ${report.adapter} adapter.`);
     console.log(`Installed version: ${report.installedVersion}`);
     console.log(`Package root: ${report.packageRoot}`);
+    console.log(`Runtime target: ${report.runtimeTarget}`);
     console.log(`Server name: ${report.serverName}`);
     console.log(`Server command: ${report.serverCommand}`);
     console.log(`Capture path: ${report.captureDir}`);

@@ -208,6 +208,23 @@ const logClaudeRuntimeStatus = (status?: {
   }
 };
 
+const logCodexRuntimeStatus = (status?: {
+  runtimeTarget?: string;
+  launcherPaths?: {
+    mcpServer?: string;
+  };
+}): void => {
+  if (!status?.runtimeTarget) {
+    return;
+  }
+
+  console.log("Codex runtime target:");
+  console.log(`- Target: ${status.runtimeTarget}`);
+  if (status.launcherPaths?.mcpServer) {
+    console.log(`- MCP launcher: ${status.launcherPaths.mcpServer}`);
+  }
+};
+
 export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): Promise<void> => {
   const resolveRemoteStatus = deps.fetchLatestGitHubReleaseStatus ?? fetchLatestGitHubReleaseStatus;
   const registryHealth = (deps.readRegistryHealth ?? readRegistryHealth)();
@@ -288,6 +305,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     }
     logRemoteReleaseStatus("codex", remoteStatus);
     logDistillationStatus(status.distillationStatus);
+    logCodexRuntimeStatus(status);
     logRegistryHealth(registryHealth);
     logEvaluationMode();
     logFirstValueReadiness(firstValueReadiness);

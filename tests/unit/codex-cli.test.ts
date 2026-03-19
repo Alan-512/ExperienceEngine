@@ -39,7 +39,24 @@ describe("Codex CLI wiring", () => {
       "--env",
       "EXPERIENCE_ENGINE_HOME=/tmp/ee-home",
       "--",
-      ...buildCodexMcpServerCommand("/tmp/experienceengine")
+      "/tmp/ee-home/bin/experienceengine-codex-mcp-server"
+    ]);
+  });
+
+  it("builds a windows launcher command when a windows runtime target is requested", () => {
+    const command = buildCodexAddCommand("/mnt/d/project/experienceengine", "/mnt/d/ExperienceEngineData/.experienceengine", undefined, [], "windows");
+
+    expect([command.bin, ...command.args]).toEqual([
+      "codex",
+      "mcp",
+      "add",
+      "experienceengine",
+      "--env",
+      "EXPERIENCE_ENGINE_HOME=/mnt/d/ExperienceEngineData/.experienceengine",
+      "--",
+      "cmd.exe",
+      "/c",
+      "D:\\ExperienceEngineData\\.experienceengine\\bin\\experienceengine-codex-mcp-server.cmd"
     ]);
   });
 
@@ -67,7 +84,7 @@ describe("Codex CLI wiring", () => {
       "--env",
       "OPENROUTER_API_KEY=token",
       "--",
-      ...buildCodexMcpServerCommand("/tmp/experienceengine")
+      "/tmp/ee-home/bin/experienceengine-codex-mcp-server"
     ]);
   });
 

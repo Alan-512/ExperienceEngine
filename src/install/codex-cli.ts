@@ -3,6 +3,12 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { resolveExperienceEnginePackageRoot } from "./openclaw-cli.js";
+import {
+  buildCodexMcpServerCommandForTarget,
+  ensureCodexLaunchers,
+  resolveCodexRuntimeTarget,
+  type CodexRuntimeTarget
+} from "./codex-runtime-target.js";
 
 export type CodexCommand = {
   bin: string;
@@ -44,18 +50,38 @@ export type CodexMcpServerInfo = {
 export const CODEX_EXPERIENCEENGINE_SERVER = "experienceengine";
 export const CODEX_EXPERIENCEENGINE_STARTUP_TIMEOUT_SEC = 60;
 
-export const buildCodexMcpServerCommand = (packageRoot = resolveExperienceEnginePackageRoot()): string[] => [
-  "node",
-  "--no-warnings",
-  join(packageRoot, "dist/cli/index.js"),
-  "codex-mcp-server"
-];
+export const buildCodexMcpServerCommand = (
+  packageRoot = resolveExperienceEnginePackageRoot(),
+  options: {
+    productHome?: string;
+    runtimeTarget?: CodexRuntimeTarget;
+    env?: NodeJS.ProcessEnv;
+    platform?: NodeJS.Platform;
+  } = {}
+): string[] => {
+  if (!options.productHome) {
+    return ["node", "--no-warnings", join(packageRoot, "dist/cli/index.js"), "codex-mcp-server"];
+  }
+
+  const launchers = ensureCodexLaunchers({
+    productHome: options.productHome,
+    packageRoot
+  });
+  const runtimeTarget = resolveCodexRuntimeTarget({
+    requested: options.runtimeTarget,
+    env: options.env,
+    platform: options.platform
+  });
+
+  return buildCodexMcpServerCommandForTarget(runtimeTarget, launchers);
+};
 
 export const buildCodexAddCommand = (
   packageRoot: string,
   experienceEngineHome: string,
   cliEnv?: NodeJS.ProcessEnv,
-  serverEnv: Array<[string, string]> = []
+  serverEnv: Array<[string, string]> = [],
+  runtimeTarget?: CodexRuntimeTarget
 ): CodexCommand => ({
   bin: "codex",
   args: [
@@ -66,7 +92,11 @@ export const buildCodexAddCommand = (
     `EXPERIENCE_ENGINE_HOME=${experienceEngineHome}`,
     ...serverEnv.flatMap(([key, value]) => ["--env", `${key}=${value}`]),
     "--",
-    ...buildCodexMcpServerCommand(packageRoot)
+    ...buildCodexMcpServerCommand(packageRoot, {
+      productHome: experienceEngineHome,
+      runtimeTarget,
+      env: cliEnv
+    })
   ],
   description: "Register the ExperienceEngine MCP server with Codex",
   env: cliEnv
