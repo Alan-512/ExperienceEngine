@@ -15,6 +15,12 @@ import {
   type ClaudeCommandRunner
 } from "./claude-cli.js";
 import { readCurrentPackageVersion } from "../version/package-version.js";
+import {
+  buildClaudeHookCommandForTarget,
+  ensureClaudeLaunchers,
+  resolveClaudeRuntimeTarget,
+  type ClaudeRuntimeTarget
+} from "./claude-runtime-target.js";
 
 type ClaudeHookCommand = {
   type: "command";
@@ -38,6 +44,7 @@ type InstallerOptions = {
   projectDir?: string;
   cliEnv?: NodeJS.ProcessEnv;
   runner?: ClaudeCommandRunner;
+  runtimeTarget?: ClaudeRuntimeTarget | string;
 };
 
 export type ClaudeCodeInstallReport = {
@@ -51,6 +58,11 @@ export type ClaudeCodeInstallReport = {
   captureDir: string;
   serverName: string;
   serverCommand: string;
+  runtimeTarget: ClaudeRuntimeTarget;
+  launcherPaths: {
+    hook: string;
+    mcpServer: string;
+  };
   hostWiring: {
     wired: boolean;
     command?: string;
@@ -68,15 +80,10 @@ const readJsonFile = <T>(filePath: string): T | null => {
   return JSON.parse(readFileSync(filePath, "utf8")) as T;
 };
 
-const shellQuote = (value: string): string => `'${value.replace(/'/g, `'\\''`)}'`;
-
-const buildClaudeHookCommand = (packageRoot: string): string =>
-  `node --no-warnings ${shellQuote(join(packageRoot, "dist/cli/index.js"))} claude-hook`;
-
 const isExperienceEngineHookCommand = (command: ClaudeHookCommand): boolean =>
   command.type === "command" &&
-  command.command.includes("dist/cli/index.js") &&
-  command.command.includes("claude-hook");
+  (command.command.includes("experienceengine-claude-hook") ||
+    (command.command.includes("dist/cli/index.js") && command.command.includes("claude-hook")));
 
 const removeStaleExperienceEngineHooks = (
   hooks: Record<string, ClaudeHookMatcher[]>,
@@ -121,11 +128,14 @@ const upsertHookMatcher = (
   hooks[eventName] = entries;
 };
 
-const mergeExperienceEngineHooks = (settings: ClaudeSettings, packageRoot: string): ClaudeSettings => {
+const mergeExperienceEngineHooks = (
+  settings: ClaudeSettings,
+  hookCommand: string
+): ClaudeSettings => {
   const next: ClaudeSettings = { ...settings, hooks: { ...(settings.hooks ?? {}) } };
   const command: ClaudeHookCommand = {
     type: "command",
-    command: buildClaudeHookCommand(packageRoot),
+    command: hookCommand,
     timeout: 30
   };
 
@@ -166,8 +176,17 @@ export const installClaudeCodeAdapter = (options: InstallerOptions = {}): Claude
   const installedVersion = readCurrentPackageVersion(packageRoot);
   const projectDir = resolve(options.projectDir ?? process.cwd());
   const settingsPath = join(projectDir, ".claude", "settings.local.json");
+  const runtimeTarget = resolveClaudeRuntimeTarget({
+    requested: options.runtimeTarget,
+    env: options.env ?? process.env
+  });
+  const launcherPaths = ensureClaudeLaunchers({
+    productHome: paths.productHome,
+    packageRoot
+  });
+  const hookCommand = buildClaudeHookCommandForTarget(runtimeTarget, launcherPaths);
   const settings = readJsonFile<ClaudeSettings>(settingsPath) ?? {};
-  const mergedSettings = mergeExperienceEngineHooks(settings, packageRoot);
+  const mergedSettings = mergeExperienceEngineHooks(settings, hookCommand);
   const existingHost = inspectClaudeHost(runner, options.cliEnv);
 
   mkdirSync(paths.dataDir, { recursive: true });
@@ -181,7 +200,7 @@ export const installClaudeCodeAdapter = (options: InstallerOptions = {}): Claude
     runClaudeCommand(buildClaudeRemoveCommand(options.cliEnv), runner);
   }
 
-  runClaudeCommand(buildClaudeAddCommand(packageRoot, paths.productHome, options.cliEnv), runner);
+  runClaudeCommand(buildClaudeAddCommand(packageRoot, paths.productHome, options.cliEnv, runtimeTarget), runner);
   const hostInfo = inspectClaudeHost(runner, options.cliEnv);
 
   writeFileSync(
@@ -196,6 +215,11 @@ export const installClaudeCodeAdapter = (options: InstallerOptions = {}): Claude
         settingsPath,
         captureDir: paths.captureDir,
         serverName: "experienceengine",
+        runtimeTarget,
+        launcherPaths: {
+          hook: runtimeTarget === "windows" ? launcherPaths.windowsHook : launcherPaths.hook,
+          mcpServer: runtimeTarget === "windows" ? launcherPaths.windowsMcpServer : launcherPaths.mcpServer
+        },
         serverCommand: hostInfo?.commandDisplay,
         hostWiring: {
           wired: Boolean(hostInfo?.commandDisplay),
@@ -221,6 +245,11 @@ export const installClaudeCodeAdapter = (options: InstallerOptions = {}): Claude
     settingsPath,
     captureDir: paths.captureDir,
     serverName: "experienceengine",
+    runtimeTarget,
+    launcherPaths: {
+      hook: runtimeTarget === "windows" ? launcherPaths.windowsHook : launcherPaths.hook,
+      mcpServer: runtimeTarget === "windows" ? launcherPaths.windowsMcpServer : launcherPaths.mcpServer
+    },
     serverCommand: hostInfo?.commandDisplay ?? "",
     hostWiring: {
       wired: Boolean(hostInfo?.commandDisplay),

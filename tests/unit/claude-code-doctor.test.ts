@@ -1,5 +1,5 @@
-import { mkdtempSync, rmSync } from "node:fs";
-import { join } from "node:path";
+import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { installClaudeCodeAdapter } from "../../src/install/claude-code-installer.js";
@@ -10,6 +10,14 @@ const tempDirs: string[] = [];
 
 const makeTempDir = (): string => {
   const dir = mkdtempSync(join(tmpdir(), "experienceengine-claude-doctor-"));
+  tempDirs.push(dir);
+  return dir;
+};
+
+const makeMountedTempDir = (): string => {
+  const root = join(resolve("."), ".tmp-claude-doctor");
+  mkdirSync(root, { recursive: true });
+  const dir = mkdtempSync(join(root, "case-"));
   tempDirs.push(dir);
   return dir;
 };
@@ -84,5 +92,58 @@ To remove this server, run: claude mcp remove "experienceengine" -s project`;
     expect(inspection.hostWiring.scope).toContain("Project config");
     expect(inspection.distillationStatus?.distillationMode).toBeTruthy();
     expect(inspection.distillationStatus?.hostLlmMode).toBeTruthy();
+  });
+
+  it("reports the configured runtime target and windows launcher commands", () => {
+    const homeDir = makeMountedTempDir();
+    const projectDir = makeMountedTempDir();
+
+    installClaudeCodeAdapter({
+      homeDir,
+      projectDir,
+      runtimeTarget: "windows",
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        if (key === "claude mcp get experienceengine") {
+          return `experienceengine:
+  Scope: Project config (shared via .mcp.json)
+  Status: ✓ Connected
+  Type: stdio
+  Command: cmd.exe
+  Args: /c D:\\ExperienceEngineData\\.experienceengine\\bin\\experienceengine-mcp-server.cmd
+  Environment:
+    EXPERIENCE_ENGINE_HOME=D:\\ExperienceEngineData\\.experienceengine
+
+To remove this server, run: claude mcp remove "experienceengine" -s project`;
+        }
+        return "";
+      }
+    });
+
+    const inspection = inspectClaudeCodeInstall({
+      homeDir,
+      projectDir,
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        if (key === "claude mcp get experienceengine") {
+          return `experienceengine:
+  Scope: Project config (shared via .mcp.json)
+  Status: ✓ Connected
+  Type: stdio
+  Command: cmd.exe
+  Args: /c D:\\ExperienceEngineData\\.experienceengine\\bin\\experienceengine-mcp-server.cmd
+  Environment:
+    EXPERIENCE_ENGINE_HOME=D:\\ExperienceEngineData\\.experienceengine
+
+To remove this server, run: claude mcp remove "experienceengine" -s project`;
+        }
+        return "";
+      }
+    });
+
+    expect(inspection.runtimeTarget).toBe("windows");
+    expect(inspection.launcherPaths?.hook).toContain("experienceengine-claude-hook.cmd");
+    expect(inspection.launcherPaths?.mcpServer).toContain("experienceengine-mcp-server.cmd");
+    expect(inspection.hooksPresent.userPromptSubmit).toBe(true);
   });
 });

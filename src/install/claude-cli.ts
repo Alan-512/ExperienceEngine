@@ -1,6 +1,12 @@
 import { execFileSync } from "node:child_process";
 import { join } from "node:path";
 import { resolveExperienceEnginePackageRoot } from "./openclaw-cli.js";
+import {
+  buildClaudeMcpServerCommandForTarget,
+  ensureClaudeLaunchers,
+  resolveClaudeRuntimeTarget,
+  type ClaudeRuntimeTarget
+} from "./claude-runtime-target.js";
 
 export type ClaudeCommand = {
   bin: string;
@@ -27,13 +33,36 @@ export type ClaudeMcpServerInfo = {
 export const CLAUDE_EXPERIENCEENGINE_SERVER = "experienceengine";
 
 export const buildExperienceEngineMcpServerCommand = (
-  packageRoot = resolveExperienceEnginePackageRoot()
-): string[] => ["node", "--no-warnings", join(packageRoot, "dist/cli/index.js"), "mcp-server"];
+  packageRoot = resolveExperienceEnginePackageRoot(),
+  options: {
+    productHome?: string;
+    runtimeTarget?: ClaudeRuntimeTarget;
+    env?: NodeJS.ProcessEnv;
+    platform?: NodeJS.Platform;
+  } = {}
+): string[] => {
+  if (!options.productHome) {
+    return ["node", "--no-warnings", join(packageRoot, "dist/cli/index.js"), "mcp-server"];
+  }
+
+  const launchers = ensureClaudeLaunchers({
+    productHome: options.productHome,
+    packageRoot
+  });
+  const runtimeTarget = resolveClaudeRuntimeTarget({
+    requested: options.runtimeTarget,
+    env: options.env,
+    platform: options.platform
+  });
+
+  return buildClaudeMcpServerCommandForTarget(runtimeTarget, launchers);
+};
 
 export const buildClaudeAddCommand = (
   packageRoot: string,
   experienceEngineHome: string,
-  cliEnv?: NodeJS.ProcessEnv
+  cliEnv?: NodeJS.ProcessEnv,
+  runtimeTarget?: ClaudeRuntimeTarget
 ): ClaudeCommand => ({
   bin: "claude",
   args: [
@@ -45,7 +74,11 @@ export const buildClaudeAddCommand = (
     "-e",
     `EXPERIENCE_ENGINE_HOME=${experienceEngineHome}`,
     "--",
-    ...buildExperienceEngineMcpServerCommand(packageRoot)
+    ...buildExperienceEngineMcpServerCommand(packageRoot, {
+      productHome: experienceEngineHome,
+      runtimeTarget,
+      env: cliEnv
+    })
   ],
   description: "Register the ExperienceEngine MCP server with Claude Code",
   env: cliEnv

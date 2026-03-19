@@ -27,7 +27,7 @@ const main = async (): Promise<void> => {
 
   switch (command) {
     case "install":
-      runInstallCommand(args[0]);
+      runInstallCommand(args[0], args.slice(1));
       break;
     case "backup":
       runBackupCommand();
@@ -63,7 +63,7 @@ const main = async (): Promise<void> => {
       runRollbackCommand(args[0]);
       break;
     case "upgrade":
-      runUpgradeCommand(args[0]);
+      runUpgradeCommand(args[0], args.slice(1));
       break;
     case "stats":
       runStatsCommand();

@@ -14,6 +14,15 @@ type InstallDeps = {
   readRegistryHealth?: typeof readRegistryHealth;
 };
 
+const readClaudeRuntimeTarget = (args: string[]): string | undefined => {
+  const flagIndex = args.findIndex((value) => value === "--runtime-target");
+  if (flagIndex >= 0) {
+    return args[flagIndex + 1];
+  }
+
+  return undefined;
+};
+
 const logRegistryHealth = (health: RegistryHealth): void => {
   if (!health.hasNonOfficialRegistry) {
     return;
@@ -35,7 +44,13 @@ const logFirstValueGuidance = (): void => {
   );
 };
 
-export const runInstallCommand = (target?: string, deps: InstallDeps = {}): void => {
+export const runInstallCommand = (
+  target?: string,
+  argsOrDeps: string[] | InstallDeps = [],
+  maybeDeps: InstallDeps = {}
+): void => {
+  const args = Array.isArray(argsOrDeps) ? argsOrDeps : [];
+  const deps = Array.isArray(argsOrDeps) ? maybeDeps : argsOrDeps;
   const registryHealth = (deps.readRegistryHealth ?? readRegistryHealth)();
   if (target === "openclaw") {
     const report = (deps.installOpenClawAdapter ?? installOpenClawAdapter)();
@@ -54,10 +69,13 @@ export const runInstallCommand = (target?: string, deps: InstallDeps = {}): void
   }
 
   if (target === "claude-code") {
-    const report = (deps.installClaudeCodeAdapter ?? installClaudeCodeAdapter)();
+    const report = (deps.installClaudeCodeAdapter ?? installClaudeCodeAdapter)({
+      runtimeTarget: readClaudeRuntimeTarget(args)
+    });
     console.log(`Installed ${report.adapter} adapter.`);
     console.log(`Installed version: ${report.installedVersion}`);
     console.log(`Package root: ${report.packageRoot}`);
+    console.log(`Runtime target: ${report.runtimeTarget}`);
     console.log(`Project settings: ${report.settingsPath}`);
     console.log(`Server name: ${report.serverName}`);
     console.log(`Server command: ${report.serverCommand}`);
@@ -80,5 +98,5 @@ export const runInstallCommand = (target?: string, deps: InstallDeps = {}): void
     return;
   }
 
-  console.log("Usage: ee install openclaw|claude-code|codex");
+  console.log("Usage: ee install openclaw|claude-code|codex [--runtime-target posix|windows]");
 };

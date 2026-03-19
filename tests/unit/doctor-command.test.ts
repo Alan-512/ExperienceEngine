@@ -94,6 +94,11 @@ describe("doctor command", () => {
             postToolUseFailure: true,
             sessionEnd: true
           },
+          runtimeTarget: "windows",
+          launcherPaths: {
+            hook: "D:\\ExperienceEngineData\\.experienceengine\\bin\\experienceengine-claude-hook.cmd",
+            mcpServer: "D:\\ExperienceEngineData\\.experienceengine\\bin\\experienceengine-mcp-server.cmd"
+          },
           distillationStatus: {
             distillationMode: "rule",
             distillationSource: "rule",
@@ -123,7 +128,15 @@ describe("doctor command", () => {
         ["- Mode: rule"],
         ["- Source: rule"],
         ["- Host LLM mode: disabled"],
-        ["- Reason: Claude Code does not expose a reusable endpoint in the current configuration."]
+        ["- Reason: Claude Code does not expose a reusable endpoint in the current configuration."],
+        ["Claude runtime target:"],
+        ["- Target: windows"],
+        [
+          "- Hook launcher: D:\\ExperienceEngineData\\.experienceengine\\bin\\experienceengine-claude-hook.cmd"
+        ],
+        [
+          "- MCP launcher: D:\\ExperienceEngineData\\.experienceengine\\bin\\experienceengine-mcp-server.cmd"
+        ]
       ])
     );
   });

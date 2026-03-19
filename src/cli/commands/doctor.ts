@@ -187,6 +187,27 @@ const logDistillationStatus = (status?: {
   console.log(`- Reason: ${status.reason}`);
 };
 
+const logClaudeRuntimeStatus = (status?: {
+  runtimeTarget?: string;
+  launcherPaths?: {
+    hook?: string;
+    mcpServer?: string;
+  };
+}): void => {
+  if (!status?.runtimeTarget) {
+    return;
+  }
+
+  console.log("Claude runtime target:");
+  console.log(`- Target: ${status.runtimeTarget}`);
+  if (status.launcherPaths?.hook) {
+    console.log(`- Hook launcher: ${status.launcherPaths.hook}`);
+  }
+  if (status.launcherPaths?.mcpServer) {
+    console.log(`- MCP launcher: ${status.launcherPaths.mcpServer}`);
+  }
+};
+
 export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): Promise<void> => {
   const resolveRemoteStatus = deps.fetchLatestGitHubReleaseStatus ?? fetchLatestGitHubReleaseStatus;
   const registryHealth = (deps.readRegistryHealth ?? readRegistryHealth)();
@@ -226,6 +247,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
       }
     ]);
     logDistillationStatus(status.distillationStatus);
+    logClaudeRuntimeStatus(status);
     if (status.versionStatus.updateAvailable) {
       console.log("Recommended next step: ee upgrade claude-code");
     }

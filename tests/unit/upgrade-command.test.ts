@@ -55,6 +55,8 @@ describe("upgrade command", () => {
   it("shows usage for unsupported targets", () => {
     runUpgradeCommand(undefined);
 
-    expect(consoleLogSpy).toHaveBeenCalledWith("Usage: ee upgrade openclaw|claude-code|codex");
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      "Usage: ee upgrade openclaw|claude-code|codex [--runtime-target posix|windows]"
+    );
   });
 });

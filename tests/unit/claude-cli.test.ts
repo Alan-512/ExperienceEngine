@@ -19,7 +19,9 @@ describe("Claude CLI wiring", () => {
       "-e",
       "EXPERIENCE_ENGINE_HOME=/tmp/ee-home",
       "--",
-      ...buildExperienceEngineMcpServerCommand("/tmp/experienceengine")
+      ...buildExperienceEngineMcpServerCommand("/tmp/experienceengine", {
+        productHome: "/tmp/ee-home"
+      })
     ]);
   });
 

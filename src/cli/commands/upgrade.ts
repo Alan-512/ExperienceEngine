@@ -12,7 +12,22 @@ type UpgradeDeps = {
   installCodexAdapter?: typeof installCodexAdapter;
 };
 
-export const runUpgradeCommand = (target?: string, deps: UpgradeDeps = {}): void => {
+const readClaudeRuntimeTarget = (args: string[]): string | undefined => {
+  const flagIndex = args.findIndex((value) => value === "--runtime-target");
+  if (flagIndex >= 0) {
+    return args[flagIndex + 1];
+  }
+
+  return undefined;
+};
+
+export const runUpgradeCommand = (
+  target?: string,
+  argsOrDeps: string[] | UpgradeDeps = [],
+  maybeDeps: UpgradeDeps = {}
+): void => {
+  const args = Array.isArray(argsOrDeps) ? argsOrDeps : [];
+  const deps = Array.isArray(argsOrDeps) ? maybeDeps : argsOrDeps;
   if (target === "openclaw") {
     const inspect = deps.inspectOpenClawInstall ?? inspectOpenClawInstall;
     const install = deps.installOpenClawAdapter ?? installOpenClawAdapter;
@@ -32,9 +47,10 @@ export const runUpgradeCommand = (target?: string, deps: UpgradeDeps = {}): void
     const inspect = deps.inspectClaudeCodeInstall ?? inspectClaudeCodeInstall;
     const install = deps.installClaudeCodeAdapter ?? installClaudeCodeAdapter;
     const before = inspect();
-    const report = install();
+    const report = install({ runtimeTarget: readClaudeRuntimeTarget(args) });
     console.log(`Upgraded ${report.adapter} adapter.`);
     console.log(`Version: ${before.versionStatus.recordedVersion ?? "unknown"} -> ${report.installedVersion}`);
+    console.log(`Runtime target: ${report.runtimeTarget}`);
     console.log(`Project settings: ${report.settingsPath}`);
     console.log("New Claude Code sessions will use the updated hook command.");
     return;
@@ -52,5 +68,5 @@ export const runUpgradeCommand = (target?: string, deps: UpgradeDeps = {}): void
     return;
   }
 
-  console.log("Usage: ee upgrade openclaw|claude-code|codex");
+  console.log("Usage: ee upgrade openclaw|claude-code|codex [--runtime-target posix|windows]");
 };
