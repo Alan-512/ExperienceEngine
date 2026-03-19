@@ -127,10 +127,38 @@ ee pack inspect <pack-id>
 ee pack draft create <pack-id> <node-id[,node-id...]> [name...]
 ee pack review <pack-id> <description...>
 ee pack publish <pack-id>
+ee pack compile <pack-id> [version]
 ee pack rollback <pack-id> <version>
 ```
 
 Use this when you want to turn a set of proven nodes into a managed local asset instead of leaving them only in SQLite state.
+
+### Compiler v1
+
+Compiler v1 turns a published or rolled-back Experience Pack into a host-friendly `AGENTS.md`-style artifact.
+
+It is intentionally conservative:
+
+- it only reads Pack files that already exist in the local registry
+- it only exports a static artifact
+- it does **not** auto-write into your repo root
+
+Example:
+
+```bash
+ee pack compile auth-debug-pack
+```
+
+Default output location:
+
+```text
+~/.experienceengine/packs/<pack-id>/compiled/agents/<version>/
+```
+
+Artifacts produced:
+
+- `AGENTS.md`
+- `compile-report.json`
 
 ## Host-Specific Setup
 
