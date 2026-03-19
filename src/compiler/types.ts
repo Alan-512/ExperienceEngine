@@ -10,7 +10,7 @@ import type {
   ExperiencePackVersionManifest
 } from "../packs/types.js";
 
-export type CompilerTarget = "agents" | "codex" | "github";
+export type CompilerTarget = "agents" | "codex" | "github" | "claude";
 
 export type CompilePackInput = {
   packsDir: string;

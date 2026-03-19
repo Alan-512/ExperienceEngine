@@ -201,6 +201,25 @@ describe("pack CLI command", () => {
     expect(output).toContain("compile-report.json:");
   });
 
+  it("compiles a published pack into CLAUDE.md output when target is claude", () => {
+    const homeDir = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(homeDir, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+
+    nodeRepo.upsert(makeNode());
+    runPackCommand(["draft", "create", "claude-pack", "node_auth_strategy", "Claude", "Pack"]);
+    runPackCommand(["review", "claude-pack", "Reviewed", "claude", "pack"]);
+    runPackCommand(["publish", "claude-pack"]);
+    runPackCommand(["compile", "claude-pack", "claude"]);
+
+    const output = consoleLogSpy.mock.calls.flat().join("\n");
+    expect(output).toContain("Compiled experience pack claude-pack");
+    expect(output).toContain("CLAUDE.md:");
+    expect(output).toContain("compile-report.json:");
+  });
+
   it("deploys a compiled agents target into the target repo with dry-run support", () => {
     const homeDir = makeTempDir();
     const targetRepo = makeTempDir();
@@ -269,6 +288,25 @@ describe("pack CLI command", () => {
     const destination = join(targetRepo, ".github", "agents", "github-pack.md");
     expect(existsSync(destination)).toBe(true);
     expect(readFileSync(destination, "utf8")).toContain("# GitHub Copilot Custom Agent Profile");
+  });
+
+  it("deploys a claude target into CLAUDE.md", () => {
+    const homeDir = makeTempDir();
+    const targetRepo = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(homeDir, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+
+    nodeRepo.upsert(makeNode());
+    runPackCommand(["draft", "create", "claude-pack", "node_auth_strategy", "Claude", "Pack"]);
+    runPackCommand(["review", "claude-pack", "Reviewed", "claude", "pack"]);
+    runPackCommand(["publish", "claude-pack"]);
+
+    runPackCommand(["deploy", "claude-pack", "claude", targetRepo]);
+    const destination = join(targetRepo, "CLAUDE.md");
+    expect(existsSync(destination)).toBe(true);
+    expect(readFileSync(destination, "utf8")).toContain("# Claude Code Instructions: Claude Pack");
   });
 
   it("treats an unchanged deployed target as up to date and avoids rewriting it", () => {

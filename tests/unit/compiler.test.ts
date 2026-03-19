@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { compilePack, compilePackToAgents, compilePackToCodex } from "../../src/compiler/compiler.js";
 import { renderAgentsMarkdown } from "../../src/compiler/agents-renderer.js";
+import { renderClaudeMarkdown } from "../../src/compiler/claude-renderer.js";
 import { renderGitHubAgentMarkdown } from "../../src/compiler/github-renderer.js";
 import { resolveExperienceEnginePaths } from "../../src/config/path-resolver.js";
 import { ExperiencePackRegistry } from "../../src/packs/fs-registry.js";
@@ -229,6 +230,45 @@ describe("Experience Compiler v1", () => {
     expect(markdown).toContain("## Preferred Strategies");
   });
 
+  it("renders claude instructions with operating rules and guidance sections", () => {
+    const markdown = renderClaudeMarkdown({
+      generatedAt: "2026-03-19T12:36:00.000Z",
+      pack: {
+        packId: "claude-pack",
+        name: "Claude Pack",
+        description: "Claude target export.",
+        owner: "seed",
+        status: "published",
+        currentVersion: "v1",
+        createdAt: "2026-03-19T00:00:00.000Z",
+        updatedAt: "2026-03-19T00:00:00.000Z",
+        publishedAt: "2026-03-19T00:00:00.000Z",
+        rolledBackAt: undefined,
+        scopeHints: ["repo:experienceengine"],
+        taskFamilies: ["test_debug"],
+        hostCompatibility: ["claude-code"]
+      },
+      manifest: {
+        packId: "claude-pack",
+        version: "v1",
+        statusSnapshot: "published",
+        sourceNodeIds: ["node_auth_strategy"],
+        evidenceSummary: "Claude evidence",
+        benchmarkSummary: "healthy",
+        riskLevel: "medium",
+        ttl: undefined,
+        hostCompatibility: ["claude-code"],
+        createdAt: "2026-03-19T00:00:00.000Z",
+        publishedAt: "2026-03-19T00:00:00.000Z"
+      },
+      nodes: [makeNode()]
+    });
+
+    expect(markdown).toContain("# Claude Code Instructions: Claude Pack");
+    expect(markdown).toContain("## Operating Rules");
+    expect(markdown).toContain("## Preferred Strategies");
+  });
+
   it("renders a github custom agent profile with frontmatter and guidance sections", () => {
     const markdown = renderGitHubAgentMarkdown({
       generatedAt: "2026-03-19T12:35:00.000Z",
@@ -309,6 +349,39 @@ describe("Experience Compiler v1", () => {
 
     expect(result.target).toBe("codex");
     expect(result.outputPath).toContain("/compiled/codex/v1/CODEX.md");
+  });
+
+  it("supports claude output target selection", () => {
+    const homeDir = makeTempDir();
+    const paths = resolveExperienceEnginePaths({ homeDir });
+    const registry = new ExperiencePackRegistry({ packsDir: paths.packsDir });
+
+    registry.createDraft({
+      packId: "claude-pack",
+      name: "Claude Pack",
+      description: "Claude compile path.",
+      owner: "seed",
+      scopeHints: ["repo:experienceengine"],
+      taskFamilies: ["test_debug"],
+      hostCompatibility: ["claude-code"],
+      nodes: [makeNode()]
+    });
+    registry.reviewPack("claude-pack", {
+      description: "Reviewed claude pack.",
+      evidenceSummary: "Reviewed claude evidence.",
+      riskLevel: "low"
+    });
+    registry.publishPack("claude-pack");
+
+    const result = compilePack({
+      packsDir: paths.packsDir,
+      packId: "claude-pack",
+      target: "claude",
+      generatedAt: "2026-03-19T12:40:00.000Z"
+    });
+
+    expect(result.target).toBe("claude");
+    expect(result.outputPath).toContain("/compiled/claude/v1/CLAUDE.md");
   });
 
   it("supports github custom agent profile output", () => {

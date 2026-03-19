@@ -1,4 +1,5 @@
 import { loadConfig } from "../../config/load-config.js";
+import type { CompilerTarget } from "../../compiler/types.js";
 import { deployCompiledPack } from "../../compiler/deployer.js";
 import { resolveExperienceEnginePaths } from "../../config/path-resolver.js";
 import {
@@ -48,8 +49,8 @@ type DoctorDeps = {
       };
     };
   };
-  inspectPackDeploymentStatus?: (packId: string, target: "agents" | "codex" | "github", repoPath: string) => {
-    target: "agents" | "codex" | "github";
+  inspectPackDeploymentStatus?: (packId: string, target: CompilerTarget, repoPath: string) => {
+    target: CompilerTarget;
     deploymentStatus: "missing" | "up_to_date" | "drifted";
   };
 };
@@ -90,7 +91,7 @@ const inspectFirstValueReadiness = (): ExperienceFirstValueReadiness =>
 const inspectScopePackStatus = () => new ExperienceInteractionService(loadConfig()).inspectScopePackStatus();
 const inspectPackDeploymentStatus = (
   packId: string,
-  target: "agents" | "codex" | "github",
+  target: CompilerTarget,
   repoPath: string
 ) => {
   const paths = resolveExperienceEnginePaths();
@@ -145,7 +146,7 @@ const logScopePackStatus = (status: {
       renderedNodeCount: number;
     };
   };
-}, deploymentStatus?: { target: "agents" | "codex" | "github"; deploymentStatus: "missing" | "up_to_date" | "drifted" }): void => {
+}, deploymentStatus?: { target: CompilerTarget; deploymentStatus: "missing" | "up_to_date" | "drifted" }): void => {
   console.log("Current scope packs:");
   console.log(`- Scope: ${status.scopeId}`);
   console.log(`- Enabled packs: ${status.enabledCount}`);
@@ -195,7 +196,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
   const latestScopeDeploymentStatus = scopePackStatus.compiler.latestCompiledArtifact
     ? resolvePackDeploymentStatus(
         scopePackStatus.compiler.latestCompiledArtifact.packId,
-        scopePackStatus.compiler.latestCompiledArtifact.target as "agents" | "codex" | "github",
+        scopePackStatus.compiler.latestCompiledArtifact.target as CompilerTarget,
         process.cwd()
       )
     : undefined;

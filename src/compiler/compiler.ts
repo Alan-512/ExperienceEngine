@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { ExperiencePackRegistry } from "../packs/fs-registry.js";
 import { nowIso } from "../utils/clock.js";
 import { renderAgentsMarkdown, selectRenderableNodes } from "./agents-renderer.js";
+import { renderClaudeMarkdown } from "./claude-renderer.js";
 import { renderCodexMarkdown } from "./codex-renderer.js";
 import { renderGitHubAgentMarkdown } from "./github-renderer.js";
 import type {
@@ -20,9 +21,16 @@ const ensureCompilablePackStatus = (status: string): void => {
 };
 
 const targetOutput = (
-  target: "agents" | "codex" | "github",
+  target: "agents" | "codex" | "github" | "claude",
   packId: string
 ): { fileName: string; renderer: typeof renderAgentsMarkdown } => {
+  if (target === "claude") {
+    return {
+      fileName: "CLAUDE.md",
+      renderer: renderClaudeMarkdown
+    };
+  }
+
   if (target === "github") {
     return {
       fileName: `${packId}.agent.md`,

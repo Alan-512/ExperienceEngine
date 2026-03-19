@@ -125,7 +125,7 @@ The user guide includes:
 - doctor first-value readiness output and the install-time cold-start guidance
 - `ee inspect --last` provenance details and quick feedback commands (`ee helped` / `ee harmed`)
 - `ee maintenance embeddings-reset` for clearing and rebuilding the managed embedding cache
-- `ee pack list|inspect|draft create|review|publish|compile|deploy|rollback` for the local Experience Pack workflow, host instruction exports (`AGENTS.md`, `CODEX.md`, GitHub agent profile markdown), and controlled repo deployment with `--dry-run` / `--force`
+- `ee pack list|inspect|draft create|review|publish|compile|deploy|rollback` for the local Experience Pack workflow, host instruction exports (`AGENTS.md`, `CODEX.md`, `CLAUDE.md`, GitHub agent profile markdown), and controlled repo deployment with `--dry-run` / `--force`
 
 ## Validation
 

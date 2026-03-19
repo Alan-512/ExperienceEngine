@@ -124,14 +124,15 @@ Current CLI surface:
 ```bash
 ee pack list
 ee pack inspect <pack-id>
-ee pack status <pack-id> [version] [agents|codex|github] [repo-path]
+ee pack status <pack-id> [version] [agents|codex|github|claude] [repo-path]
 ee pack draft create <pack-id> <node-id[,node-id...]> [name...]
 ee pack review <pack-id> <description...>
 ee pack publish <pack-id>
 ee pack compile <pack-id> [version]
 ee pack compile <pack-id> [version] codex
 ee pack compile <pack-id> [version] github
-ee pack deploy <pack-id> [version] [agents|codex|github] [repo-path] [--dry-run] [--force] [--status-only]
+ee pack compile <pack-id> [version] claude
+ee pack deploy <pack-id> [version] [agents|codex|github|claude] [repo-path] [--dry-run] [--force] [--status-only]
 ee pack rollback <pack-id> <version>
 ```
 
@@ -153,9 +154,11 @@ Example:
 ee pack compile auth-debug-pack
 ee pack compile auth-debug-pack codex
 ee pack compile auth-debug-pack github
+ee pack compile auth-debug-pack claude
 ee pack deploy auth-debug-pack agents /path/to/repo --dry-run
 ee pack deploy auth-debug-pack codex /path/to/repo
 ee pack deploy github-pack github /path/to/repo --force
+ee pack deploy auth-debug-pack claude /path/to/repo
 ee pack deploy auth-debug-pack agents /path/to/repo --status-only
 ee pack status auth-debug-pack agents /path/to/repo
 ```
@@ -170,6 +173,7 @@ Artifacts produced:
 
 - `AGENTS.md` for `agents` target
 - `CODEX.md` for `codex` target
+- `CLAUDE.md` for `claude` target
 - `<pack-id>.agent.md` for `github` target
 - `compile-report.json`
 
@@ -177,6 +181,7 @@ Deploying compiled artifacts:
 
 - `agents` target writes to `<repo>/AGENTS.md`
 - `codex` target writes to `<repo>/CODEX.md`
+- `claude` target writes to `<repo>/CLAUDE.md`
 - `github` target writes to `<repo>/.github/agents/<pack-id>.md`
 
 Use `--dry-run` to preview the destination without writing files. Existing files are protected by default; use `--force` only when you intentionally want to overwrite the destination. Use `--status-only` to inspect whether the destination is `missing`, `up_to_date`, or `drifted` without writing anything.
@@ -184,7 +189,7 @@ Use `--dry-run` to preview the destination without writing files. Existing files
 If you only want the deployment state without invoking the deploy command shape, use:
 
 ```bash
-ee pack status <pack-id> [version] [agents|codex|github] [repo-path]
+ee pack status <pack-id> [version] [agents|codex|github|claude] [repo-path]
 ```
 
 Compiler visibility is also exposed through:

@@ -15,7 +15,7 @@ const ALL_HOSTS = ["openclaw", "claude-code", "codex"] as const;
 
 const usage = (): void => {
   console.log(
-    "Usage: ee pack <list|inspect <pack-id>|status <pack-id> [version] [agents|codex|github] [repo-path]|draft create <pack-id> <node-id[,node-id...]> [name...]|review <pack-id> <description...>|publish <pack-id>|compile <pack-id> [version] [agents|codex|github]|deploy <pack-id> [version] [agents|codex|github] [repo-path] [--dry-run] [--force] [--status-only]|rollback <pack-id> <version>>"
+    "Usage: ee pack <list|inspect <pack-id>|status <pack-id> [version] [agents|codex|github|claude] [repo-path]|draft create <pack-id> <node-id[,node-id...]> [name...]|review <pack-id> <description...>|publish <pack-id>|compile <pack-id> [version] [agents|codex|github|claude]|deploy <pack-id> [version] [agents|codex|github|claude] [repo-path] [--dry-run] [--force] [--status-only]|rollback <pack-id> <version>>"
   );
 };
 
@@ -118,8 +118,8 @@ export const runPackCommand = (args: string[]): void => {
       console.log("Compiled targets: none");
     }
 
-    const compileTarget = (value: string | undefined): "agents" | "codex" | "github" | undefined =>
-      value === "agents" || value === "codex" || value === "github" ? value : undefined;
+    const compileTarget = (value: string | undefined): "agents" | "codex" | "github" | "claude" | undefined =>
+      value === "agents" || value === "codex" || value === "github" || value === "claude" ? value : undefined;
     const arg2Target = compileTarget(rest[1]);
     const arg3Target = compileTarget(rest[2]);
     const version = arg2Target ? undefined : rest[1];
@@ -209,8 +209,8 @@ export const runPackCommand = (args: string[]): void => {
 
   if (action === "compile") {
     const packId = rest[0];
-    const compileTarget = (value: string | undefined): "agents" | "codex" | "github" | undefined =>
-      value === "agents" || value === "codex" || value === "github" ? value : undefined;
+    const compileTarget = (value: string | undefined): "agents" | "codex" | "github" | "claude" | undefined =>
+      value === "agents" || value === "codex" || value === "github" || value === "claude" ? value : undefined;
     const arg2Target = compileTarget(rest[1]);
     const arg3Target = compileTarget(rest[2]);
     const version = arg2Target ? undefined : rest[1];
@@ -234,8 +234,8 @@ export const runPackCommand = (args: string[]): void => {
   }
 
   if (action === "status") {
-    const compileTarget = (value: string | undefined): "agents" | "codex" | "github" | undefined =>
-      value === "agents" || value === "codex" || value === "github" ? value : undefined;
+    const compileTarget = (value: string | undefined): "agents" | "codex" | "github" | "claude" | undefined =>
+      value === "agents" || value === "codex" || value === "github" || value === "claude" ? value : undefined;
     const packId = rest[0];
     const arg2Target = compileTarget(rest[1]);
     const arg3Target = compileTarget(rest[2]);
@@ -266,8 +266,8 @@ export const runPackCommand = (args: string[]): void => {
   }
 
   if (action === "deploy") {
-    const compileTarget = (value: string | undefined): "agents" | "codex" | "github" | undefined =>
-      value === "agents" || value === "codex" || value === "github" ? value : undefined;
+    const compileTarget = (value: string | undefined): "agents" | "codex" | "github" | "claude" | undefined =>
+      value === "agents" || value === "codex" || value === "github" || value === "claude" ? value : undefined;
     const positional = rest.filter(
       (value) => value !== "--dry-run" && value !== "--force" && value !== "--status-only"
     );

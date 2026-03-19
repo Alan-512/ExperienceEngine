@@ -30,6 +30,10 @@ const resolveDestinationPath = (
   packId: string,
   target: CompilerTarget
 ): string => {
+  if (target === "claude") {
+    return join(repoPath, "CLAUDE.md");
+  }
+
   if (target === "codex") {
     return join(repoPath, "CODEX.md");
   }
