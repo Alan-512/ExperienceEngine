@@ -351,4 +351,28 @@ describe("pack CLI command", () => {
     output = consoleLogSpy.mock.calls.flat().join("\n");
     expect(output).toContain("Status: up_to_date");
   });
+
+  it("includes deployment status in pack inspect when target repo arguments are provided", () => {
+    const homeDir = makeTempDir();
+    const targetRepo = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(homeDir, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+
+    nodeRepo.upsert(makeNode());
+    runPackCommand(["draft", "create", "inspect-pack", "node_auth_strategy", "Inspect", "Pack"]);
+    runPackCommand(["review", "inspect-pack", "Reviewed", "inspect", "pack"]);
+    runPackCommand(["publish", "inspect-pack"]);
+
+    consoleLogSpy.mockClear();
+    runPackCommand(["inspect", "inspect-pack", "agents", targetRepo]);
+
+    const output = consoleLogSpy.mock.calls.flat().join("\n");
+    expect(output).toContain("Pack: inspect-pack");
+    expect(output).toContain("Deployment status:");
+    expect(output).toContain("  Target: agents");
+    expect(output).toContain(`  Destination: ${join(targetRepo, "AGENTS.md")}`);
+    expect(output).toContain("  Status: missing");
+  });
 });

@@ -117,6 +117,29 @@ export const runPackCommand = (args: string[]): void => {
     } else {
       console.log("Compiled targets: none");
     }
+
+    const compileTarget = (value: string | undefined): "agents" | "codex" | "github" | undefined =>
+      value === "agents" || value === "codex" || value === "github" ? value : undefined;
+    const arg2Target = compileTarget(rest[1]);
+    const arg3Target = compileTarget(rest[2]);
+    const version = arg2Target ? undefined : rest[1];
+    const target = arg2Target ?? arg3Target;
+    const repoPath = target ? rest[arg2Target ? 2 : arg3Target ? 3 : version ? 2 : 1] : undefined;
+    if (target && repoPath) {
+      const paths = resolveExperienceEnginePaths();
+      const deployment = deployCompiledPack({
+        packsDir: paths.packsDir,
+        packId,
+        version,
+        target,
+        repoPath,
+        statusOnly: true
+      });
+      console.log("Deployment status:");
+      console.log(`  Target: ${deployment.target}`);
+      console.log(`  Destination: ${deployment.destinationPath}`);
+      console.log(`  Status: ${deployment.deploymentStatus}`);
+    }
     return;
   }
 
