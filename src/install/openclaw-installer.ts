@@ -1,5 +1,17 @@
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  cpSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync
+} from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { resolveExperienceEnginePaths, resolveProductStateDir, type ResolvedPathInfo } from "../config/path-resolver.js";
@@ -26,6 +38,7 @@ export type OpenClawInstallReport = {
   installed: true;
   paths: ResolvedPathInfo;
   packageRoot: string;
+  installSource: string;
   installedVersion: string;
   hostWiring: {
     wired: boolean;
@@ -43,6 +56,7 @@ type InstallerOptions = {
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
   runner?: OpenClawCommandRunner;
+  packageSourceBuilder?: (packageRoot: string, paths: ResolvedPathInfo) => string;
 };
 
 type HostState = {
@@ -148,6 +162,74 @@ const removeExistingOpenClawInstallPath = (installPath: string): void => {
   if (existsSync(installPath)) {
     rmSync(installPath, { recursive: true, force: true });
   }
+};
+
+const protectOpenClawReinstallPath = (installPath: string, packageRoot: string, homeDir?: string): void => {
+  const normalizedInstallPath = resolve(expandHomePath(installPath, homeDir));
+  const normalizedPackageRoot = resolve(expandHomePath(packageRoot, homeDir));
+  if (normalizedInstallPath === normalizedPackageRoot) {
+    throw new Error(
+      `Refusing to delete OpenClaw install path ${normalizedInstallPath} because it points at the current ExperienceEngine working tree.`
+    );
+  }
+
+  const gitMarker = join(normalizedInstallPath, ".git");
+  if (existsSync(gitMarker)) {
+    throw new Error(
+      `Refusing to delete OpenClaw install path ${normalizedInstallPath} because it looks like a git working tree.`
+    );
+  }
+
+  const looksLikeSourceTree =
+    existsSync(join(normalizedInstallPath, "src")) && existsSync(join(normalizedInstallPath, "tsconfig.json"));
+  if (looksLikeSourceTree) {
+    throw new Error(
+      `Refusing to delete OpenClaw install path ${normalizedInstallPath} because it looks like a live source checkout.`
+    );
+  }
+};
+
+const createOpenClawInstallTarball = (packageRoot: string, paths: ResolvedPathInfo): string => {
+  const tempRoot = mkdtempSync(join(resolveProductStateDir(paths), "openclaw-package-"));
+  const stageDir = join(tempRoot, "experienceengine-openclaw");
+  mkdirSync(stageDir, { recursive: true });
+
+  cpSync(join(packageRoot, "dist"), join(stageDir, "dist"), { recursive: true });
+
+  const rawPackageJson = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8")) as Record<string, unknown>;
+  const packagedManifest = {
+    name: rawPackageJson.name,
+    version: rawPackageJson.version,
+    type: rawPackageJson.type,
+    description: rawPackageJson.description,
+    openclaw: rawPackageJson.openclaw,
+    engines: rawPackageJson.engines,
+    dependencies: rawPackageJson.dependencies
+  };
+  writeFileSync(join(stageDir, "package.json"), `${JSON.stringify(packagedManifest, null, 2)}\n`, "utf8");
+
+  const pluginManifestPath = join(packageRoot, "openclaw.plugin.json");
+  if (existsSync(pluginManifestPath)) {
+    cpSync(pluginManifestPath, join(stageDir, "openclaw.plugin.json"));
+  }
+
+  for (const filename of ["README.md", "LICENSE", "LICENSE.md"]) {
+    const sourcePath = join(packageRoot, filename);
+    if (existsSync(sourcePath)) {
+      cpSync(sourcePath, join(stageDir, filename));
+    }
+  }
+
+  const output = execFileSync("npm", ["pack", stageDir, "--pack-destination", tempRoot], {
+    stdio: "pipe",
+    encoding: "utf8"
+  }).trim();
+  const tarballName = output.split(/\r?\n/).filter(Boolean).at(-1);
+  if (!tarballName) {
+    throw new Error("npm pack did not return an OpenClaw install artifact");
+  }
+
+  return join(tempRoot, tarballName);
 };
 
 export type OpenClawInspection = ReturnType<typeof inspectOpenClawInstall>;
@@ -341,9 +423,11 @@ export const installOpenClawAdapter = (options: InstallerOptions = {}): OpenClaw
     join(dirname(paths.compatibilityHome), "extensions", "experienceengine");
   const installAction = inferOpenClawInstallAction(existingPluginsConfig, packageRoot, expectedInstallPath);
   if (installAction === "reinstall") {
+    protectOpenClawReinstallPath(expectedInstallPath, packageRoot, options.homeDir);
     removeExistingOpenClawInstallPath(expectedInstallPath);
   }
-  const commands = buildOpenClawInstallCommands(packageRoot, "experienceengine", installAction, pluginConfig);
+  const installSource = (options.packageSourceBuilder ?? createOpenClawInstallTarball)(packageRoot, paths);
+  const commands = buildOpenClawInstallCommands(installSource, "experienceengine", installAction, pluginConfig);
   runOpenClawCommands(commands, options.runner);
   cleanupOpenClawWarningSources(paths, options.runner);
 
@@ -352,12 +436,13 @@ export const installOpenClawAdapter = (options: InstallerOptions = {}): OpenClaw
     installedAt: new Date().toISOString(),
     installedVersion,
     packageRoot,
+    installSource,
     installMode:
       installAction === "update"
         ? "updated-plugin"
         : installAction === "reinstall"
-          ? "reinstalled-plugin"
-          : "copied-plugin",
+          ? "reinstalled-packaged-plugin"
+          : "packaged-plugin",
     hostWiring: {
       wired: true,
       restartRecommended: true
@@ -372,6 +457,7 @@ export const installOpenClawAdapter = (options: InstallerOptions = {}): OpenClaw
     installed: true,
     paths,
     packageRoot,
+    installSource,
     installedVersion,
     hostWiring: {
       wired: true,
@@ -387,6 +473,7 @@ type PersistedInstallState = {
   installedAt: string;
   installedVersion?: string;
   packageRoot?: string;
+  installSource?: string;
   installMode?: string;
   hostWiring?: {
     wired?: boolean;
@@ -471,6 +558,7 @@ export const inspectOpenClawInstall = (options: InstallerOptions = {}) => {
     captureDir: paths.captureDir,
     installStatePath: paths.installStatePath,
     packageRoot: state?.packageRoot,
+    installSource: state?.installSource,
     installMode: state?.installMode,
     hostWiring: {
       wired: state?.hostWiring?.wired ?? false,

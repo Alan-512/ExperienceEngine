@@ -31,6 +31,9 @@ describe("OpenClaw installer", () => {
     let pluginsReads = 0;
     const report = installOpenClawAdapter({
       homeDir,
+      packageSourceBuilder() {
+        return join(homeDir, "tmp", "experienceengine-openclaw.tgz");
+      },
       runner(command) {
         const key = [command.bin, ...command.args].join(" ");
         commands.push(key);
@@ -71,7 +74,8 @@ describe("OpenClaw installer", () => {
     expect(existsSync(report.paths.installStatePath)).toBe(true);
     expect(commands).toHaveLength(6);
     expect(commands[0]).toBe(`openclaw config get plugins`);
-    expect(commands[1]).toBe(`openclaw plugins install ${report.packageRoot}`);
+    expect(commands[1]).toBe(`openclaw plugins install ${report.installSource}`);
+    expect(report.installSource).toMatch(/experienceengine-openclaw\.tgz$/);
     expect(commands[4]).toBe("openclaw config get plugins");
     expect(commands[5]).toBe('openclaw config set plugins.load.paths ["/tmp/other-plugin"] --json');
 
@@ -81,14 +85,16 @@ describe("OpenClaw installer", () => {
       installMode: string;
       sqlitePath: string;
       packageRoot: string;
+      installSource: string;
       hostWiring: { wired: boolean };
     };
 
     expect(payload.adapter).toBe("openclaw");
     expect(payload.installedVersion).toBe(report.installedVersion);
-    expect(payload.installMode).toBe("copied-plugin");
+    expect(payload.installMode).toBe("packaged-plugin");
     expect(payload.sqlitePath).toBe(report.pluginConfig.sqlitePath);
     expect(payload.packageRoot).toBe(report.packageRoot);
+    expect(payload.installSource).toBe(report.installSource);
     expect(payload.hostWiring.wired).toBe(true);
   });
 
@@ -158,6 +164,9 @@ describe("OpenClaw installer", () => {
 
     const report = installOpenClawAdapter({
       homeDir,
+      packageSourceBuilder() {
+        return join(homeDir, "tmp", "experienceengine-openclaw.tgz");
+      },
       runner(command) {
         const key = [command.bin, ...command.args].join(" ");
         commands.push(key);
@@ -179,11 +188,11 @@ describe("OpenClaw installer", () => {
       }
     });
 
-    expect(commands[1]).toBe(`openclaw plugins install ${report.packageRoot}`);
+    expect(commands[1]).toBe(`openclaw plugins install ${report.installSource}`);
     const payload = JSON.parse(readFileSync(report.paths.installStatePath, "utf8")) as {
       installMode: string;
     };
-    expect(payload.installMode).toBe("reinstalled-plugin");
+    expect(payload.installMode).toBe("reinstalled-packaged-plugin");
   });
 
   it("updates an existing npm install via plugins update", () => {
@@ -227,6 +236,9 @@ describe("OpenClaw installer", () => {
 
     const report = installOpenClawAdapter({
       homeDir,
+      packageSourceBuilder() {
+        return join(homeDir, "tmp", "experienceengine-openclaw.tgz");
+      },
       runner(command) {
         const key = [command.bin, ...command.args].join(" ");
         commands.push(key);
@@ -243,10 +255,44 @@ describe("OpenClaw installer", () => {
       }
     });
 
-    expect(commands[1]).toBe(`openclaw plugins install ${report.packageRoot}`);
+    expect(commands[1]).toBe(`openclaw plugins install ${report.installSource}`);
     const payload = JSON.parse(readFileSync(report.paths.installStatePath, "utf8")) as {
       installMode: string;
     };
-    expect(payload.installMode).toBe("reinstalled-plugin");
+    expect(payload.installMode).toBe("reinstalled-packaged-plugin");
+  });
+
+  it("refuses to delete an install path that points at a live git working tree", () => {
+    const homeDir = makeTempDir();
+    const packageRoot = join(homeDir, "live-repo");
+    mkdirSync(join(packageRoot, ".git"), { recursive: true });
+    mkdirSync(packageRoot, { recursive: true });
+
+    expect(() =>
+      installOpenClawAdapter({
+        homeDir,
+        packageSourceBuilder() {
+          return join(homeDir, "tmp", "experienceengine-openclaw.tgz");
+        },
+        runner(command) {
+          const key = [command.bin, ...command.args].join(" ");
+          if (key === "openclaw config get plugins") {
+            return `{
+  "load": {
+    "paths": []
+  },
+  "installs": {
+    "experienceengine": {
+      "source": "path",
+      "sourcePath": "${packageRoot}",
+      "installPath": "${packageRoot}"
+    }
+  }
+}`;
+          }
+          return "";
+        }
+      })
+    ).toThrow(/refusing to delete.*git working tree/i);
   });
 });

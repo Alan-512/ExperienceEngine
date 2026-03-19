@@ -93,6 +93,9 @@ describe("OpenClaw repair recommendation", () => {
 
     installOpenClawAdapter({
       homeDir,
+      packageSourceBuilder() {
+        return join(homeDir, "tmp", "experienceengine-openclaw.tgz");
+      },
       runner(command) {
         const key = [command.bin, ...command.args].join(" ");
         seen.push(key);
@@ -123,6 +126,9 @@ describe("OpenClaw repair recommendation", () => {
     let repairReads = 0;
     const report = repairOpenClawAdapter({
       homeDir,
+      packageSourceBuilder() {
+        return join(homeDir, "tmp", "experienceengine-openclaw.tgz");
+      },
       runner(command) {
         const key = [command.bin, ...command.args].join(" ");
         repairSeen.push(key);
@@ -143,8 +149,8 @@ describe("OpenClaw repair recommendation", () => {
       }
     });
 
-    expect(seen[1]).toBe(`openclaw plugins install ${report.packageRoot}`);
-    expect(repairSeen[1]).toBe(`openclaw plugins install ${report.packageRoot}`);
+    expect(seen[1]).toBe(`openclaw plugins install ${report.installSource}`);
+    expect(repairSeen[1]).toBe(`openclaw plugins install ${report.installSource}`);
     expect(report.installed).toBe(true);
   });
 

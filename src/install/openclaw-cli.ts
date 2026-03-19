@@ -58,7 +58,7 @@ export const resolveExperienceEnginePackageRoot = (): string =>
   resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 export const buildOpenClawInstallCommands = (
-  packageRoot: string,
+  installSource: string,
   pluginId: string,
   installAction: OpenClawInstallAction,
   pluginConfig: OpenClawConfigPayload
@@ -69,7 +69,7 @@ export const buildOpenClawInstallCommands = (
       args:
         installAction === "update"
           ? ["plugins", "update", pluginId]
-          : ["plugins", "install", packageRoot],
+          : ["plugins", "install", installSource],
       description:
         installAction === "update"
           ? "Update the existing ExperienceEngine plugin install in OpenClaw"

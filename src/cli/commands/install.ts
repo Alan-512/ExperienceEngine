@@ -66,6 +66,7 @@ export const runInstallCommand = (
     console.log(`Installed ${report.adapter} adapter.`);
     console.log(`Installed version: ${report.installedVersion}`);
     console.log(`Linked package root: ${report.packageRoot}`);
+    console.log(`Install source: ${report.installSource}`);
     console.log(`Active data root: ${report.paths.activeHome}`);
     console.log(`SQLite path: ${report.pluginConfig.sqlitePath}`);
     console.log(`Capture path: ${report.pluginConfig.captureDir}`);
