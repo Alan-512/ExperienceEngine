@@ -1,6 +1,7 @@
 import { loadConfig } from "../../config/load-config.js";
 import { resolveDistillationResolution } from "../../distillation/host-llm.js";
 import { LlmDistiller } from "../../distillation/llm-distiller.js";
+import { runClaudePrintValidation } from "../../maintenance/claude-validate-print.js";
 import { redistillRuleNodes } from "../../maintenance/redistill-rule-nodes.js";
 import { bootstrapDatabase, openDatabase } from "../../store/sqlite/db.js";
 import { CandidateRepository } from "../../store/sqlite/repositories/candidate-repo.js";
@@ -12,6 +13,7 @@ type MaintenanceDeps = {
   resolveDistillationResolution?: typeof resolveDistillationResolution;
   resetManagedEmbeddingCache?: typeof resetManagedEmbeddingCache;
   redistillRuleNodes?: typeof redistillRuleNodes;
+  claudeValidatePrint?: typeof runClaudePrintValidation;
 };
 
 export const runMaintenanceCommand = async (
@@ -85,5 +87,21 @@ export const runMaintenanceCommand = async (
     return;
   }
 
-  console.log("Usage: ee maintenance embeddings-reset|redistill-rule-nodes");
+  if (action === "claude-validate-print") {
+    const report = await (deps.claudeValidatePrint ?? runClaudePrintValidation)();
+    console.log("[ExperienceEngine] Claude print validation complete.");
+    console.log(`[ExperienceEngine] Exit code: ${report.exitCode ?? "null"}`);
+    console.log(`[ExperienceEngine] Stdout empty: ${report.stdout.trim().length === 0 ? "yes" : "no"}`);
+    console.log(`[ExperienceEngine] Transcript: ${report.transcriptPath ?? "not found"}`);
+    console.log(
+      `[ExperienceEngine] Target tool seen: ${report.toolSeen ? "yes" : "no"} (${report.targetToolName})`
+    );
+    console.log(`[ExperienceEngine] Tool result seen: ${report.toolResultSeen ? "yes" : "no"}`);
+    if (report.usedTranscriptConclusion && report.assistantText) {
+      console.log(`[ExperienceEngine] Transcript conclusion: ${report.assistantText}`);
+    }
+    return;
+  }
+
+  console.log("Usage: ee maintenance embeddings-reset|redistill-rule-nodes|claude-validate-print");
 };

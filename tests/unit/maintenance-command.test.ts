@@ -8,6 +8,35 @@ afterEach(() => {
 });
 
 describe("maintenance command", () => {
+  it("runs claude print validation and summarizes transcript-backed results", async () => {
+    await runMaintenanceCommand("claude-validate-print", {
+      claudeValidatePrint: async () => ({
+        command: ["claude", "-p", "--permission-mode", "bypassPermissions", "ping"],
+        exitCode: 0,
+        stdout: "",
+        stderr: "",
+        transcriptPath: "/tmp/claude-session.jsonl",
+        targetToolName: "mcp__experienceengine__experienceengine_pack_list",
+        toolSeen: true,
+        toolResultSeen: true,
+        assistantText: "There is one pack.",
+        usedTranscriptConclusion: true
+      })
+    });
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["[ExperienceEngine] Claude print validation complete."],
+        ["[ExperienceEngine] Exit code: 0"],
+        ["[ExperienceEngine] Stdout empty: yes"],
+        ["[ExperienceEngine] Transcript: /tmp/claude-session.jsonl"],
+        ["[ExperienceEngine] Target tool seen: yes (mcp__experienceengine__experienceengine_pack_list)"],
+        ["[ExperienceEngine] Tool result seen: yes"],
+        ["[ExperienceEngine] Transcript conclusion: There is one pack."]
+      ])
+    );
+  });
+
   it("clears and rebuilds the configured embedding cache", async () => {
     await runMaintenanceCommand("embeddings-reset", {
       loadConfig: () =>
@@ -98,7 +127,7 @@ describe("maintenance command", () => {
     await runMaintenanceCommand("unknown");
 
     expect(consoleLogSpy).toHaveBeenCalledWith(
-      "Usage: ee maintenance embeddings-reset|redistill-rule-nodes"
+      "Usage: ee maintenance embeddings-reset|redistill-rule-nodes|claude-validate-print"
     );
   });
 });
