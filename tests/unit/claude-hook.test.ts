@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { processClaudeHookPayload, persistClaudeHookCapture } from "../../src/cli/commands/claude-hook.js";
 import { persistClaudeNormalizedEvent } from "../../src/adapters/claude-code/event-store.js";
 import { normalizeClaudeHookPayload } from "../../src/adapters/claude-code/hook-normalizer.js";
@@ -449,5 +449,30 @@ describe("Claude hook capture", () => {
     expect(row?.task_summary).toBe("Summarize the current working directory.");
     expect(row?.outcome_signal).toBe("success");
     expect(row?.evidence_json).toContain("Bash: success: /tmp/example-claude-project");
+  });
+
+  it("does not import the runtime module for PreToolUse-only hook processing", async () => {
+    const homeDir = makeTempDir();
+
+    vi.resetModules();
+    vi.doMock("../../src/runtime/service.js", () => {
+      throw new Error("runtime module should not load for PreToolUse");
+    });
+
+    const module = await import("../../src/cli/commands/claude-hook.js");
+    const result = await module.processClaudeHookPayload(
+      JSON.stringify({
+        hook_event_name: "PreToolUse",
+        session_id: "session-pretool-lazy",
+        cwd: "/repo",
+        tool_name: "mcp__experienceengine__experienceengine_pack_list",
+        tool_input: {}
+      }),
+      { homeDir }
+    );
+
+    expect(result.capturePath).toBeTruthy();
+    vi.doUnmock("../../src/runtime/service.js");
+    vi.resetModules();
   });
 });

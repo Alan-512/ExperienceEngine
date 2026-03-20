@@ -20,6 +20,11 @@ This workflow validates the Claude Code adapter against a real local Claude CLI 
    - `$EXPERIENCE_ENGINE_HOME/adapters/claude-code/sessions`
    - `$EXPERIENCE_ENGINE_HOME/sqlite/experienceengine.db`
 
+For non-interactive `claude -p` validation that is expected to touch MCP tools:
+
+- include `--permission-mode bypassPermissions`
+- otherwise Claude may stop on its own tool-permission prompt flow and look like an EE/MCP timeout even when the server is healthy
+
 ## Suggested Validation Command
 
 ```bash

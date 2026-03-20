@@ -11,7 +11,6 @@ import {
 import { toClaudePromptContext, toClaudeToolResult } from "../../adapters/claude-code/runtime-projection.js";
 import { loadConfig } from "../../config/load-config.js";
 import { resolveExperienceEnginePaths } from "../../config/path-resolver.js";
-import { ExperienceRuntimeService } from "../../runtime/service.js";
 
 type ClaudeHookPayload = {
   session_id?: string;
@@ -35,12 +34,13 @@ export type ClaudeHookCommandResult = {
 const sanitizeSegment = (value: string | undefined, fallback: string): string =>
   (value ?? fallback).replace(/[^a-zA-Z0-9_.-]+/g, "_");
 
-const createClaudeRuntime = (options: ClaudeHookOptions = {}): ExperienceRuntimeService => {
+const createClaudeRuntime = async (options: ClaudeHookOptions = {}) => {
   const paths = resolveExperienceEnginePaths({
     adapter: "claude-code",
     env: options.env ?? process.env,
     homeDir: options.homeDir
   });
+  const { ExperienceRuntimeService } = await import("../../runtime/service.js");
 
   return new ExperienceRuntimeService(
     loadConfig(
@@ -211,7 +211,7 @@ export const processClaudeHookPayload = async (
 
   const promptContext = toClaudePromptContext(event);
   if (promptContext) {
-    const runtime = createClaudeRuntime(options);
+    const runtime = await createClaudeRuntime(options);
     const promptResult = await runtime.beforePromptBuild(promptContext);
     const rememberedContext = {
       ...promptContext,
@@ -238,7 +238,7 @@ export const processClaudeHookPayload = async (
     const stored = loadClaudeSession(event.sessionId, options);
     const promptContext = stored?.promptContext ?? recoverClaudePromptContext(payload as ClaudeHookPayload | null, event.sessionId);
     if (promptContext) {
-      const runtime = createClaudeRuntime(options);
+      const runtime = await createClaudeRuntime(options);
       for (const pendingToolResult of stored?.toolResults ?? []) {
         await runtime.persistToolResult(pendingToolResult);
       }
