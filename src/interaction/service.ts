@@ -40,6 +40,11 @@ import type {
 import { transitionState } from "../feedback/state-transition.js";
 import { nowIso } from "../utils/clock.js";
 import { createId } from "../utils/ids.js";
+import {
+  buildRepoSummary,
+  type ExperienceRepoSummary,
+  type ExperienceRepoDeploymentStatus
+} from "./repo-summary.js";
 
 export type ExperienceNodeSummary = {
   id: string;
@@ -291,6 +296,8 @@ export type ExperiencePackActivationResult = {
   pinnedVersion?: string;
   updatedAt: string;
 };
+
+const REPO_SUMMARY_TARGETS: CompilerTarget[] = ["codex", "agents", "claude", "github"];
 
 const summarizeAutomaticFeedback = (events: ReviewEvent[]): "helped" | "harmed" | "none" => {
   const automatic = events.filter((event) => event.source === "automatic");
@@ -871,6 +878,30 @@ export class ExperienceInteractionService {
     };
   }
 
+  inspectRepoSummary(cwd: string = process.cwd()): ExperienceRepoSummary {
+    const scope = resolveScope(cwd);
+    const latest = this.inspectLast();
+    const learning = this.inspectLearningSummary();
+    const scopePackStatus = this.inspectScopePackStatusByScopeId(scope.scope_id);
+    const activePacks = scopePackStatus.activations.filter((activation) => activation.enabled);
+    const matchedPackIds = new Set(latest?.matchedPacks.map((pack) => pack.packId) ?? []);
+    const matchedPacks = scopePackStatus.activations.filter((activation) => matchedPackIds.has(activation.packId));
+    const deployments = this.inspectRepoDeploymentStatuses(scopePackStatus.activations, cwd);
+
+    return buildRepoSummary({
+      scope: {
+        scopeId: scope.scope_id,
+        scopeName: scope.scope_name,
+        rootPath: scope.root_path
+      },
+      latest: latest && latest.scopeId === scope.scope_id ? latest : undefined,
+      learning,
+      activePacks,
+      matchedPacks,
+      deployments
+    });
+  }
+
   inspectFirstValueReadiness(): ExperienceFirstValueReadiness {
     const summary = this.inspectLearningSummary();
     const rawRecords = summary.runtime.records;
@@ -1007,5 +1038,43 @@ export class ExperienceInteractionService {
       nodeId,
       state: updated.state
     };
+  }
+
+  private inspectRepoDeploymentStatuses(
+    activations: ExperienceScopePackActivationView[],
+    repoPath: string
+  ): ExperienceRepoDeploymentStatus[] {
+    const published = activations.find(
+      (activation) =>
+        activation.enabled && (activation.status === "published" || activation.status === "rolled_back")
+    );
+
+    if (!published) {
+      return REPO_SUMMARY_TARGETS.map((target) => ({
+        target,
+        status: "missing"
+      }));
+    }
+
+    return REPO_SUMMARY_TARGETS.map((target) => {
+      try {
+        const result = this.inspectPackDeploymentStatus({
+          packId: published.packId,
+          version: published.pinnedVersion ?? published.currentVersion,
+          target,
+          repoPath
+        });
+        return {
+          target,
+          status: result.deploymentStatus,
+          destination: result.destinationPath
+        };
+      } catch {
+        return {
+          target,
+          status: "missing"
+        };
+      }
+    });
   }
 }

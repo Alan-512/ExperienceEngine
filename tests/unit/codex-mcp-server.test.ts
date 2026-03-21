@@ -558,6 +558,7 @@ describe("Codex MCP behavior loop", () => {
     const lastResource = getRegisteredResource(server, "experienceengine://last");
     const recentResource = getRegisteredResourceTemplate(server, "experienceengine_recent");
     const learningResource = getRegisteredResource(server, "experienceengine://learning/summary");
+    const repoSummaryResource = getRegisteredResource(server, "experienceengine://repo-summary");
     const nodeResource = getRegisteredResourceTemplate(server, "experienceengine_node");
 
     const lastPayload = await lastResource.readCallback(new URL("experienceengine://last"), {});
@@ -568,6 +569,10 @@ describe("Codex MCP behavior loop", () => {
     );
     const learningPayload = await learningResource.readCallback(
       new URL("experienceengine://learning/summary"),
+      {}
+    );
+    const repoSummaryPayload = await repoSummaryResource.readCallback(
+      new URL("experienceengine://repo-summary"),
       {}
     );
     const nodePayload = await nodeResource.readCallback(
@@ -610,6 +615,19 @@ describe("Codex MCP behavior loop", () => {
       nodes: expect.objectContaining({
         active: expect.any(Number)
       })
+    });
+    expect(JSON.parse((repoSummaryPayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({
+      scope: expect.objectContaining({
+        scopeId: resolveScope(process.cwd()).scope_id
+      }),
+      benchmark: expect.objectContaining({
+        verdict: expect.any(String)
+      }),
+      packs: expect.objectContaining({
+        enabledCount: expect.any(Number)
+      }),
+      deployment: expect.any(Array),
+      recommendedNextAction: expect.any(String)
     });
     expect(JSON.parse((nodePayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({
       id: "node_codex_resource_view",
@@ -1118,6 +1136,7 @@ describe("Codex MCP behavior loop", () => {
   it("registers MCP prompts for review and control workflows", async () => {
     const server = createCodexMcpServer();
     const reviewCapabilitiesPrompt = getRegisteredPrompt(server, "experienceengine_review_capabilities");
+    const reviewRepoStatusPrompt = getRegisteredPrompt(server, "experienceengine_review_repo_status");
     const showLastPrompt = getRegisteredPrompt(server, "experienceengine_show_last_intervention");
     const recentPrompt = getRegisteredPrompt(server, "experienceengine_review_recent_injected");
     const pausePrompt = getRegisteredPrompt(server, "experienceengine_pause_current_project");
@@ -1128,6 +1147,9 @@ describe("Codex MCP behavior loop", () => {
     const preparePackDeployPrompt = getRegisteredPrompt(server, "experienceengine_prepare_pack_deploy");
 
     const reviewCapabilities = (await reviewCapabilitiesPrompt.callback({})) as {
+      messages: Array<{ role: string; content: { type: string; text?: string; uri?: string } }>;
+    };
+    const reviewRepoStatus = (await reviewRepoStatusPrompt.callback({})) as {
       messages: Array<{ role: string; content: { type: string; text?: string; uri?: string } }>;
     };
     const showLast = (await showLastPrompt.callback({})) as {
@@ -1169,6 +1191,8 @@ describe("Codex MCP behavior loop", () => {
     };
     expect(reviewCapabilities.messages[0].content.text).toContain("experienceengine://capabilities");
     expect(reviewCapabilities.messages[0].content.text).toContain("direct low-risk tools");
+    expect(reviewRepoStatus.messages[0].content.text).toContain("experienceengine://repo-summary");
+    expect(reviewRepoStatus.messages[0].content.text).toContain("experienceengine_get_repo_summary");
     expect(showLast.messages[0].content.text).toContain("Summarize whether guidance was injected");
     expect(showLast.messages[1].content).toMatchObject({
       type: "resource_link",
@@ -1272,6 +1296,52 @@ describe("Codex MCP behavior loop", () => {
         latestVersion: "0.2.0"
       }
     });
+  });
+
+  it("registers a repo summary MCP tool", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    seedPack(homeDir, db, nodeRepo, process.cwd(), nowIso(), "pack_repo_summary_tool", "node_repo_summary_tool");
+
+    const server = createCodexMcpServer({ homeDir, env });
+    const repoSummaryTool = getRegisteredTool(server, "experienceengine_get_repo_summary");
+
+    const result = parseTextPayload<{
+      scope: { scopeId: string };
+      benchmark: { verdict: string };
+      packs: { enabledCount: number };
+      deployment: Array<{ target: string; status: string }>;
+      recommendedNextAction: string;
+    }>(
+      (await repoSummaryTool.handler({ cwd: process.cwd() })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+
+    expect(result).toMatchObject({
+      scope: {
+        scopeId: resolveScope(process.cwd()).scope_id
+      },
+      benchmark: {
+        verdict: expect.any(String)
+      },
+      packs: {
+        enabledCount: 1
+      },
+      recommendedNextAction: expect.any(String)
+    });
+    expect(result.deployment).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          target: "codex",
+          status: expect.any(String)
+        })
+      ])
+    );
   });
 
   it("registers MCP tools for node lifecycle control", async () => {

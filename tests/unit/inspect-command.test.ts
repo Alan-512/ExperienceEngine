@@ -326,6 +326,44 @@ describe("inspect command", () => {
     );
   });
 
+  it("prints a repo summary fallback with benchmark, packs, deployment, and next action", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+
+    const nodeRepo = new NodeRepository(db);
+    const node = makeNode({ scope_id: resolveScope(process.cwd()).scope_id });
+    nodeRepo.upsert(node);
+    seedPackActivation(home, db, node);
+    compilePack({
+      packsDir: join(home, ".experienceengine", "packs"),
+      packId: "auth-pack",
+      target: "codex",
+      generatedAt: "2026-03-20T05:00:00.000Z"
+    });
+
+    runInspectCommand("repo");
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Repo summary:"],
+        [`- Scope: ${resolveScope(process.cwd()).scope_id}`],
+        ["- Benchmark verdict: warming_up"],
+        ["- Suggested mode: shadow"],
+        ["- Enabled packs: 1"],
+        ["- auth-pack@v1 [published enabled]"],
+        ["- Latest compiled target: codex"],
+        ["Deployment status:"],
+        ["- codex: missing"],
+        ["- agents: missing"],
+        ["- claude: missing"],
+        ["- github: missing"],
+        ["Recommended next action:"]
+      ])
+    );
+  });
+
   it("prints the most recent shadow evaluation when hints were suppressed", () => {
     const home = makeTempDir();
     process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");

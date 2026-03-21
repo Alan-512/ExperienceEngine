@@ -202,6 +202,28 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
     return;
   }
 
+  if (target === "repo") {
+    const summary = interaction.inspectRepoSummary();
+    console.log("Repo summary:");
+    console.log(`- Scope: ${summary.scope.scopeId}`);
+    console.log(`- Benchmark verdict: ${summary.benchmark.verdict}`);
+    console.log(`- Suggested mode: ${summary.benchmark.suggestedMode}`);
+    console.log(`- Enabled packs: ${summary.packs.enabledCount}`);
+    for (const pack of summary.packs.active) {
+      console.log(`- ${pack.packId}@${pack.pinnedVersion ?? pack.currentVersion} [${pack.status} enabled]`);
+    }
+    if (summary.packs.latestCompiledTarget) {
+      console.log(`- Latest compiled target: ${summary.packs.latestCompiledTarget}`);
+    }
+    console.log("Deployment status:");
+    for (const deployment of summary.deployment) {
+      console.log(`- ${deployment.target}: ${deployment.status}`);
+    }
+    console.log("Recommended next action:");
+    console.log(`- ${summary.recommendedNextAction}`);
+    return;
+  }
+
   if (target === "node") {
     console.log("Usage: ee inspect node <id>");
     return;

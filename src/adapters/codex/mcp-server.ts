@@ -100,6 +100,7 @@ const buildExperienceCapabilities = () => ({
     targets: [...COMPILER_TARGETS]
   },
   prompts: [
+    "experienceengine_review_repo_status",
     "experienceengine_review_pack_status",
     "experienceengine_prepare_pack_publish",
     "experienceengine_prepare_pack_rollback",
@@ -107,6 +108,7 @@ const buildExperienceCapabilities = () => ({
   ],
   resources: [
     "experienceengine://capabilities",
+    "experienceengine://repo-summary",
     "experienceengine://packs",
     "experienceengine://pack/{id}",
     "experienceengine://last",
@@ -434,6 +436,10 @@ export const createCodexInteractionSurface = (options: CodexServerOptions = {}) 
       return interaction.inspectLearningSummary();
     },
 
+    async inspectRepoSummary(args: CodexScopeArgs = {}) {
+      return interaction.inspectRepoSummary(args.cwd);
+    },
+
     async feedbackLast(args: { feedback: FeedbackValue }) {
       return interaction.feedbackLast(args.feedback);
     },
@@ -579,6 +585,17 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
   );
 
   server.registerResource(
+    "experienceengine_repo_summary",
+    "experienceengine://repo-summary",
+    {
+      title: "ExperienceEngine Repo Summary",
+      description: "Repo-level ExperienceEngine summary for the current scope, including benchmark, packs, deployment, and next action.",
+      mimeType: "application/json"
+    },
+    async (uri) => toJsonResourceResult(uri.toString(), await interactionSurface.inspectRepoSummary())
+  );
+
+  server.registerResource(
     "experienceengine_packs",
     "experienceengine://packs",
     {
@@ -681,6 +698,26 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
           nodeType: parseNodeType(String(variables.type))
         })
       )
+  );
+
+  server.registerPrompt(
+    "experienceengine_review_repo_status",
+    {
+      title: "ExperienceEngine Review Repo Status",
+      description: "Guide the host agent to review the current repo's ExperienceEngine state before deciding what to do next."
+    },
+    async () => ({
+      messages: [
+        {
+          role: "user",
+          content: {
+            type: "text",
+            text:
+              "First read the experienceengine://repo-summary resource. Then call experienceengine_get_repo_summary if you need the structured form. Summarize the repo benchmark verdict, suggested mode, active packs, deploy status, and the most conservative next action."
+          }
+        }
+      ]
+    })
   );
 
   server.registerPrompt(
@@ -1363,6 +1400,18 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
       toStructuredToolResult(
         await interactionSurface.deployPackPreview({ packId, version, target, repoPath })
       )
+  );
+
+  server.registerTool(
+    "experienceengine_get_repo_summary",
+    {
+      title: "ExperienceEngine Get Repo Summary",
+      description: "Read the current repo-level ExperienceEngine summary for the active or specified cwd.",
+      inputSchema: {
+        cwd: z.string().optional()
+      }
+    },
+    async ({ cwd }) => toStructuredToolResult(await interactionSurface.inspectRepoSummary({ cwd }))
   );
 
   server.registerTool(
