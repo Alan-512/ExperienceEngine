@@ -9,6 +9,8 @@ const buildStrategyHint = (taskType: TaskType, verificationTool: string, familyL
       return `Reproduce the failing test with ${verificationTool}, make the smallest code change that matches the failure, then rerun ${verificationTool}.`;
     case "build_debug":
       return `Anchor the fix on the first compiler/build breakage with ${verificationTool}, clear that breakage, then rerun ${verificationTool} before touching more files.`;
+    case "config_debug":
+      return `Validate the provider/config path with ${verificationTool}, isolate the first routing or credential mismatch, then rerun ${verificationTool} after each targeted configuration change.`;
     case "integration_fix":
       return `Validate the failing ${familyLabel} with ${verificationTool}, narrow the broken boundary first, then rerun ${verificationTool} after each targeted fix.`;
     case "feature_add":

@@ -3,11 +3,12 @@ const usageText =
   + " | helped|harmed"
   + " | pack <list|inspect|draft create|review|publish|compile [version] [agents|codex]|rollback>"
   + " | backup|export|import <snapshot-path>|rollback <backup-id>"
-  + " | maintenance embeddings-reset|redistill-rule-nodes"
+  + " | maintenance embeddings-reset|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
   + " | evaluate openclaw-baseline [--lookback-hours N] [--output-dir PATH]"
   + " | evaluate openclaw-scenarios --pack high-confidence [--repo-root PATH] [--output-dir PATH] [--dry-run]"
   + " | mcp-server"
-  + " | config <get|set> notices.inline [true|false]";
+  + " | models list <provider> [query]"
+  + " | config <get|set> notices.inline|distillation.provider|distillation.model [value]";
 
 export const printCliUsage = (): void => {
   console.log(usageText);
@@ -52,7 +53,12 @@ export const runCliCommand = async (command: string | undefined, args: string[])
     }
     case "config": {
       const { runConfigCommand } = await import("./commands/config.js");
-      runConfigCommand(args[0], args[1], args[2]);
+      await runConfigCommand(args[0], args[1], args[2]);
+      break;
+    }
+    case "models": {
+      const { runModelsCommand } = await import("./commands/models.js");
+      await runModelsCommand(args[0], args[1], args[2]);
       break;
     }
     case "repair": {
@@ -107,7 +113,7 @@ export const runCliCommand = async (command: string | undefined, args: string[])
     }
     case "maintenance": {
       const { runMaintenanceCommand } = await import("./commands/maintenance.js");
-      await runMaintenanceCommand(args[0]);
+      await runMaintenanceCommand(args[0], args.slice(1));
       break;
     }
     case "pack": {

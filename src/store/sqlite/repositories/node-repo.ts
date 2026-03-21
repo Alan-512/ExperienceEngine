@@ -9,6 +9,13 @@ export class NodeRepository {
     node_type: ExperienceNode["node_type"];
     scope_id: string;
     task_type: ExperienceNode["task_type"];
+    experience_kind: ExperienceNode["experience_kind"] | null;
+    confidence_signal: ExperienceNode["confidence_signal"] | null;
+    validation_state: ExperienceNode["validation_state"] | null;
+    correction_scope: ExperienceNode["correction_scope"] | null;
+    correction_category: ExperienceNode["correction_category"] | null;
+    deviation_pattern: string | null;
+    corrected_constraint: string | null;
     trigger_pattern: string;
     applicability_notes: string | null;
     env_signature: string | null;
@@ -50,6 +57,13 @@ export class NodeRepository {
       node_type: row.node_type,
       scope_id: row.scope_id,
       task_type: row.task_type,
+      experience_kind: row.experience_kind ?? undefined,
+      confidence_signal: row.confidence_signal ?? undefined,
+      validation_state: row.validation_state ?? undefined,
+      correction_scope: row.correction_scope ?? undefined,
+      correction_category: row.correction_category ?? undefined,
+      deviation_pattern: row.deviation_pattern ?? undefined,
+      corrected_constraint: row.corrected_constraint ?? undefined,
       trigger_pattern: row.trigger_pattern,
       applicability_notes: row.applicability_notes ?? undefined,
       env_signature: row.env_signature ?? undefined,
@@ -94,6 +108,13 @@ export class NodeRepository {
       node_type: node.node_type,
       scope_id: node.scope_id,
       task_type: node.task_type,
+      experience_kind: node.experience_kind ?? null,
+      confidence_signal: node.confidence_signal ?? null,
+      validation_state: node.validation_state ?? null,
+      correction_scope: node.correction_scope ?? null,
+      correction_category: node.correction_category ?? null,
+      deviation_pattern: node.deviation_pattern ?? null,
+      corrected_constraint: node.corrected_constraint ?? null,
       trigger_pattern: node.trigger_pattern,
       applicability_notes: node.applicability_notes ?? null,
       env_signature: node.env_signature ?? null,
@@ -134,16 +155,23 @@ export class NodeRepository {
     this.db
       .prepare(
         `INSERT INTO experience_nodes
-          (id, node_type, scope_id, task_type, trigger_pattern, applicability_notes, env_signature, compact_hint, goal, recommended_steps_json,
+          (id, node_type, scope_id, task_type, experience_kind, confidence_signal, validation_state, correction_scope, correction_category, deviation_pattern, corrected_constraint, trigger_pattern, applicability_notes, env_signature, compact_hint, goal, recommended_steps_json,
            avoid_steps_json, fallback_steps_json, success_signal, stop_condition, escalation_condition, evidence_summary, retrieval_text, embedding_json, embedding_provider, embedding_model, embedding_version, embedding_dimensions, distillation_mode_used, distillation_source, redistilled_from, source_kind,
            origin_record_ids_json, helped_record_ids_json, harmed_record_ids_json, state,
            usage_count, helped_count, harmed_count, support_count, last_used_at, last_helped_at, last_harmed_at, created_at, updated_at)
          VALUES
-         (@id, @node_type, @scope_id, @task_type, @trigger_pattern, @applicability_notes, @env_signature, @compact_hint, @goal, @recommended_steps_json,
+         (@id, @node_type, @scope_id, @task_type, @experience_kind, @confidence_signal, @validation_state, @correction_scope, @correction_category, @deviation_pattern, @corrected_constraint, @trigger_pattern, @applicability_notes, @env_signature, @compact_hint, @goal, @recommended_steps_json,
            @avoid_steps_json, @fallback_steps_json, @success_signal, @stop_condition, @escalation_condition, @evidence_summary, @retrieval_text, @embedding_json, @embedding_provider, @embedding_model, @embedding_version, @embedding_dimensions, @distillation_mode_used, @distillation_source, @redistilled_from, @source_kind,
            @origin_record_ids_json, @helped_record_ids_json, @harmed_record_ids_json, @state,
            @usage_count, @helped_count, @harmed_count, @support_count, @last_used_at, @last_helped_at, @last_harmed_at, @created_at, @updated_at)
          ON CONFLICT(id) DO UPDATE SET
+          experience_kind = excluded.experience_kind,
+          confidence_signal = excluded.confidence_signal,
+          validation_state = excluded.validation_state,
+          correction_scope = excluded.correction_scope,
+          correction_category = excluded.correction_category,
+          deviation_pattern = excluded.deviation_pattern,
+          corrected_constraint = excluded.corrected_constraint,
           trigger_pattern = excluded.trigger_pattern,
           applicability_notes = excluded.applicability_notes,
           env_signature = excluded.env_signature,
@@ -238,6 +266,13 @@ export class NodeRepository {
            AND state IN ('active', 'cooling', 'candidate')
          ORDER BY updated_at DESC`
       )
+      .all(scopeId)
+      .map((row) => this.mapNode(row as Parameters<typeof this.mapNode>[0]));
+  }
+
+  listByScope(scopeId: string): ExperienceNode[] {
+    return this.db
+      .prepare("SELECT * FROM experience_nodes WHERE scope_id = ? ORDER BY updated_at DESC")
       .all(scopeId)
       .map((row) => this.mapNode(row as Parameters<typeof this.mapNode>[0]));
   }

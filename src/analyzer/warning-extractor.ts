@@ -7,6 +7,8 @@ const buildWarningHint = (taskType: TaskType, failureTool: string, failureSignat
       return `Do not rerun ${failureTool} unchanged while ${failureSignature}; narrow the failing assertion before editing more code.`;
     case "build_debug":
       return `Do not keep broadening the fix while ${failureTool} still reports ${failureSignature}; isolate the first compile breakage before moving on.`;
+    case "config_debug":
+      return `Do not keep retrying the same provider/config path while ${failureTool} still reports ${failureSignature}; isolate the first routing, credential, or endpoint mismatch first.`;
     case "integration_fix":
       return `Do not keep pushing the same ${familyLabel} path while ${failureTool} still reports ${failureSignature}; isolate the failing boundary first.`;
     case "feature_add":

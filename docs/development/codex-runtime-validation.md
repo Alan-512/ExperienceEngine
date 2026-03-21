@@ -32,10 +32,87 @@ Excluded from this pass:
 - ExperienceEngine build: local `dist/cli/index.js`
 - Codex MCP server entrypoint: `node --no-warnings /mnt/d/project/experienceengine/dist/cli/index.js codex-mcp-server`
 - Distillation provider path exercised in this pass:
-  - `EXPERIENCE_ENGINE_USE_HOST_LLM=true`
   - `EXPERIENCE_ENGINE_ADAPTER=codex`
-  - `CODEX_CONFIG_PATH=<api-backed codex config>`
-  - provider API key forwarded through MCP server env
+  - `ee config set distillation.provider <provider id>`
+  - `ee config set distillation.model <model id>`
+  - provider-specific credential env
+
+Preferred provider/model selection:
+
+```bash
+ee models list openrouter
+ee config set distillation.provider openrouter
+ee config set distillation.model openai/gpt-5.4-mini
+export OPENROUTER_API_KEY=...
+```
+
+Provider-first examples:
+
+- OpenAI:
+  - `ee config set distillation.provider openai`
+  - `ee config set distillation.model gpt-5.4`
+  - `OPENAI_API_KEY=<provider api key>`
+
+- Anthropic:
+  - `ee config set distillation.provider anthropic`
+  - `ee config set distillation.model claude-sonnet-4-20250514`
+  - `ANTHROPIC_API_KEY=<provider api key>`
+
+- Gemini:
+  - `ee config set distillation.provider gemini`
+  - `ee config set distillation.model gemini-2.5-flash`
+  - `GEMINI_API_KEY=<provider api key>`
+
+- Azure OpenAI:
+  - `ee config set distillation.provider azure_openai`
+  - `ee config set distillation.model <azure deployment name>`
+  - `AZURE_OPENAI_ENDPOINT=https://<resource>.openai.azure.com`
+  - `AZURE_OPENAI_API_KEY=<provider api key>`
+  - `AZURE_OPENAI_API_VERSION=2024-10-21`
+
+- Bedrock:
+  - `ee config set distillation.provider bedrock`
+  - `ee config set distillation.model <bedrock model id>`
+  - `AWS_ACCESS_KEY_ID=<aws access key>`
+  - `AWS_SECRET_ACCESS_KEY=<aws secret>`
+  - `AWS_REGION=<aws region>`
+  - `AWS_SESSION_TOKEN=<optional session token>`
+
+- DeepSeek:
+  - `ee config set distillation.provider deepseek`
+  - `ee config set distillation.model deepseek-chat`
+  - `DEEPSEEK_API_KEY=<provider api key>`
+
+- Moonshot:
+  - `ee config set distillation.provider moonshot`
+  - `ee config set distillation.model moonshot-v1-8k`
+  - `MOONSHOT_API_KEY=<provider api key>`
+
+- MiniMax:
+  - `ee config set distillation.provider minimax`
+  - `ee config set distillation.model MiniMax-M1-80k`
+  - `MINIMAX_API_KEY=<provider api key>`
+
+- Volcengine Ark:
+  - `ee config set distillation.provider volcengine_ark`
+  - `ee config set distillation.model <ark model id>`
+  - `VOLCENGINE_ARK_API_KEY=<provider api key>`
+
+- Tencent Hunyuan:
+  - `ee config set distillation.provider tencent_hunyuan`
+  - `ee config set distillation.model <hunyuan model id>`
+  - `TENCENT_HUNYUAN_API_KEY=<provider api key>`
+
+- Baidu Qianfan:
+  - `ee config set distillation.provider baidu_qianfan`
+  - `ee config set distillation.model <qianfan model id>`
+  - `BAIDU_QIANFAN_API_KEY=<provider api key>`
+
+Legacy generic config still works, but is treated as `openai_compatible`:
+
+- `EXPERIENCE_ENGINE_DISTILLER_MODEL=<configured model>`
+- `EXPERIENCE_ENGINE_DISTILLER_BASE_URL=<compatible chat completions URL>`
+- `EXPERIENCE_ENGINE_DISTILLER_API_KEY=<provider api key>`
 
 Current host state was re-checked at the end of the pass:
 
@@ -44,7 +121,7 @@ Current host state was re-checked at the end of the pass:
   - `enabled: true`
   - `transport: stdio`
   - `startup_timeout_sec: 60`
-  - masked env entries for `CODEX_CONFIG_PATH`, `EXPERIENCE_ENGINE_ADAPTER`, `EXPERIENCE_ENGINE_HOME`, `EXPERIENCE_ENGINE_USE_HOST_LLM`, and the provider API key
+  - masked env entries for `EXPERIENCE_ENGINE_ADAPTER`, `EXPERIENCE_ENGINE_HOME`, `EXPERIENCE_ENGINE_DISTILLER_PROVIDER`, `EXPERIENCE_ENGINE_DISTILLER_MODEL`, and the provider credential env
 
 ## Scenarios Executed
 
@@ -165,8 +242,8 @@ The following runtime issues were discovered while running the real Codex scenar
 
 1. Legacy or incompatible embeddings on older nodes could break retrieval for mixed-history state.
    - Fix area: `src/store/vector/embeddings.ts`, `src/controller/candidate-retriever.ts`, `src/store/vector/node-index.ts`
-2. Codex installation did not forward host-LLM configuration strongly enough for distillation.
-   - Fix area: `src/distillation/host-llm.ts`, `src/install/codex-cli.ts`, `src/install/codex-installer.ts`
+2. Distillation configuration needed to be explicit and provider-backed instead of inferring host reuse or collapsing all vendors into one generic path.
+   - Fix area: `src/distillation/host-llm.ts`, `src/install/codex-installer.ts`, `src/config/load-config.ts`
 3. Distillation could stall in `processing` or fail late on provider/auth issues.
    - Fix area: `src/distillation/llm-distiller.ts`, `src/distillation/queue-worker.ts`
 4. Exact new Codex nodes could lose ranking priority to older unrelated active nodes.
@@ -206,8 +283,8 @@ What this means:
 
 - This pass did not rerun OpenClaw or Claude Code live-host validation.
 - OpenClaw remains the primary core-learning baseline host.
-- Codex host-LLM reuse currently requires an API-backed provider configuration visible through `CODEX_CONFIG_PATH` and the required provider env keys.
-- A plain ChatGPT login session is not, by itself, enough to guarantee a usable distillation endpoint for ExperienceEngine.
+- Codex does not provide a supported host-LLM reuse path for ExperienceEngine distillation.
+- LLM distillation requires an explicitly configured official or compatible provider API.
 - Some v3 conceptual objects are still represented through current SQLite tables rather than one-to-one schema names from the strategy documents.
 
 ## Re-Run Guidance

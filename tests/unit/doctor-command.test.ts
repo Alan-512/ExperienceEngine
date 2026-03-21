@@ -41,8 +41,14 @@ const codexStatus = (overrides: Record<string, unknown> = {}) =>
     distillationStatus: {
       distillationMode: "rule",
       distillationSource: "rule",
-      hostLlmMode: "disabled",
-      reason: "Codex does not expose a reusable provider endpoint in the current configuration."
+      provider: "openai_compatible",
+      reason: "No explicit distiller provider is configured. Configure an official or compatible LLM API to enable llm distillation.",
+      diagnostics: {
+        configured: false,
+        provider: "openai_compatible",
+        baseUrl: "https://api.openai.com/v1/chat/completions",
+        missingEnv: ["EXPERIENCE_ENGINE_DISTILLER_MODEL", "EXPERIENCE_ENGINE_DISTILLER_API_KEY"]
+      }
     },
     captureDir: "/tmp/.experienceengine/adapters/codex/captures",
     ...overrides
@@ -102,8 +108,15 @@ describe("doctor command", () => {
           distillationStatus: {
             distillationMode: "rule",
             distillationSource: "rule",
-            hostLlmMode: "disabled",
-            reason: "Claude Code does not expose a reusable endpoint in the current configuration."
+            provider: "openai_compatible",
+            reason:
+              "No explicit distiller provider is configured. Configure an official or compatible LLM API to enable llm distillation.",
+            diagnostics: {
+              configured: false,
+              provider: "openai_compatible",
+              baseUrl: "https://api.openai.com/v1/chat/completions",
+              missingEnv: ["EXPERIENCE_ENGINE_DISTILLER_MODEL", "EXPERIENCE_ENGINE_DISTILLER_API_KEY"]
+            }
           }
         }) as never,
       fetchLatestGitHubReleaseStatus: async () => ({
@@ -127,8 +140,15 @@ describe("doctor command", () => {
         ["Distillation status:"],
         ["- Mode: rule"],
         ["- Source: rule"],
-        ["- Host LLM mode: disabled"],
-        ["- Reason: Claude Code does not expose a reusable endpoint in the current configuration."],
+        ["- Provider: openai_compatible"],
+        [
+          "- Reason: No explicit distiller provider is configured. Configure an official or compatible LLM API to enable llm distillation."
+        ],
+        ["- Explicit provider configured: no"],
+        ["- Base URL: https://api.openai.com/v1/chat/completions"],
+        [
+          "- Missing env: EXPERIENCE_ENGINE_DISTILLER_MODEL, EXPERIENCE_ENGINE_DISTILLER_API_KEY"
+        ],
         ["Claude runtime target:"],
         ["- Target: windows"],
         [
@@ -212,7 +232,7 @@ describe("doctor command", () => {
     );
   });
 
-  it("prints distillation mode, source, and host llm diagnostics", async () => {
+  it("prints distillation mode and explicit-provider diagnostics", async () => {
     await runDoctorCommand("codex", {
       inspectCodexInstall: () =>
         codexStatus({
@@ -244,13 +264,159 @@ describe("doctor command", () => {
         ["Distillation status:"],
         ["- Mode: rule"],
         ["- Source: rule"],
-        ["- Host LLM mode: disabled"],
-        ["- Reason: Codex does not expose a reusable provider endpoint in the current configuration."],
+        ["- Provider: openai_compatible"],
+        [
+          "- Reason: No explicit distiller provider is configured. Configure an official or compatible LLM API to enable llm distillation."
+        ],
+        ["- Explicit provider configured: no"],
+        ["- Base URL: https://api.openai.com/v1/chat/completions"],
+        [
+          "- Missing env: EXPERIENCE_ENGINE_DISTILLER_MODEL, EXPERIENCE_ENGINE_DISTILLER_API_KEY"
+        ],
         ["Codex runtime target:"],
         ["- Target: windows"],
         [
           "- MCP launcher: D:\\ExperienceEngineData\\.experienceengine\\bin\\experienceengine-codex-mcp-server.cmd"
         ]
+      ])
+    );
+  });
+
+  it("prints resolved explicit-provider details when llm distillation is configured", async () => {
+    await runDoctorCommand("codex", {
+      inspectCodexInstall: () =>
+        codexStatus({
+          distillationStatus: {
+            distillationMode: "llm",
+            distillationSource: "explicit_provider",
+            provider: "openai",
+            reason: "Resolved from explicit ExperienceEngine distiller provider configuration.",
+            diagnostics: {
+              configured: true,
+              provider: "openai",
+              model: "gpt-5.4",
+              baseUrl: "https://api.openai.com/v1/chat/completions",
+              missingEnv: []
+            }
+          }
+        }),
+      fetchLatestGitHubReleaseStatus: async () => ({
+        source: "github-releases",
+        repository: "Alan-512/ExperienceEngine",
+        latestVersion: "0.1.0",
+        releaseUrl: null,
+        publishedAt: "2026-03-12T12:00:00Z",
+        state: "current",
+        updateAvailable: false
+      }),
+      inspectFirstValueReadiness: () => ({
+        rawRecords: 3,
+        taskRuns: 1,
+        candidates: 1,
+        nodes: 0,
+        nextStep: "Keep working in the same repo."
+      })
+    });
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Distillation status:"],
+        ["- Mode: llm"],
+        ["- Source: explicit_provider"],
+        ["- Provider: openai"],
+        ["- Explicit provider configured: yes"],
+        ["- Model: gpt-5.4"],
+        ["- Base URL: https://api.openai.com/v1/chat/completions"]
+      ])
+    );
+  });
+
+  it("prints provider-specific guidance for gemini when credentials are missing", async () => {
+    await runDoctorCommand("codex", {
+      inspectCodexInstall: () =>
+        codexStatus({
+          distillationStatus: {
+            distillationMode: "rule",
+            distillationSource: "rule",
+            provider: "gemini",
+            reason: "No explicit distiller provider is configured. Configure an official or compatible LLM API to enable llm distillation.",
+            diagnostics: {
+              configured: false,
+              provider: "gemini",
+              model: "gemini-2.5-flash",
+              baseUrl: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+              missingEnv: ["GEMINI_API_KEY"]
+            }
+          }
+        }),
+      fetchLatestGitHubReleaseStatus: async () => ({
+        source: "github-releases",
+        repository: "Alan-512/ExperienceEngine",
+        latestVersion: "0.1.0",
+        releaseUrl: null,
+        publishedAt: "2026-03-12T12:00:00Z",
+        state: "current",
+        updateAvailable: false
+      }),
+      inspectFirstValueReadiness: () => ({
+        rawRecords: 3,
+        taskRuns: 1,
+        candidates: 1,
+        nodes: 0,
+        nextStep: "Keep working in the same repo."
+      })
+    });
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["- Provider: gemini"],
+        ["- Missing env: GEMINI_API_KEY"],
+        ["- Setup hint: Run `ee models list gemini`, then `ee config set distillation.provider gemini`, `ee config set distillation.model <modelId>`, and set GEMINI_API_KEY."]
+      ])
+    );
+  });
+
+  it("prints provider-specific guidance for bedrock when aws credentials are missing", async () => {
+    await runDoctorCommand("codex", {
+      inspectCodexInstall: () =>
+        codexStatus({
+          distillationStatus: {
+            distillationMode: "rule",
+            distillationSource: "rule",
+            provider: "bedrock",
+            reason: "No explicit distiller provider is configured. Configure an official or compatible LLM API to enable llm distillation.",
+            diagnostics: {
+              configured: false,
+              provider: "bedrock",
+              model: "anthropic.claude-3-5-sonnet-20240620-v1:0",
+              baseUrl: "https://bedrock-runtime.<region>.amazonaws.com/model/<model>/converse",
+              missingEnv: ["AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_REGION"]
+            }
+          }
+        }),
+      fetchLatestGitHubReleaseStatus: async () => ({
+        source: "github-releases",
+        repository: "Alan-512/ExperienceEngine",
+        latestVersion: "0.1.0",
+        releaseUrl: null,
+        publishedAt: "2026-03-12T12:00:00Z",
+        state: "current",
+        updateAvailable: false
+      }),
+      inspectFirstValueReadiness: () => ({
+        rawRecords: 3,
+        taskRuns: 1,
+        candidates: 1,
+        nodes: 0,
+        nextStep: "Keep working in the same repo."
+      })
+    });
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["- Provider: bedrock"],
+        ["- Missing env: AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_REGION"],
+        ["- Setup hint: Run `ee models list bedrock`, then `ee config set distillation.provider bedrock`, `ee config set distillation.model <modelId>`, and configure AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION."]
       ])
     );
   });

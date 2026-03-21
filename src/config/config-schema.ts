@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DISTILLER_PROVIDERS } from "../distillation/providers/types.js";
 
 export const configSchema = z.object({
   dataDir: z.string().default("./data"),
@@ -15,9 +16,9 @@ export const configSchema = z.object({
   embeddingModel: z.string().default("Xenova/multilingual-e5-small"),
   embeddingDtype: z.enum(["q8", "fp32"]).default("q8"),
   embeddingCacheDir: z.string().default("./data/models/embeddings"),
+  distillerProvider: z.enum(DISTILLER_PROVIDERS).default("openai_compatible"),
+  distillerModel: z.string().default(""),
   distillationMode: z.enum(["auto", "llm", "rule", "disabled"]).default("auto"),
-  hostLlmMode: z.enum(["auto", "disabled", "endpoint", "mediated"]).default("auto"),
-  hostLlmMediatedTimeoutMs: z.number().int().min(1000).max(120000).default(25000),
   distillerProfile: z.enum(["fast", "balanced", "high_quality"]).default("balanced"),
   distillationAllowPassthrough: z.boolean().default(false),
   distillationMaxRetries: z.number().int().min(0).max(10).default(2),
@@ -97,21 +98,19 @@ export const pluginConfigJsonSchema = {
       type: "string",
       description: "Directory used to cache managed embedding model files."
     },
+    distillerProvider: {
+      type: "string",
+      enum: [...DISTILLER_PROVIDERS],
+      description: "Distillation provider identifier. `openai_compatible` is the legacy generic provider; prefer a named provider when available."
+    },
+    distillerModel: {
+      type: "string",
+      description: "Selected distillation model identifier for the chosen provider."
+    },
     distillationMode: {
       type: "string",
       enum: ["auto", "llm", "rule", "disabled"],
-      description: "Controls whether ExperienceEngine uses host-backed LLM distillation, rule promotion, or disables candidate promotion."
-    },
-    hostLlmMode: {
-      type: "string",
-      enum: ["auto", "disabled", "endpoint", "mediated"],
-      description: "Controls whether ExperienceEngine reuses host LLM capability through a direct endpoint, mediated host execution, or disables host reuse."
-    },
-    hostLlmMediatedTimeoutMs: {
-      type: "integer",
-      minimum: 1000,
-      maximum: 120000,
-      description: "Timeout for one mediated host distillation invocation."
+      description: "Controls whether ExperienceEngine uses explicit-provider LLM distillation, rule promotion, or disables candidate promotion."
     },
     distillerProfile: {
       type: "string",
@@ -188,14 +187,14 @@ export const pluginUiHints = {
     label: "Embedding Cache Directory",
     placeholder: "./data/models/embeddings"
   },
+  distillerProvider: {
+    label: "Distiller Provider"
+  },
+  distillerModel: {
+    label: "Distiller Model"
+  },
   distillationMode: {
     label: "Distillation Mode"
-  },
-  hostLlmMode: {
-    label: "Host LLM Mode"
-  },
-  hostLlmMediatedTimeoutMs: {
-    label: "Host LLM Mediated Timeout"
   },
   distillerProfile: {
     label: "Distiller Profile"

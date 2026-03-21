@@ -23,7 +23,7 @@ import {
   type ResolvedPathInfo
 } from "../config/path-resolver.js";
 import { resolveExperienceEnginePackageRoot } from "./openclaw-cli.js";
-import { resolveCodexHostLlmBinding, resolveDistillationResolution, resolveHostLlmResolution } from "../distillation/host-llm.js";
+import { resolveDistillationResolution } from "../distillation/host-llm.js";
 import { loadConfig } from "../config/load-config.js";
 import { buildVersionStatus, readCurrentPackageVersion } from "../version/package-version.js";
 
@@ -56,8 +56,15 @@ export type CodexInstallReport = {
   distillationStatus?: {
     distillationMode: "llm" | "rule" | "disabled";
     distillationSource: string;
-    hostLlmMode: "endpoint" | "mediated" | "disabled";
+    provider: string;
     reason: string;
+    diagnostics: {
+      configured: boolean;
+      provider: string;
+      model?: string;
+      baseUrl: string;
+      missingEnv: string[];
+    };
   };
 };
 
@@ -114,20 +121,7 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
   mkdirSync(resolveProductStateDir(paths), { recursive: true });
   mkdirSync(paths.captureDir, { recursive: true });
 
-  const hostLlmBinding = resolveCodexHostLlmBinding({
-    env: options.env ?? process.env,
-    homeDir: options.homeDir
-  });
-  const serverEnv: Array<[string, string]> = [
-    ["EXPERIENCE_ENGINE_USE_HOST_LLM", "true"],
-    ["EXPERIENCE_ENGINE_ADAPTER", "codex"]
-  ];
-  if (hostLlmBinding?.configPath) {
-    serverEnv.push(["CODEX_CONFIG_PATH", hostLlmBinding.configPath]);
-  }
-  for (const [key, value] of Object.entries(hostLlmBinding?.envBindings ?? {})) {
-    serverEnv.push([key, value]);
-  }
+  const serverEnv: Array<[string, string]> = [["EXPERIENCE_ENGINE_ADAPTER", "codex"]];
 
   if (existing?.name === "experienceengine") {
     runCodexCommand(buildCodexRemoveCommand(options.cliEnv), runner);
@@ -201,20 +195,14 @@ export const inspectCodexInstall = (options: InstallerOptions = {}) => {
   const config = loadConfig({}, { env: options.env ?? process.env, homeDir: options.homeDir });
   const resolutionEnv: NodeJS.ProcessEnv = {
     ...(options.env ?? process.env),
-    EXPERIENCE_ENGINE_USE_HOST_LLM: "true",
     EXPERIENCE_ENGINE_ADAPTER: "codex"
   };
   const distillationResolution = resolveDistillationResolution({
     env: resolutionEnv,
-    homeDir: options.homeDir,
+    configProvider: config.distillerProvider,
+    configModel: config.distillerModel,
     distillationMode: config.distillationMode,
-    hostLlmMode: config.hostLlmMode,
     allowRuleFallback: config.distillationAllowPassthrough
-  });
-  const hostResolution = resolveHostLlmResolution({
-    env: resolutionEnv,
-    homeDir: options.homeDir,
-    hostLlmMode: config.hostLlmMode
   });
 
   return {
@@ -236,8 +224,9 @@ export const inspectCodexInstall = (options: InstallerOptions = {}) => {
     distillationStatus: {
       distillationMode: distillationResolution.distillationMode,
       distillationSource: distillationResolution.distillationSource,
-      hostLlmMode: hostResolution.mode,
-      reason: distillationResolution.reason
+      provider: distillationResolution.provider,
+      reason: distillationResolution.reason,
+      diagnostics: distillationResolution.diagnostics
     },
     hostState: hostInfo
   };

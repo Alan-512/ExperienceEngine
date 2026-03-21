@@ -152,7 +152,7 @@ describe("redistillRuleNodes", () => {
             retrieval_text: "ignored",
             source_kind: "system_derived",
             distillation_mode_used: "llm",
-            distillation_source: "host_mediated"
+            distillation_source: "explicit_provider"
           };
         }
       }
@@ -169,7 +169,7 @@ describe("redistillRuleNodes", () => {
     expect(upgraded?.id).toBe("node_rule_1");
     expect(upgraded?.compact_hint).toContain("smallest auth repro");
     expect(upgraded?.distillation_mode_used).toBe("llm");
-    expect(upgraded?.distillation_source).toBe("host_mediated");
+    expect(upgraded?.distillation_source).toBe("explicit_provider");
     expect(upgraded?.redistilled_from).toBe("rule");
     expect(upgraded?.usage_count).toBe(3);
     expect(upgraded?.helped_count).toBe(1);

@@ -25,7 +25,7 @@ At the start of the pass:
 - `ee doctor codex` from this repository reported:
   - adapter installed and enabled
   - `distillation mode = llm`
-  - `source = host_mediated`
+  - `source = explicit_provider`
   - `evaluation mode = live`
 - current scope state for this repository:
   - `Scope: scope_05bdb507d983`

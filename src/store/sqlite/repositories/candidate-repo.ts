@@ -9,6 +9,13 @@ type CandidateRow = {
   scope_id: string;
   task_type: ExperienceCandidate["task_type"];
   node_type: ExperienceCandidate["node_type"];
+  experience_kind: ExperienceCandidate["experience_kind"] | null;
+  confidence_signal: ExperienceCandidate["confidence_signal"] | null;
+  validation_state: ExperienceCandidate["validation_state"] | null;
+  correction_scope: ExperienceCandidate["correction_scope"] | null;
+  correction_category: ExperienceCandidate["correction_category"] | null;
+  deviation_pattern: string | null;
+  corrected_constraint: string | null;
   trigger_pattern: string;
   applicability_notes: string | null;
   env_signature: string | null;
@@ -51,6 +58,13 @@ export class CandidateRepository {
       scope_id: row.scope_id,
       task_type: row.task_type,
       node_type: row.node_type,
+      experience_kind: row.experience_kind ?? undefined,
+      confidence_signal: row.confidence_signal ?? undefined,
+      validation_state: row.validation_state ?? undefined,
+      correction_scope: row.correction_scope ?? undefined,
+      correction_category: row.correction_category ?? undefined,
+      deviation_pattern: row.deviation_pattern ?? undefined,
+      corrected_constraint: row.corrected_constraint ?? undefined,
       trigger_pattern: row.trigger_pattern,
       applicability_notes: row.applicability_notes ?? undefined,
       env_signature: row.env_signature ?? undefined,
@@ -91,6 +105,13 @@ export class CandidateRepository {
       scope_id: candidate.scope_id,
       task_type: candidate.task_type,
       node_type: candidate.node_type,
+      experience_kind: candidate.experience_kind ?? null,
+      confidence_signal: candidate.confidence_signal ?? null,
+      validation_state: candidate.validation_state ?? null,
+      correction_scope: candidate.correction_scope ?? null,
+      correction_category: candidate.correction_category ?? null,
+      deviation_pattern: candidate.deviation_pattern ?? null,
+      corrected_constraint: candidate.corrected_constraint ?? null,
       trigger_pattern: candidate.trigger_pattern,
       applicability_notes: candidate.applicability_notes ?? null,
       env_signature: candidate.env_signature ?? null,
@@ -124,22 +145,29 @@ export class CandidateRepository {
     this.db
       .prepare(
         `INSERT INTO experience_candidates
-          (id, task_run_id, candidate_kind, source_record_id, scope_id, task_type, node_type, trigger_pattern, applicability_notes, env_signature,
+          (id, task_run_id, candidate_kind, source_record_id, scope_id, task_type, node_type, experience_kind, confidence_signal, validation_state, correction_scope, correction_category, deviation_pattern, corrected_constraint, trigger_pattern, applicability_notes, env_signature,
            compact_hint, goal, recommended_steps_json, avoid_steps_json, fallback_steps_json, success_signal, stop_condition,
            escalation_condition, evidence_summary, retrieval_text, source_kind, source_context_summary, source_outcome_signal, raw_summary, failure_signature,
            source_signal_json, lifecycle_state, retry_count, distilled_node_id, last_error, created_at, updated_at, distilled_at,
            discarded_at, last_failed_at)
          VALUES
-          (@id, @task_run_id, @candidate_kind, @source_record_id, @scope_id, @task_type, @node_type, @trigger_pattern, @applicability_notes, @env_signature,
+          (@id, @task_run_id, @candidate_kind, @source_record_id, @scope_id, @task_type, @node_type, @experience_kind, @confidence_signal, @validation_state, @correction_scope, @correction_category, @deviation_pattern, @corrected_constraint, @trigger_pattern, @applicability_notes, @env_signature,
            @compact_hint, @goal, @recommended_steps_json, @avoid_steps_json, @fallback_steps_json, @success_signal, @stop_condition,
            @escalation_condition, @evidence_summary, @retrieval_text, @source_kind, @source_context_summary, @source_outcome_signal, @raw_summary, @failure_signature,
            @source_signal_json, @lifecycle_state, @retry_count, @distilled_node_id, @last_error, @created_at, @updated_at, @distilled_at,
            @discarded_at, @last_failed_at)
          ON CONFLICT(id) DO UPDATE SET
-           task_run_id = excluded.task_run_id,
-           candidate_kind = excluded.candidate_kind,
-           source_record_id = excluded.source_record_id,
-           trigger_pattern = excluded.trigger_pattern,
+          task_run_id = excluded.task_run_id,
+          candidate_kind = excluded.candidate_kind,
+          source_record_id = excluded.source_record_id,
+          experience_kind = excluded.experience_kind,
+          confidence_signal = excluded.confidence_signal,
+          validation_state = excluded.validation_state,
+          correction_scope = excluded.correction_scope,
+          correction_category = excluded.correction_category,
+          deviation_pattern = excluded.deviation_pattern,
+          corrected_constraint = excluded.corrected_constraint,
+          trigger_pattern = excluded.trigger_pattern,
            applicability_notes = excluded.applicability_notes,
            env_signature = excluded.env_signature,
            compact_hint = excluded.compact_hint,

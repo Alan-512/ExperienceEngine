@@ -147,4 +147,33 @@ describe("feedback command", () => {
       "[ExperienceEngine] Recorded feedback for node node_feedback: harmed."
     );
   });
+
+  it("promotes expectation-correction validation on helpful reuse and invalidates it on harm", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+
+    nodeRepo.upsert(
+      makeNode({
+        id: "node_expectation",
+        experience_kind: "expectation_correction",
+        confidence_signal: "unconfirmed",
+        validation_state: "pending_reuse_validation",
+        correction_scope: "repo_local",
+        correction_category: "verification_order",
+        deviation_pattern: "verification happened too late",
+        corrected_constraint: "Run the targeted verification before broad edits.",
+        helped_count: 0,
+        harmed_count: 0
+      })
+    );
+
+    runFeedbackCommand("node", "node_expectation", "helped");
+    expect(nodeRepo.getById("node_expectation")?.validation_state).toBe("validated_by_reuse");
+
+    runFeedbackCommand("node", "node_expectation", "harmed");
+    expect(nodeRepo.getById("node_expectation")?.validation_state).toBe("invalidated");
+  });
 });

@@ -20,8 +20,16 @@ const TASK_FAMILY_PROXIMITY: Record<TaskType, Partial<Record<TaskType, number>>>
   build_debug: {
     build_debug: 1,
     bug_fix: 0.82,
+    config_debug: 0.72,
     integration_fix: 0.7,
     general: 0.65
+  },
+  config_debug: {
+    config_debug: 1,
+    integration_fix: 0.84,
+    bug_fix: 0.8,
+    build_debug: 0.72,
+    general: 0.72
   },
   test_debug: {
     test_debug: 1,
@@ -31,6 +39,7 @@ const TASK_FAMILY_PROXIMITY: Record<TaskType, Partial<Record<TaskType, number>>>
   },
   integration_fix: {
     integration_fix: 1,
+    config_debug: 0.84,
     bug_fix: 0.86,
     test_debug: 0.78,
     build_debug: 0.7,
@@ -58,6 +67,7 @@ const TASK_FAMILY_PROXIMITY: Record<TaskType, Partial<Record<TaskType, number>>>
     general: 1,
     bug_fix: 0.72,
     build_debug: 0.65,
+    config_debug: 0.72,
     test_debug: 0.7,
     integration_fix: 0.68,
     feature_add: 0.75,
@@ -96,6 +106,67 @@ const getGenericPenalty = (node: ExperienceNode): number => (isLegacyGenericNode
 const getFamilyScore = (inputTaskType: TaskType, nodeTaskType: TaskType): number =>
   TASK_FAMILY_PROXIMITY[inputTaskType][nodeTaskType] ?? 0;
 
+const textOverlapScore = (left: string | undefined, right: string): number => {
+  if (!left?.trim()) {
+    return 0;
+  }
+
+  const lhs = new Set(tokenize(left));
+  const rhs = new Set(tokenize(right));
+  if (!lhs.size || !rhs.size) {
+    return 0;
+  }
+
+  const overlap = [...lhs].filter((token) => rhs.has(token)).length;
+  return overlap / Math.max(lhs.size, rhs.size);
+};
+
+const isExpectationCorrectionNode = (node: ExperienceNode): boolean => node.experience_kind === "expectation_correction";
+
+const passesCorrectionScopeGate = (input: ExperienceInput, node: ExperienceNode): boolean => {
+  if (!isExpectationCorrectionNode(node)) {
+    return true;
+  }
+
+  if (node.scope_id !== input.scope_id && node.correction_scope === "repo_local") {
+    return false;
+  }
+
+  if (node.scope_id !== input.scope_id && node.correction_scope === "task_local") {
+    return false;
+  }
+
+  if (node.scope_id !== input.scope_id && node.correction_scope === "workflow_local") {
+    return false;
+  }
+
+  if (node.scope_id !== input.scope_id && node.correction_category === "style_constraint") {
+    return false;
+  }
+
+  return true;
+};
+
+const getExpectationCorrectionAdjustment = (input: ExperienceInput, node: ExperienceNode): number => {
+  if (!isExpectationCorrectionNode(node)) {
+    return 0;
+  }
+
+  const queryText = [input.task_summary, input.context_summary].filter(Boolean).join("\n");
+  const categoryMatch = textOverlapScore(node.correction_category, queryText);
+  const deviationMatch = textOverlapScore(node.deviation_pattern, queryText);
+  const constraintMatch = textOverlapScore(node.corrected_constraint, queryText);
+  const confidenceBonus =
+    node.confidence_signal === "confirmed_by_user"
+      ? 0.06
+      : node.confidence_signal === "supported_by_objective_success"
+        ? 0.03
+        : 0;
+  const validationBonus = node.validation_state === "validated_by_reuse" ? 0.05 : 0;
+
+  return categoryMatch * 0.18 + deviationMatch * 0.1 + constraintMatch * 0.08 + confidenceBonus + validationBonus;
+};
+
 type RetrieveOptions = {
   config?: Pick<ExperienceEngineConfig, "embeddingProvider" | "embeddingModel" | "embeddingDtype" | "embeddingCacheDir">;
   env?: NodeJS.ProcessEnv;
@@ -116,7 +187,7 @@ export const retrieveCandidates = async (
   const localQuery = await embedQueryText(queryText || input.task_summary, options);
   const legacyQuery = buildLegacyEmbedding(queryText || input.task_summary);
   const vectorStore = openVectorStore();
-  const scopeLocalNodes = nodes.filter(isInjectableState);
+  const scopeLocalNodes = nodes.filter((node) => isInjectableState(node) && passesCorrectionScopeGate(input, node));
   const localSemanticRecords = scopeLocalNodes
     .filter((node) => isMatchingEmbeddingSpace(node, localQuery.space))
     .map((node) => ({
@@ -148,7 +219,8 @@ export const retrieveCandidates = async (
       const familyScore = getFamilyScore(inputTaskType, node.task_type);
       const qualityAdjustment =
         getSpecificityBonus(node) + getFeedbackAdjustment(node) - getGenericPenalty(node);
-      const totalScore = semanticScore * 0.68 + familyScore * 0.22 + qualityAdjustment;
+      const totalScore =
+        semanticScore * 0.68 + familyScore * 0.22 + qualityAdjustment + getExpectationCorrectionAdjustment(input, node);
       return { node, semanticScore, familyScore, totalScore };
     })
     .filter(({ semanticScore, familyScore }) => semanticScore >= 0.12 && familyScore >= minimumFamilyScore)

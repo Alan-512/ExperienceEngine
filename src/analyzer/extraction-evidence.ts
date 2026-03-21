@@ -56,6 +56,8 @@ export const summarizeTaskFamily = (taskType: TaskType): string => {
       return "targeted test failure";
     case "build_debug":
       return "build or compile regression";
+    case "config_debug":
+      return "provider or configuration path";
     case "integration_fix":
       return "service or integration path";
     case "feature_add":

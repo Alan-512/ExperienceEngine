@@ -91,7 +91,7 @@ To remove this server, run: claude mcp remove "experienceengine" -s project`;
     expect(inspection.hostWiring.transport).toBe("stdio");
     expect(inspection.hostWiring.scope).toContain("Project config");
     expect(inspection.distillationStatus?.distillationMode).toBeTruthy();
-    expect(inspection.distillationStatus?.hostLlmMode).toBeTruthy();
+    expect(inspection.distillationStatus?.distillationSource).toBeTruthy();
   });
 
   it("reports the configured runtime target and windows launcher commands", () => {

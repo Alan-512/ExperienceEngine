@@ -1,7 +1,7 @@
 import type { ExperienceInput, ExperienceNode } from "../types/domain.js";
 import { nowIso } from "../utils/clock.js";
 import { detectHarm } from "./harm-detector.js";
-import { transitionState } from "./state-transition.js";
+import { transitionState, transitionValidationState } from "./state-transition.js";
 
 const appendUniqueId = (values: string[], nextId?: string): string[] => {
   if (!nextId) {
@@ -30,6 +30,12 @@ export const applyFeedback = (
       usage_count: node.usage_count + 1,
       helped_count: node.helped_count + Number(input.outcome_signal === "success"),
       harmed_count: node.harmed_count + Number(harmed),
+      validation_state:
+        input.outcome_signal === "success"
+          ? transitionValidationState(node, "helped")
+          : harmed
+            ? transitionValidationState(node, "harmed")
+            : node.validation_state,
       helped_record_ids:
         input.outcome_signal === "success"
           ? appendUniqueId(node.helped_record_ids, attributionRecordId)

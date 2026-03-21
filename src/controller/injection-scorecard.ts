@@ -17,16 +17,35 @@ const riskOrder: Record<InjectionRiskLevel, number> = {
 const maxRisk = (left: InjectionRiskLevel, right: InjectionRiskLevel): InjectionRiskLevel =>
   riskOrder[left] >= riskOrder[right] ? left : right;
 
+const hasActiveExactFamilyCoverage = (nodes: ExperienceNode[], candidate: ExperienceNode): boolean =>
+  nodes.some(
+    (node) =>
+      node.id !== candidate.id &&
+      node.node_type === "strategy" &&
+      node.state === "active" &&
+      node.task_type === candidate.task_type
+  );
+
+const deriveNodeRiskLevel = (node: ExperienceNode, nodes: ExperienceNode[]): InjectionRiskLevel => {
+  if (node.state === "candidate") {
+    return hasActiveExactFamilyCoverage(nodes, node) ? "medium" : "high";
+  }
+
+  if (node.harmed_count > node.helped_count) {
+    return "high";
+  }
+
+  if (node.state === "cooling" || node.harmed_count > 0 || node.node_type === "warning") {
+    return "medium";
+  }
+
+  return "low";
+};
+
 export const deriveInjectionRiskLevel = (nodes: ExperienceNode[]): InjectionRiskLevel => {
   let level: InjectionRiskLevel = "low";
   for (const node of nodes) {
-    let nodeRisk: InjectionRiskLevel = "low";
-    if (node.state === "candidate" || node.harmed_count > node.helped_count) {
-      nodeRisk = "high";
-    } else if (node.state === "cooling" || node.harmed_count > 0 || node.node_type === "warning") {
-      nodeRisk = "medium";
-    }
-    level = maxRisk(level, nodeRisk);
+    level = maxRisk(level, deriveNodeRiskLevel(node, nodes));
   }
   return level;
 };
@@ -61,7 +80,11 @@ const buildNodeReasons = (input: ExperienceInput, node: ExperienceNode): string[
   return reasons;
 };
 
-const buildNodeScorecard = (input: ExperienceInput, node: ExperienceNode): InjectionScorecardNode => ({
+const buildNodeScorecard = (
+  input: ExperienceInput,
+  node: ExperienceNode,
+  nodes: ExperienceNode[]
+): InjectionScorecardNode => ({
   id: node.id,
   nodeType: node.node_type,
   state: node.state,
@@ -72,7 +95,7 @@ const buildNodeScorecard = (input: ExperienceInput, node: ExperienceNode): Injec
   helped: node.helped_count,
   harmed: node.harmed_count,
   supportCount: node.support_count,
-  riskLevel: deriveInjectionRiskLevel([node]),
+  riskLevel: deriveNodeRiskLevel(node, nodes),
   whyMatched: buildNodeReasons(input, node)
 });
 
@@ -107,7 +130,7 @@ export const buildInjectionScorecard = (
   nodes: ExperienceNode[],
   sessionId?: string
 ): InjectionScorecard => {
-  const scoredNodes = nodes.map((node) => buildNodeScorecard(input, node));
+  const scoredNodes = nodes.map((node) => buildNodeScorecard(input, node, nodes));
   const riskLevel = scoredNodes.reduce<InjectionRiskLevel>(
     (current, node) => maxRisk(current, node.riskLevel),
     "low"

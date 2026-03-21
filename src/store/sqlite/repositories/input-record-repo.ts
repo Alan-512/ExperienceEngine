@@ -143,6 +143,34 @@ export class InputRecordRepository {
     return row ? this.mapRecord(row) : undefined;
   }
 
+  getLatestByScope(scopeId: string): ExperienceInputRecord | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT record_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary,
+                evidence_json, injected_node_ids_json, created_at
+         FROM experience_input_records
+         WHERE scope_id = ?
+         ORDER BY created_at DESC
+         LIMIT 1`
+      )
+      .get(scopeId) as
+      | {
+          record_id: string;
+          scope_id: string;
+          session_id: string | null;
+          task_type: ExperienceInputRecord["task_type"];
+          task_summary: string;
+          outcome_signal: ExperienceInputRecord["outcome_signal"];
+          context_summary: string | null;
+          evidence_json: string;
+          injected_node_ids_json: string;
+          created_at: string;
+        }
+      | undefined;
+
+    return row ? this.mapRecord(row) : undefined;
+  }
+
   listRecent(options: { limit?: number; injectedOnly?: boolean } = {}): ExperienceInputRecord[] {
     const limit = options.limit ?? 10;
     const whereClause = options.injectedOnly ? "WHERE injected_node_ids_json != '[]'" : "";
@@ -177,5 +205,13 @@ export class InputRecordRepository {
 
   count(): number {
     return (this.db.prepare("SELECT COUNT(*) AS count FROM experience_input_records").get() as { count: number }).count;
+  }
+
+  countByScope(scopeId: string): number {
+    return (
+      this.db
+        .prepare("SELECT COUNT(*) AS count FROM experience_input_records WHERE scope_id = ?")
+        .get(scopeId) as { count: number }
+    ).count;
   }
 }

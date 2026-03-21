@@ -60,9 +60,8 @@ describe("Codex CLI wiring", () => {
     ]);
   });
 
-  it("adds repeated server env bindings when extra host-llm env is provided", () => {
+  it("adds repeated server env bindings when extra adapter env is provided", () => {
     const command = buildCodexAddCommand("/tmp/experienceengine", "/tmp/ee-home", undefined, [
-      ["EXPERIENCE_ENGINE_USE_HOST_LLM", "true"],
       ["EXPERIENCE_ENGINE_ADAPTER", "codex"],
       ["CODEX_CONFIG_PATH", "/tmp/codex.toml"],
       ["OPENROUTER_API_KEY", "token"]
@@ -75,8 +74,6 @@ describe("Codex CLI wiring", () => {
       "experienceengine",
       "--env",
       "EXPERIENCE_ENGINE_HOME=/tmp/ee-home",
-      "--env",
-      "EXPERIENCE_ENGINE_USE_HOST_LLM=true",
       "--env",
       "EXPERIENCE_ENGINE_ADAPTER=codex",
       "--env",

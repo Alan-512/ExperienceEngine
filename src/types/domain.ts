@@ -1,6 +1,7 @@
 export type TaskType =
   | "bug_fix"
   | "build_debug"
+  | "config_debug"
   | "test_debug"
   | "integration_fix"
   | "feature_add"
@@ -11,6 +12,22 @@ export type ResolvedTaskType = TaskType | "unknown";
 
 export type ExperienceState = "candidate" | "active" | "cooling" | "retired";
 export type ExperienceNodeType = "strategy" | "warning";
+export type ExperienceKind =
+  | "execution_pattern"
+  | "config_troubleshooting"
+  | "verification_loop"
+  | "warning"
+  | "expectation_correction";
+export type ConfidenceSignal = "confirmed_by_user" | "supported_by_objective_success" | "unconfirmed";
+export type ValidationState = "pending_reuse_validation" | "validated_by_reuse" | "invalidated";
+export type CorrectionScope = "task_local" | "repo_local" | "workflow_local" | "host_local" | "cross_repo_candidate";
+export type CorrectionCategory =
+  | "goal_interpretation"
+  | "quality_bar"
+  | "interaction_behavior"
+  | "verification_order"
+  | "implementation_boundary"
+  | "style_constraint";
 export type InjectionMode = "skip" | "inject_conservative" | "inject";
 export type InjectionRiskLevel = "low" | "medium" | "high";
 export type EvaluationMode = "live" | "shadow" | "holdout";
@@ -20,12 +37,7 @@ export type CandidateLifecycleState = "pending" | "distilled" | "failed" | "disc
 export type DistillationJobState = "pending" | "processing" | "succeeded" | "failed" | "discarded";
 export type DistillationMode = "auto" | "llm" | "rule" | "disabled";
 export type ResolvedDistillationMode = Exclude<DistillationMode, "auto">;
-export type DistillationSource =
-  | "explicit_provider"
-  | "host_endpoint"
-  | "host_mediated"
-  | "rule"
-  | "disabled";
+export type DistillationSource = "explicit_provider" | "rule" | "disabled";
 export type FeedbackAttributionReason =
   | "success_outcome"
   | "relevant_failure"
@@ -123,6 +135,13 @@ export type ExperienceNode = {
   node_type: ExperienceNodeType;
   scope_id: string;
   task_type: TaskType;
+  experience_kind?: ExperienceKind;
+  confidence_signal?: ConfidenceSignal;
+  validation_state?: ValidationState;
+  correction_scope?: CorrectionScope;
+  correction_category?: CorrectionCategory;
+  deviation_pattern?: string;
+  corrected_constraint?: string;
   trigger_pattern: string;
   applicability_notes?: string;
   env_signature?: string;

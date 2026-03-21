@@ -6,6 +6,10 @@ export type ExperienceEngineSettings = {
   notices?: {
     inline?: boolean;
   };
+  distillation?: {
+    provider?: string;
+    model?: string;
+  };
 };
 
 type SettingsOptions = {
@@ -45,6 +49,40 @@ export const setInlineNoticesEnabled = (
     notices: {
       ...(current.notices ?? {}),
       inline: enabled
+    }
+  };
+
+  return writeExperienceEngineSettings(next, options);
+};
+
+export const setDistillationProvider = (
+  provider: string,
+  options: SettingsOptions = {}
+): ExperienceEngineSettings => {
+  const current = readExperienceEngineSettings(options);
+  const next: ExperienceEngineSettings = {
+    ...current,
+    distillation: {
+      ...(current.distillation ?? {}),
+      provider
+    }
+  };
+
+  return writeExperienceEngineSettings(next, options);
+};
+
+export const setDistillationModel = (
+  provider: string,
+  model: string,
+  options: SettingsOptions = {}
+): ExperienceEngineSettings => {
+  const current = readExperienceEngineSettings(options);
+  const next: ExperienceEngineSettings = {
+    ...current,
+    distillation: {
+      ...(current.distillation ?? {}),
+      provider,
+      model
     }
   };
 

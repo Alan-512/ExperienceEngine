@@ -3,6 +3,7 @@ import { stableId } from "../utils/ids.js";
 import type { ExperienceCandidate, ExperienceCandidateDraft, ExperienceNode } from "../types/domain.js";
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import { LlmDistiller } from "./llm-distiller.js";
+import { LlmMergeDecider } from "./merge-decider.js";
 import type { DistillationJob } from "../types/domain.js";
 import { CandidateRepository } from "../store/sqlite/repositories/candidate-repo.js";
 import { DistillationJobRepository } from "../store/sqlite/repositories/distillation-job-repo.js";
@@ -10,11 +11,17 @@ import { NodeRepository } from "../store/sqlite/repositories/node-repo.js";
 import { buildLegacyEmbedding, embedPassageText, withEmbeddingMetadata } from "../store/vector/embeddings.js";
 import { transitionState } from "../feedback/state-transition.js";
 import { getDistillationFailureBucket } from "./errors.js";
+import { tokenize } from "../utils/text.js";
 
-const DISTILLATION_STALE_PROCESSING_MS = 60_000;
+const DISTILLATION_STALE_PROCESSING_MS = 150_000;
+const NEAR_DUPLICATE_TRIGGER_SIMILARITY = 0.72;
+const NEAR_DUPLICATE_HINT_SIMILARITY = 0.72;
 
 const buildRetrievalText = (candidate: ExperienceCandidateDraft): string =>
-  [candidate.trigger_pattern, candidate.compact_hint, candidate.goal, candidate.evidence_summary]
+  (candidate.experience_kind === "expectation_correction"
+    ? [candidate.deviation_pattern, candidate.corrected_constraint, candidate.trigger_pattern]
+    : [candidate.trigger_pattern, candidate.compact_hint, candidate.goal, candidate.evidence_summary]
+  )
     .filter(Boolean)
     .join("\n");
 
@@ -23,22 +30,96 @@ const mergeIds = (existing: string[] | undefined, next: string[]): string[] => {
   return [...merged];
 };
 
-const distilledDraftToNode = (candidate: ExperienceCandidate, distilled: ExperienceCandidateDraft, existing?: ExperienceNode): ExperienceNode => {
+const triggerSimilarity = (left: string, right: string): number => {
+  const lhs = new Set(tokenize(left));
+  const rhs = new Set(tokenize(right));
+  if (!lhs.size || !rhs.size) {
+    return 0;
+  }
+
+  const overlap = [...lhs].filter((token) => rhs.has(token)).length;
+  const jaccardLike = overlap / Math.max(lhs.size, rhs.size);
+  const inputCoverage = overlap / lhs.size;
+  const candidateCoverage = overlap / rhs.size;
+  return Math.max(jaccardLike, inputCoverage, candidateCoverage);
+};
+
+const reuseSimilarity = (left: ExperienceNode, right: ExperienceCandidateDraft): number =>
+  Math.max(
+    triggerSimilarity(left.trigger_pattern, right.trigger_pattern),
+    triggerSimilarity(left.compact_hint, right.compact_hint)
+  );
+
+type MergeAction = "ADD" | "UPDATE" | "NONE";
+
+type MergeDecision = {
+  action: MergeAction;
+  targetNodeId?: string;
+  reason: string;
+  source: "llm" | "rule";
+};
+
+const CONTENT_UPDATE_FIELDS: Array<keyof ExperienceCandidateDraft> = [
+  "trigger_pattern",
+  "compact_hint",
+  "goal",
+  "recommended_steps",
+  "avoid_steps",
+  "fallback_steps",
+  "success_signal",
+  "evidence_summary",
+  "applicability_notes",
+  "stop_condition",
+  "escalation_condition"
+];
+
+const distilledDraftToNode = (
+  candidate: ExperienceCandidate,
+  distilled: ExperienceCandidateDraft,
+  existing?: ExperienceNode,
+  mergeAction: MergeAction = "ADD"
+): ExperienceNode => {
   const timestamp = nowIso();
   const id =
     existing?.id ??
     stableId("node", [candidate.scope_id, candidate.task_type, candidate.node_type, distilled.compact_hint].join(":"));
 
-  const retrievalText = buildRetrievalText(distilled);
+  const baseDraft =
+    mergeAction === "NONE" && existing
+      ? ({
+          ...existing,
+          scope_id: existing.scope_id,
+          task_type: existing.task_type,
+          node_type: existing.node_type,
+          source_kind: existing.source_kind
+        } satisfies ExperienceCandidateDraft)
+      : mergeAction === "UPDATE" && existing
+        ? ({
+            ...existing,
+            ...Object.fromEntries(CONTENT_UPDATE_FIELDS.map((field) => [field, distilled[field] ?? existing[field]])),
+            scope_id: existing.scope_id,
+            task_type: existing.task_type,
+            node_type: existing.node_type,
+            source_kind: existing.source_kind
+          } satisfies ExperienceCandidateDraft)
+        : distilled;
+
+  const retrievalText = buildRetrievalText(baseDraft);
   const legacyEmbedding = buildLegacyEmbedding(retrievalText);
 
   return {
     id,
-    ...distilled,
+    ...baseDraft,
     retrieval_text: retrievalText,
     ...withEmbeddingMetadata(legacyEmbedding),
-    distillation_mode_used: distilled.distillation_mode_used ?? existing?.distillation_mode_used,
-    distillation_source: distilled.distillation_source ?? existing?.distillation_source,
+    distillation_mode_used:
+      mergeAction === "NONE"
+        ? existing?.distillation_mode_used ?? distilled.distillation_mode_used
+        : distilled.distillation_mode_used ?? existing?.distillation_mode_used,
+    distillation_source:
+      mergeAction === "NONE"
+        ? existing?.distillation_source ?? distilled.distillation_source
+        : distilled.distillation_source ?? existing?.distillation_source,
     redistilled_from:
       existing?.distillation_source &&
       distilled.distillation_source &&
@@ -61,8 +142,75 @@ const distilledDraftToNode = (candidate: ExperienceCandidate, distilled: Experie
   };
 };
 
+const findReusableNodes = (
+  nodeRepo: NodeRepository,
+  candidate: ExperienceCandidate,
+  distilled: ExperienceCandidateDraft
+): ExperienceNode[] =>
+  nodeRepo
+    .listByScope(candidate.scope_id)
+    .filter((node) => node.task_type === candidate.task_type && node.node_type === candidate.node_type)
+    .sort((left, right) => {
+      const leftExact = left.trigger_pattern === distilled.trigger_pattern ? 1 : 0;
+      const rightExact = right.trigger_pattern === distilled.trigger_pattern ? 1 : 0;
+      if (leftExact !== rightExact) {
+        return rightExact - leftExact;
+      }
+
+      const leftSimilarity = reuseSimilarity(left, distilled);
+      const rightSimilarity = reuseSimilarity(right, distilled);
+      if (leftSimilarity !== rightSimilarity) {
+        return rightSimilarity - leftSimilarity;
+      }
+
+      const leftActive = left.state === "active" ? 1 : 0;
+      const rightActive = right.state === "active" ? 1 : 0;
+      if (leftActive !== rightActive) {
+        return rightActive - leftActive;
+      }
+
+      if (left.support_count !== right.support_count) {
+        return right.support_count - left.support_count;
+      }
+
+      return right.updated_at.localeCompare(left.updated_at);
+    })
+    .filter((node) => {
+      const triggerScore = triggerSimilarity(node.trigger_pattern, distilled.trigger_pattern);
+      const hintScore = triggerSimilarity(node.compact_hint, distilled.compact_hint);
+      return triggerScore >= NEAR_DUPLICATE_TRIGGER_SIMILARITY || hintScore >= NEAR_DUPLICATE_HINT_SIMILARITY;
+    })
+    .slice(0, 3);
+
+const buildFallbackMergeDecision = (existingNodes: ExperienceNode[], distilled: ExperienceCandidateDraft): MergeDecision => {
+  const best = existingNodes[0];
+  if (!best) {
+    return { action: "ADD", reason: "no reusable node matched", source: "rule" };
+  }
+
+  const exactCoverage =
+    best.trigger_pattern === distilled.trigger_pattern &&
+    best.compact_hint.trim().toLowerCase() === distilled.compact_hint.trim().toLowerCase();
+  if (exactCoverage) {
+    return {
+      action: "NONE",
+      targetNodeId: best.id,
+      reason: "existing node already covers the distilled experience",
+      source: "rule"
+    };
+  }
+
+  return {
+    action: "UPDATE",
+    targetNodeId: best.id,
+    reason: "existing node is near-duplicate and should absorb the new expression",
+    source: "rule"
+  };
+};
+
 export class DistillationQueueWorker {
   private readonly distiller: LlmDistiller;
+  private readonly mergeDecider: LlmMergeDecider;
 
   constructor(
     private readonly config: ExperienceEngineConfig,
@@ -72,6 +220,7 @@ export class DistillationQueueWorker {
     options: ConstructorParameters<typeof LlmDistiller>[1] = {}
   ) {
     this.distiller = new LlmDistiller(config, options);
+    this.mergeDecider = new LlmMergeDecider(config, options);
   }
 
   async drain(limit: number = this.config.distillationBatchSize): Promise<number> {
@@ -169,11 +318,20 @@ export class DistillationQueueWorker {
 
     try {
       const distilled = await this.distiller.distill(candidate);
+      const reusableNodes = findReusableNodes(this.nodeRepo, candidate, distilled);
+      const fallbackMergeDecision = buildFallbackMergeDecision(reusableNodes, distilled);
+      const mergeDecision = await this.mergeDecider.decide(candidate, distilled, reusableNodes, fallbackMergeDecision);
       const resolvedNodeId =
+        mergeDecision.targetNodeId ??
         candidate.distilled_node_id ??
         stableId("node", [candidate.scope_id, candidate.task_type, candidate.node_type, distilled.compact_hint].join(":"));
       const existingNode = this.nodeRepo.getById(resolvedNodeId);
-      const node = distilledDraftToNode(candidate, distilled, existingNode);
+      const node = distilledDraftToNode(
+        candidate,
+        distilled,
+        existingNode,
+        existingNode ? mergeDecision.action : "ADD"
+      );
       const semanticEmbedding = await embedPassageText(node.retrieval_text ?? `${node.trigger_pattern}\n${node.compact_hint}`, {
         config: this.config
       });

@@ -1,9 +1,37 @@
-import { readExperienceEngineSettings, setInlineNoticesEnabled } from "../../config/settings-store.js";
+import {
+  readExperienceEngineSettings,
+  setDistillationModel,
+  setDistillationProvider,
+  setInlineNoticesEnabled
+} from "../../config/settings-store.js";
+import { resolveModelCatalog, type ProviderModelCatalog } from "../../distillation/model-catalog.js";
+import type { DistillerProvider } from "../../distillation/providers/types.js";
 
-export const runConfigCommand = (action?: string, key?: string, value?: string): void => {
+type ConfigCommandDeps = {
+  resolveModelCatalog?: (provider: DistillerProvider) => Promise<ProviderModelCatalog>;
+};
+
+export const runConfigCommand = async (
+  action?: string,
+  key?: string,
+  value?: string,
+  deps: ConfigCommandDeps = {}
+): Promise<void> => {
   if (action === "get" && key === "notices.inline") {
     const settings = readExperienceEngineSettings();
     console.log(String(settings.notices?.inline ?? true));
+    return;
+  }
+
+  if (action === "get" && key === "distillation.provider") {
+    const settings = readExperienceEngineSettings();
+    console.log(String(settings.distillation?.provider ?? ""));
+    return;
+  }
+
+  if (action === "get" && key === "distillation.model") {
+    const settings = readExperienceEngineSettings();
+    console.log(String(settings.distillation?.model ?? ""));
     return;
   }
 
@@ -22,5 +50,43 @@ export const runConfigCommand = (action?: string, key?: string, value?: string):
     return;
   }
 
-  console.log("Usage: ee config <get|set> notices.inline [true|false]");
+  if (action === "set" && key === "distillation.provider") {
+    if (!value) {
+      console.log("Usage: ee config set distillation.provider <provider>");
+      return;
+    }
+
+    setDistillationProvider(value);
+    console.log(`[ExperienceEngine] Distillation provider set to ${value}.`);
+    return;
+  }
+
+  if (action === "set" && key === "distillation.model") {
+    if (!value) {
+      console.log("Usage: ee config set distillation.model <modelId>");
+      return;
+    }
+
+    const settings = readExperienceEngineSettings();
+    const provider = settings.distillation?.provider as DistillerProvider | undefined;
+    if (!provider) {
+      console.log("[ExperienceEngine] Set distillation.provider before selecting a model.");
+      return;
+    }
+
+    const catalog = await (deps.resolveModelCatalog ?? resolveModelCatalog)(provider);
+    const found = catalog.models.find((model) => model.id === value);
+    if (!found) {
+      console.log(
+        `[ExperienceEngine] ${value} is not in the ${provider} model catalog. Use \`ee models list ${provider}\` first.`
+      );
+      return;
+    }
+
+    setDistillationModel(provider, value);
+    console.log(`[ExperienceEngine] Distillation model set to ${value} for provider ${provider}.`);
+    return;
+  }
+
+  console.log("Usage: ee config <get|set> notices.inline|distillation.provider|distillation.model [value]");
 };

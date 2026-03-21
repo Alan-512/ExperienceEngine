@@ -138,8 +138,6 @@ describe("evaluate command", () => {
           unknownRecords: 0,
           injectedNodeSources: {
             explicit_provider: 0,
-            host_endpoint: 0,
-            host_mediated: 0,
             rule: 0,
             disabled: 0
           },
@@ -332,8 +330,6 @@ describe("evaluate command", () => {
           candidateState: 0,
           bySource: {
             explicit_provider: 0,
-            host_endpoint: 0,
-            host_mediated: 0,
             rule: 1,
             disabled: 0
           },

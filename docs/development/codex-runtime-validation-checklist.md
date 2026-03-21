@@ -3,7 +3,7 @@
 Use this checklist when changes affect any part of the Codex supported-host path:
 
 - Codex MCP wiring
-- host-LLM reuse on Codex
+- explicit-provider LLM distillation on Codex
 - high-signal candidate capture
 - distillation queue behavior
 - retrieval / node ranking
@@ -16,12 +16,12 @@ This checklist validates `Codex` as a supported product host. It does **not** re
 - [ ] `codex` CLI is installed locally and can run real `codex exec` sessions
 - [ ] the repository has been built and `dist/cli/index.js` exists
 - [ ] `ee install codex` has been run for the validation environment
-- [ ] if distillation is part of the pass, an API-backed Codex provider config is available
+- [ ] if distillation is part of the pass, an explicit official or compatible LLM API is configured
 - [ ] the MCP server env exposes:
-  - `EXPERIENCE_ENGINE_USE_HOST_LLM=true`
   - `EXPERIENCE_ENGINE_ADAPTER=codex`
-  - `CODEX_CONFIG_PATH=<provider-backed config>`
-  - required provider API key env vars
+  - `EXPERIENCE_ENGINE_DISTILLER_MODEL=<configured model>`
+  - `EXPERIENCE_ENGINE_DISTILLER_BASE_URL=<provider base URL>`
+  - `EXPERIENCE_ENGINE_DISTILLER_API_KEY=<provider api key>`
 
 ## Wiring Checks
 

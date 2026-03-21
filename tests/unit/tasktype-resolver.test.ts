@@ -10,6 +10,18 @@ describe("resolveTaskType", () => {
     expect(resolveTaskType("Refactor the auth service to remove duplicated branching")).toBe("refactor");
   });
 
+  it("detects provider and model routing troubleshooting as config_debug", () => {
+    expect(
+      resolveTaskType("Debug the OpenRouter free model routing issue and find a working provider/model configuration.")
+    ).toBe("config_debug");
+  });
+
+  it("detects API key and endpoint configuration troubleshooting as config_debug", () => {
+    expect(
+      resolveTaskType("Investigate why the API key and endpoint configuration fails for the Gemini provider.")
+    ).toBe("config_debug");
+  });
+
   it("falls back to general when no specialized matcher applies", () => {
     expect(resolveTaskType("Refine the roadmap copy")).toBe("general");
   });

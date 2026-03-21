@@ -80,4 +80,17 @@ export class ReviewEventRepository {
         .get(source, eventType) as { count: number }
     ).count;
   }
+
+  countByNodeScope(scopeId: string): number {
+    return (
+      this.db
+        .prepare(
+          `SELECT COUNT(*) AS count
+           FROM review_events re
+           JOIN experience_nodes en ON en.id = re.node_id
+           WHERE en.scope_id = ?`
+        )
+        .get(scopeId) as { count: number }
+    ).count;
+  }
 }

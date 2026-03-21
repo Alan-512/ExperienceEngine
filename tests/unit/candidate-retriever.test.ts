@@ -256,4 +256,77 @@ describe("retrieveCandidates", () => {
 
     expect(candidates.map((entry) => entry.id)).toContain("legacy-fallback");
   });
+
+  it("prefers expectation-correction nodes whose correction category matches the current deviation", async () => {
+    const candidates = await retrieveCandidates(
+      input({
+        task_type: "feature_add",
+        task_summary: "The UI technically works, but the requested interaction model is wrong and needs to be corrected.",
+        context_summary: "User corrected the interaction behavior after the first implementation."
+      }),
+      [
+        node({
+          id: "matching-correction",
+          task_type: "feature_add",
+          trigger_pattern: "Technically works but misses the requested interaction model",
+          compact_hint: "When the user corrects the interaction model, rebuild around the requested behavior before polishing details.",
+          retrieval_text:
+            "technically works but misses the requested interaction model\nrequested interaction behavior must change",
+          correction_category: "interaction_behavior",
+          correction_scope: "repo_local",
+          deviation_pattern: "technically works but misses the requested interaction model",
+          corrected_constraint: "Rebuild around the requested interaction behavior before polishing details.",
+          experience_kind: "expectation_correction",
+          confidence_signal: "confirmed_by_user",
+          validation_state: "validated_by_reuse"
+        }),
+        node({
+          id: "theme-match-wrong-correction",
+          task_type: "feature_add",
+          trigger_pattern: "Technically works but the implementation boundary is wrong",
+          compact_hint: "Keep the work in the provider layer instead of changing the UI contract.",
+          retrieval_text:
+            "technically works but the implementation boundary is wrong\nfix the provider layer instead of changing the UI contract",
+          correction_category: "implementation_boundary",
+          correction_scope: "repo_local",
+          deviation_pattern: "implementation solves the wrong layer of the problem",
+          corrected_constraint: "Fix the provider layer instead of changing the UI contract.",
+          experience_kind: "expectation_correction",
+          confidence_signal: "confirmed_by_user",
+          validation_state: "validated_by_reuse"
+        })
+      ]
+    );
+
+    expect(candidates[0]?.id).toBe("matching-correction");
+  });
+
+  it("does not automatically inject repo-local style constraints across repos", async () => {
+    const candidates = await retrieveCandidates(
+      input({
+        scope_id: "scope-b",
+        task_type: "feature_add",
+        task_summary: "Adjust the page styling so it feels lighter and more editorial.",
+        context_summary: "A different repo is asking for a refreshed style pass."
+      }),
+      [
+        node({
+          id: "repo-local-style",
+          scope_id: "scope-a",
+          task_type: "feature_add",
+          trigger_pattern: "The page styling technically works but violates the requested editorial tone",
+          compact_hint: "Keep the styling restrained and editorial rather than product-heavy.",
+          correction_category: "style_constraint",
+          correction_scope: "repo_local",
+          deviation_pattern: "result passes technically but violates quality bar",
+          corrected_constraint: "Keep the styling restrained and editorial rather than product-heavy.",
+          experience_kind: "expectation_correction",
+          confidence_signal: "supported_by_objective_success",
+          validation_state: "pending_reuse_validation"
+        })
+      ]
+    );
+
+    expect(candidates).toEqual([]);
+  });
 });

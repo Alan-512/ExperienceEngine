@@ -81,10 +81,7 @@ env_key = "OPENROUTER_API_KEY"
     expect(readFileSync(join(homeDir, ".codex", "config.toml"), "utf8")).toContain("startup_timeout_sec = 60.0");
     expect(commands[0]).toBe("codex mcp get experienceengine");
     expect(commands[1]).toContain("codex mcp add experienceengine --env");
-    expect(commands[1]).toContain("--env EXPERIENCE_ENGINE_USE_HOST_LLM=true");
     expect(commands[1]).toContain("--env EXPERIENCE_ENGINE_ADAPTER=codex");
-    expect(commands[1]).toContain(`--env CODEX_CONFIG_PATH=${env.CODEX_CONFIG_PATH}`);
-    expect(commands[1]).toContain("--env OPENROUTER_API_KEY=test-openrouter-key");
 
     const payload = JSON.parse(readFileSync(report.paths.installStatePath, "utf8")) as {
       adapter: string;
@@ -188,7 +185,7 @@ env_key = "OPENROUTER_API_KEY"
     expect(status.hostWiring.transport).toBe("stdio");
   });
 
-  it("reports mediated distillation status for auth-only Codex configs", () => {
+  it("does not report llm distillation for auth-only Codex configs without an explicit provider", () => {
     const homeDir = makeTempDir();
     mkdirSync(join(homeDir, ".codex"), { recursive: true });
     const configPath = join(homeDir, ".codex", "config.toml");
@@ -243,9 +240,9 @@ env_key = "OPENROUTER_API_KEY"
       }
     });
 
-    expect(status.distillationStatus?.distillationMode).toBe("llm");
-    expect(status.distillationStatus?.distillationSource).toBe("host_mediated");
-    expect(status.distillationStatus?.hostLlmMode).toBe("mediated");
+    expect(status.distillationStatus?.distillationMode).toBe("rule");
+    expect(status.distillationStatus?.distillationSource).toBe("rule");
+    expect(status.distillationStatus?.reason).toContain("explicit");
   });
 
   it("writes windows-compatible launcher commands when runtime target is windows", () => {

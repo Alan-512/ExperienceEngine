@@ -7,7 +7,17 @@ export const shouldStoreCandidate = (candidate: ExperienceCandidateDraft, input:
   }
 
   const signals = buildCandidateSignals(input);
-  if (!signals.criticality || !signals.improvement_room || !signals.recoverable_path) {
+  const allowsConfigDebugWarningRecovery =
+    input.task_type === "config_debug" &&
+    candidate.node_type === "warning" &&
+    Boolean(signals.failure_signature) &&
+    signals.improvement_room;
+
+  if (
+    !signals.criticality ||
+    !signals.improvement_room ||
+    (!signals.recoverable_path && !allowsConfigDebugWarningRecovery)
+  ) {
     return false;
   }
 

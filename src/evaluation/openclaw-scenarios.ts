@@ -411,8 +411,6 @@ const aggregateScenarioResults = (
 ): OpenClawScenarioReport["aggregate"] => {
   const injectedNodeSources: Record<DistillationSource, number> = {
     explicit_provider: 0,
-    host_endpoint: 0,
-    host_mediated: 0,
     rule: 0,
     disabled: 0
   };
@@ -584,8 +582,6 @@ export const renderOpenClawScenarioMarkdown = (report: OpenClawScenarioReport): 
     "## Injected Node Sources",
     "",
     `- explicit_provider: ${report.aggregate.injectedNodeSources.explicit_provider}`,
-    `- host_endpoint: ${report.aggregate.injectedNodeSources.host_endpoint}`,
-    `- host_mediated: ${report.aggregate.injectedNodeSources.host_mediated}`,
     `- rule: ${report.aggregate.injectedNodeSources.rule}`,
     `- disabled: ${report.aggregate.injectedNodeSources.disabled}`,
     "",

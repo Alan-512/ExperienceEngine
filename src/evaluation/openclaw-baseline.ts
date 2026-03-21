@@ -468,8 +468,6 @@ export const collectOpenClawBaselineSummary = (
       candidateState: nodeStates.candidate ?? 0,
       bySource: {
         explicit_provider: nodeSources.explicit_provider ?? 0,
-        host_endpoint: nodeSources.host_endpoint ?? 0,
-        host_mediated: nodeSources.host_mediated ?? 0,
         rule: nodeSources.rule ?? 0,
         disabled: nodeSources.disabled ?? 0
       },
@@ -580,8 +578,6 @@ export const renderOpenClawBaselineMarkdown = (
 ## Node Sources
 
 - explicit_provider: ${summary.nodes.bySource.explicit_provider}
-- host_endpoint: ${summary.nodes.bySource.host_endpoint}
-- host_mediated: ${summary.nodes.bySource.host_mediated}
 - rule: ${summary.nodes.bySource.rule}
 - disabled: ${summary.nodes.bySource.disabled}
 

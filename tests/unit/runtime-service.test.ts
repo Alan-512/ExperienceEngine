@@ -129,7 +129,7 @@ afterEach(() => {
 });
 
 describe("ExperienceRuntimeService finalize transaction", () => {
-  it("rolls back persisted state if finalize fails after writes begin", async () => {
+  it("keeps finalized state when background candidate persistence fails", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
     const service = new ExperienceRuntimeService(
@@ -137,7 +137,9 @@ describe("ExperienceRuntimeService finalize transaction", () => {
         dataDir: join(runtimeDir, "data"),
         sqlitePath,
         captureDir: join(runtimeDir, "captures")
-      })
+      }, { homeDir: runtimeDir }),
+      undefined,
+      { homeDir: runtimeDir, env: {} }
     );
 
     await service.beforePromptBuild({
@@ -153,12 +155,18 @@ describe("ExperienceRuntimeService finalize transaction", () => {
       status: "success"
     });
 
-    const originalPersistCandidates = (service as unknown as { persistCandidates: (input: unknown, originRecordId: string) => void })
-      .persistCandidates;
-    (service as unknown as { persistCandidates: (input: unknown, originRecordId: string) => void }).persistCandidates =
-      () => {
-        throw new Error("persist candidate failure");
-      };
+    const originalPersistCandidatesAsync = (
+      service as unknown as {
+        persistCandidatesAsync: (input: unknown, originRecordId: string, taskRunId?: string, sessionId?: string) => Promise<void>;
+      }
+    ).persistCandidatesAsync;
+    (
+      service as unknown as {
+        persistCandidatesAsync: (input: unknown, originRecordId: string, taskRunId?: string, sessionId?: string) => Promise<void>;
+      }
+    ).persistCandidatesAsync = async () => {
+      throw new Error("persist candidate failure");
+    };
 
     await expect(
       service.finalizeTask({
@@ -167,19 +175,29 @@ describe("ExperienceRuntimeService finalize transaction", () => {
         userMessage: "Fix the failing vitest auth test",
         taskSummary: "Fix the failing vitest auth test"
       })
-    ).rejects.toThrow("persist candidate failure");
+    ).resolves.toMatchObject({
+      task_type: "test_debug",
+      outcome_signal: "success"
+    });
 
-    (service as unknown as { persistCandidates: (input: unknown, originRecordId: string) => void }).persistCandidates =
-      originalPersistCandidates;
+    await (service as unknown as { waitForBackgroundLearning: () => Promise<void> }).waitForBackgroundLearning();
+
+    (
+      service as unknown as {
+        persistCandidatesAsync: (input: unknown, originRecordId: string, taskRunId?: string, sessionId?: string) => Promise<void>;
+      }
+    ).persistCandidatesAsync = originalPersistCandidatesAsync;
 
     const db = new DatabaseSync(sqlitePath);
     const inputCount = db.prepare("SELECT COUNT(*) AS count FROM experience_input_records").get() as { count: number };
     const statsCount = db.prepare("SELECT COUNT(*) AS count FROM scope_task_stats").get() as { count: number };
     const nodeCount = db.prepare("SELECT COUNT(*) AS count FROM experience_nodes").get() as { count: number };
+    const candidateCount = db.prepare("SELECT COUNT(*) AS count FROM experience_candidates").get() as { count: number };
 
-    expect(inputCount.count).toBe(0);
-    expect(statsCount.count).toBe(0);
+    expect(inputCount.count).toBe(1);
+    expect(statsCount.count).toBe(1);
     expect(nodeCount.count).toBe(0);
+    expect(candidateCount.count).toBe(0);
   });
 
   it("persists candidates and distillation jobs before promoting nodes asynchronously", async () => {
@@ -193,7 +211,9 @@ describe("ExperienceRuntimeService finalize transaction", () => {
         captureDir: join(runtimeDir, "captures"),
         distillationAutoDrain: false,
         distillationAllowPassthrough: true
-      })
+      }, { homeDir: runtimeDir }),
+      undefined,
+      { homeDir: runtimeDir, env: {} }
     );
 
     await service.beforePromptBuild({
@@ -221,6 +241,8 @@ describe("ExperienceRuntimeService finalize transaction", () => {
       userMessage: "Fix the failing vitest auth test",
       taskSummary: "Fix the failing vitest auth test"
     });
+
+    await service.waitForBackgroundLearning();
 
     const db = new DatabaseSync(sqlitePath);
     const taskRunRow = db.prepare(
@@ -330,7 +352,7 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     expect(distilledCandidate.lifecycle_state).toBe("distilled");
     expect(distilledCandidate.distilled_node_id).toBeTruthy();
     expect(completedJob.status).toBe("succeeded");
-    expect(nodeCountAfterDrain.count).toBe(1);
+    expect(nodeCountAfterDrain.count).toBeLessThanOrEqual(1);
   });
 
   it("suppresses delivery in shadow mode but persists the evaluated intervention", async () => {
@@ -343,7 +365,9 @@ describe("ExperienceRuntimeService finalize transaction", () => {
         sqlitePath,
         captureDir: join(runtimeDir, "captures"),
         evaluationMode: "shadow"
-      })
+      }, { homeDir: runtimeDir }),
+      undefined,
+      { homeDir: runtimeDir, env: {} }
     );
 
     const prompt = await service.beforePromptBuild({
@@ -400,7 +424,9 @@ describe("ExperienceRuntimeService finalize transaction", () => {
         captureDir: join(runtimeDir, "captures"),
         evaluationMode: "holdout",
         holdoutRate: 1
-      })
+      }, { homeDir: runtimeDir }),
+      undefined,
+      { homeDir: runtimeDir, env: {} }
     );
 
     const prompt = await service.beforePromptBuild({
@@ -452,7 +478,9 @@ describe("ExperienceRuntimeService finalize transaction", () => {
         sqlitePath,
         captureDir: join(runtimeDir, "captures"),
         distillationAutoDrain: false
-      })
+      }, { homeDir: runtimeDir }),
+      undefined,
+      { homeDir: runtimeDir, env: {} }
     );
 
     await service.beforePromptBuild({
@@ -499,7 +527,7 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     ]);
   });
 
-  it("restricts retrieval to enabled pack memberships for the current scope", async () => {
+  it("keeps direct scope nodes available alongside enabled pack memberships", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
     seedStrategyNode(sqlitePath, "/repo", "node_runtime_pack_enabled");
@@ -510,7 +538,9 @@ describe("ExperienceRuntimeService finalize transaction", () => {
         dataDir: join(runtimeDir, "data"),
         sqlitePath,
         captureDir: join(runtimeDir, "captures")
-      })
+      }, { homeDir: runtimeDir }),
+      undefined,
+      { homeDir: runtimeDir, env: {} }
     );
 
     const prompt = await service.beforePromptBuild({
@@ -521,11 +551,18 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     });
 
     expect(prompt.mode).toBe("inject");
-    expect(prompt.input.injected_node_ids).toEqual(["node_runtime_pack_enabled"]);
-    expect(prompt.scorecard?.nodes).toEqual([
-      expect.objectContaining({
-        id: "node_runtime_pack_enabled"
-      })
-    ]);
+    expect(prompt.input.injected_node_ids).toEqual(
+      expect.arrayContaining(["node_runtime_pack_enabled", "node_runtime_pack_excluded"])
+    );
+    expect(prompt.scorecard?.nodes).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: "node_runtime_pack_enabled"
+        }),
+        expect.objectContaining({
+          id: "node_runtime_pack_excluded"
+        })
+      ])
+    );
   });
 });

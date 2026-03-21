@@ -65,4 +65,23 @@ describe("shouldStoreCandidate SDPO gate", () => {
 
     expect(shouldStoreCandidate(makeCandidate(), input)).toBe(false);
   });
+
+  it("accepts config_debug warnings with a concrete provider failure signature", () => {
+    const input = makeInput({
+      task_type: "config_debug",
+      task_summary: "Investigate why the OpenRouter free model routing fails.",
+      tool_events: [makeEvent({ tool_name: "doctor", status: "failure", error_signature: "404 no endpoints found" })],
+      outcome_signal: "failure"
+    });
+
+    const candidate: ExperienceCandidateDraft = {
+      ...makeCandidate(),
+      node_type: "warning",
+      task_type: "config_debug",
+      compact_hint:
+        "Do not keep retrying the same provider/config path while doctor still reports 404 no endpoints found."
+    };
+
+    expect(shouldStoreCandidate(candidate, input)).toBe(true);
+  });
 });

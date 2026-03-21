@@ -175,4 +175,60 @@ describe("analyzeExperience", () => {
     expect(result.accepted[0]?.task_type).toBe("general");
     expect(result.accepted[0]?.compact_hint).toContain("coding task");
   });
+
+  it("produces config_debug strategy candidates for successful provider troubleshooting", () => {
+    const result = analyzeExperience(
+      baseInput({
+        task_type: "config_debug",
+        task_summary: "Find a working OpenRouter free model configuration for EE distillation.",
+        tool_events: [
+          {
+            event_id: "tool-doctor",
+            tool_name: "doctor",
+            status: "failure",
+            error_signature: "OpenRouter model routing failed.",
+            output_summary: "doctor reported a provider/model routing mismatch.",
+            started_at: "2026-03-20T09:00:00.000Z"
+          },
+          {
+            event_id: "tool-distill",
+            tool_name: "openrouter",
+            status: "success",
+            output_summary: "The OpenRouter free model completed distillation successfully.",
+            started_at: "2026-03-20T09:02:00.000Z"
+          }
+        ]
+      })
+    );
+
+    expect(result.accepted).toHaveLength(1);
+    expect(result.accepted[0]?.task_type).toBe("config_debug");
+    expect(result.accepted[0]?.compact_hint).toContain("provider/config path");
+    expect(result.accepted[0]?.compact_hint).toContain("routing or credential mismatch");
+  });
+
+  it("produces config_debug warning candidates for repeated provider failures", () => {
+    const result = analyzeExperience(
+      baseInput({
+        task_type: "config_debug",
+        task_summary: "Investigate why the Gemini provider API key and endpoint configuration fails.",
+        outcome_signal: "failure",
+        tool_events: [
+          {
+            event_id: "tool-config",
+            tool_name: "doctor",
+            status: "failure",
+            error_signature: "401 invalid api key",
+            output_summary: "doctor still reports an invalid API key.",
+            started_at: "2026-03-20T10:00:00.000Z"
+          }
+        ]
+      })
+    );
+
+    expect(result.accepted).toHaveLength(1);
+    expect(result.accepted[0]?.task_type).toBe("config_debug");
+    expect(result.accepted[0]?.compact_hint).toContain("provider/config path");
+    expect(result.accepted[0]?.compact_hint).toContain("routing, credential, or endpoint mismatch");
+  });
 });

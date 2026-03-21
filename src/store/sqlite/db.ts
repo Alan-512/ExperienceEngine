@@ -61,6 +61,13 @@ export const bootstrapDatabase = (db: DatabaseSync): void => {
   ensureColumn(db, "experience_nodes", "origin_record_ids_json", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "experience_nodes", "helped_record_ids_json", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "experience_nodes", "harmed_record_ids_json", "TEXT NOT NULL DEFAULT '[]'");
+  ensureColumn(db, "experience_nodes", "experience_kind", "TEXT");
+  ensureColumn(db, "experience_nodes", "confidence_signal", "TEXT");
+  ensureColumn(db, "experience_nodes", "validation_state", "TEXT");
+  ensureColumn(db, "experience_nodes", "correction_scope", "TEXT");
+  ensureColumn(db, "experience_nodes", "correction_category", "TEXT");
+  ensureColumn(db, "experience_nodes", "deviation_pattern", "TEXT");
+  ensureColumn(db, "experience_nodes", "corrected_constraint", "TEXT");
   ensureColumn(db, "experience_candidates", "source_context_summary", "TEXT");
   ensureColumn(db, "experience_candidates", "source_outcome_signal", "TEXT NOT NULL DEFAULT 'unknown'");
   ensureColumn(db, "experience_candidates", "task_run_id", "TEXT");
@@ -75,6 +82,13 @@ export const bootstrapDatabase = (db: DatabaseSync): void => {
   ensureColumn(db, "experience_candidates", "distilled_at", "TEXT");
   ensureColumn(db, "experience_candidates", "discarded_at", "TEXT");
   ensureColumn(db, "experience_candidates", "last_failed_at", "TEXT");
+  ensureColumn(db, "experience_candidates", "experience_kind", "TEXT");
+  ensureColumn(db, "experience_candidates", "confidence_signal", "TEXT");
+  ensureColumn(db, "experience_candidates", "validation_state", "TEXT");
+  ensureColumn(db, "experience_candidates", "correction_scope", "TEXT");
+  ensureColumn(db, "experience_candidates", "correction_category", "TEXT");
+  ensureColumn(db, "experience_candidates", "deviation_pattern", "TEXT");
+  ensureColumn(db, "experience_candidates", "corrected_constraint", "TEXT");
   ensureColumn(db, "distillation_jobs", "extractor_profile", "TEXT NOT NULL DEFAULT 'balanced'");
   ensureColumn(db, "distillation_jobs", "distillation_source", "TEXT");
   ensureColumn(db, "distillation_jobs", "failure_bucket", "TEXT");

@@ -173,8 +173,15 @@ const logScopePackStatus = (status: {
 const logDistillationStatus = (status?: {
   distillationMode: "llm" | "rule" | "disabled";
   distillationSource: string;
-  hostLlmMode: "endpoint" | "mediated" | "disabled";
+  provider?: string;
   reason: string;
+  diagnostics?: {
+    configured: boolean;
+    provider: string;
+    model?: string;
+    baseUrl: string;
+    missingEnv: string[];
+  };
 }): void => {
   if (!status) {
     return;
@@ -183,8 +190,63 @@ const logDistillationStatus = (status?: {
   console.log("Distillation status:");
   console.log(`- Mode: ${status.distillationMode}`);
   console.log(`- Source: ${status.distillationSource}`);
-  console.log(`- Host LLM mode: ${status.hostLlmMode}`);
+  if (status.provider) {
+    console.log(`- Provider: ${status.provider}`);
+  }
   console.log(`- Reason: ${status.reason}`);
+  if (status.diagnostics) {
+    console.log(`- Explicit provider configured: ${status.diagnostics.configured ? "yes" : "no"}`);
+    if (status.diagnostics.model) {
+      console.log(`- Model: ${status.diagnostics.model}`);
+    }
+    console.log(`- Base URL: ${status.diagnostics.baseUrl}`);
+    if (status.diagnostics.missingEnv.length) {
+      console.log(`- Missing env: ${status.diagnostics.missingEnv.join(", ")}`);
+      const setupHint = getDistillerProviderSetupHint(status.diagnostics.provider);
+      if (setupHint) {
+        console.log(`- Setup hint: ${setupHint}`);
+      }
+    }
+  }
+};
+
+const getDistillerProviderSetupHint = (provider: string): string | null => {
+  switch (provider) {
+    case "openai":
+      return "Run `ee models list openai`, then `ee config set distillation.provider openai`, `ee config set distillation.model <modelId>`, and set OPENAI_API_KEY.";
+    case "anthropic":
+      return "Run `ee models list anthropic`, then `ee config set distillation.provider anthropic`, `ee config set distillation.model <modelId>`, and set ANTHROPIC_API_KEY.";
+    case "gemini":
+      return "Run `ee models list gemini`, then `ee config set distillation.provider gemini`, `ee config set distillation.model <modelId>`, and set GEMINI_API_KEY.";
+    case "azure_openai":
+      return "Run `ee config set distillation.provider azure_openai`, `ee config set distillation.model <deploymentName>`, and set AZURE_OPENAI_ENDPOINT plus AZURE_OPENAI_API_KEY.";
+    case "bedrock":
+      return "Run `ee models list bedrock`, then `ee config set distillation.provider bedrock`, `ee config set distillation.model <modelId>`, and configure AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, and AWS_REGION.";
+    case "openrouter":
+      return "Run `ee models list openrouter`, then `ee config set distillation.provider openrouter`, `ee config set distillation.model <modelId>`, and set OPENROUTER_API_KEY.";
+    case "deepseek":
+      return "Run `ee models list deepseek`, then `ee config set distillation.provider deepseek`, `ee config set distillation.model <modelId>`, and set DEEPSEEK_API_KEY.";
+    case "moonshot":
+      return "Run `ee models list moonshot`, then `ee config set distillation.provider moonshot`, `ee config set distillation.model <modelId>`, and set MOONSHOT_API_KEY.";
+    case "dashscope":
+      return "Run `ee models list dashscope`, then `ee config set distillation.provider dashscope`, `ee config set distillation.model <modelId>`, and set DASHSCOPE_API_KEY.";
+    case "zhipu":
+      return "Run `ee models list zhipu`, then `ee config set distillation.provider zhipu`, `ee config set distillation.model <modelId>`, and set ZHIPU_API_KEY.";
+    case "siliconflow":
+      return "Run `ee models list siliconflow`, then `ee config set distillation.provider siliconflow`, `ee config set distillation.model <modelId>`, and set SILICONFLOW_API_KEY.";
+    case "minimax":
+      return "Run `ee models list minimax`, then `ee config set distillation.provider minimax`, `ee config set distillation.model <modelId>`, and set MINIMAX_API_KEY.";
+    case "volcengine_ark":
+      return "Run `ee models list volcengine_ark`, then `ee config set distillation.provider volcengine_ark`, `ee config set distillation.model <modelId>`, and set VOLCENGINE_ARK_API_KEY.";
+    case "tencent_hunyuan":
+      return "Run `ee models list tencent_hunyuan`, then `ee config set distillation.provider tencent_hunyuan`, `ee config set distillation.model <modelId>`, and set TENCENT_HUNYUAN_API_KEY.";
+    case "baidu_qianfan":
+      return "Run `ee models list baidu_qianfan`, then `ee config set distillation.provider baidu_qianfan`, `ee config set distillation.model <modelId>`, and set BAIDU_QIANFAN_API_KEY.";
+    case "openai_compatible":
+      return "Prefer a named provider. If you must use a generic endpoint, set EXPERIENCE_ENGINE_DISTILLER_API_KEY, EXPERIENCE_ENGINE_DISTILLER_BASE_URL, and EXPERIENCE_ENGINE_DISTILLER_MODEL.";
+    default:
+      return null;
+  }
 };
 
 const logClaudeRuntimeStatus = (status?: {

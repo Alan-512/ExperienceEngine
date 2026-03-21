@@ -43,6 +43,13 @@ const node = (overrides: Partial<ExperienceNode>): ExperienceNode => ({
     "Execution hints from prior similar tasks: - Reproduce first, then validate the fix with exec before moving on. [Thu 2026-03-12 09:24 GMT+8] Fix the failing vitest auth test. Start...\nDo not keep iterating on the current debug path without narrowing the failing signature first.",
   embedding: [0.1, -0.2, 0.3],
   source_kind: "system_derived",
+  experience_kind: "expectation_correction",
+  confidence_signal: "confirmed_by_user",
+  validation_state: "validated_by_reuse",
+  correction_scope: "repo_local",
+  correction_category: "implementation_boundary",
+  deviation_pattern: "implementation solves the wrong layer of the problem",
+  corrected_constraint: "Fix the provider routing layer before touching UI code.",
   origin_record_ids: ["input_origin"],
   helped_record_ids: ["input_helped"],
   harmed_record_ids: ["input_harmed"],
@@ -81,6 +88,13 @@ describe("NodeRepository", () => {
     expect(stored?.usage_count).toBe(3);
     expect(stored?.helped_count).toBe(2);
     expect(stored?.harmed_count).toBe(1);
+    expect(stored?.experience_kind).toBe("expectation_correction");
+    expect(stored?.confidence_signal).toBe("confirmed_by_user");
+    expect(stored?.validation_state).toBe("validated_by_reuse");
+    expect(stored?.correction_scope).toBe("repo_local");
+    expect(stored?.correction_category).toBe("implementation_boundary");
+    expect(stored?.deviation_pattern).toBe("implementation solves the wrong layer of the problem");
+    expect(stored?.corrected_constraint).toBe("Fix the provider routing layer before touching UI code.");
     expect(stored?.origin_record_ids).toEqual(["input_origin"]);
     expect(stored?.helped_record_ids).toEqual(["input_helped"]);
     expect(stored?.harmed_record_ids).toEqual(["input_harmed"]);

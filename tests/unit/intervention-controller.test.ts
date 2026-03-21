@@ -266,6 +266,135 @@ describe("decideIntervention", () => {
     expect(decision.selected[0]?.id).toBe("exact-candidate-match");
   });
 
+  it("does not append a cross-family strategy when two exact-family strategies already cover the task", async () => {
+    const decision = await decideIntervention(
+      input,
+      [
+        node({
+          id: "payments-primary",
+          task_type: "test_debug",
+          trigger_pattern: "Fix the failing payments auth test in ExperienceEngine",
+          compact_hint: "Run the failing payments auth test before editing and rerun it after the fix.",
+          helped_count: 6,
+          support_count: 1
+        }),
+        node({
+          id: "payments-secondary",
+          task_type: "test_debug",
+          trigger_pattern: "Check the current workspace before fixing the payments auth test",
+          compact_hint: "Check the current workspace path before attempting the payments auth-test fix.",
+          helped_count: 6,
+          support_count: 1
+        }),
+        node({
+          id: "sqlite-cross-family",
+          task_type: "integration_fix",
+          trigger_pattern: "Repair the broken sqlite ledger migration in ExperienceEngine",
+          compact_hint:
+            "Use exec to isolate the sqlite ledger migration order mismatch, apply the smallest reordering fix, then rerun exec.",
+          helped_count: 5,
+          harmed_count: 3,
+          support_count: 1
+        })
+      ],
+      stats,
+      0.6,
+      3
+    );
+
+    expect(decision.mode).toBe("inject");
+    expect(decision.selected.map((entry) => entry.id)).toEqual(["payments-primary", "payments-secondary"]);
+  });
+
+  it("caps exact-family strategy injection at two hints when coverage is already strong", async () => {
+    const decision = await decideIntervention(
+      {
+        ...input,
+        task_summary: "Fix the failing vitest auth test in ExperienceEngine again"
+      },
+      [
+        node({
+          id: "family-primary",
+          task_type: "test_debug",
+          trigger_pattern: "Fix the failing vitest auth test in ExperienceEngine",
+          compact_hint: "Run the failing vitest auth test before editing and rerun it after the fix.",
+          helped_count: 6,
+          support_count: 1
+        }),
+        node({
+          id: "family-secondary",
+          task_type: "test_debug",
+          trigger_pattern: "Check the current workspace before fixing the vitest auth test",
+          compact_hint: "Check the current workspace path before attempting the vitest auth-test fix.",
+          helped_count: 5,
+          support_count: 1
+        }),
+        node({
+          id: "family-tertiary",
+          task_type: "test_debug",
+          trigger_pattern: "Fix the failing vitest auth test in ExperienceEngine again",
+          compact_hint:
+            "Reproduce the failing vitest auth test, make a minimal change based on the failure, and rerun vitest to confirm success.",
+          helped_count: 1,
+          support_count: 1
+        })
+      ],
+      stats,
+      0.6,
+      3
+    );
+
+    expect(decision.mode).toBe("inject");
+    expect(decision.selected.map((entry) => entry.id)).toEqual(["family-tertiary", "family-primary"]);
+  });
+
+  it("does not append related-family strategies when an exact-family strategy already matches", async () => {
+    const decision = await decideIntervention(
+      {
+        ...input,
+        task_type: "integration_fix",
+        task_summary: "Repair the broken sqlite ledger migration in ExperienceEngine"
+      },
+      [
+        node({
+          id: "integration-exact",
+          task_type: "integration_fix",
+          trigger_pattern: "Repair the broken sqlite ledger migration in ExperienceEngine",
+          compact_hint:
+            "Use exec to isolate the sqlite ledger migration ordering issue, apply the smallest reordering fix, then rerun exec.",
+          helped_count: 6,
+          harmed_count: 3,
+          support_count: 1
+        }),
+        node({
+          id: "payments-related-primary",
+          task_type: "test_debug",
+          trigger_pattern: "Fix the failing payments auth test in ExperienceEngine",
+          compact_hint: "Run the failing payments auth test before editing and rerun it after the fix.",
+          helped_count: 8,
+          support_count: 1
+        }),
+        node({
+          id: "payments-related-secondary",
+          task_type: "test_debug",
+          trigger_pattern: "Check the current workspace before fixing the payments auth test",
+          compact_hint: "Check the current workspace path before attempting the payments auth-test fix.",
+          helped_count: 8,
+          support_count: 1
+        })
+      ],
+      {
+        ...stats,
+        task_type: "integration_fix"
+      },
+      0.6,
+      3
+    );
+
+    expect(decision.mode).toBe("inject");
+    expect(decision.selected.map((entry) => entry.id)).toEqual(["integration-exact"]);
+  });
+
   it("caps conservative candidate injection at one hint", async () => {
     const decision = await decideIntervention(
       input,

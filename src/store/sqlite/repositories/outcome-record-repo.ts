@@ -65,4 +65,17 @@ export class OutcomeRecordRepository {
   count(): number {
     return (this.db.prepare("SELECT COUNT(*) AS count FROM outcome_records").get() as { count: number }).count;
   }
+
+  countByScope(scopeId: string): number {
+    return (
+      this.db
+        .prepare(
+          `SELECT COUNT(*) AS count
+           FROM outcome_records o
+           JOIN task_runs tr ON tr.id = o.task_run_id
+           WHERE tr.scope_id = ?`
+        )
+        .get(scopeId) as { count: number }
+    ).count;
+  }
 }

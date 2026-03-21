@@ -1,4 +1,4 @@
-import { analyzeExperience } from "../analyzer/experience-analyzer.js";
+import { LlmLearningGate } from "../analyzer/llm-learning-gate.js";
 import { buildCandidateSignals } from "../analyzer/candidate-signals.js";
 import { buildInjectionScorecard } from "../controller/injection-scorecard.js";
 import { classifyFailureAttributionReason } from "../feedback/automatic-attribution.js";
@@ -280,11 +280,14 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly injectionRepo;
   private readonly packRepo;
   private readonly distillationWorker;
+  private readonly learningGate;
+  private readonly pendingLearningTasks = new Set<Promise<void>>();
   readonly captureWriter;
 
   constructor(
     readonly config: ExperienceEngineConfig,
-    logger?: OpenClawLogger
+    logger?: OpenClawLogger,
+    runtimeOptions: ConstructorParameters<typeof LlmLearningGate>[1] = {}
   ) {
     this.logger = logger ?? {};
     this.db = openDatabase(config);
@@ -304,8 +307,10 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       config,
       this.candidateRepo,
       this.jobRepo,
-      this.nodeRepo
+      this.nodeRepo,
+      runtimeOptions
     );
+    this.learningGate = new LlmLearningGate(config, runtimeOptions);
     this.captureWriter = new RuntimeCaptureWriter(config, this.logger);
   }
 
@@ -358,10 +363,13 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     }
 
     if (!allowedNodeIds.size) {
-      return [];
+      return scopedNodes;
     }
 
-    return scopedNodes.filter((node) => allowedNodeIds.has(node.id));
+    return [
+      ...scopedNodes,
+      ...this.nodeRepo.listByIds(Array.from(allowedNodeIds)).filter((node) => node.scope_id === scopeId)
+    ].filter((node, index, nodes) => nodes.findIndex((entry) => entry.id === node.id) === index);
   }
 
   recoverToolEvents(sessionId: string, payload: unknown): void {
@@ -416,16 +424,64 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     return record;
   }
 
-  private persistCandidates(input: ExperienceInput, originRecordId: string, taskRunId?: string): ExperienceCandidate[] {
-    const analysis = analyzeExperience(input);
-    const persistedCandidates = analysis.accepted.map((draft) =>
-      draftToCandidate(draft, input, originRecordId, taskRunId)
-    );
-    for (const candidate of persistedCandidates) {
-      this.candidateRepo.upsert(candidate);
-      this.jobRepo.upsert(candidateToInitialJob(candidate, this.config.distillerProfile));
+  private trackLearningTask(task: Promise<void>): void {
+    const tracked = task
+      .catch((error) => {
+        this.logger.error?.("experienceengine.learning_failed", {
+          error: error instanceof Error ? error.message : String(error)
+        });
+      })
+      .finally(() => {
+        this.pendingLearningTasks.delete(tracked);
+      });
+    this.pendingLearningTasks.add(tracked);
+  }
+
+  async waitForBackgroundLearning(): Promise<void> {
+    await Promise.allSettled([...this.pendingLearningTasks]);
+  }
+
+  private async persistCandidatesAsync(
+    input: ExperienceInput,
+    originRecordId: string,
+    taskRunId?: string,
+    sessionId?: string
+  ): Promise<void> {
+    const result = await this.learningGate.generateCandidateDrafts(input);
+    if (!result.drafts.length) {
+      this.logger.debug?.("experienceengine.learning_skipped", {
+        sessionId,
+        taskType: input.task_type,
+        reason: result.reason,
+        source: result.source
+      });
+      return;
     }
-    return persistedCandidates;
+
+    const persistedCandidates = result.drafts.map((draft) => draftToCandidate(draft, input, originRecordId, taskRunId));
+    withTransaction(this.db, () => {
+      for (const candidate of persistedCandidates) {
+        this.candidateRepo.upsert(candidate);
+        this.jobRepo.upsert(candidateToInitialJob(candidate, this.config.distillerProfile));
+      }
+    });
+
+    this.logger.info?.("experienceengine.learning_captured", {
+      sessionId,
+      taskType: input.task_type,
+      candidateCount: persistedCandidates.length,
+      source: result.source,
+      reason: result.reason
+    });
+
+    if (this.config.distillationAutoDrain) {
+      await this.distillationWorker.drain().catch((error) => {
+        this.logger.error?.("experienceengine.distillation_drain_failed", {
+          sessionId,
+          error: error instanceof Error ? error.message : String(error)
+        });
+      });
+    }
   }
 
   private updateInjectedNodes(input: ExperienceInput, attributionRecordId: string, taskRunId?: string): void {
@@ -611,12 +667,19 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     const sessionId = context.sessionId ?? "global";
     const session = this.getSession(sessionId);
     const input = this.buildFinalizedInput(context, session);
+    let learningTaskContext:
+      | {
+          input: ExperienceInput;
+          originRecordId: string;
+          taskRunId: string;
+          sessionId: string;
+        }
+      | undefined;
     withTransaction(this.db, () => {
       const record = this.persistFinalizedInput(input, sessionId, session);
       const taskRun = toTaskRun(input, sessionId, context);
       this.taskRunRepo.upsert(taskRun);
       this.outcomeRepo.upsert(toOutcomeRecord(taskRun, input));
-      this.persistCandidates(input, record.record_id, taskRun.id);
       this.updateInjectedNodes(input, record.record_id, taskRun.id);
       if (session.lastInjectionEvent) {
         const touchedNodes = session.lastInjectionEvent.injected_node_ids
@@ -641,16 +704,24 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
           resolved_at: nowIso()
         });
       }
+      learningTaskContext = {
+        input,
+        originRecordId: record.record_id,
+        taskRunId: taskRun.id,
+        sessionId
+      };
     });
     this.sessions.delete(sessionId);
 
-    if (this.config.distillationAutoDrain) {
-      void this.distillationWorker.drain().catch((error) => {
-        this.logger.error?.("experienceengine.distillation_drain_failed", {
-          sessionId,
-          error: error instanceof Error ? error.message : String(error)
-        });
-      });
+    if (learningTaskContext) {
+      this.trackLearningTask(
+        this.persistCandidatesAsync(
+          learningTaskContext.input,
+          learningTaskContext.originRecordId,
+          learningTaskContext.taskRunId,
+          learningTaskContext.sessionId
+        )
+      );
     }
 
     this.logger.info?.("experienceengine.finalize", {

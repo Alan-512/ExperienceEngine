@@ -37,7 +37,7 @@ import type {
   ExperienceState,
   ReviewEvent
 } from "../types/domain.js";
-import { transitionState } from "../feedback/state-transition.js";
+import { transitionState, transitionValidationState } from "../feedback/state-transition.js";
 import { nowIso } from "../utils/clock.js";
 import { createId } from "../utils/ids.js";
 import {
@@ -239,6 +239,7 @@ const applyNodeFeedback = (node: ExperienceNode, feedback: FeedbackValue): Exper
     ...node,
     helped_count: feedback === "helped" ? node.helped_count + 1 : node.helped_count,
     harmed_count: feedback === "harmed" ? node.harmed_count + 1 : node.harmed_count,
+    validation_state: transitionValidationState(node, feedback),
     last_helped_at: feedback === "helped" ? timestamp : node.last_helped_at,
     last_harmed_at: feedback === "harmed" ? timestamp : node.last_harmed_at,
     updated_at: timestamp
@@ -495,8 +496,7 @@ export class ExperienceInteractionService {
     });
   }
 
-  inspectLast(): ExperienceLastInspection | undefined {
-    const record = this.inputRepo.getLatest();
+  private inspectRecord(record: ExperienceInputRecord | undefined): ExperienceLastInspection | undefined {
     if (!record) {
       return undefined;
     }
@@ -588,6 +588,10 @@ export class ExperienceInteractionService {
       summary: record.task_summary,
       createdAt: record.created_at
     };
+  }
+
+  inspectLast(): ExperienceLastInspection | undefined {
+    return this.inspectRecord(this.inputRepo.getLatest());
   }
 
   inspectRecent(options: { injectedOnly?: boolean; limit?: number } = {}): ExperienceRecentInspection[] {
@@ -805,16 +809,14 @@ export class ExperienceInteractionService {
   }
 
   inspectLearningSummary(): ExperienceLearningSummary {
+    return this.buildLearningSummary();
+  }
+
+  private buildLearningSummary(scopeId?: string): ExperienceLearningSummary {
     const candidateStates: CandidateLifecycleState[] = ["pending", "distilled", "failed", "discarded"];
     const jobStates: DistillationJobState[] = ["pending", "processing", "succeeded", "failed", "discarded"];
     const nodeStates: ExperienceState[] = ["candidate", "active", "cooling", "retired"];
-    const nodeSources: DistillationSource[] = [
-      "explicit_provider",
-      "host_endpoint",
-      "host_mediated",
-      "rule",
-      "disabled"
-    ];
+    const nodeSources: DistillationSource[] = ["explicit_provider", "rule", "disabled"];
     const attributionReasons: FeedbackAttributionReason[] = [
       "success_outcome",
       "relevant_failure",
@@ -824,8 +826,13 @@ export class ExperienceInteractionService {
       "suppressed_delivery",
       "unknown_outcome"
     ];
-    const latestRecord = this.inputRepo.getLatest();
-    const allNodes = this.nodeRepo.listAll();
+    const latestRecord = scopeId ? this.inputRepo.getLatestByScope(scopeId) : this.inputRepo.getLatest();
+    const allNodes = scopeId ? this.nodeRepo.listByScope(scopeId) : this.nodeRepo.listAll();
+    const candidates = scopeId
+      ? this.candidateRepo.listByScope(scopeId)
+      : candidateStates.flatMap((state) => this.candidateRepo.listByLifecycleState(state));
+    const candidateIds = new Set(candidates.map((candidate) => candidate.id));
+    const jobs = jobStates.flatMap((state) => this.jobRepo.listByStatus(state)).filter((job) => candidateIds.has(job.candidate_id));
     const publishedPacks = this.packRepo
       .listPacks()
       .filter((pack) => pack.status === "published" || pack.status === "rolled_back");
@@ -836,25 +843,29 @@ export class ExperienceInteractionService {
     );
 
     const effectiveness = {
-      decisions: this.injectionRepo.count(),
-      live: this.injectionRepo.countByDeliveryMode("live"),
-      shadow: this.injectionRepo.countByDeliveryMode("shadow"),
-      holdout: this.injectionRepo.countByDeliveryMode("holdout"),
-      delivered: this.injectionRepo.countByDelivered(true),
-      suppressed: this.injectionRepo.countByDelivered(false),
-      automaticHelped: this.reviewEventRepo.countBySourceAndType("automatic", "mark_helped"),
-      automaticHarmed: this.reviewEventRepo.countBySourceAndType("automatic", "mark_harmed")
+      decisions: scopeId ? this.injectionRepo.countByScope(scopeId) : this.injectionRepo.count(),
+      live: scopeId ? this.injectionRepo.countByScopeAndDeliveryMode(scopeId, "live") : this.injectionRepo.countByDeliveryMode("live"),
+      shadow: scopeId ? this.injectionRepo.countByScopeAndDeliveryMode(scopeId, "shadow") : this.injectionRepo.countByDeliveryMode("shadow"),
+      holdout: scopeId ? this.injectionRepo.countByScopeAndDeliveryMode(scopeId, "holdout") : this.injectionRepo.countByDeliveryMode("holdout"),
+      delivered: scopeId ? this.injectionRepo.countByScopeAndDelivered(scopeId, true) : this.injectionRepo.countByDelivered(true),
+      suppressed: scopeId ? this.injectionRepo.countByScopeAndDelivered(scopeId, false) : this.injectionRepo.countByDelivered(false),
+      automaticHelped: scopeId
+        ? this.injectionRepo.countAutomaticFeedbackByScope(scopeId, "mark_helped")
+        : this.injectionRepo.countAutomaticFeedback("mark_helped"),
+      automaticHarmed: scopeId
+        ? this.injectionRepo.countAutomaticFeedbackByScope(scopeId, "mark_harmed")
+        : this.injectionRepo.countAutomaticFeedback("mark_harmed")
     };
 
     return {
       candidates: Object.fromEntries(
-        candidateStates.map((state) => [state, this.candidateRepo.listByLifecycleState(state).length])
+        candidateStates.map((state) => [state, candidates.filter((candidate) => candidate.lifecycle_state === state).length])
       ) as Record<CandidateLifecycleState, number>,
       jobs: Object.fromEntries(
-        jobStates.map((state) => [state, this.jobRepo.listByStatus(state).length])
+        jobStates.map((state) => [state, jobs.filter((job) => job.status === state).length])
       ) as Record<DistillationJobState, number>,
       nodes: Object.fromEntries(
-        nodeStates.map((state) => [state, this.nodeRepo.listByState(state).length])
+        nodeStates.map((state) => [state, allNodes.filter((node) => node.state === state).length])
       ) as Record<ExperienceState, number>,
       nodeSources: Object.fromEntries(
         nodeSources.map((source) => [
@@ -865,13 +876,16 @@ export class ExperienceInteractionService {
       effectiveness,
       benchmark: buildBenchmarkSummary(effectiveness),
       attributionReasons: Object.fromEntries(
-        attributionReasons.map((reason) => [reason, this.injectionRepo.countByAttributionReason(reason)])
+        attributionReasons.map((reason) => [
+          reason,
+          scopeId ? this.injectionRepo.countByScopeAndAttributionReason(scopeId, reason) : this.injectionRepo.countByAttributionReason(reason)
+        ])
       ) as Record<FeedbackAttributionReason, number>,
       runtime: {
-        records: this.inputRepo.count(),
-        taskRuns: this.taskRunRepo.count(),
-        outcomes: this.outcomeRepo.count(),
-        reviews: this.reviewEventRepo.count()
+        records: scopeId ? this.inputRepo.countByScope(scopeId) : this.inputRepo.count(),
+        taskRuns: scopeId ? this.taskRunRepo.countByScope(scopeId) : this.taskRunRepo.count(),
+        outcomes: scopeId ? this.outcomeRepo.countByScope(scopeId) : this.outcomeRepo.count(),
+        reviews: scopeId ? this.reviewEventRepo.countByNodeScope(scopeId) : this.reviewEventRepo.count()
       },
       compiler,
       latestRecordCreatedAt: latestRecord?.created_at
@@ -880,8 +894,9 @@ export class ExperienceInteractionService {
 
   inspectRepoSummary(cwd: string = process.cwd()): ExperienceRepoSummary {
     const scope = resolveScope(cwd);
-    const latest = this.inspectLast();
-    const learning = this.inspectLearningSummary();
+    const latestRecord = this.inputRepo.getLatestByScope(scope.scope_id);
+    const latest = latestRecord ? this.inspectRecord(latestRecord) : undefined;
+    const learning = this.buildLearningSummary(scope.scope_id);
     const scopePackStatus = this.inspectScopePackStatusByScopeId(scope.scope_id);
     const activePacks = scopePackStatus.activations.filter((activation) => activation.enabled);
     const matchedPackIds = new Set(latest?.matchedPacks.map((pack) => pack.packId) ?? []);

@@ -103,6 +103,53 @@ describe("bootstrapDatabase", () => {
     expect(columnNames).toContain("origin_record_ids_json");
     expect(columnNames).toContain("helped_record_ids_json");
     expect(columnNames).toContain("harmed_record_ids_json");
+    expect(columnNames).toContain("experience_kind");
+    expect(columnNames).toContain("confidence_signal");
+    expect(columnNames).toContain("validation_state");
+    expect(columnNames).toContain("correction_scope");
+    expect(columnNames).toContain("correction_category");
+    expect(columnNames).toContain("deviation_pattern");
+    expect(columnNames).toContain("corrected_constraint");
+  });
+
+  it("adds expectation-correction columns to an existing experience_candidates table", () => {
+    const runtimeDir = makeTempDir();
+    const dbPath = join(runtimeDir, "experienceengine.db");
+    const db = new DatabaseSync(dbPath);
+
+    db.exec(`
+      CREATE TABLE experience_candidates (
+        id TEXT PRIMARY KEY,
+        source_record_id TEXT NOT NULL,
+        scope_id TEXT NOT NULL,
+        task_type TEXT NOT NULL,
+        node_type TEXT NOT NULL,
+        trigger_pattern TEXT NOT NULL,
+        compact_hint TEXT NOT NULL,
+        success_signal TEXT NOT NULL,
+        evidence_summary TEXT NOT NULL,
+        source_kind TEXT NOT NULL,
+        source_outcome_signal TEXT NOT NULL,
+        source_signal_json TEXT NOT NULL,
+        lifecycle_state TEXT NOT NULL,
+        retry_count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+    `);
+
+    bootstrapDatabase(db);
+
+    const columns = db.prepare("PRAGMA table_info(experience_candidates)").all() as Array<{ name: string }>;
+    const columnNames = columns.map((column) => column.name);
+
+    expect(columnNames).toContain("experience_kind");
+    expect(columnNames).toContain("confidence_signal");
+    expect(columnNames).toContain("validation_state");
+    expect(columnNames).toContain("correction_scope");
+    expect(columnNames).toContain("correction_category");
+    expect(columnNames).toContain("deviation_pattern");
+    expect(columnNames).toContain("corrected_constraint");
   });
 
   it("creates additive V3 runtime tables for task runs, outcomes, and review events", () => {

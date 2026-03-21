@@ -1,4 +1,10 @@
-import type { ExperienceInput, ExperienceNode, InjectionMode, ScopeTaskStats } from "../types/domain.js";
+import type {
+  ExperienceInput,
+  ExperienceNode,
+  InjectionMode,
+  ResolvedTaskType,
+  ScopeTaskStats
+} from "../types/domain.js";
 import { retrieveCandidates } from "./candidate-retriever.js";
 import { renderInjection } from "./injection-renderer.js";
 import { rankNodes } from "./node-ranker.js";
@@ -13,11 +19,20 @@ export type InterventionDecision = {
 
 export const selectInjectableNodes = (
   ranked: ExperienceNode[],
-  maxHints = 3
+  maxHints = 3,
+  preferredTaskType?: ResolvedTaskType
 ): ExperienceNode[] => {
   const strategyNodes = ranked.filter((node) => node.node_type === "strategy");
-  const fallback = strategyNodes.length ? strategyNodes : ranked.filter((node) => node.node_type === "warning");
-  return fallback.slice(0, maxHints);
+  const exactFamilyStrategies =
+    preferredTaskType && preferredTaskType !== "unknown"
+      ? strategyNodes.filter((node) => node.task_type === preferredTaskType)
+      : [];
+  const familyScopedStrategies = exactFamilyStrategies.length >= 1 ? exactFamilyStrategies : strategyNodes;
+  const fallback = familyScopedStrategies.length
+    ? familyScopedStrategies
+    : ranked.filter((node) => node.node_type === "warning");
+  const selectionCap = exactFamilyStrategies.length >= 2 ? Math.min(maxHints, 2) : maxHints;
+  return fallback.slice(0, selectionCap);
 };
 
 export const decideIntervention = (
@@ -45,7 +60,11 @@ const decideInterventionInternal = async (
   }
 
   const mode: InjectionMode = ranked[0]?.state === "candidate" ? "inject_conservative" : "inject";
-  const selected = selectInjectableNodes(ranked, mode === "inject_conservative" ? 1 : maxHints);
+  const selected = selectInjectableNodes(
+    ranked,
+    mode === "inject_conservative" ? 1 : maxHints,
+    input.task_type
+  );
   const candidateRiskSummary = selected[0]?.trigger_pattern ?? selected[0]?.compact_hint;
 
   if (!evaluateTrigger(input, stats, candidateRiskSummary, threshold)) {

@@ -42,7 +42,7 @@ const makeNode = (overrides: Partial<ExperienceNode> = {}): ExperienceNode => ({
   embedding_version: undefined,
   embedding_dimensions: undefined,
   distillation_mode_used: "llm",
-  distillation_source: "host_mediated",
+  distillation_source: "explicit_provider",
   redistilled_from: undefined,
   source_kind: "system_derived",
   origin_record_ids: ["input_auth_fix"],

@@ -61,17 +61,20 @@ export const loadConfig = (
       env.EXPERIENCE_ENGINE_EMBEDDING_CACHE_DIR ??
       overrides.embeddingCacheDir ??
       join(paths.productHome, "models", "embeddings"),
+    distillerProvider:
+      (env.EXPERIENCE_ENGINE_DISTILLER_PROVIDER as ExperienceEngineConfig["distillerProvider"] | undefined) ??
+      overrides.distillerProvider ??
+      (settings.distillation?.provider as ExperienceEngineConfig["distillerProvider"] | undefined) ??
+      defaultConfig.distillerProvider,
+    distillerModel:
+      env.EXPERIENCE_ENGINE_DISTILLER_MODEL ??
+      overrides.distillerModel ??
+      settings.distillation?.model ??
+      defaultConfig.distillerModel,
     distillationMode:
       (env.EXPERIENCE_ENGINE_DISTILLATION_MODE as ExperienceEngineConfig["distillationMode"] | undefined) ??
       overrides.distillationMode ??
       defaultConfig.distillationMode,
-    hostLlmMode:
-      (env.EXPERIENCE_ENGINE_HOST_LLM_MODE as ExperienceEngineConfig["hostLlmMode"] | undefined) ??
-      overrides.hostLlmMode ??
-      defaultConfig.hostLlmMode,
-    hostLlmMediatedTimeoutMs: env.EXPERIENCE_ENGINE_HOST_LLM_MEDIATED_TIMEOUT_MS
-      ? Number(env.EXPERIENCE_ENGINE_HOST_LLM_MEDIATED_TIMEOUT_MS)
-      : overrides.hostLlmMediatedTimeoutMs ?? defaultConfig.hostLlmMediatedTimeoutMs,
     distillerProfile:
       (env.EXPERIENCE_ENGINE_DISTILLER_PROFILE as ExperienceEngineConfig["distillerProfile"] | undefined) ??
       overrides.distillerProfile ??

@@ -52,6 +52,13 @@ const candidate = (overrides: Partial<ExperienceCandidate> = {}): ExperienceCand
   evidence_summary: "Terminal sequence: vitest passed.",
   retrieval_text: "Fix the failing auth vitest\nvitest passed",
   source_kind: "system_derived",
+  experience_kind: "expectation_correction",
+  confidence_signal: "supported_by_objective_success",
+  validation_state: "pending_reuse_validation",
+  correction_scope: "repo_local",
+  correction_category: "verification_order",
+  deviation_pattern: "verification happened too late",
+  corrected_constraint: "Run the targeted verification before broad edits.",
   source_context_summary: "Auth test failure in the current workspace.",
   source_outcome_signal: "success",
   raw_summary: "Auth vitest failed once, then passed after a narrow edit.",
@@ -119,6 +126,13 @@ describe("CandidateRepository", () => {
     expect(stored?.raw_summary).toBe("Auth vitest failed once, then passed after a narrow edit.");
     expect(stored?.failure_signature).toBe("Auth spec assertion failed");
     expect(stored?.source_record_id).toBe("input_auth_fix");
+    expect(stored?.experience_kind).toBe("expectation_correction");
+    expect(stored?.confidence_signal).toBe("supported_by_objective_success");
+    expect(stored?.validation_state).toBe("pending_reuse_validation");
+    expect(stored?.correction_scope).toBe("repo_local");
+    expect(stored?.correction_category).toBe("verification_order");
+    expect(stored?.deviation_pattern).toBe("verification happened too late");
+    expect(stored?.corrected_constraint).toBe("Run the targeted verification before broad edits.");
     expect(stored?.source_signal.task_summary).toBe("Fix the failing auth vitest");
     expect(stored?.source_signal.tool_events[0]?.tool_name).toBe("vitest");
     expect(stored?.recommended_steps).toEqual([

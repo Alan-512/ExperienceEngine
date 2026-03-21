@@ -31,6 +31,13 @@ export const buildCandidatePayload = (candidate: ExperienceCandidate): string =>
     {
       nodeType: candidate.node_type,
       taskType: candidate.task_type,
+      experienceKind: candidate.experience_kind,
+      confidenceSignal: candidate.confidence_signal,
+      validationState: candidate.validation_state,
+      correctionScope: candidate.correction_scope,
+      correctionCategory: candidate.correction_category,
+      deviationPattern: candidate.deviation_pattern,
+      correctedConstraint: candidate.corrected_constraint,
       triggerPattern: candidate.trigger_pattern,
       compactHintDraft: candidate.compact_hint,
       goalDraft: candidate.goal,

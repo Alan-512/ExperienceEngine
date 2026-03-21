@@ -68,15 +68,14 @@ That means the observed behavior in this case study primarily reflects the runti
 From `ee doctor codex` on `2026-03-19`:
 
 - `Distillation mode: llm`
-- `Distillation source: host_mediated`
-- `Host LLM mode: mediated`
+- `Distillation source: explicit_provider`
 - `Evaluation mode: live`
 - `Holdout rate: 0.2`
 - `Raw task records: 132`
 - `Task runs: 25`
 - `Formal experience nodes: 18`
 
-This indicates that the repository is no longer in a cold-start state. ExperienceEngine is operating with durable experience already present.
+This indicates that the repository is no longer in a cold-start state. ExperienceEngine is operating with durable experience already present, and the LLM distillation path depends on an explicitly configured provider API.
 
 ### Latest observed intervention
 

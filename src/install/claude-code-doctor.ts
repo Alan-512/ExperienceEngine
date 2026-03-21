@@ -10,7 +10,7 @@ import {
   runClaudeCommand,
   type ClaudeCommandRunner
 } from "./claude-cli.js";
-import { resolveDistillationResolution, resolveHostLlmResolution } from "../distillation/host-llm.js";
+import { resolveDistillationResolution } from "../distillation/host-llm.js";
 import {
   buildClaudeHookCommandForTarget,
   ensureClaudeLaunchers,
@@ -109,20 +109,14 @@ export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
   const config = loadConfig({}, { env: options.env ?? process.env, homeDir: options.homeDir });
   const resolutionEnv: NodeJS.ProcessEnv = {
     ...(options.env ?? process.env),
-    EXPERIENCE_ENGINE_USE_HOST_LLM: "true",
     EXPERIENCE_ENGINE_ADAPTER: "claude-code"
   };
   const distillationResolution = resolveDistillationResolution({
     env: resolutionEnv,
-    homeDir: options.homeDir,
+    configProvider: config.distillerProvider,
+    configModel: config.distillerModel,
     distillationMode: config.distillationMode,
-    hostLlmMode: config.hostLlmMode,
     allowRuleFallback: config.distillationAllowPassthrough
-  });
-  const hostResolution = resolveHostLlmResolution({
-    env: resolutionEnv,
-    homeDir: options.homeDir,
-    hostLlmMode: config.hostLlmMode
   });
 
   return {
@@ -153,8 +147,9 @@ export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
     distillationStatus: {
       distillationMode: distillationResolution.distillationMode,
       distillationSource: distillationResolution.distillationSource,
-      hostLlmMode: hostResolution.mode,
-      reason: distillationResolution.reason
+      provider: distillationResolution.provider,
+      reason: distillationResolution.reason,
+      diagnostics: distillationResolution.diagnostics
     },
     hostState: hostInfo
   };

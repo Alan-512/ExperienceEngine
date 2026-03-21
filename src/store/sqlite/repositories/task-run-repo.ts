@@ -92,4 +92,12 @@ export class TaskRunRepository {
   count(): number {
     return (this.db.prepare("SELECT COUNT(*) AS count FROM task_runs").get() as { count: number }).count;
   }
+
+  countByScope(scopeId: string): number {
+    return (
+      this.db
+        .prepare("SELECT COUNT(*) AS count FROM task_runs WHERE scope_id = ?")
+        .get(scopeId) as { count: number }
+    ).count;
+  }
 }

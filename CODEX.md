@@ -11,3 +11,8 @@
 
 - A previous `repair openclaw` path-based reinstall deleted the active ExperienceEngine working directory because the recorded OpenClaw plugin install path pointed at the live repo.
 - Treat any future OpenClaw reinstall/delete operation as high risk until path safety has been explicitly validated.
+
+## Current Product Boundary
+
+- ExperienceEngine currently supports LLM distillation only through an explicitly configured official or compatible API.
+- Do not treat host login state, host model visibility, or host session capability as a supported distillation path.

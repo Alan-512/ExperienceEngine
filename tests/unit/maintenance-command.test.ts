@@ -69,27 +69,34 @@ describe("maintenance command", () => {
       skippedNoCandidate: 1,
       failed: 0
     });
+    const resolveDistillationResolution = vi.fn().mockReturnValue({
+      distillationMode: "llm",
+      distillationSource: "explicit_provider",
+      reason: "Resolved from explicit ExperienceEngine distiller provider configuration."
+    });
 
     await runMaintenanceCommand("redistill-rule-nodes", {
       loadConfig: () =>
         ({
           distillationMode: "auto",
           distillationAllowPassthrough: true,
-          hostLlmMode: "auto"
+          distillerProvider: "openrouter",
+          distillerModel: "openai/gpt-4o-mini"
         }) as never,
-      resolveDistillationResolution: () =>
-        ({
-          distillationMode: "llm",
-          distillationSource: "host_mediated",
-          reason: "Resolved host-mediated Codex distillation."
-        }) as never,
+      resolveDistillationResolution,
       redistillRuleNodes
     });
 
+    expect(resolveDistillationResolution).toHaveBeenCalledWith(
+      expect.objectContaining({
+        configProvider: "openrouter",
+        configModel: "openai/gpt-4o-mini"
+      })
+    );
     expect(redistillRuleNodes).toHaveBeenCalledOnce();
     expect(consoleLogSpy.mock.calls).toEqual(
       expect.arrayContaining([
-        ["[ExperienceEngine] Re-distilled rule-promoted nodes with source: host_mediated"],
+        ["[ExperienceEngine] Re-distilled rule-promoted nodes with source: explicit_provider"],
         ["[ExperienceEngine] Attempted: 2 | Upgraded: 1 | Skipped (no candidate): 1 | Failed: 0"]
       ])
     );
@@ -102,23 +109,22 @@ describe("maintenance command", () => {
       loadConfig: () =>
         ({
           distillationMode: "auto",
-          distillationAllowPassthrough: true,
-          hostLlmMode: "auto"
+          distillationAllowPassthrough: true
         }) as never,
       resolveDistillationResolution: () =>
         ({
           distillationMode: "rule",
           distillationSource: "rule",
-          reason: "No reusable host llm path is available."
+          reason: "No explicit distiller provider is configured."
         }) as never,
       redistillRuleNodes
     });
 
     expect(redistillRuleNodes).not.toHaveBeenCalled();
-    expect(consoleLogSpy.mock.calls).toEqual(
+      expect(consoleLogSpy.mock.calls).toEqual(
       expect.arrayContaining([
         ["[ExperienceEngine] Rule node re-distillation requires llm mode; current mode is rule."],
-        ["[ExperienceEngine] No reusable host llm path is available."]
+        ["[ExperienceEngine] No explicit distiller provider is configured."]
       ])
     );
   });
@@ -127,7 +133,39 @@ describe("maintenance command", () => {
     await runMaintenanceCommand("unknown");
 
     expect(consoleLogSpy).toHaveBeenCalledWith(
-      "Usage: ee maintenance embeddings-reset|redistill-rule-nodes|claude-validate-print"
+      "Usage: ee maintenance embeddings-reset|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
+    );
+  });
+
+  it("merges one scope into another through maintenance command", async () => {
+    const mergeScopesWithConfig = vi.fn().mockReturnValue({
+      sourceScopeId: "scope_source",
+      targetScopeId: "scope_target",
+      moved: {
+        inputRecords: 12,
+        taskRuns: 7,
+        injections: 0,
+        nodes: 3,
+        candidates: 1
+      },
+      merged: {
+        packActivations: 1,
+        taskStats: 2
+      }
+    });
+
+    await runMaintenanceCommand("merge-scope", ["scope_source", "scope_target"], {
+      mergeScopesWithConfig,
+      loadConfig: () => ({}) as never
+    });
+
+    expect(mergeScopesWithConfig).toHaveBeenCalledOnce();
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["[ExperienceEngine] Merged scope scope_source into scope_target."],
+        ["[ExperienceEngine] Moved: records=12 taskRuns=7 injections=0 nodes=3 candidates=1"],
+        ["[ExperienceEngine] Merged aggregates: packActivations=1 taskStats=2"]
+      ])
     );
   });
 });

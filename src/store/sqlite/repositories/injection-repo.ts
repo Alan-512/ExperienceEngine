@@ -116,6 +116,14 @@ export class InjectionRepository {
     return (this.db.prepare("SELECT COUNT(*) AS count FROM injection_events").get() as { count: number }).count;
   }
 
+  countByScope(scopeId: string): number {
+    return (
+      this.db
+        .prepare("SELECT COUNT(*) AS count FROM injection_events WHERE scope_id = ?")
+        .get(scopeId) as { count: number }
+    ).count;
+  }
+
   countByDeliveryMode(deliveryMode: InjectionEvent["delivery_mode"]): number {
     return (
       this.db
@@ -124,11 +132,27 @@ export class InjectionRepository {
     ).count;
   }
 
+  countByScopeAndDeliveryMode(scopeId: string, deliveryMode: InjectionEvent["delivery_mode"]): number {
+    return (
+      this.db
+        .prepare("SELECT COUNT(*) AS count FROM injection_events WHERE scope_id = ? AND delivery_mode = ?")
+        .get(scopeId, deliveryMode) as { count: number }
+    ).count;
+  }
+
   countByDelivered(delivered: boolean): number {
     return (
       this.db
         .prepare("SELECT COUNT(*) AS count FROM injection_events WHERE delivered = ?")
         .get(Number(delivered)) as { count: number }
+    ).count;
+  }
+
+  countByScopeAndDelivered(scopeId: string, delivered: boolean): number {
+    return (
+      this.db
+        .prepare("SELECT COUNT(*) AS count FROM injection_events WHERE scope_id = ? AND delivered = ?")
+        .get(scopeId, Number(delivered)) as { count: number }
     ).count;
   }
 
@@ -148,6 +172,46 @@ export class InjectionRepository {
     ).count;
   }
 
+  countByScopeAndAttributionReason(scopeId: string, reason: NonNullable<InjectionEvent["attribution_reason"]>): number {
+    return (
+      this.db
+        .prepare("SELECT COUNT(*) AS count FROM injection_events WHERE scope_id = ? AND attribution_reason = ?")
+        .get(scopeId, reason) as { count: number }
+    ).count;
+  }
+
+  countAutomaticFeedback(eventType: "mark_helped" | "mark_harmed"): number {
+    return (
+      this.db
+        .prepare(
+          `SELECT COUNT(DISTINCT ie.injection_id) AS count
+           FROM review_events re
+           JOIN task_runs tr ON tr.id = re.task_run_id
+           JOIN injection_events ie ON ie.session_id = tr.session_id
+           WHERE re.source = 'automatic'
+             AND re.event_type = ?`
+        )
+        .get(eventType) as { count: number }
+    ).count;
+  }
+
+  countAutomaticFeedbackByScope(scopeId: string, eventType: "mark_helped" | "mark_harmed"): number {
+    return (
+      this.db
+        .prepare(
+          `SELECT COUNT(DISTINCT ie.injection_id) AS count
+           FROM review_events re
+           JOIN task_runs tr ON tr.id = re.task_run_id
+           JOIN injection_events ie ON ie.session_id = tr.session_id
+           WHERE tr.scope_id = ?
+             AND ie.scope_id = ?
+             AND re.source = 'automatic'
+             AND re.event_type = ?`
+        )
+        .get(scopeId, scopeId, eventType) as { count: number }
+    ).count;
+  }
+
   countAutomaticFeedbackByDeliveryMode(
     deliveryMode: InjectionEvent["delivery_mode"],
     eventType: "mark_helped" | "mark_harmed"
@@ -155,7 +219,7 @@ export class InjectionRepository {
     return (
       this.db
         .prepare(
-          `SELECT COUNT(DISTINCT re.id) AS count
+          `SELECT COUNT(DISTINCT ie.injection_id) AS count
            FROM review_events re
            JOIN task_runs tr ON tr.id = re.task_run_id
            JOIN injection_events ie ON ie.session_id = tr.session_id

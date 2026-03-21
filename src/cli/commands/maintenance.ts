@@ -3,6 +3,7 @@ import { resolveDistillationResolution } from "../../distillation/host-llm.js";
 import { LlmDistiller } from "../../distillation/llm-distiller.js";
 import { runClaudePrintValidation } from "../../maintenance/claude-validate-print.js";
 import { redistillRuleNodes } from "../../maintenance/redistill-rule-nodes.js";
+import { mergeScopesWithConfig } from "../../maintenance/scope-merge.js";
 import { bootstrapDatabase, openDatabase } from "../../store/sqlite/db.js";
 import { CandidateRepository } from "../../store/sqlite/repositories/candidate-repo.js";
 import { NodeRepository } from "../../store/sqlite/repositories/node-repo.js";
@@ -14,12 +15,16 @@ type MaintenanceDeps = {
   resetManagedEmbeddingCache?: typeof resetManagedEmbeddingCache;
   redistillRuleNodes?: typeof redistillRuleNodes;
   claudeValidatePrint?: typeof runClaudePrintValidation;
+  mergeScopesWithConfig?: typeof mergeScopesWithConfig;
 };
 
 export const runMaintenanceCommand = async (
   action?: string,
-  deps: MaintenanceDeps = {}
+  argsOrDeps: string[] | MaintenanceDeps = [],
+  maybeDeps: MaintenanceDeps = {}
 ): Promise<void> => {
+  const args = Array.isArray(argsOrDeps) ? argsOrDeps : [];
+  const deps = Array.isArray(argsOrDeps) ? maybeDeps : argsOrDeps;
   const config = (deps.loadConfig ?? loadConfig)();
 
   if (action === "embeddings-reset") {
@@ -40,8 +45,9 @@ export const runMaintenanceCommand = async (
   if (action === "redistill-rule-nodes") {
     const resolution = (deps.resolveDistillationResolution ?? resolveDistillationResolution)({
       env: process.env,
+      configProvider: config.distillerProvider,
+      configModel: config.distillerModel,
       distillationMode: config.distillationMode,
-      hostLlmMode: config.hostLlmMode,
       allowRuleFallback: config.distillationAllowPassthrough
     });
 
@@ -103,5 +109,28 @@ export const runMaintenanceCommand = async (
     return;
   }
 
-  console.log("Usage: ee maintenance embeddings-reset|redistill-rule-nodes|claude-validate-print");
+  if (action === "merge-scope") {
+    const [sourceScopeId, targetScopeId] = args;
+    if (!sourceScopeId || !targetScopeId) {
+      console.log("[ExperienceEngine] merge-scope requires <sourceScopeId> <targetScopeId>.");
+      console.log(
+        "Usage: ee maintenance embeddings-reset|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
+      );
+      return;
+    }
+
+    const report = (deps.mergeScopesWithConfig ?? mergeScopesWithConfig)(config, sourceScopeId, targetScopeId);
+    console.log(`[ExperienceEngine] Merged scope ${report.sourceScopeId} into ${report.targetScopeId}.`);
+    console.log(
+      `[ExperienceEngine] Moved: records=${report.moved.inputRecords} taskRuns=${report.moved.taskRuns} injections=${report.moved.injections} nodes=${report.moved.nodes} candidates=${report.moved.candidates}`
+    );
+    console.log(
+      `[ExperienceEngine] Merged aggregates: packActivations=${report.merged.packActivations} taskStats=${report.merged.taskStats}`
+    );
+    return;
+  }
+
+  console.log(
+    "Usage: ee maintenance embeddings-reset|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
+  );
 };

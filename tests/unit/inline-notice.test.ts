@@ -69,4 +69,38 @@ describe("renderInlineNotice", () => {
       "[ExperienceEngine] Injected 2 strategy hints for this task (risk: low). Run ee inspect --last to review why it matched."
     );
   });
+
+  it("keeps a single candidate node at high risk", () => {
+    expect(
+      renderInlineNotice([
+        makeNode({
+          id: "node_candidate",
+          state: "candidate"
+        })
+      ])
+    ).toBe(
+      "[ExperienceEngine] Injected 1 strategy hint for this task (risk: high). Run ee inspect --last to review why it matched."
+    );
+  });
+
+  it("downgrades risk when a candidate is paired with an active exact-family strategy", () => {
+    expect(
+      renderInlineNotice([
+        makeNode({
+          id: "node_active",
+          task_type: "integration_fix",
+          helped_count: 7,
+          harmed_count: 3
+        }),
+        makeNode({
+          id: "node_candidate",
+          task_type: "integration_fix",
+          state: "candidate",
+          distillation_source: "explicit_provider"
+        })
+      ])
+    ).toBe(
+      "[ExperienceEngine] Injected 2 strategy hints for this task (risk: medium). Run ee inspect --last to review why it matched."
+    );
+  });
 });

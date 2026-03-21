@@ -12,6 +12,12 @@ const cleanList = (items?: string[]): string[] | undefined => {
 
 export const normalizeCandidate = (candidate: ExperienceCandidateDraft): ExperienceCandidateDraft => ({
   ...candidate,
+  deviation_pattern: candidate.deviation_pattern
+    ? truncate(toSentence(normalizeWhitespace(candidate.deviation_pattern)), 180)
+    : undefined,
+  corrected_constraint: candidate.corrected_constraint
+    ? truncate(toSentence(normalizeWhitespace(candidate.corrected_constraint)), 180)
+    : undefined,
   trigger_pattern: truncate(normalizeWhitespace(candidate.trigger_pattern), 180),
   compact_hint: truncate(toSentence(candidate.compact_hint), 220),
   evidence_summary: truncate(toSentence(candidate.evidence_summary), 220),

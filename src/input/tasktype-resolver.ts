@@ -7,6 +7,10 @@ import {
 
 const MATCHERS: Array<[ResolvedTaskType, RegExp]> = [
   ["test_debug", /\b(test|vitest|jest|playwright|failing spec|assert(?:ion)?)\b/i],
+  [
+    "config_debug",
+    /\b(openrouter|provider|model(?:\s+id)?|api key|apikey|endpoint|base url|routing|privacy|guardrail|zdr|rate limit|quota|credential|configuration|settings?)\b/i
+  ],
   ["build_debug", /\b(build|compile|bundle|vite|webpack|tsc|transpile)\b/i],
   ["refactor", /\b(refactor|cleanup|clean up|reorganize|重构)\b/i],
   ["performance", /\b(slow|performance|optimi[sz]e|latency|memory|性能|优化)\b/i],

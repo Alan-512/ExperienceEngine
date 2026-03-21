@@ -692,7 +692,7 @@ describe("inspect command", () => {
         [expect.objectContaining({ pending: 1, distilled: 0, failed: 0, discarded: 0 })],
         [expect.objectContaining({ pending: 0, processing: 0, succeeded: 0, failed: 1, discarded: 0 })],
         [expect.objectContaining({ candidate: 0, active: 1, cooling: 0, retired: 0 })],
-        [expect.objectContaining({ explicit_provider: 0, host_endpoint: 0, host_mediated: 0, rule: 1, disabled: 0 })],
+        [expect.objectContaining({ explicit_provider: 0, rule: 1, disabled: 0 })],
         [expect.objectContaining({ decisions: 1, live: 0, shadow: 1, holdout: 0, delivered: 0, suppressed: 1, automaticHelped: 1, automaticHarmed: 0 })],
         [expect.objectContaining({ deliveryRate: 0, suppressionRate: 1, helpfulRate: 1, harmfulRate: 0, netHelpfulRate: 1, verdict: "warming_up" })],
         [expect.objectContaining({ success_outcome: 0, relevant_failure: 0, environmental_failure: 0, exploratory_failure: 0, no_relevant_failure: 0, suppressed_delivery: 1, unknown_outcome: 0 })],
