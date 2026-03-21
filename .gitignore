@@ -16,3 +16,6 @@ data/logs/*.jsonl
 internal-docs/
 artifacts/
 .worktrees/
+docs/superpowers/specs/
+docs/superpowers/plans/
+scripts/tmp-*
