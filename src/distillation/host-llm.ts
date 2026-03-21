@@ -5,6 +5,7 @@ import type { DistillationDiagnostics, DistillerEndpoint, DistillerProvider } fr
 type ResolveOptions = {
   env?: NodeJS.ProcessEnv;
   configProvider?: DistillerProvider;
+  configAuthMode?: string;
   configModel?: string;
 };
 
@@ -49,6 +50,9 @@ export const resolveDistillationResolution = (
   };
   if (!env.EXPERIENCE_ENGINE_DISTILLER_PROVIDER && options.configProvider) {
     env.EXPERIENCE_ENGINE_DISTILLER_PROVIDER = options.configProvider;
+  }
+  if (!env.EXPERIENCE_ENGINE_DISTILLER_AUTH_MODE && options.configAuthMode) {
+    env.EXPERIENCE_ENGINE_DISTILLER_AUTH_MODE = options.configAuthMode;
   }
   if (!env.EXPERIENCE_ENGINE_DISTILLER_MODEL && options.configModel) {
     env.EXPERIENCE_ENGINE_DISTILLER_MODEL = options.configModel;

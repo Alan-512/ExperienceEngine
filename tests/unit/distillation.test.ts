@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadConfig } from "../../src/config/load-config.js";
+import { clearGoogleAdcTokenCache } from "../../src/distillation/providers/google-adc.js";
 import { LlmDistiller } from "../../src/distillation/llm-distiller.js";
 import { resolveDistillationResolution } from "../../src/distillation/host-llm.js";
 import { DistillationQueueWorker } from "../../src/distillation/queue-worker.js";
@@ -34,6 +35,7 @@ const makeDb = (overrides: Partial<ReturnType<typeof loadConfig>> = {}) => {
 };
 
 afterEach(() => {
+  clearGoogleAdcTokenCache();
   clearEmbeddingProviderForTests();
   while (tempDirs.length) {
     rmSync(tempDirs.pop()!, { recursive: true, force: true });
@@ -410,6 +412,75 @@ describe("LlmDistiller", () => {
     expect(result.compact_hint).toContain("Keep the auth change small");
   });
 
+  it("uses google adc bearer auth for gemini when google_adc auth mode is configured", async () => {
+    const { config } = makeDb({
+      distillerProvider: "gemini",
+      distillationAuthMode: "google_adc"
+    });
+    const adcPath = join(config.dataDir, "application_default_credentials.json");
+    writeFileSync(
+      adcPath,
+      JSON.stringify({
+        type: "authorized_user",
+        client_id: "client-id",
+        client_secret: "client-secret",
+        refresh_token: "refresh-token"
+      }),
+      "utf8"
+    );
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          access_token: "adc-access-token",
+          expires_in: 3600
+        })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          candidates: [
+            {
+              content: {
+                parts: [
+                  {
+                    text: JSON.stringify({
+                      compact_hint: "Start with the narrowest Gemini verification loop before widening scope.",
+                      trigger_conditions: "When iterating on Gemini auth configuration",
+                      success_criteria: "the Gemini verification request succeeds",
+                      risk_level: "low"
+                    })
+                  }
+                ]
+              }
+            }
+          ]
+        })
+      });
+
+    const distiller = new LlmDistiller(config, {
+      env: {
+        EXPERIENCE_ENGINE_DISTILLER_PROVIDER: "gemini",
+        EXPERIENCE_ENGINE_DISTILLER_AUTH_MODE: "google_adc",
+        EXPERIENCE_ENGINE_DISTILLER_MODEL: "gemini-2.5-flash",
+        GOOGLE_APPLICATION_CREDENTIALS: adcPath
+      },
+      fetchImpl: fetchImpl as unknown as typeof fetch
+    });
+
+    const result = await distiller.distill(makeCandidate());
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const [tokenUrl, tokenInit] = fetchImpl.mock.calls[0] as [string, { body: string }];
+    expect(tokenUrl).toBe("https://oauth2.googleapis.com/token");
+    expect(String(tokenInit.body)).toContain("grant_type=refresh_token");
+    const [url, requestInit] = fetchImpl.mock.calls[1] as [string, { headers: Record<string, string>; body: string }];
+    expect(url).toBe("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent");
+    expect(requestInit.headers.Authorization).toBe("Bearer adc-access-token");
+    expect(result.compact_hint).toContain("Start with the narrowest Gemini verification loop");
+  });
+
   it("uses the native azure openai path when azure_openai is configured", async () => {
     const { config } = makeDb({
       distillerProvider: "azure_openai"
@@ -573,6 +644,38 @@ describe("LlmDistiller", () => {
         EXPERIENCE_ENGINE_DISTILLER_BASE_URL: "https://example.test/v1/chat/completions"
       },
       fetchImpl: fetchImpl as unknown as typeof fetch
+    });
+
+    const result = await distiller.distill(makeCandidate());
+
+    expect(result.distillation_mode_used).toBe("rule");
+    expect(result.distillation_source).toBe("rule");
+    expect(result.compact_hint).toBe("Use vitest as the terminal verification loop for the auth failure.");
+  });
+
+  it("falls back to rule distillation when the provider returns an empty message payload and passthrough is enabled", async () => {
+    const { config } = makeDb({
+      distillationAllowPassthrough: true,
+      distillerProvider: "openrouter",
+      distillerModel: "openrouter/free"
+    });
+
+    const distiller = new LlmDistiller(config, {
+      env: {
+        EXPERIENCE_ENGINE_DISTILLER_PROVIDER: "openrouter",
+        EXPERIENCE_ENGINE_DISTILLER_MODEL: "openrouter/free",
+        OPENROUTER_API_KEY: "secret"
+      },
+      fetchImpl: vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {}
+            }
+          ]
+        })
+      }) as unknown as typeof fetch
     });
 
     const result = await distiller.distill(makeCandidate());
@@ -1191,6 +1294,269 @@ describe("DistillationQueueWorker", () => {
     expect(nodeRepo.listAll()).toHaveLength(1);
     expect(candidateRepo.getById("candidate_distill_auth")?.distilled_node_id).toBe("node_build_active");
     expect(nodeRepo.getById("node_build_active")?.support_count).toBe(3);
+  });
+
+  it("does not merge expectation-correction nodes when the correction dimension differs", async () => {
+    setEmbeddingProviderForTests({
+      provider: "local",
+      model: "Xenova/multilingual-e5-small",
+      version: "local-e5-v1",
+      dimensions: 3,
+      async embedQuery() {
+        return [1, 0, 0];
+      },
+      async embedPassage() {
+        return [1, 0, 0];
+      }
+    });
+
+    const { db, config } = makeDb();
+    const candidateRepo = new CandidateRepository(db);
+    const jobRepo = new DistillationJobRepository(db);
+    const nodeRepo = new NodeRepository(db);
+
+    candidateRepo.upsert(
+      makeCandidate({
+        task_type: "config_debug",
+        node_type: "strategy",
+        trigger_pattern: "OpenRouter free model times out during provider routing checks.",
+        compact_hint: "Probe the free model route before widening timeout policy changes.",
+        goal: "Separate endpoint routing failures from timeout behavior.",
+        success_signal: "The provider probe succeeds and distillation returns structured output.",
+        evidence_summary: "The free-model route succeeded after checking routing before changing timeout policy.",
+        experience_kind: "expectation_correction",
+        confidence_signal: "unconfirmed",
+        validation_state: "pending_reuse_validation",
+        correction_scope: "host_local",
+        correction_category: "verification_order",
+        deviation_pattern: "verification happened too late",
+        corrected_constraint: "Probe provider routing before changing retry or timeout behavior."
+      })
+    );
+    jobRepo.upsert(makeJob());
+    nodeRepo.upsert({
+      id: "node_existing_expectation_other_dimension",
+      node_type: "strategy",
+      scope_id: "scope_1",
+      task_type: "config_debug",
+      trigger_pattern: "OpenRouter free model times out during provider routing checks.",
+      compact_hint: "Probe the free model route before widening timeout policy changes.",
+      goal: "Separate endpoint routing failures from timeout behavior.",
+      recommended_steps: ["Probe the route", "Then decide whether timeout policy needs to change"],
+      avoid_steps: [],
+      fallback_steps: [],
+      success_signal: "The provider probe succeeds and distillation returns structured output.",
+      evidence_summary: "Previous correction around the same provider family.",
+      retrieval_text:
+        "implementation solves the wrong layer of the problem\nFix the provider configuration layer before changing timeout policy.\nOpenRouter free model times out during provider routing checks.",
+      source_kind: "system_derived",
+      experience_kind: "expectation_correction",
+      confidence_signal: "confirmed_by_user",
+      validation_state: "validated_by_reuse",
+      correction_scope: "host_local",
+      correction_category: "implementation_boundary",
+      deviation_pattern: "implementation solves the wrong layer of the problem",
+      corrected_constraint: "Fix the provider configuration layer before changing timeout policy.",
+      distillation_mode_used: "llm",
+      distillation_source: "explicit_provider",
+      redistilled_from: undefined,
+      origin_record_ids: ["input_old"],
+      helped_record_ids: ["input_old"],
+      harmed_record_ids: [],
+      state: "active",
+      usage_count: 1,
+      helped_count: 1,
+      harmed_count: 0,
+      support_count: 1,
+      created_at: "2026-03-20T11:00:00.000Z",
+      updated_at: "2026-03-20T11:00:00.000Z"
+    });
+
+    const fetchImpl = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                compact_hint: "Probe the free model route before widening timeout policy changes.",
+                trigger_conditions: "OpenRouter free model times out during provider routing checks.",
+                success_criteria: "The provider probe succeeds and distillation returns structured output.",
+                risk_level: "medium",
+                goal: "Separate endpoint routing failures from timeout behavior.",
+                recommended_steps: ["Probe the route", "Then adjust timeout behavior only if routing succeeds"],
+                evidence_summary: "Distilled from a provider-routing correction.",
+                experience_kind: "expectation_correction",
+                correction_scope: "host_local",
+                correction_category: "verification_order",
+                deviation_pattern: "verification happened too late",
+                corrected_constraint: "Probe provider routing before changing retry or timeout behavior."
+              })
+            }
+          }
+        ]
+      })
+    });
+
+    const worker = new DistillationQueueWorker(config, candidateRepo, jobRepo, nodeRepo, {
+      env: {
+        EXPERIENCE_ENGINE_DISTILLER_PROVIDER: "openrouter",
+        EXPERIENCE_ENGINE_DISTILLER_MODEL: "openai/gpt-4o-mini",
+        OPENROUTER_API_KEY: "secret"
+      },
+      fetchImpl: fetchImpl as unknown as typeof fetch
+    });
+
+    await worker.drain();
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(nodeRepo.listAll()).toHaveLength(2);
+    expect(candidateRepo.getById("candidate_distill_auth")?.distilled_node_id).not.toBe(
+      "node_existing_expectation_other_dimension"
+    );
+  });
+
+  it("reuses an expectation-correction node when the correction dimension is semantically equivalent", async () => {
+    setEmbeddingProviderForTests({
+      provider: "local",
+      model: "Xenova/multilingual-e5-small",
+      version: "local-e5-v1",
+      dimensions: 3,
+      async embedQuery() {
+        return [1, 0, 0];
+      },
+      async embedPassage() {
+        return [1, 0, 0];
+      }
+    });
+
+    const { db, config } = makeDb();
+    const candidateRepo = new CandidateRepository(db);
+    const jobRepo = new DistillationJobRepository(db);
+    const nodeRepo = new NodeRepository(db);
+
+    candidateRepo.upsert(
+      makeCandidate({
+        task_type: "config_debug",
+        node_type: "strategy",
+        trigger_pattern: "The implementation technically works, but the behavior is still wrong because the fix is happening in the UI layer instead of provider routing.",
+        compact_hint: "Move the fix into provider routing instead of continuing to patch the UI layer.",
+        goal: "Correct the implementation boundary before polishing the surface behavior.",
+        success_signal: "The provider-level verification reflects the requested behavior.",
+        evidence_summary: "A prior correction only succeeded after moving the fix out of the UI layer.",
+        experience_kind: "expectation_correction",
+        confidence_signal: "supported_by_objective_success",
+        validation_state: "pending_reuse_validation",
+        correction_scope: "host_local",
+        correction_category: "implementation_boundary",
+        deviation_pattern: "the implementation keeps fixing the wrong layer of the problem",
+        corrected_constraint: "Put the fix in provider routing instead of persisting in the UI layer."
+      })
+    );
+    jobRepo.upsert(makeJob());
+    nodeRepo.upsert({
+      id: "node_existing_expectation_same_dimension",
+      node_type: "strategy",
+      scope_id: "scope_1",
+      task_type: "config_debug",
+      trigger_pattern: "The implementation technically works, but the behavior remains wrong because the change is still living in the UI instead of provider routing.",
+      compact_hint: "Shift the correction into provider routing before making more UI changes.",
+      goal: "Correct the implementation boundary before polishing the surface behavior.",
+      recommended_steps: ["Confirm the current fix still lives in the UI layer", "Move it into provider routing", "Re-run the targeted verification"],
+      avoid_steps: [],
+      fallback_steps: [],
+      success_signal: "The provider-level verification reflects the requested behavior.",
+      evidence_summary: "A prior correction only succeeded after moving the fix out of the UI layer.",
+      retrieval_text:
+        "implementation solves the wrong layer of the problem\nMove the fix into provider routing instead of leaving it in the UI layer.\nThe implementation technically works, but the behavior remains wrong because the change is still living in the UI instead of provider routing.",
+      source_kind: "system_derived",
+      experience_kind: "expectation_correction",
+      confidence_signal: "supported_by_objective_success",
+      validation_state: "validated_by_reuse",
+      correction_scope: "host_local",
+      correction_category: "implementation_boundary",
+      deviation_pattern: "implementation solves the wrong layer of the problem",
+      corrected_constraint: "Move the fix into provider routing instead of leaving it in the UI layer.",
+      distillation_mode_used: "llm",
+      distillation_source: "explicit_provider",
+      redistilled_from: undefined,
+      origin_record_ids: ["input_old"],
+      helped_record_ids: ["input_old"],
+      harmed_record_ids: [],
+      state: "active",
+      usage_count: 2,
+      helped_count: 2,
+      harmed_count: 0,
+      support_count: 2,
+      created_at: "2026-03-20T11:00:00.000Z",
+      updated_at: "2026-03-20T11:00:00.000Z"
+    });
+
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  compact_hint: "Move the fix into provider routing instead of continuing to patch the UI layer.",
+                  trigger_conditions:
+                    "The implementation technically works, but the behavior is still wrong because the fix is happening in the UI layer instead of provider routing.",
+                  success_criteria: "The provider-level verification reflects the requested behavior.",
+                  risk_level: "medium",
+                  goal: "Correct the implementation boundary before polishing the surface behavior.",
+                  recommended_steps: [
+                    "Confirm the current fix still lives in the UI layer",
+                    "Move it into provider routing",
+                    "Re-run the targeted verification"
+                  ],
+                  evidence_summary: "A prior correction only succeeded after moving the fix out of the UI layer.",
+                  experience_kind: "expectation_correction",
+                  correction_scope: "host_local",
+                  correction_category: "implementation_boundary",
+                  deviation_pattern: "the implementation keeps fixing the wrong layer of the problem",
+                  corrected_constraint: "Put the fix in provider routing instead of persisting in the UI layer."
+                })
+              }
+            }
+          ]
+        })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  action: "UPDATE",
+                  target_node_id: "node_existing_expectation_same_dimension",
+                  reason: "The existing expectation-correction node captures the same correction dimension and should absorb the refined wording."
+                })
+              }
+            }
+          ]
+        })
+      });
+
+    const worker = new DistillationQueueWorker(config, candidateRepo, jobRepo, nodeRepo, {
+      env: {
+        EXPERIENCE_ENGINE_DISTILLER_PROVIDER: "openrouter",
+        EXPERIENCE_ENGINE_DISTILLER_MODEL: "openai/gpt-4o-mini",
+        OPENROUTER_API_KEY: "secret"
+      },
+      fetchImpl: fetchImpl as unknown as typeof fetch
+    });
+
+    await worker.drain();
+
+    expect(nodeRepo.listAll()).toHaveLength(1);
+    expect(candidateRepo.getById("candidate_distill_auth")?.distilled_node_id).toBe(
+      "node_existing_expectation_same_dimension"
+    );
+    expect(nodeRepo.getById("node_existing_expectation_same_dimension")?.support_count).toBe(3);
   });
 
   it("keeps governance fields untouched when the merge decision is NONE", async () => {

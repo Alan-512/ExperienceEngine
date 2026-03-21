@@ -8,6 +8,7 @@ export type ExperienceEngineSettings = {
   };
   distillation?: {
     provider?: string;
+    auth_mode?: string;
     model?: string;
   };
 };
@@ -65,6 +66,22 @@ export const setDistillationProvider = (
     distillation: {
       ...(current.distillation ?? {}),
       provider
+    }
+  };
+
+  return writeExperienceEngineSettings(next, options);
+};
+
+export const setDistillationAuthMode = (
+  authMode: string,
+  options: SettingsOptions = {}
+): ExperienceEngineSettings => {
+  const current = readExperienceEngineSettings(options);
+  const next: ExperienceEngineSettings = {
+    ...current,
+    distillation: {
+      ...(current.distillation ?? {}),
+      auth_mode: authMode
     }
   };
 

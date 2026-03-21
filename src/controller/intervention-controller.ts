@@ -17,6 +17,30 @@ export type InterventionDecision = {
   text?: string;
 };
 
+const buildCandidateRiskSummary = (node: ExperienceNode | undefined): string | undefined => {
+  if (!node) {
+    return undefined;
+  }
+
+  if (node.experience_kind === "expectation_correction") {
+    return [node.deviation_pattern, node.corrected_constraint, node.trigger_pattern].filter(Boolean).join("\n");
+  }
+
+  return node.trigger_pattern ?? node.compact_hint;
+};
+
+const resolveTriggerThreshold = (selected: ExperienceNode | undefined, threshold: number): number => {
+  if (!selected) {
+    return threshold;
+  }
+
+  if (selected.experience_kind === "expectation_correction") {
+    return Math.min(threshold, 0.4);
+  }
+
+  return threshold;
+};
+
 export const selectInjectableNodes = (
   ranked: ExperienceNode[],
   maxHints = 3,
@@ -65,9 +89,10 @@ const decideInterventionInternal = async (
     mode === "inject_conservative" ? 1 : maxHints,
     input.task_type
   );
-  const candidateRiskSummary = selected[0]?.trigger_pattern ?? selected[0]?.compact_hint;
+  const candidateRiskSummary = buildCandidateRiskSummary(selected[0]);
+  const triggerThreshold = resolveTriggerThreshold(selected[0], threshold);
 
-  if (!evaluateTrigger(input, stats, candidateRiskSummary, threshold)) {
+  if (!evaluateTrigger(input, stats, candidateRiskSummary, triggerThreshold)) {
     return { mode: "skip", selected: [] };
   }
 

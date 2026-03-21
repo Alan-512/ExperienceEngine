@@ -17,6 +17,7 @@ import {
   type DistillationResolution,
   type DistillerEndpoint
 } from "../distillation/host-llm.js";
+import { resolveGoogleAdcAccessToken } from "../distillation/providers/google-adc.js";
 
 type LearningGateRuntimeOptions = {
   env?: NodeJS.ProcessEnv;
@@ -45,8 +46,19 @@ type LearningGateResult = {
   source: "llm" | "rule" | "disabled";
 };
 
+type ExpectationCorrectionRepair = {
+  experience_kind?: "expectation_correction";
+  confidence_signal?: ConfidenceSignal;
+  validation_state?: ValidationState;
+  correction_scope?: CorrectionScope;
+  correction_category?: CorrectionCategory;
+  deviation_pattern?: string;
+  corrected_constraint?: string;
+};
+
 const DEFAULT_REQUEST_TIMEOUT_MS = 45_000;
 const FREE_MODEL_REQUEST_TIMEOUT_MS = 75_000;
+const TRANSIENT_RETRY_DELAY_MS = 1_500;
 const BEDROCK_SERVICE = "bedrock";
 const TASK_TYPES: TaskType[] = [
   "bug_fix",
@@ -75,6 +87,18 @@ Do not capture:
 - routine success with no reusable signal
 - repo-specific noise that would not help a later similar task
 - generic advice with no concrete trigger or verification signal
+
+Use experience_kind = expectation_correction when:
+- the first attempt technically worked or partially worked
+- but the user corrected the direction, layer, behavior, quality bar, or verification order
+- and the later direction produced a better or objectively supported result
+
+For expectation_correction candidates:
+- you must include confidence_signal, correction_scope, correction_category, deviation_pattern, and corrected_constraint
+- use confidence_signal = confirmed_by_user only when the user explicitly accepted the corrected result
+- use confidence_signal = supported_by_objective_success when the corrected direction is backed by a concrete probe, test, or verification success but the user did not explicitly reconfirm
+- use confidence_signal = unconfirmed when the direction changed but there is no explicit acceptance and no strong objective success
+- use validation_state = pending_reuse_validation for new expectation_correction candidates
 
 Return strict JSON with:
 - worth_capturing: boolean
@@ -108,7 +132,39 @@ candidate may also include:
 
 Keep the hint concrete, reusable, and tied to the task evidence.`;
 
-const EXPECTATION_CORRECTION_NOTE = `If multiple user corrections happened in one task, only learn from the correction that directly led to the final successful direction. Ignore exploratory corrections that were later superseded.`;
+const EXPECTATION_CORRECTION_NOTE = `If multiple user corrections happened in one task, only learn from the correction that directly led to the final successful direction. Ignore exploratory corrections that were later superseded.
+
+When user feedback says the current implementation is solving the wrong layer, wrong behavior, wrong quality bar, or wrong verification order, prefer expectation_correction over a generic execution_pattern.
+
+If the corrected direction later succeeds through a targeted probe, test, or verification, treat that as supported_by_objective_success even when the user does not explicitly confirm the final result.`;
+
+const EXPECTATION_CORRECTION_REPAIR_PROMPT = `You are repairing a coding-experience draft.
+
+Decide whether the task should actually be stored as expectation_correction.
+
+Return strict JSON:
+- expectation_correction: boolean
+- confidence_signal: confirmed_by_user | supported_by_objective_success | unconfirmed (required when true)
+- validation_state: pending_reuse_validation (required when true)
+- correction_scope: task_local | repo_local | workflow_local | host_local | cross_repo_candidate (required when true)
+- correction_category: goal_interpretation | quality_bar | interaction_behavior | verification_order | implementation_boundary | style_constraint (required when true)
+- deviation_pattern: short sentence (required when true)
+- corrected_constraint: short sentence (required when true)
+
+Only return expectation_correction=true when the run shows that a technically working or partially working direction was corrected into a better direction by user feedback or stronger task evidence.`;
+const EXPECTATION_CORRECTION_REPAIR_EXAMPLES = `Example 1:
+task_summary: "The implementation technically works, but the user corrected the fix: the problem is in provider routing, not the UI layer."
+context_summary: "The final targeted probe succeeded after moving the fix from UI to provider routing."
+draft.compact_hint: "Move the fix from the UI layer into provider routing."
+output:
+{"expectation_correction":true,"confidence_signal":"supported_by_objective_success","validation_state":"pending_reuse_validation","correction_scope":"host_local","correction_category":"implementation_boundary","deviation_pattern":"implementation solves the wrong layer of the problem","corrected_constraint":"Move the fix into provider routing instead of persisting in the UI layer."}
+
+Example 2:
+task_summary: "The build failed until pnpm typecheck was run after each change."
+context_summary: "No user correction happened; this is a verification loop."
+draft.compact_hint: "Run pnpm typecheck after each change."
+output:
+{"expectation_correction":false}`;
 
 const sha256Hex = (value: string): string => createHash("sha256").update(value, "utf8").digest("hex");
 const hmac = (key: string | Buffer, value: string): Buffer => createHmac("sha256", key).update(value, "utf8").digest();
@@ -183,6 +239,18 @@ const isCorrectionScope = (value: unknown): value is CorrectionScope =>
   typeof value === "string" && CORRECTION_SCOPES.includes(value as CorrectionScope);
 const isCorrectionCategory = (value: unknown): value is CorrectionCategory =>
   typeof value === "string" && CORRECTION_CATEGORIES.includes(value as CorrectionCategory);
+
+const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isTransientProviderFailure = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    /timed out/i.test(message) ||
+    /failed with 429\b/i.test(message) ||
+    /failed with 5\d{2}\b/i.test(message) ||
+    /did not include a message payload/i.test(message)
+  );
+};
 
 const resolveRequestTimeoutMs = (endpoint: DistillerEndpoint): number => {
   const model = endpoint.model.toLowerCase();
@@ -269,6 +337,7 @@ export class LlmLearningGate {
     return resolveDistillationResolution({
       env: this.env,
       configProvider: this.config.distillerProvider,
+      configAuthMode: this.config.distillationAuthMode,
       configModel: this.config.distillerModel,
       distillationMode: this.config.distillationMode,
       allowRuleFallback: this.config.distillationAllowPassthrough
@@ -355,6 +424,175 @@ export class LlmLearningGate {
     };
   }
 
+  private buildExpectationCorrectionRepairBody(
+    endpoint: DistillerEndpoint,
+    input: ExperienceInput,
+    draft: ExperienceCandidateDraft,
+    reason: string
+  ): Record<string, unknown> {
+    const payload = JSON.stringify(
+      {
+        task_summary: input.task_summary,
+        task_type: input.task_type,
+        context_summary: input.context_summary,
+        outcome_signal: input.outcome_signal,
+        tool_events: input.tool_events.map((event) => ({
+          tool_name: event.tool_name,
+          status: event.status,
+          error_signature: event.error_signature,
+          output_summary: event.output_summary
+        })),
+        draft: {
+          task_type: draft.task_type,
+          node_type: draft.node_type,
+          experience_kind: draft.experience_kind,
+          trigger_pattern: draft.trigger_pattern,
+          compact_hint: draft.compact_hint,
+          success_signal: draft.success_signal,
+          evidence_summary: draft.evidence_summary
+        },
+        original_reason: reason
+      },
+      null,
+      2
+    );
+
+    if (endpoint.kind === "anthropic") {
+      return {
+        model: endpoint.model,
+        max_tokens: 512,
+        system: `${EXPECTATION_CORRECTION_REPAIR_PROMPT}\n\n${EXPECTATION_CORRECTION_REPAIR_EXAMPLES}`,
+        messages: [{ role: "user", content: payload }],
+        temperature: 0
+      };
+    }
+
+    if (endpoint.kind === "gemini") {
+      return {
+        system_instruction: {
+          parts: [{ text: `${EXPECTATION_CORRECTION_REPAIR_PROMPT}\n\n${EXPECTATION_CORRECTION_REPAIR_EXAMPLES}` }]
+        },
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: payload }]
+          }
+        ],
+        generationConfig: {
+          temperature: 0,
+          responseMimeType: "application/json"
+        }
+      };
+    }
+
+    if (endpoint.kind === "bedrock") {
+      return {
+        system: [{ text: `${EXPECTATION_CORRECTION_REPAIR_PROMPT}\n\n${EXPECTATION_CORRECTION_REPAIR_EXAMPLES}` }],
+        messages: [
+          {
+            role: "user",
+            content: [{ text: payload }]
+          }
+        ],
+        inferenceConfig: {
+          maxTokens: 512,
+          temperature: 0
+        }
+      };
+    }
+
+    return {
+      model: endpoint.model,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: `${EXPECTATION_CORRECTION_REPAIR_PROMPT}\n\n${EXPECTATION_CORRECTION_REPAIR_EXAMPLES}` },
+        { role: "user", content: payload }
+      ],
+      temperature: 0
+    };
+  }
+
+  private parseExpectationCorrectionRepair(content: string): ExpectationCorrectionRepair | undefined {
+    const parsed = JSON.parse(content) as Record<string, unknown>;
+    if (parsed.expectation_correction !== true) {
+      return undefined;
+    }
+
+    const confidenceSignal = isConfidenceSignal(parsed.confidence_signal) ? parsed.confidence_signal : undefined;
+    const validationState = isValidationState(parsed.validation_state) ? parsed.validation_state : undefined;
+    const correctionScope = isCorrectionScope(parsed.correction_scope) ? parsed.correction_scope : undefined;
+    const correctionCategory = isCorrectionCategory(parsed.correction_category) ? parsed.correction_category : undefined;
+    const deviationPattern = pickString(parsed.deviation_pattern);
+    const correctedConstraint = pickString(parsed.corrected_constraint);
+
+    if (
+      !confidenceSignal ||
+      !validationState ||
+      !correctionScope ||
+      !correctionCategory ||
+      !deviationPattern ||
+      !correctedConstraint
+    ) {
+      return undefined;
+    }
+
+    return {
+      experience_kind: "expectation_correction",
+      confidence_signal: confidenceSignal,
+      validation_state: validationState,
+      correction_scope: correctionScope,
+      correction_category: correctionCategory,
+      deviation_pattern: deviationPattern,
+      corrected_constraint: correctedConstraint
+    };
+  }
+
+  private async maybeRepairExpectationCorrection(
+    endpoint: DistillerEndpoint,
+    input: ExperienceInput,
+    reason: string,
+    draft: ExperienceCandidateDraft
+  ): Promise<ExperienceCandidateDraft> {
+    const hasCompleteExpectationCorrectionShape =
+      draft.experience_kind === "expectation_correction" &&
+      Boolean(
+        draft.confidence_signal &&
+          draft.validation_state &&
+          draft.correction_scope &&
+          draft.correction_category &&
+          draft.deviation_pattern &&
+          draft.corrected_constraint
+      );
+
+    if (input.outcome_signal !== "success" || hasCompleteExpectationCorrectionShape) {
+      return draft;
+    }
+
+    try {
+      const response = await this.postJsonWithRetry(
+        this.buildRequestUrl(endpoint),
+        endpoint,
+        this.buildExpectationCorrectionRepairBody(endpoint, input, draft, reason)
+      );
+      if (!response.ok) {
+        return draft;
+      }
+
+      const content = await this.parseResponseContent(endpoint, response);
+      const repair = this.parseExpectationCorrectionRepair(content);
+      if (!repair) {
+        return draft;
+      }
+
+      return normalizeCandidate({
+        ...draft,
+        ...repair
+      });
+    } catch {
+      return draft;
+    }
+  }
+
   private async parseResponseContent(endpoint: DistillerEndpoint, response: Response): Promise<string> {
     if (endpoint.kind === "anthropic") {
       const payload = (await response.json()) as {
@@ -436,10 +674,19 @@ export class LlmLearningGate {
     const headers =
       endpoint.kind === "bedrock"
         ? this.buildBedrockHeaders(endpoint, serializedBody)
-        : {
-            "Content-Type": "application/json",
-            ...endpoint.headers
-          };
+        : endpoint.kind === "gemini" && endpoint.authMode === "google_adc"
+          ? {
+              "Content-Type": "application/json",
+              ...endpoint.headers,
+              Authorization: `Bearer ${await resolveGoogleAdcAccessToken({
+                env: this.env,
+                fetchImpl: this.fetchImpl
+              })}`
+            }
+          : {
+              "Content-Type": "application/json",
+              ...endpoint.headers
+            };
     const timeoutMs = resolveRequestTimeoutMs(endpoint);
 
     try {
@@ -458,6 +705,27 @@ export class LlmLearningGate {
       }
 
       throw error;
+    }
+  }
+
+  private async postJsonWithRetry(
+    url: string,
+    endpoint: DistillerEndpoint,
+    body: Record<string, unknown>
+  ): Promise<Response> {
+    try {
+      const response = await this.postJson(url, endpoint, body);
+      if (response.ok || (response.status !== 429 && response.status < 500)) {
+        return response;
+      }
+      await sleep(TRANSIENT_RETRY_DELAY_MS);
+      return await this.postJson(url, endpoint, body);
+    } catch (error) {
+      if (!isTransientProviderFailure(error)) {
+        throw error;
+      }
+      await sleep(TRANSIENT_RETRY_DELAY_MS);
+      return await this.postJson(url, endpoint, body);
     }
   }
 
@@ -492,7 +760,7 @@ export class LlmLearningGate {
     }
 
     try {
-      const response = await this.postJson(
+      const response = await this.postJsonWithRetry(
         this.buildRequestUrl(resolution.endpoint),
         resolution.endpoint,
         this.buildRequestBody(resolution.endpoint, input)
@@ -523,10 +791,17 @@ export class LlmLearningGate {
         throw new Error("Learning gate marked worth_capturing=true without a candidate payload");
       }
 
+      const draft = await this.maybeRepairExpectationCorrection(
+        resolution.endpoint,
+        input,
+        reason,
+        normalizeDraft(rawCandidate, input)
+      );
+
       return {
         worthCapturing: true,
         reason,
-        drafts: dedupeCandidates([normalizeDraft(rawCandidate, input)]),
+        drafts: dedupeCandidates([draft]),
         source: "llm"
       };
     } catch (error) {

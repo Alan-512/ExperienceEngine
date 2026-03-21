@@ -1,5 +1,6 @@
 import {
   readExperienceEngineSettings,
+  setDistillationAuthMode,
   setDistillationModel,
   setDistillationProvider,
   setInlineNoticesEnabled
@@ -35,6 +36,12 @@ export const runConfigCommand = async (
     return;
   }
 
+  if (action === "get" && key === "distillation.auth_mode") {
+    const settings = readExperienceEngineSettings();
+    console.log(String(settings.distillation?.auth_mode ?? "api_key"));
+    return;
+  }
+
   if (action === "set" && key === "notices.inline") {
     if (value !== "true" && value !== "false") {
       console.log("Usage: ee config set notices.inline true|false");
@@ -58,6 +65,17 @@ export const runConfigCommand = async (
 
     setDistillationProvider(value);
     console.log(`[ExperienceEngine] Distillation provider set to ${value}.`);
+    return;
+  }
+
+  if (action === "set" && key === "distillation.auth_mode") {
+    if (value !== "api_key" && value !== "google_adc") {
+      console.log("Usage: ee config set distillation.auth_mode api_key|google_adc");
+      return;
+    }
+
+    setDistillationAuthMode(value);
+    console.log(`[ExperienceEngine] Distillation auth mode set to ${value}.`);
     return;
   }
 
@@ -88,5 +106,7 @@ export const runConfigCommand = async (
     return;
   }
 
-  console.log("Usage: ee config <get|set> notices.inline|distillation.provider|distillation.model [value]");
+  console.log(
+    "Usage: ee config <get|set> notices.inline|distillation.provider|distillation.auth_mode|distillation.model [value]"
+  );
 };

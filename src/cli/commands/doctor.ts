@@ -174,6 +174,11 @@ const logDistillationStatus = (status?: {
   distillationMode: "llm" | "rule" | "disabled";
   distillationSource: string;
   provider?: string;
+  authMode?: string;
+  authDiagnostics?: {
+    status: string;
+    message: string;
+  };
   reason: string;
   diagnostics?: {
     configured: boolean;
@@ -181,6 +186,11 @@ const logDistillationStatus = (status?: {
     model?: string;
     baseUrl: string;
     missingEnv: string[];
+    authMode?: string;
+    authDiagnostics?: {
+      status: string;
+      message: string;
+    };
   };
 }): void => {
   if (!status) {
@@ -193,7 +203,17 @@ const logDistillationStatus = (status?: {
   if (status.provider) {
     console.log(`- Provider: ${status.provider}`);
   }
+  if (status.authMode ?? status.diagnostics?.authMode) {
+    console.log(`- Auth mode: ${status.authMode ?? status.diagnostics?.authMode}`);
+  }
   console.log(`- Reason: ${status.reason}`);
+  if (status.authDiagnostics ?? status.diagnostics?.authDiagnostics) {
+    const auth = status.authDiagnostics ?? status.diagnostics?.authDiagnostics;
+    if (auth) {
+      console.log(`- Auth status: ${auth.status}`);
+      console.log(`- Auth hint: ${auth.message}`);
+    }
+  }
   if (status.diagnostics) {
     console.log(`- Explicit provider configured: ${status.diagnostics.configured ? "yes" : "no"}`);
     if (status.diagnostics.model) {
@@ -217,7 +237,7 @@ const getDistillerProviderSetupHint = (provider: string): string | null => {
     case "anthropic":
       return "Run `ee models list anthropic`, then `ee config set distillation.provider anthropic`, `ee config set distillation.model <modelId>`, and set ANTHROPIC_API_KEY.";
     case "gemini":
-      return "Run `ee models list gemini`, then `ee config set distillation.provider gemini`, `ee config set distillation.model <modelId>`, and set GEMINI_API_KEY.";
+      return "Run `ee models list gemini`, then `ee config set distillation.provider gemini`, `ee config set distillation.auth_mode google_adc`, `ee config set distillation.model <modelId>`, and if needed run `gcloud auth application-default login`.";
     case "azure_openai":
       return "Run `ee config set distillation.provider azure_openai`, `ee config set distillation.model <deploymentName>`, and set AZURE_OPENAI_ENDPOINT plus AZURE_OPENAI_API_KEY.";
     case "bedrock":

@@ -44,6 +44,8 @@ export type GeminiEndpoint = {
   headers: Record<string, string>;
   source: "explicit";
   provider: DistillerProvider;
+  authMode: "api_key" | "google_adc";
+  adcPath?: string;
 };
 
 export type BedrockEndpoint = {
@@ -67,6 +69,11 @@ export type DistillationDiagnostics = {
   model?: string;
   baseUrl: string;
   missingEnv: string[];
+  authMode?: string;
+  authDiagnostics?: {
+    status: string;
+    message: string;
+  };
 };
 
 export type ProviderResolution = {

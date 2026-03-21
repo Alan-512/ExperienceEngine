@@ -46,6 +46,7 @@ export const runMaintenanceCommand = async (
     const resolution = (deps.resolveDistillationResolution ?? resolveDistillationResolution)({
       env: process.env,
       configProvider: config.distillerProvider,
+      configAuthMode: config.distillationAuthMode,
       configModel: config.distillerModel,
       distillationMode: config.distillationMode,
       allowRuleFallback: config.distillationAllowPassthrough

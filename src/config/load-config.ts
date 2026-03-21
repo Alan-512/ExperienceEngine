@@ -66,6 +66,11 @@ export const loadConfig = (
       overrides.distillerProvider ??
       (settings.distillation?.provider as ExperienceEngineConfig["distillerProvider"] | undefined) ??
       defaultConfig.distillerProvider,
+    distillationAuthMode:
+      (env.EXPERIENCE_ENGINE_DISTILLER_AUTH_MODE as ExperienceEngineConfig["distillationAuthMode"] | undefined) ??
+      overrides.distillationAuthMode ??
+      (settings.distillation?.auth_mode as ExperienceEngineConfig["distillationAuthMode"] | undefined) ??
+      defaultConfig.distillationAuthMode,
     distillerModel:
       env.EXPERIENCE_ENGINE_DISTILLER_MODEL ??
       overrides.distillerModel ??

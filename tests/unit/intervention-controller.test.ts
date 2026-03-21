@@ -424,6 +424,62 @@ describe("decideIntervention", () => {
     expect(decision.selected[0]?.state).toBe("candidate");
   });
 
+  it("uses expectation-correction signals when deciding whether to conservatively inject a candidate", async () => {
+    const correctionInput: ExperienceInput = {
+      scope_id: "scope_1",
+      task_type: "config_debug",
+      task_summary:
+        "This implementation technically works, but the behavior is still wrong because the fix is happening in the UI layer instead of the provider routing layer. Figure out the correct next step.",
+      tool_events: [],
+      outcome_signal: "unknown",
+      context_summary:
+        "A similar task is drifting into the UI layer even though the real correction belongs in provider routing behavior.",
+      injected_node_ids: []
+    };
+
+    const correctionStats: ScopeTaskStats = {
+      scope_id: "scope_1",
+      task_type: "config_debug",
+      total_tasks: 1,
+      success_tasks: 1,
+      failed_tasks: 0,
+      unknown_tasks: 0,
+      injected_tasks: 0,
+      injected_success_tasks: 0,
+      updated_at: new Date().toISOString()
+    };
+
+    const decision = await decideIntervention(
+      correctionInput,
+      [
+        node({
+          id: "expectation-candidate",
+          task_type: "config_debug",
+          state: "candidate",
+          experience_kind: "expectation_correction",
+          confidence_signal: "supported_by_objective_success",
+          validation_state: "pending_reuse_validation",
+          correction_scope: "host_local",
+          correction_category: "implementation_boundary",
+          deviation_pattern:
+            "Initial implementation addresses symptoms in the UI layer instead of the root cause in provider routing.",
+          corrected_constraint:
+            "Shift the fix from the presentation layer to the provider routing configuration.",
+          trigger_pattern:
+            "The first implementation technically worked, but the user corrected the approach: the problem is in provider routing behavior, not the UI.",
+          compact_hint:
+            "Shift the fix from the presentation layer to the provider routing configuration if the behavior originates from backend or provider logic."
+        })
+      ],
+      correctionStats,
+      0.6,
+      3
+    );
+
+    expect(decision.mode).toBe("inject_conservative");
+    expect(decision.selected.map((entry) => entry.id)).toEqual(["expectation-candidate"]);
+  });
+
   it("awaits the active embedding provider before selecting nodes", async () => {
     setEmbeddingProviderForTests({
       provider: "local",

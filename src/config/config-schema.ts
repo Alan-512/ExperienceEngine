@@ -18,6 +18,7 @@ export const configSchema = z.object({
   embeddingCacheDir: z.string().default("./data/models/embeddings"),
   distillerProvider: z.enum(DISTILLER_PROVIDERS).default("openai_compatible"),
   distillerModel: z.string().default(""),
+  distillationAuthMode: z.enum(["api_key", "google_adc"]).default("api_key"),
   distillationMode: z.enum(["auto", "llm", "rule", "disabled"]).default("auto"),
   distillerProfile: z.enum(["fast", "balanced", "high_quality"]).default("balanced"),
   distillationAllowPassthrough: z.boolean().default(false),
@@ -107,6 +108,11 @@ export const pluginConfigJsonSchema = {
       type: "string",
       description: "Selected distillation model identifier for the chosen provider."
     },
+    distillationAuthMode: {
+      type: "string",
+      enum: ["api_key", "google_adc"],
+      description: "Provider-specific distillation authentication mode. Currently used by Gemini."
+    },
     distillationMode: {
       type: "string",
       enum: ["auto", "llm", "rule", "disabled"],
@@ -192,6 +198,9 @@ export const pluginUiHints = {
   },
   distillerModel: {
     label: "Distiller Model"
+  },
+  distillationAuthMode: {
+    label: "Distillation Auth Mode"
   },
   distillationMode: {
     label: "Distillation Mode"

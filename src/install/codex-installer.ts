@@ -57,6 +57,11 @@ export type CodexInstallReport = {
     distillationMode: "llm" | "rule" | "disabled";
     distillationSource: string;
     provider: string;
+    authMode?: string;
+    authDiagnostics?: {
+      status: string;
+      message: string;
+    };
     reason: string;
     diagnostics: {
       configured: boolean;
@@ -64,6 +69,11 @@ export type CodexInstallReport = {
       model?: string;
       baseUrl: string;
       missingEnv: string[];
+      authMode?: string;
+      authDiagnostics?: {
+        status: string;
+        message: string;
+      };
     };
   };
 };
@@ -200,6 +210,7 @@ export const inspectCodexInstall = (options: InstallerOptions = {}) => {
   const distillationResolution = resolveDistillationResolution({
     env: resolutionEnv,
     configProvider: config.distillerProvider,
+    configAuthMode: config.distillationAuthMode,
     configModel: config.distillerModel,
     distillationMode: config.distillationMode,
     allowRuleFallback: config.distillationAllowPassthrough
@@ -225,6 +236,8 @@ export const inspectCodexInstall = (options: InstallerOptions = {}) => {
       distillationMode: distillationResolution.distillationMode,
       distillationSource: distillationResolution.distillationSource,
       provider: distillationResolution.provider,
+      authMode: distillationResolution.diagnostics.authMode,
+      authDiagnostics: distillationResolution.diagnostics.authDiagnostics,
       reason: distillationResolution.reason,
       diagnostics: distillationResolution.diagnostics
     },

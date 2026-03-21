@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadConfig } from "../../src/config/load-config.js";
 import { resolveScope } from "../../src/input/scope-resolver.js";
 import { ExperienceRuntimeService } from "../../src/runtime/service.js";
@@ -129,6 +129,184 @@ afterEach(() => {
 });
 
 describe("ExperienceRuntimeService finalize transaction", () => {
+  it("learns an expectation correction in one run and conservatively injects it on the next similar run", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const geminiJsonResponse = (payload: unknown) =>
+      new Response(
+        JSON.stringify({
+          candidates: [
+            {
+              content: {
+                parts: [{ text: JSON.stringify(payload) }]
+              }
+            }
+          ]
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json"
+          }
+        }
+      );
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        geminiJsonResponse({
+          worth_capturing: true,
+          experience_kind: "expectation_correction",
+          reason: "The successful fix corrected the implementation boundary after the user rejected the first direction.",
+          candidate: {
+            node_type: "strategy",
+            task_type: "config_debug",
+            trigger_pattern: "When the implementation technically works but keeps the fix in the UI layer instead of provider routing",
+            compact_hint:
+              "Do not keep the fix in the UI layer when the real correction belongs in provider routing behavior.",
+            success_signal: "The provider probe matches the expected behavior after moving the fix into routing.",
+            evidence_summary: "The issue cleared only after moving the fix from the UI layer into provider routing.",
+            experience_kind: "expectation_correction",
+            confidence_signal: "supported_by_objective_success",
+            validation_state: "pending_reuse_validation",
+            correction_scope: "host_local",
+            correction_category: "implementation_boundary",
+            deviation_pattern: "implementation solves the wrong layer of the problem",
+            corrected_constraint: "Move the fix into provider routing instead of persisting in the UI layer."
+          }
+        })
+      )
+      .mockResolvedValueOnce(
+        geminiJsonResponse({
+          trigger_conditions:
+            "When the implementation technically works but keeps the fix in the UI layer instead of provider routing.",
+          success_criteria: "The targeted provider probe reflects the requested behavior after the routing change.",
+          risk_level: "medium",
+          trigger_pattern: "When the implementation technically works but keeps the fix in the UI layer instead of provider routing",
+          compact_hint:
+            "Do not keep the fix in the UI layer when the real correction belongs in provider routing behavior.",
+          goal: "Move the fix into provider routing rather than polishing the UI layer.",
+          recommended_steps: [
+            "Check whether the current change is still in the UI layer.",
+            "Move the behavior fix into provider routing.",
+            "Re-run the targeted provider probe."
+          ],
+          avoid_steps: ["Do not continue refining UI code when the behavior mismatch is still in provider routing."],
+          fallback_steps: ["If the routing move is still ambiguous, isolate the provider path with a narrower probe."],
+          success_signal: "The targeted provider probe reflects the requested behavior after the routing change.",
+          evidence_summary: "A prior correction only succeeded after moving the fix out of the UI layer.",
+          experience_kind: "expectation_correction",
+          confidence_signal: "supported_by_objective_success",
+          validation_state: "pending_reuse_validation",
+          correction_scope: "host_local",
+          correction_category: "implementation_boundary",
+          deviation_pattern: "implementation solves the wrong layer of the problem",
+          corrected_constraint: "Move the fix into provider routing instead of persisting in the UI layer."
+        })
+      );
+
+    const service = new ExperienceRuntimeService(
+      loadConfig(
+        {
+          dataDir: join(runtimeDir, "data"),
+          sqlitePath,
+          captureDir: join(runtimeDir, "captures"),
+          distillerProvider: "gemini",
+          distillerModel: "gemini-3-flash-preview",
+          distillationAuthMode: "api_key",
+          distillationMode: "llm",
+          distillationAutoDrain: true,
+          distillationAllowPassthrough: true
+        },
+        { homeDir: runtimeDir }
+      ),
+      undefined,
+      {
+        homeDir: runtimeDir,
+        env: {
+          GEMINI_API_KEY: "secret"
+        },
+        fetchImpl: fetchImpl as unknown as typeof fetch
+      }
+    );
+
+    const firstPrompt =
+      "The first implementation technically worked, but the user corrected the approach: the problem is in provider routing behavior, not the UI. Rework the fix around the provider configuration path.";
+    const secondPrompt =
+      "This implementation technically works, but the behavior is still wrong because the fix is happening in the UI layer instead of the provider routing layer. Figure out the correct next step.";
+
+    const firstLookup = await service.beforePromptBuild({
+      sessionId: "expectation-a",
+      cwd: "/repo",
+      userMessage: firstPrompt,
+      taskSummary: firstPrompt,
+      contextSummary:
+        "The first pass technically succeeded but the user corrected the approach: the fix belongs in provider routing, not the UI layer."
+    });
+    expect(firstLookup.mode).toBe("skip");
+
+    await service.persistToolResult({
+      sessionId: "expectation-a",
+      toolName: "user-feedback",
+      inputSummary: "user review of the first result",
+      outputSummary: "The user said the issue is not the UI; the correction must happen in the provider routing configuration path.",
+      status: "success"
+    });
+    await service.persistToolResult({
+      sessionId: "expectation-a",
+      toolName: "targeted-probe",
+      inputSummary: "probe provider routing after moving the fix into the configuration layer",
+      outputSummary: "The targeted provider probe now matches the expected behavior after moving the fix out of the UI layer.",
+      status: "success"
+    });
+    await service.finalizeTask({
+      sessionId: "expectation-a",
+      cwd: "/repo",
+      userMessage: firstPrompt,
+      taskSummary: firstPrompt,
+      contextSummary:
+        "The task required correcting a technically working but directionally wrong implementation. No explicit user re-confirmation was recorded after the provider-side fix."
+    });
+    await service.waitForBackgroundLearning();
+
+    const db = new DatabaseSync(sqlitePath);
+    const storedNode = db.prepare(
+      `SELECT experience_kind, state, validation_state, correction_category, deviation_pattern, corrected_constraint
+       FROM experience_nodes
+       WHERE experience_kind = 'expectation_correction'
+       ORDER BY created_at DESC
+       LIMIT 1`
+    ).get() as {
+      experience_kind: string;
+      state: string;
+      validation_state: string;
+      correction_category: string;
+      deviation_pattern: string;
+      corrected_constraint: string;
+    } | undefined;
+
+    expect(storedNode).toMatchObject({
+      experience_kind: "expectation_correction",
+      state: "candidate",
+      validation_state: "pending_reuse_validation",
+      correction_category: "implementation_boundary",
+      deviation_pattern: "implementation solves the wrong layer of the problem",
+      corrected_constraint: "Move the fix into provider routing instead of persisting in the UI layer."
+    });
+
+    const secondLookup = await service.beforePromptBuild({
+      sessionId: "expectation-b",
+      cwd: "/repo",
+      userMessage: secondPrompt,
+      taskSummary: secondPrompt,
+      contextSummary:
+        "A similar task is drifting into the UI layer even though the real correction belongs in provider routing behavior."
+    });
+
+    expect(secondLookup.mode).toBe("inject_conservative");
+    expect(secondLookup.input.injected_node_ids).toHaveLength(1);
+    expect(secondLookup.text).toContain("provider routing");
+  });
+
   it("keeps finalized state when background candidate persistence fails", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");

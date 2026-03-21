@@ -282,6 +282,51 @@ describe("doctor command", () => {
     );
   });
 
+  it("prints gemini google_adc setup guidance when adc is missing", async () => {
+    await runDoctorCommand("codex", {
+      inspectCodexInstall: () =>
+        codexStatus({
+          distillationStatus: {
+            distillationMode: "rule",
+            distillationSource: "rule",
+            provider: "gemini",
+            reason: "Gemini google_adc is configured, but no local ADC credentials are available.",
+            diagnostics: {
+              configured: false,
+              provider: "gemini",
+              model: "gemini-2.5-flash",
+              baseUrl: "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent",
+              missingEnv: []
+            },
+            authMode: "google_adc",
+            authDiagnostics: {
+              status: "adc_missing",
+              message: "Run: gcloud auth application-default login"
+            }
+          }
+        }),
+      fetchLatestGitHubReleaseStatus: async () => ({
+        source: "github-releases",
+        repository: "Alan-512/ExperienceEngine",
+        latestVersion: "0.1.0",
+        releaseUrl: null,
+        publishedAt: "2026-03-12T12:00:00Z",
+        state: "current",
+        updateAvailable: false
+      })
+    });
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Distillation status:"],
+        ["- Provider: gemini"],
+        ["- Auth mode: google_adc"],
+        ["- Auth status: adc_missing"],
+        ["- Auth hint: Run: gcloud auth application-default login"]
+      ])
+    );
+  });
+
   it("prints resolved explicit-provider details when llm distillation is configured", async () => {
     await runDoctorCommand("codex", {
       inspectCodexInstall: () =>
@@ -371,7 +416,9 @@ describe("doctor command", () => {
       expect.arrayContaining([
         ["- Provider: gemini"],
         ["- Missing env: GEMINI_API_KEY"],
-        ["- Setup hint: Run `ee models list gemini`, then `ee config set distillation.provider gemini`, `ee config set distillation.model <modelId>`, and set GEMINI_API_KEY."]
+        [
+          "- Setup hint: Run `ee models list gemini`, then `ee config set distillation.provider gemini`, `ee config set distillation.auth_mode google_adc`, `ee config set distillation.model <modelId>`, and if needed run `gcloud auth application-default login`."
+        ]
       ])
     );
   });

@@ -16,6 +16,7 @@ export const defaultConfig: ExperienceEngineConfig = {
   embeddingDtype: "q8",
   embeddingCacheDir: "./data/models/embeddings",
   distillerProvider: "openai_compatible",
+  distillationAuthMode: "api_key",
   distillerModel: "",
   distillationMode: "auto",
   distillerProfile: "balanced",

@@ -114,6 +114,7 @@ export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
   const distillationResolution = resolveDistillationResolution({
     env: resolutionEnv,
     configProvider: config.distillerProvider,
+    configAuthMode: config.distillationAuthMode,
     configModel: config.distillerModel,
     distillationMode: config.distillationMode,
     allowRuleFallback: config.distillationAllowPassthrough
@@ -148,6 +149,8 @@ export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
       distillationMode: distillationResolution.distillationMode,
       distillationSource: distillationResolution.distillationSource,
       provider: distillationResolution.provider,
+      authMode: distillationResolution.diagnostics.authMode,
+      authDiagnostics: distillationResolution.diagnostics.authDiagnostics,
       reason: distillationResolution.reason,
       diagnostics: distillationResolution.diagnostics
     },

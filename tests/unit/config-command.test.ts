@@ -60,6 +60,20 @@ describe("config command", () => {
     expect(consoleLogSpy).toHaveBeenCalledWith("false");
   });
 
+  it("persists distillation auth mode selection", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+
+    runConfigCommand("set", "distillation.auth_mode", "google_adc");
+
+    expect(consoleLogSpy).toHaveBeenCalledWith("[ExperienceEngine] Distillation auth mode set to google_adc.");
+    expect(JSON.parse(readFileSync(join(process.env.EXPERIENCE_ENGINE_HOME, "settings.json"), "utf8"))).toEqual({
+      distillation: {
+        auth_mode: "google_adc"
+      }
+    });
+  });
+
   it("persists distillation provider selection", () => {
     const home = makeTempDir();
     process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");

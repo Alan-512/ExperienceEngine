@@ -150,6 +150,84 @@ describe("LlmLearningGate", () => {
     expect(result.drafts[0]?.compact_hint).toContain("OpenRouter free route");
   });
 
+  it("repairs a generic successful draft into expectation_correction when the follow-up llm call provides correction metadata", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  worth_capturing: true,
+                  experience_kind: "execution_pattern",
+                  reason: "The direction was corrected from the UI layer to the provider routing layer after user feedback.",
+                  candidate: {
+                    node_type: "strategy",
+                    task_type: "config_debug",
+                    trigger_pattern: "When a technically working fix is applied in the wrong layer",
+                    compact_hint: "Move the fix from the UI layer into provider routing when the user corrects the abstraction boundary.",
+                    success_signal: "The targeted provider probe reflects the requested behavior.",
+                    evidence_summary: "The final working change came from moving the fix into provider routing."
+                  }
+                })
+              }
+            }
+          ]
+        })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  expectation_correction: true,
+                  confidence_signal: "supported_by_objective_success",
+                  validation_state: "pending_reuse_validation",
+                  correction_scope: "host_local",
+                  correction_category: "implementation_boundary",
+                  deviation_pattern: "implementation solves the wrong layer of the problem",
+                  corrected_constraint: "Move the fix into provider routing instead of persisting in the UI layer."
+                })
+              }
+            }
+          ]
+        })
+      });
+
+    const gate = new LlmLearningGate(
+      loadConfig({
+        distillerProvider: "openai",
+        distillerModel: "gpt-5.4-nano",
+        distillationMode: "llm"
+      }),
+      {
+        env: {
+          EXPERIENCE_ENGINE_DISTILLER_PROVIDER: "openai",
+          EXPERIENCE_ENGINE_DISTILLER_MODEL: "gpt-5.4-nano",
+          OPENAI_API_KEY: "secret"
+        },
+        fetchImpl: fetchImpl as unknown as typeof fetch
+      }
+    );
+
+    const result = await gate.generateCandidateDrafts(makeInput({ outcome_signal: "success" }));
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(result.drafts[0]).toMatchObject({
+      experience_kind: "expectation_correction",
+      confidence_signal: "supported_by_objective_success",
+      validation_state: "pending_reuse_validation",
+      correction_scope: "host_local",
+      correction_category: "implementation_boundary",
+      deviation_pattern: "implementation solves the wrong layer of the problem.",
+      corrected_constraint: "Move the fix into provider routing instead of persisting in the UI layer."
+    });
+  });
+
   it("falls back to rule analysis when the llm gate request fails", async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: false,
@@ -179,6 +257,63 @@ describe("LlmLearningGate", () => {
     expect(result.worthCapturing).toBe(true);
     expect(result.reason).toContain("llm gate failed");
     expect(result.drafts).toHaveLength(1);
+    expect(result.drafts[0]?.task_type).toBe("config_debug");
+  });
+
+  it("retries once when the llm gate hits a transient 429 and succeeds on the second attempt", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  worth_capturing: true,
+                  experience_kind: "config_troubleshooting",
+                  reason: "Provider routing debugging exposed a reusable configuration pattern.",
+                  candidate: {
+                    node_type: "warning",
+                    task_type: "config_debug",
+                    trigger_pattern: "When an OpenRouter free model returns 404 or times out during EE distillation",
+                    compact_hint:
+                      "Do not keep retrying the same OpenRouter free route while doctor still shows 404 or timeout; isolate the first routing, credential, or endpoint mismatch first.",
+                    success_signal: "doctor or the distillation probe succeeds with a narrowed provider/model path",
+                    evidence_summary: "OpenRouter free model troubleshooting converged only after isolating provider routing and timeout behavior."
+                  }
+                })
+              }
+            }
+          ]
+        })
+      });
+
+    const gate = new LlmLearningGate(
+      loadConfig({
+        distillerProvider: "openrouter",
+        distillerModel: "openrouter/free",
+        distillationMode: "llm"
+      }),
+      {
+        env: {
+          EXPERIENCE_ENGINE_DISTILLER_PROVIDER: "openrouter",
+          EXPERIENCE_ENGINE_DISTILLER_MODEL: "openrouter/free",
+          OPENROUTER_API_KEY: "secret"
+        },
+        fetchImpl: fetchImpl as unknown as typeof fetch
+      }
+    );
+
+    const result = await gate.generateCandidateDrafts(makeInput({ outcome_signal: "success" }));
+
+    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(result.source).toBe("llm");
+    expect(result.worthCapturing).toBe(true);
     expect(result.drafts[0]?.task_type).toBe("config_debug");
   });
 });

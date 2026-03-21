@@ -16,6 +16,7 @@ import { tokenize } from "../utils/text.js";
 const DISTILLATION_STALE_PROCESSING_MS = 150_000;
 const NEAR_DUPLICATE_TRIGGER_SIMILARITY = 0.72;
 const NEAR_DUPLICATE_HINT_SIMILARITY = 0.72;
+const EXPECTATION_CORRECTION_DIMENSION_SIMILARITY = 0.55;
 
 const buildRetrievalText = (candidate: ExperienceCandidateDraft): string =>
   (candidate.experience_kind === "expectation_correction"
@@ -44,11 +45,62 @@ const triggerSimilarity = (left: string, right: string): number => {
   return Math.max(jaccardLike, inputCoverage, candidateCoverage);
 };
 
+const normalizeSemanticText = (value: string | undefined): string =>
+  value
+    ?.trim()
+    .toLowerCase()
+    .replace(/\s+/g, " ") ?? "";
+
+const semanticFieldMatches = (left: string | undefined, right: string | undefined): boolean => {
+  const lhs = normalizeSemanticText(left);
+  const rhs = normalizeSemanticText(right);
+  if (!lhs || !rhs) {
+    return false;
+  }
+  if (lhs === rhs) {
+    return true;
+  }
+  return triggerSimilarity(lhs, rhs) >= EXPECTATION_CORRECTION_DIMENSION_SIMILARITY;
+};
+
 const reuseSimilarity = (left: ExperienceNode, right: ExperienceCandidateDraft): number =>
   Math.max(
     triggerSimilarity(left.trigger_pattern, right.trigger_pattern),
     triggerSimilarity(left.compact_hint, right.compact_hint)
   );
+
+const hasAlignedExpectationCorrectionDimension = (
+  node: ExperienceNode,
+  draft: ExperienceCandidateDraft
+): boolean => {
+  if (draft.experience_kind !== "expectation_correction") {
+    return true;
+  }
+
+  if (node.experience_kind !== "expectation_correction") {
+    return false;
+  }
+
+  const nodeCategory = normalizeSemanticText(node.correction_category);
+  const draftCategory = normalizeSemanticText(draft.correction_category);
+  if (!nodeCategory || !draftCategory || nodeCategory !== draftCategory) {
+    return false;
+  }
+
+  const nodeDeviation = normalizeSemanticText(node.deviation_pattern);
+  const draftDeviation = normalizeSemanticText(draft.deviation_pattern);
+  if (!semanticFieldMatches(nodeDeviation, draftDeviation)) {
+    return false;
+  }
+
+  const nodeConstraint = normalizeSemanticText(node.corrected_constraint);
+  const draftConstraint = normalizeSemanticText(draft.corrected_constraint);
+  if (!semanticFieldMatches(nodeConstraint, draftConstraint)) {
+    return false;
+  }
+
+  return true;
+};
 
 type MergeAction = "ADD" | "UPDATE" | "NONE";
 
@@ -176,6 +228,10 @@ const findReusableNodes = (
       return right.updated_at.localeCompare(left.updated_at);
     })
     .filter((node) => {
+      if (!hasAlignedExpectationCorrectionDimension(node, distilled)) {
+        return false;
+      }
+
       const triggerScore = triggerSimilarity(node.trigger_pattern, distilled.trigger_pattern);
       const hintScore = triggerSimilarity(node.compact_hint, distilled.compact_hint);
       return triggerScore >= NEAR_DUPLICATE_TRIGGER_SIMILARITY || hintScore >= NEAR_DUPLICATE_HINT_SIMILARITY;

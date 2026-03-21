@@ -6,6 +6,7 @@ import {
   type DistillationResolution,
   type DistillerEndpoint
 } from "./host-llm.js";
+import { resolveGoogleAdcAccessToken } from "./providers/google-adc.js";
 
 type MergeDecisionRuntimeOptions = {
   env?: NodeJS.ProcessEnv;
@@ -151,6 +152,7 @@ export class LlmMergeDecider {
     return resolveDistillationResolution({
       env: this.env,
       configProvider: this.config.distillerProvider,
+      configAuthMode: this.config.distillationAuthMode,
       configModel: this.config.distillerModel,
       distillationMode: this.config.distillationMode,
       allowRuleFallback: this.config.distillationAllowPassthrough
@@ -310,10 +312,19 @@ export class LlmMergeDecider {
     const headers =
       endpoint.kind === "bedrock"
         ? this.buildBedrockHeaders(endpoint, serializedBody)
-        : {
-            "Content-Type": "application/json",
-            ...endpoint.headers
-          };
+        : endpoint.kind === "gemini" && endpoint.authMode === "google_adc"
+          ? {
+              "Content-Type": "application/json",
+              ...endpoint.headers,
+              Authorization: `Bearer ${await resolveGoogleAdcAccessToken({
+                env: this.env,
+                fetchImpl: this.fetchImpl
+              })}`
+            }
+          : {
+              "Content-Type": "application/json",
+              ...endpoint.headers
+            };
     const timeoutMs = resolveRequestTimeoutMs(endpoint);
 
     try {

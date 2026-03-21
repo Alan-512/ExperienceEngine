@@ -77,4 +77,22 @@ describe("evaluateTrigger", () => {
       )
     ).toBe(true);
   });
+
+  it("uses context_summary when deciding whether a known expectation-correction pattern overlaps enough", () => {
+    expect(
+      evaluateTrigger(
+        {
+          ...baseInput,
+          task_type: "config_debug",
+          task_summary:
+            "This implementation technically works, but the behavior is still wrong because the fix is happening in the UI layer instead of the provider routing layer. Figure out the correct next step.",
+          context_summary:
+            "A similar task is drifting into the UI layer even though the real correction belongs in provider routing behavior."
+        },
+        undefined,
+        "Initial implementation addresses the symptom in the UI layer instead of the root cause in provider routing.\nShift the fix from the UI layer to the provider routing configuration path.",
+        0.4
+      )
+    ).toBe(true);
+  });
 });

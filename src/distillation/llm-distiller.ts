@@ -1,5 +1,14 @@
 import { createHash, createHmac } from "node:crypto";
-import type { ExperienceCandidate, ExperienceCandidateDraft, ExperienceInput } from "../types/domain.js";
+import type {
+  ConfidenceSignal,
+  CorrectionCategory,
+  CorrectionScope,
+  ExperienceCandidate,
+  ExperienceCandidateDraft,
+  ExperienceInput,
+  ExperienceKind,
+  ValidationState
+} from "../types/domain.js";
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import type { DistillationResult } from "./types.js";
 import {
@@ -8,6 +17,7 @@ import {
   type DistillerEndpoint
 } from "./host-llm.js";
 import { DEFAULT_DISTILLER_SYSTEM_PROMPT, buildCandidatePayload } from "./prompt-contract.js";
+import { resolveGoogleAdcAccessToken } from "./providers/google-adc.js";
 
 type DistillerRuntimeOptions = {
   env?: NodeJS.ProcessEnv;
@@ -56,6 +66,50 @@ const normalizeRiskLevel = (value: unknown): "low" | "medium" | "high" | undefin
   }
   return undefined;
 };
+
+const EXPERIENCE_KINDS: ExperienceKind[] = [
+  "execution_pattern",
+  "config_troubleshooting",
+  "verification_loop",
+  "warning",
+  "expectation_correction"
+];
+const CONFIDENCE_SIGNALS: ConfidenceSignal[] = [
+  "confirmed_by_user",
+  "supported_by_objective_success",
+  "unconfirmed"
+];
+const VALIDATION_STATES: ValidationState[] = [
+  "pending_reuse_validation",
+  "validated_by_reuse",
+  "invalidated"
+];
+const CORRECTION_SCOPES: CorrectionScope[] = [
+  "task_local",
+  "repo_local",
+  "workflow_local",
+  "host_local",
+  "cross_repo_candidate"
+];
+const CORRECTION_CATEGORIES: CorrectionCategory[] = [
+  "goal_interpretation",
+  "quality_bar",
+  "interaction_behavior",
+  "verification_order",
+  "implementation_boundary",
+  "style_constraint"
+];
+
+const isExperienceKind = (value: unknown): value is ExperienceKind =>
+  typeof value === "string" && EXPERIENCE_KINDS.includes(value as ExperienceKind);
+const isConfidenceSignal = (value: unknown): value is ConfidenceSignal =>
+  typeof value === "string" && CONFIDENCE_SIGNALS.includes(value as ConfidenceSignal);
+const isValidationState = (value: unknown): value is ValidationState =>
+  typeof value === "string" && VALIDATION_STATES.includes(value as ValidationState);
+const isCorrectionScope = (value: unknown): value is CorrectionScope =>
+  typeof value === "string" && CORRECTION_SCOPES.includes(value as CorrectionScope);
+const isCorrectionCategory = (value: unknown): value is CorrectionCategory =>
+  typeof value === "string" && CORRECTION_CATEGORIES.includes(value as CorrectionCategory);
 
 const withRiskLevel = (summary: string | undefined, riskLevel: string | undefined): string => {
   const trimmed = pickString(summary) ?? "";
@@ -129,6 +183,17 @@ const applyFallbacks = (
     node_type: candidate.node_type,
     scope_id: candidate.scope_id,
     task_type: candidate.task_type,
+    experience_kind: isExperienceKind(parsed.experience_kind) ? parsed.experience_kind : candidate.experience_kind,
+    confidence_signal: isConfidenceSignal(parsed.confidence_signal)
+      ? parsed.confidence_signal
+      : candidate.confidence_signal,
+    validation_state: isValidationState(parsed.validation_state) ? parsed.validation_state : candidate.validation_state,
+    correction_scope: isCorrectionScope(parsed.correction_scope) ? parsed.correction_scope : candidate.correction_scope,
+    correction_category: isCorrectionCategory(parsed.correction_category)
+      ? parsed.correction_category
+      : candidate.correction_category,
+    deviation_pattern: pickString(parsed.deviation_pattern) ?? candidate.deviation_pattern,
+    corrected_constraint: pickString(parsed.corrected_constraint) ?? candidate.corrected_constraint,
     trigger_pattern: candidate.trigger_pattern,
     applicability_notes: triggerConditions ?? candidate.applicability_notes,
     env_signature: candidate.env_signature,
@@ -179,7 +244,12 @@ const resolveRequestTimeoutMs = (endpoint: DistillerEndpoint): number => {
 
 const isTransientProviderFailure = (error: unknown): boolean => {
   const message = error instanceof Error ? error.message : String(error);
-  return /timed out/i.test(message) || /failed with 429\b/i.test(message) || /failed with 5\d{2}\b/i.test(message);
+  return (
+    /timed out/i.test(message) ||
+    /failed with 429\b/i.test(message) ||
+    /failed with 5\d{2}\b/i.test(message) ||
+    /did not include a message payload/i.test(message)
+  );
 };
 
 export class LlmDistiller {
@@ -200,6 +270,7 @@ export class LlmDistiller {
     return resolveDistillationResolution({
       env: this.env,
       configProvider: this.config.distillerProvider,
+      configAuthMode: this.config.distillationAuthMode,
       configModel: this.config.distillerModel,
       distillationMode: this.config.distillationMode,
       allowRuleFallback: this.config.distillationAllowPassthrough
@@ -415,10 +486,19 @@ export class LlmDistiller {
     const headers =
       endpoint.kind === "bedrock"
         ? this.buildBedrockHeaders(endpoint, serializedBody)
-        : {
-            "Content-Type": "application/json",
-            ...endpoint.headers
-          };
+        : endpoint.kind === "gemini" && endpoint.authMode === "google_adc"
+          ? {
+              "Content-Type": "application/json",
+              ...endpoint.headers,
+              Authorization: `Bearer ${await resolveGoogleAdcAccessToken({
+                env: this.env,
+                fetchImpl: this.fetchImpl
+              })}`
+            }
+          : {
+              "Content-Type": "application/json",
+              ...endpoint.headers
+            };
     const timeoutMs = resolveRequestTimeoutMs(endpoint);
     try {
       return await this.fetchImpl(url, {

@@ -77,6 +77,21 @@ describe("provider resolution config surface", () => {
     expect(config.distillerProvider).toBe("gemini");
   });
 
+  it("reads gemini google_adc auth mode from env", () => {
+    const config = loadConfig(
+      {},
+      {
+        env: {
+          EXPERIENCE_ENGINE_DISTILLER_PROVIDER: "gemini",
+          EXPERIENCE_ENGINE_DISTILLER_AUTH_MODE: "google_adc"
+        }
+      }
+    );
+
+    expect(config.distillerProvider).toBe("gemini");
+    expect(config.distillationAuthMode).toBe("google_adc");
+  });
+
   it("reads an explicit azure_openai provider from env", () => {
     const config = loadConfig(
       {},
