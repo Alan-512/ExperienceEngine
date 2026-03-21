@@ -114,6 +114,60 @@ describe("runtime helpers", () => {
     });
   });
 
+  it("derives context summary from prior OpenClaw session messages when explicit summary is absent", () => {
+    const payload = {
+      context: {
+        sessionId: "sess_hist",
+        workspaceDir: "/repo/runtime"
+      },
+      payload: {
+        prompt:
+          "[Sat 2026-03-21 21:31 GMT+8] Correction: that is the wrong boundary. Verify the user-facing Gemini model selection flow.",
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "text",
+                text: "[Sat 2026-03-21 21:26 GMT+8] First inspect provider implementation files directly and summarize where Gemini model ids are resolved."
+              }
+            ]
+          },
+          {
+            role: "assistant",
+            content: [
+              { type: "thinking", thinking: "ignored" },
+              {
+                type: "text",
+                text: "I'll start by exploring provider implementation files."
+              }
+            ]
+          },
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "text",
+                text: "Gemini model IDs are resolved in host-llm.ts and the gemini provider adapter."
+              }
+            ]
+          }
+        ]
+      }
+    };
+
+    expect(normalizePromptPayload(payload)).toEqual({
+      sessionId: "sess_hist",
+      cwd: "/repo/runtime",
+      userMessage:
+        "[Sat 2026-03-21 21:31 GMT+8] Correction: that is the wrong boundary. Verify the user-facing Gemini model selection flow.",
+      taskSummary:
+        "[Sat 2026-03-21 21:31 GMT+8] Correction: that is the wrong boundary. Verify the user-facing Gemini model selection flow.",
+      contextSummary:
+        "Previous user request: [Sat 2026-03-21 21:26 GMT+8] First inspect provider implementation files directly and summarize where Gemini model ids are resolved.\nPrevious assistant summary: Gemini model IDs are resolved in host-llm.ts and the gemini provider adapter."
+    });
+  });
+
   it("prepends injected context onto mutable payloads", () => {
     const payload: Record<string, unknown> = { prependContext: "Existing context" };
     applyInjectionToPayload(payload, "New hints");

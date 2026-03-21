@@ -106,9 +106,10 @@ class OpenClawExperiencePlugin implements ExperiencePlugin {
 
 export const createExperiencePlugin = (
   configOverrides: Partial<ExperienceEngineConfig> = {},
-  logger?: OpenClawLogger
+  logger?: OpenClawLogger,
+  runtimeOptions: ConstructorParameters<typeof ExperienceRuntimeService>[2] = {}
 ): OpenClawExperiencePlugin =>
-  new OpenClawExperiencePlugin(new ExperienceRuntimeService(loadConfig(configOverrides), logger));
+  new OpenClawExperiencePlugin(new ExperienceRuntimeService(loadConfig(configOverrides), logger, runtimeOptions));
 
 const resolvePluginConfig = (api: OpenClawPluginApi): Partial<ExperienceEngineConfig> => {
   const rawConfig = (api.pluginConfig ?? api.config ?? {}) as Partial<ExperienceEngineConfig>;

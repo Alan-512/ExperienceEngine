@@ -75,6 +75,51 @@ const extractContentText = (value: unknown): string | undefined => {
   return text || undefined;
 };
 
+const extractMessages = (payload: UnknownRecord): unknown[] => {
+  if (Array.isArray(payload.messages)) {
+    return payload.messages;
+  }
+
+  const nested = readNested(payload, ["payload", "messages"]);
+  return Array.isArray(nested) ? nested : [];
+};
+
+const summarizePriorMessages = (payload: UnknownRecord): string | undefined => {
+  const messages = extractMessages(payload).filter(isRecord);
+  if (messages.length === 0) {
+    return undefined;
+  }
+
+  const userMessages = messages
+    .filter((message) => readString(message.role, message.author) === "user")
+    .map((message) => readString(message.content, message.text, readNested(message, ["content", "text"])) ?? extractContentText(message.content))
+    .filter((message): message is string => Boolean(message));
+
+  const assistantMessages = messages
+    .filter((message) => readString(message.role, message.author) === "assistant")
+    .map((message) => extractContentText(message.content) ?? readString(message.content, message.text))
+    .filter((message): message is string => Boolean(message))
+    .filter((message) => !/^I('|’)ll\b/i.test(message));
+
+  const parts: string[] = [];
+  const lastUser = userMessages.at(-1);
+  const lastAssistant = assistantMessages.at(-1);
+
+  if (!lastAssistant && userMessages.length < 2) {
+    return undefined;
+  }
+
+  if (lastUser) {
+    parts.push(`Previous user request: ${truncate(normalizeWhitespace(lastUser), 240)}`);
+  }
+
+  if (lastAssistant) {
+    parts.push(`Previous assistant summary: ${truncate(normalizeWhitespace(lastAssistant), 240)}`);
+  }
+
+  return parts.length > 0 ? parts.join("\n") : undefined;
+};
+
 const normalizeToolStatus = (...values: unknown[]): HostToolResult["status"] => {
   for (const value of values) {
     if (typeof value !== "string") {
@@ -106,6 +151,7 @@ const extractMessageText = (payload: UnknownRecord): string | undefined => {
   const direct = readString(
     payload.userMessage,
     payload.prompt,
+    readNested(payload, ["payload", "prompt"]),
     payload.message,
     readNested(payload, ["message", "content"]),
     readNested(payload, ["message", "text"]),
@@ -116,8 +162,8 @@ const extractMessageText = (payload: UnknownRecord): string | undefined => {
     return direct;
   }
 
-  const messages = payload.messages;
-  if (!Array.isArray(messages)) {
+  const messages = extractMessages(payload);
+  if (messages.length === 0) {
     return undefined;
   }
 
@@ -180,6 +226,7 @@ export const normalizePromptPayload = (payload: unknown): HostPromptContext => {
       payload.workspacePath,
       readNested(payload, ["workspace", "cwd"]),
       readNested(payload, ["context", "cwd"]),
+      readNested(payload, ["context", "workspaceDir"]),
       readNested(payload, ["repo", "root"])
     ),
     userMessage: extractMessageText(payload) ?? "",
@@ -193,7 +240,8 @@ export const normalizePromptPayload = (payload: unknown): HostPromptContext => {
       payload.contextSummary,
       readNested(payload, ["context", "summary"]),
       readNested(payload, ["compaction", "summary"]),
-      readNested(payload, ["workingContext", "summary"])
+      readNested(payload, ["workingContext", "summary"]),
+      summarizePriorMessages(payload)
     )
   };
 };
@@ -291,11 +339,7 @@ export const extractToolResultsFromPayload = (payload: unknown): HostToolResult[
     return [];
   }
 
-  const messages = Array.isArray(payload.messages)
-    ? payload.messages
-    : isRecord(payload.payload) && Array.isArray(payload.payload.messages)
-      ? payload.payload.messages
-      : [];
+  const messages = extractMessages(payload);
 
   return messages
     .filter((message): message is UnknownRecord => isRecord(message) && readString(message.role) === "toolResult")

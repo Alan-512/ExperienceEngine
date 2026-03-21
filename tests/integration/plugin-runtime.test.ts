@@ -2,8 +2,8 @@ import { existsSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import plugin from "../../src/plugin/openclaw-plugin.js";
+import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import plugin, { createExperiencePlugin } from "../../src/plugin/openclaw-plugin.js";
 import { installOpenClawAdapter } from "../../src/install/openclaw-installer.js";
 import { clearEmbeddingProviderForTests, setEmbeddingProviderForTests } from "../../src/store/vector/embeddings.js";
 import { replayScenarios, type ReplayScenario } from "../fixtures/openclaw/index.js";
@@ -98,6 +98,25 @@ const waitFor = async (assertion: () => void, attempts = 25, delayMs = 20): Prom
 
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 };
+
+const geminiJsonResponse = (payload: unknown): Response =>
+  new Response(
+    JSON.stringify({
+      candidates: [
+        {
+          content: {
+            parts: [{ text: JSON.stringify(payload) }]
+          }
+        }
+      ]
+    }),
+    {
+      status: 200,
+      headers: {
+        "Content-Type": "application/json"
+      }
+    }
+  );
 
 afterEach(() => {
   while (tempDirs.length) {
@@ -274,7 +293,7 @@ describe("OpenClaw plugin runtime", () => {
     } finally {
       process.env.HOME = originalHome;
     }
-  });
+  }, 10_000);
 
   it("injects conservative hints on a later similar turn once a node exists", async () => {
     const runtimeDir = makeTempDir();
@@ -791,6 +810,299 @@ describe("OpenClaw plugin runtime", () => {
         success_tasks: 1
       });
     });
+  });
+
+  it("learns an expectation correction from real OpenClaw follow-up payloads and conservatively injects it on the next similar turn", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const handlers = new Map<string, Handler>();
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        geminiJsonResponse({
+          worth_capturing: true,
+          experience_kind: "expectation_correction",
+          reason: "The user corrected the implementation boundary and the follow-up succeeded only after moving the fix into provider routing.",
+          candidate: {
+            node_type: "strategy",
+            task_type: "config_debug",
+            trigger_pattern:
+              "When the implementation technically works but the real correction belongs in provider routing instead of the UI layer",
+            compact_hint:
+              "Do not keep polishing the UI layer when the user correction says the real fix belongs in provider routing.",
+            success_signal:
+              "A targeted provider probe matches the requested model-selection behavior after moving the fix into routing.",
+            evidence_summary:
+              "A follow-up correction only succeeded after moving the fix out of the UI layer and validating provider routing.",
+            experience_kind: "expectation_correction",
+            confidence_signal: "supported_by_objective_success",
+            validation_state: "pending_reuse_validation",
+            correction_scope: "host_local",
+            correction_category: "implementation_boundary",
+            deviation_pattern: "implementation solves the wrong layer of the problem",
+            corrected_constraint: "Move the fix into provider routing instead of persisting in the UI layer."
+          }
+        })
+      )
+      .mockResolvedValueOnce(
+        geminiJsonResponse({
+          trigger_conditions:
+            "The implementation technically works, but the correction says the real fix belongs in provider routing rather than the UI layer.",
+          success_criteria:
+            "A targeted provider probe matches the requested model-selection behavior after moving the fix into routing.",
+          risk_level: "medium",
+          trigger_pattern:
+            "When the implementation technically works but the real correction belongs in provider routing instead of the UI layer",
+          compact_hint:
+            "Do not keep polishing the UI layer when the user correction says the real fix belongs in provider routing.",
+          goal: "Move the fix into provider routing rather than continuing in the UI layer.",
+          recommended_steps: [
+            "Check whether the current change still lives in the UI layer.",
+            "Move the fix into provider routing.",
+            "Run a targeted provider probe."
+          ],
+          avoid_steps: ["Do not continue refining UI code while the behavior mismatch still lives in provider routing."],
+          fallback_steps: ["If the routing move is still ambiguous, isolate the provider path with a narrower probe."],
+          success_signal:
+            "A targeted provider probe matches the requested model-selection behavior after moving the fix into routing.",
+          evidence_summary:
+            "A prior correction only succeeded after moving the fix out of the UI layer and validating provider routing.",
+          experience_kind: "expectation_correction",
+          confidence_signal: "supported_by_objective_success",
+          validation_state: "pending_reuse_validation",
+          correction_scope: "host_local",
+          correction_category: "implementation_boundary",
+          deviation_pattern: "implementation solves the wrong layer of the problem",
+          corrected_constraint: "Move the fix into provider routing instead of persisting in the UI layer."
+        })
+      );
+
+    createExperiencePlugin(
+      {
+        dataDir: join(runtimeDir, "data"),
+        sqlitePath,
+        triggerThreshold: 0.6,
+        maxHints: 3,
+        distillerProvider: "gemini",
+        distillerModel: "gemini-3-flash-preview",
+        distillationAuthMode: "api_key",
+        distillationMode: "llm",
+        distillationAllowPassthrough: true,
+        distillationAutoDrain: true
+      },
+      undefined,
+      {
+        homeDir: runtimeDir,
+        env: {
+          GEMINI_API_KEY: "secret"
+        },
+        fetchImpl: fetchImpl as unknown as typeof fetch
+      }
+    ).register({
+      on(event, handler) {
+        handlers.set(event, handler);
+      }
+    });
+
+    const beforePromptBuild = handlers.get("before_prompt_build");
+    const persistToolResult = handlers.get("tool_result_persist");
+    const finalize = handlers.get("message_sent");
+
+    await beforePromptBuild?.(
+      {
+        prompt:
+          "Fix the Gemini model selection issue in the current workspace. Start with the UI layer and verify the result.",
+        messages: []
+      },
+      {
+        sessionId: "expectation-runtime",
+        workspaceDir: "/tmp/repo"
+      }
+    );
+    await persistToolResult?.(
+      {
+        toolName: "exec",
+        toolCallId: "call_ui_fix_1",
+        message: {
+          role: "toolResult",
+          toolCallId: "call_ui_fix_1",
+          toolName: "exec",
+          content: [{ type: "text", text: "Updated the UI layer." }],
+          details: {
+            status: "completed",
+            exitCode: 0,
+            aggregated: "Updated the UI layer."
+          },
+          isError: false
+        },
+        isSynthetic: false
+      },
+      {
+        agentId: "main",
+        toolName: "exec",
+        toolCallId: "call_ui_fix_1"
+      }
+    );
+    await finalize?.(
+      {
+        messages: [
+          {
+            role: "user",
+            content: [{ type: "text", text: "Fix the Gemini model selection issue in the current workspace. Start with the UI layer and verify the result." }]
+          },
+          {
+            role: "toolResult",
+            toolCallId: "call_ui_fix_1",
+            toolName: "exec",
+            content: [{ type: "text", text: "Updated the UI layer." }],
+            details: {
+              status: "completed",
+              exitCode: 0,
+              aggregated: "Updated the UI layer."
+            },
+            isError: false
+          },
+          {
+            role: "assistant",
+            content: [{ type: "text", text: "The UI layer has been updated." }]
+          }
+        ]
+      },
+      {
+        sessionId: "expectation-runtime",
+        workspaceDir: "/tmp/repo"
+      }
+    );
+
+    const followUp = (await beforePromptBuild?.(
+      {
+        prompt:
+          "Correction: that is the wrong boundary. The UI technically works, but the real fix belongs in provider routing. Verify the model-selection behavior through provider routing instead.",
+        messages: [
+          {
+            role: "user",
+            content: [{ type: "text", text: "Fix the Gemini model selection issue in the current workspace. Start with the UI layer and verify the result." }]
+          },
+          {
+            role: "assistant",
+            content: [{ type: "text", text: "The UI layer has been updated." }]
+          }
+        ]
+      },
+      {
+        sessionId: "expectation-runtime",
+        workspaceDir: "/tmp/repo"
+      }
+    )) as Record<string, unknown>;
+    expect(followUp.prependContext).toBeFalsy();
+
+    await persistToolResult?.(
+      {
+        toolName: "exec",
+        toolCallId: "call_provider_probe_1",
+        message: {
+          role: "toolResult",
+          toolCallId: "call_provider_probe_1",
+          toolName: "exec",
+          content: [{ type: "text", text: "Provider routing now matches the requested model-selection behavior." }],
+          details: {
+            status: "completed",
+            exitCode: 0,
+            aggregated: "Provider routing now matches the requested model-selection behavior."
+          },
+          isError: false
+        },
+        isSynthetic: false
+      },
+      {
+        agentId: "main",
+        toolName: "exec",
+        toolCallId: "call_provider_probe_1"
+      }
+    );
+    await finalize?.(
+      {
+        messages: [
+          {
+            role: "user",
+            content: [{ type: "text", text: "Fix the Gemini model selection issue in the current workspace. Start with the UI layer and verify the result." }]
+          },
+          {
+            role: "assistant",
+            content: [{ type: "text", text: "The UI layer has been updated." }]
+          },
+          {
+            role: "user",
+            content: [{ type: "text", text: "Correction: that is the wrong boundary. The UI technically works, but the real fix belongs in provider routing. Verify the model-selection behavior through provider routing instead." }]
+          },
+          {
+            role: "toolResult",
+            toolCallId: "call_provider_probe_1",
+            toolName: "exec",
+            content: [{ type: "text", text: "Provider routing now matches the requested model-selection behavior." }],
+            details: {
+              status: "completed",
+              exitCode: 0,
+              aggregated: "Provider routing now matches the requested model-selection behavior."
+            },
+            isError: false
+          },
+          {
+            role: "assistant",
+            content: [{ type: "text", text: "The provider-routing fix is now behaving correctly." }]
+          }
+        ]
+      },
+      {
+        sessionId: "expectation-runtime",
+        workspaceDir: "/tmp/repo"
+      }
+    );
+
+    const db = new DatabaseSync(sqlitePath);
+    await waitFor(() => {
+      const nodeRow = db
+        .prepare(
+          "SELECT experience_kind, confidence_signal, validation_state FROM experience_nodes WHERE experience_kind = 'expectation_correction' ORDER BY updated_at DESC LIMIT 1"
+        )
+        .get() as {
+          experience_kind: string;
+          confidence_signal: string;
+          validation_state: string;
+        };
+      expect(nodeRow).toEqual({
+        experience_kind: "expectation_correction",
+        confidence_signal: "supported_by_objective_success",
+        validation_state: "pending_reuse_validation"
+      });
+    });
+
+    const replayResult = (await beforePromptBuild?.(
+      {
+        prompt:
+          "The UI technically works, but the behavior is still wrong because the fix is happening in the UI layer instead of provider routing. Figure out the correct next step.",
+        messages: [
+          {
+            role: "user",
+            content: [{ type: "text", text: "Correction: that is the wrong boundary. The UI technically works, but the real fix belongs in provider routing. Verify the model-selection behavior through provider routing instead." }]
+          }
+        ]
+      },
+      {
+        sessionId: "expectation-runtime-replay",
+        workspaceDir: "/tmp/repo"
+      }
+    )) as Record<string, unknown>;
+
+    expect(typeof replayResult.prependContext).toBe("string");
+    expect(String(replayResult.prependContext)).toMatch(/execution hints/i);
+
+    const injectionRow = db
+      .prepare(
+        "SELECT mode FROM injection_events WHERE session_id = ? ORDER BY created_at DESC LIMIT 1"
+      )
+      .get("expectation-runtime-replay") as { mode: string };
+    expect(injectionRow.mode).toBe("inject_conservative");
   });
 
   it("persists feedback timestamps when injected turns succeed or fail", async () => {
