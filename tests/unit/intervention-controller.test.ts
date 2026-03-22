@@ -189,6 +189,59 @@ describe("decideIntervention", () => {
     expect(decision.selected[0]?.id).toBe("specific-distilled");
   });
 
+  it("prefers expectation-correction nodes over generic candidates when the correction context matches", async () => {
+    const correctionInput: ExperienceInput = {
+      scope_id: "scope_1",
+      session_id: "session_ec",
+      task_type: "config_debug",
+      task_summary:
+        "Correction: a previous pass focused too much on UI aliases. In exactly one sentence, say the real issue is runtime config resolution and persisted settings precedence.",
+      context_summary:
+        "Previous assistant summary: The real issue is runtime config resolution and persisted settings precedence.",
+      tool_events: [],
+      outcome_signal: "unknown",
+      injected_node_ids: []
+    };
+
+    const decision = await decideIntervention(
+      correctionInput,
+      [
+        node({
+          id: "generic-competing-candidate",
+          task_type: "config_debug",
+          state: "candidate",
+          trigger_pattern:
+            "Diagnose why OpenClaw is selecting the wrong Gemini model. Focus only on UI labels and aliases. Do not inspect runtime config resolution or persisted settings precedence.",
+          compact_hint:
+            "Stay on the UI model picker and aliases when the Gemini selection looks wrong.",
+          support_count: 1
+        }),
+        node({
+          id: "matching-expectation-correction",
+          task_type: "config_debug",
+          state: "candidate",
+          experience_kind: "expectation_correction",
+          confidence_signal: "supported_by_objective_success",
+          validation_state: "pending_reuse_validation",
+          deviation_pattern:
+            "Focusing on UI/presentation layer instead of backend configuration logic.",
+          corrected_constraint:
+            "State the issue as runtime config resolution and persisted settings precedence.",
+          trigger_pattern:
+            "Agent focuses on UI labels, aliases, or cosmetic symptoms during configuration troubleshooting.",
+          compact_hint:
+            "Shift focus from UI labels and cosmetic aliases to runtime configuration resolution and the precedence of persisted settings."
+        })
+      ],
+      undefined,
+      0.6,
+      3
+    );
+
+    expect(decision.mode).toBe("inject_conservative");
+    expect(decision.selected.map((entry) => entry.id)).toEqual(["matching-expectation-correction"]);
+  });
+
   it("prefers exact task-family strategies over general fallback nodes", async () => {
     const decision = await decideIntervention(
       input,

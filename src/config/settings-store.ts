@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import type { ExperienceEngineConfig } from "./config-schema.js";
 import { resolveExperienceEnginePaths } from "./path-resolver.js";
 
 export type ExperienceEngineSettings = {
@@ -16,10 +17,19 @@ export type ExperienceEngineSettings = {
 type SettingsOptions = {
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
+  overrides?: Partial<ExperienceEngineConfig>;
 };
 
 export const resolveSettingsPath = (options: SettingsOptions = {}): string =>
-  join(resolveExperienceEnginePaths({ env: options.env, homeDir: options.homeDir }).productHome, "settings.json");
+  (() => {
+    const paths = resolveExperienceEnginePaths({
+      env: options.env,
+      homeDir: options.homeDir,
+      overrides: options.overrides
+    });
+    const baseDir = paths.mode === "explicit" ? paths.activeHome : paths.productHome;
+    return join(baseDir, "settings.json");
+  })();
 
 export const readExperienceEngineSettings = (options: SettingsOptions = {}): ExperienceEngineSettings => {
   const settingsPath = resolveSettingsPath(options);

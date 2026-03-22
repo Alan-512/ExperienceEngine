@@ -15,7 +15,7 @@ export const loadConfig = (
 ): ExperienceEngineConfig => {
   const env = options.env ?? process.env;
   const paths = resolveExperienceEnginePaths({ overrides, env, homeDir: options.homeDir });
-  const settings = readExperienceEngineSettings({ env, homeDir: options.homeDir });
+  const settings = readExperienceEngineSettings({ env, homeDir: options.homeDir, overrides });
   const captureRawPayloads =
     env.EXPERIENCE_ENGINE_CAPTURE_RAW_PAYLOADS !== undefined
       ? env.EXPERIENCE_ENGINE_CAPTURE_RAW_PAYLOADS === "true"

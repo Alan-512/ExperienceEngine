@@ -95,6 +95,7 @@ class OpenClawExperiencePlugin implements ExperiencePlugin {
       }
 
       await this.finalizeTask(context);
+      await this.runtime.waitForBackgroundLearning();
       return payload;
     };
 

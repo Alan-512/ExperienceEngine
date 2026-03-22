@@ -26,9 +26,16 @@ export const evaluateTrigger = (
 
   const failureRate =
     stats && stats.total_tasks > 0 ? stats.failed_tasks / stats.total_tasks : 0;
-  const contextRisk = overlapScore(input.task_summary, knownRiskSummary ?? input.context_summary);
+  const knownPattern = knownRiskSummary ?? input.context_summary;
+  const taskRisk = overlapScore(input.task_summary, knownPattern);
+  const contextRisk = overlapScore(input.context_summary ?? "", knownPattern);
+  const combinedRisk = overlapScore(
+    [input.task_summary, input.context_summary].filter(Boolean).join("\n") || input.task_summary,
+    knownPattern
+  );
+  const triggerRisk = Math.max(taskRisk, contextRisk, combinedRisk);
   const candidateRiskThreshold = knownRiskSummary ? Math.min(threshold, 0.5) : threshold;
   const explicitFailure = input.tool_events.some((event) => event.status === "failure");
 
-  return explicitFailure || failureRate >= threshold || contextRisk >= candidateRiskThreshold;
+  return explicitFailure || failureRate >= threshold || triggerRisk >= candidateRiskThreshold;
 };

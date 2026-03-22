@@ -85,12 +85,12 @@ describe("evaluateTrigger", () => {
           ...baseInput,
           task_type: "config_debug",
           task_summary:
-            "This implementation technically works, but the behavior is still wrong because the fix is happening in the UI layer instead of the provider routing layer. Figure out the correct next step.",
+            "Correction: a previous pass focused too much on UI aliases. In exactly one sentence, say the real issue is runtime config resolution and persisted settings precedence.",
           context_summary:
-            "A similar task is drifting into the UI layer even though the real correction belongs in provider routing behavior."
+            "Previous assistant summary: The real issue is runtime config resolution and persisted settings precedence."
         },
         undefined,
-        "Initial implementation addresses the symptom in the UI layer instead of the root cause in provider routing.\nShift the fix from the UI layer to the provider routing configuration path.",
+        "Focusing on UI/presentation layer instead of backend configuration logic.\nState the issue as runtime config resolution and persisted settings precedence.\nAgent focuses on UI labels, aliases, or cosmetic symptoms during configuration troubleshooting.",
         0.4
       )
     ).toBe(true);

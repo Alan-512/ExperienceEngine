@@ -17,6 +17,19 @@ export type InterventionDecision = {
   text?: string;
 };
 
+const CORRECTION_INTENT_PATTERNS = [
+  /\bcorrection\b/i,
+  /\bthat answer was wrong\b/i,
+  /\bprevious pass\b/i,
+  /\bthe real issue\b/i,
+  /\bfocused too much on\b/i
+];
+
+const hasCorrectionIntent = (input: ExperienceInput): boolean => {
+  const text = [input.task_summary, input.context_summary].filter(Boolean).join("\n");
+  return CORRECTION_INTENT_PATTERNS.some((pattern) => pattern.test(text));
+};
+
 const buildCandidateRiskSummary = (node: ExperienceNode | undefined): string | undefined => {
   if (!node) {
     return undefined;
@@ -77,15 +90,23 @@ const decideInterventionInternal = async (
   config?: Pick<ExperienceEngineConfig, "embeddingProvider" | "embeddingModel" | "embeddingDtype" | "embeddingCacheDir">
 ): Promise<InterventionDecision> => {
   const candidates = await retrieveCandidates(input, nodes, { config });
-  const ranked = rankNodes(input.task_summary, candidates, input.task_type);
+  const rankingSummary = [input.task_summary, input.context_summary].filter(Boolean).join("\n");
+  const ranked = rankNodes(rankingSummary || input.task_summary, candidates, input.task_type);
+  const correctionAwareRanked = hasCorrectionIntent(input)
+    ? [
+        ...ranked.filter((node) => node.experience_kind === "expectation_correction"),
+        ...ranked.filter((node) => node.experience_kind !== "expectation_correction")
+      ]
+    : ranked;
 
-  if (!ranked.length) {
+  if (!correctionAwareRanked.length) {
     return { mode: "skip", selected: [] };
   }
 
-  const mode: InjectionMode = ranked[0]?.state === "candidate" ? "inject_conservative" : "inject";
+  const mode: InjectionMode =
+    correctionAwareRanked[0]?.state === "candidate" ? "inject_conservative" : "inject";
   const selected = selectInjectableNodes(
-    ranked,
+    correctionAwareRanked,
     mode === "inject_conservative" ? 1 : maxHints,
     input.task_type
   );

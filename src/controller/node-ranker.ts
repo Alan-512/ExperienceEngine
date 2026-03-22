@@ -62,6 +62,16 @@ const getTaskTypePreference = (
   return -4;
 };
 
+const buildRankingText = (node: ExperienceNode): string => {
+  if (node.experience_kind === "expectation_correction") {
+    return [node.deviation_pattern, node.corrected_constraint, node.trigger_pattern, node.compact_hint]
+      .filter(Boolean)
+      .join("\n");
+  }
+
+  return node.trigger_pattern;
+};
+
 export const rankNodes = (
   summary: string,
   nodes: ExperienceNode[],
@@ -70,7 +80,7 @@ export const rankNodes = (
   [...nodes].sort((a, b) => {
     const aScore =
       STATE_WEIGHT[a.state] * 10 +
-      similarity(summary, a.trigger_pattern) * 6 +
+      similarity(summary, buildRankingText(a)) * 6 +
       getSpecificityBonus(a) +
       getFeedbackAdjustment(a) +
       a.support_count * 0.1 -
@@ -78,7 +88,7 @@ export const rankNodes = (
       getTaskTypePreference(preferredTaskType, a);
     const bScore =
       STATE_WEIGHT[b.state] * 10 +
-      similarity(summary, b.trigger_pattern) * 6 +
+      similarity(summary, buildRankingText(b)) * 6 +
       getSpecificityBonus(b) +
       getFeedbackAdjustment(b) +
       b.support_count * 0.1 -

@@ -994,7 +994,8 @@ describe("OpenClaw plugin runtime", () => {
         workspaceDir: "/tmp/repo"
       }
     )) as Record<string, unknown>;
-    expect(followUp.prependContext).toBeFalsy();
+    expect(typeof followUp.prependContext).toBe("string");
+    expect(String(followUp.prependContext)).toMatch(/conservative execution hints/i);
 
     await persistToolResult?.(
       {
@@ -1073,7 +1074,7 @@ describe("OpenClaw plugin runtime", () => {
       expect(nodeRow).toEqual({
         experience_kind: "expectation_correction",
         confidence_signal: "supported_by_objective_success",
-        validation_state: "pending_reuse_validation"
+        validation_state: "validated_by_reuse"
       });
     });
 
@@ -1102,7 +1103,110 @@ describe("OpenClaw plugin runtime", () => {
         "SELECT mode FROM injection_events WHERE session_id = ? ORDER BY created_at DESC LIMIT 1"
       )
       .get("expectation-runtime-replay") as { mode: string };
-    expect(injectionRow.mode).toBe("inject_conservative");
+    expect(injectionRow.mode).toBe("inject");
+  });
+
+  it("waits for background learning to finish before the finalize hook returns", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const handlers = new Map<string, Handler>();
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(
+      async () =>
+        new Promise<Response>((resolve) => {
+          setTimeout(() => {
+            resolve(
+              geminiJsonResponse({
+                worth_capturing: true,
+                experience_kind: "expectation_correction",
+                reason: "The corrected direction is reusable.",
+                candidate: {
+                  node_type: "strategy",
+                  task_type: "config_debug",
+                  trigger_pattern: "provider routing correction after a wrong UI-layer fix",
+                  compact_hint: "Validate provider routing before continuing in the UI layer.",
+                  success_signal: "A targeted provider probe succeeds.",
+                  evidence_summary: "The provider probe succeeded after the user corrected the implementation boundary.",
+                  experience_kind: "expectation_correction",
+                  confidence_signal: "supported_by_objective_success",
+                  validation_state: "pending_reuse_validation",
+                  correction_scope: "host_local",
+                  correction_category: "implementation_boundary",
+                  deviation_pattern: "implementation solves the wrong layer of the problem",
+                  corrected_constraint: "Move the fix into provider routing instead of persisting in the UI layer."
+                }
+              })
+            );
+          }, 50);
+        })
+    );
+
+    createExperiencePlugin(
+      {
+        dataDir: join(runtimeDir, "data"),
+        sqlitePath,
+        triggerThreshold: 0.6,
+        maxHints: 3,
+        distillerProvider: "gemini",
+        distillerModel: "gemini-3-flash-preview",
+        distillationAuthMode: "api_key",
+        distillationMode: "llm",
+        distillationAllowPassthrough: true,
+        distillationAutoDrain: false
+      },
+      undefined,
+      {
+        homeDir: runtimeDir,
+        env: {
+          GEMINI_API_KEY: "secret"
+        },
+        fetchImpl: fetchImpl as unknown as typeof fetch
+      }
+    ).register({
+      on(event, handler) {
+        handlers.set(event, handler);
+      }
+    });
+
+    const finalize = handlers.get("message_sent");
+    expect(finalize).toBeTypeOf("function");
+
+    await finalize?.(
+      {
+        messages: [
+          {
+            role: "user",
+            content: [{ type: "text", text: "Correction: the UI technically works, but the real fix belongs in provider routing." }]
+          },
+          {
+            role: "toolResult",
+            toolCallId: "call_provider_probe_wait",
+            toolName: "exec",
+            content: [{ type: "text", text: "Provider routing now matches the requested model-selection behavior." }],
+            details: {
+              status: "completed",
+              exitCode: 0,
+              aggregated: "Provider routing now matches the requested model-selection behavior."
+            },
+            isError: false
+          },
+          {
+            role: "assistant",
+            content: [{ type: "text", text: "The provider-routing fix is now behaving correctly." }]
+          }
+        ]
+      },
+      {
+        sessionId: "expectation-runtime-wait",
+        workspaceDir: "/tmp/repo"
+      }
+    );
+
+    const db = new DatabaseSync(sqlitePath);
+    const candidateCount = db.prepare("SELECT COUNT(*) AS count FROM experience_candidates").get() as { count: number };
+    const jobCount = db.prepare("SELECT COUNT(*) AS count FROM distillation_jobs").get() as { count: number };
+
+    expect(candidateCount.count).toBe(1);
+    expect(jobCount.count).toBe(1);
   });
 
   it("persists feedback timestamps when injected turns succeed or fail", async () => {

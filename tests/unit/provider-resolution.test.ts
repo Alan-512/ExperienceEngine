@@ -218,6 +218,42 @@ describe("provider resolution config surface", () => {
     expect(config.distillerModel).toBe("gpt-5.4-mini");
   });
 
+  it("reads persisted settings from an explicit dataDir override", () => {
+    const homeDir = mkdtempSync(join(tmpdir(), "experienceengine-provider-explicit-data-dir-"));
+    tempDirs.push(homeDir);
+    const dataDir = join(homeDir, "runtime-data");
+    mkdirSync(dataDir, { recursive: true });
+    writeFileSync(
+      join(dataDir, "settings.json"),
+      `${JSON.stringify(
+        {
+          distillation: {
+            provider: "gemini",
+            auth_mode: "api_key",
+            model: "gemini-3.1-flash-lite-preview"
+          }
+        },
+        null,
+        2
+      )}\n`,
+      "utf8"
+    );
+
+    const config = loadConfig(
+      {
+        dataDir
+      },
+      {
+        env: {},
+        homeDir
+      }
+    );
+
+    expect(config.distillerProvider).toBe("gemini");
+    expect(config.distillationAuthMode).toBe("api_key");
+    expect(config.distillerModel).toBe("gemini-3.1-flash-lite-preview");
+  });
+
   it("rejects unsupported distiller providers", () => {
     const parsed = configSchema.safeParse({
       distillerProvider: "not_a_real_provider"
