@@ -7,6 +7,7 @@ type ApiEmbeddingOptions = {
 };
 
 const DEFAULT_TIMEOUT_MS = 5_000;
+const MAX_TRANSIENT_RETRIES = 1;
 
 const describeApiFailure = (provider: "openai" | "jina", status: number): string => {
   if (status === 401 || status === 403) {
@@ -21,6 +22,20 @@ const describeApiFailure = (provider: "openai" | "jina", status: number): string
   return `${provider} embedding API error (${status})`;
 };
 
+const isTransientApiStatus = (status: number): boolean => status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
+
+const isTransientApiError = (error: unknown): boolean => {
+  if (!(error instanceof Error)) {
+    return false;
+  }
+
+  if (error.name === "TimeoutError" || error.name === "AbortError") {
+    return true;
+  }
+
+  return /rate limited|upstream failed|timed out|fetch failed|network/i.test(error.message);
+};
+
 const fetchWithTimeout = async (
   input: string,
   init: RequestInit,
@@ -29,6 +44,20 @@ const fetchWithTimeout = async (
 ): Promise<Response> => {
   const signal = AbortSignal.timeout(timeoutMs);
   return fetchImpl(input, { ...init, signal });
+};
+
+const withTransientRetry = async <T>(operation: () => Promise<T>): Promise<T> => {
+  let attempts = 0;
+  while (true) {
+    try {
+      return await operation();
+    } catch (error) {
+      if (attempts >= MAX_TRANSIENT_RETRIES || !isTransientApiError(error)) {
+        throw error;
+      }
+      attempts += 1;
+    }
+  }
 };
 
 const OPENAI_MODEL = "text-embedding-3-small";
@@ -45,33 +74,39 @@ const createOpenAIProvider = (options: ApiEmbeddingOptions = {}): SemanticEmbedd
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
   const embed = async (text: string): Promise<number[]> => {
-    const response = await fetchWithTimeout(
-      "https://api.openai.com/v1/embeddings",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${apiKey}`
+    return withTransientRetry(async () => {
+      const response = await fetchWithTimeout(
+        "https://api.openai.com/v1/embeddings",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${apiKey}`
+          },
+          body: JSON.stringify({
+            model: OPENAI_MODEL,
+            input: text
+          })
         },
-        body: JSON.stringify({
-          model: OPENAI_MODEL,
-          input: text
-        })
-      },
-      fetchImpl,
-      timeoutMs
-    );
+        fetchImpl,
+        timeoutMs
+      );
 
-    if (!response.ok) {
-      throw new Error(describeApiFailure("openai", response.status));
-    }
+      if (!response.ok) {
+        const error = new Error(describeApiFailure("openai", response.status));
+        if (isTransientApiStatus(response.status)) {
+          throw error;
+        }
+        throw error;
+      }
 
-    const payload = (await response.json()) as { data?: Array<{ embedding?: number[] }> };
-    const embedding = payload.data?.[0]?.embedding;
-    if (!embedding?.length) {
-      throw new Error("OpenAI embedding API returned empty vector");
-    }
-    return embedding;
+      const payload = (await response.json()) as { data?: Array<{ embedding?: number[] }> };
+      const embedding = payload.data?.[0]?.embedding;
+      if (!embedding?.length) {
+        throw new Error("OpenAI embedding API returned empty vector");
+      }
+      return embedding;
+    });
   };
 
   return {
@@ -106,32 +141,38 @@ const createJinaProvider = (options: ApiEmbeddingOptions = {}): SemanticEmbeddin
       headers.Authorization = `Bearer ${apiKey}`;
     }
 
-    const response = await fetchWithTimeout(
-      "https://api.jina.ai/v1/embeddings",
-      {
-        method: "POST",
-        headers,
-        body: JSON.stringify({
-          model: JINA_MODEL,
-          input: [text],
-          task: JINA_TASK_MAP[task],
-          normalized: true
-        })
-      },
-      fetchImpl,
-      timeoutMs
-    );
+    return withTransientRetry(async () => {
+      const response = await fetchWithTimeout(
+        "https://api.jina.ai/v1/embeddings",
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({
+            model: JINA_MODEL,
+            input: [text],
+            task: JINA_TASK_MAP[task],
+            normalized: true
+          })
+        },
+        fetchImpl,
+        timeoutMs
+      );
 
-    if (!response.ok) {
-      throw new Error(describeApiFailure("jina", response.status));
-    }
+      if (!response.ok) {
+        const error = new Error(describeApiFailure("jina", response.status));
+        if (isTransientApiStatus(response.status)) {
+          throw error;
+        }
+        throw error;
+      }
 
-    const payload = (await response.json()) as { data?: Array<{ embedding?: number[] }> };
-    const embedding = payload.data?.[0]?.embedding;
-    if (!embedding?.length) {
-      throw new Error("Jina embedding API returned empty vector");
-    }
-    return embedding;
+      const payload = (await response.json()) as { data?: Array<{ embedding?: number[] }> };
+      const embedding = payload.data?.[0]?.embedding;
+      if (!embedding?.length) {
+        throw new Error("Jina embedding API returned empty vector");
+      }
+      return embedding;
+    });
   };
 
   return {

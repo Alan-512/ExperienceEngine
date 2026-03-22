@@ -268,4 +268,72 @@ describe("embedding fallback diagnostics", () => {
     expect(warnSpy.mock.calls[0]?.[0]).toContain("429");
     expect(warnSpy.mock.calls[0]?.[0]).toContain("local bootstrap failed");
   });
+
+  it("retries a transient API rate limit once before succeeding", async () => {
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify({ error: "rate limited" }), { status: 429 }))
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [{ embedding: [0.61, 0.72, 0.83] }]
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const result = await embedQueryText("retry the transient embedding failure once", {
+      config: {
+        embeddingProvider: "api",
+        embeddingModel: "Xenova/multilingual-e5-small",
+        embeddingDtype: "q8",
+        embeddingCacheDir: "./tmp/embeddings"
+      },
+      env: {
+        ...process.env,
+        OPENAI_API_KEY: "test-openai-key"
+      }
+    });
+
+    expect(result.space.provider).toBe("openai");
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("does not retry authentication failures and falls back immediately", async () => {
+    const fetchSpy = vi.fn(async () => new Response(JSON.stringify({ error: "unauthorized" }), { status: 401 }));
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const pipelineSpy = vi.fn(async () =>
+      async () => ({
+        data: [0.21, 0.32, 0.43]
+      })
+    );
+
+    setTransformersModuleLoaderForTests(async () => ({
+      env: {
+        allowRemoteModels: false,
+        allowLocalModels: false,
+        cacheDir: undefined
+      },
+      pipeline: pipelineSpy
+    }));
+
+    const result = await embedQueryText("do not retry auth failures", {
+      config: {
+        embeddingProvider: "api",
+        embeddingModel: "Xenova/multilingual-e5-small",
+        embeddingDtype: "q8",
+        embeddingCacheDir: "./tmp/embeddings"
+      },
+      env: {
+        ...process.env,
+        OPENAI_API_KEY: "test-openai-key"
+      }
+    });
+
+    expect(result.space.provider).toBe("local");
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(pipelineSpy).toHaveBeenCalledTimes(1);
+  });
 });
