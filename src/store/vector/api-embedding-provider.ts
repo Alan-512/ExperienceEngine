@@ -137,7 +137,10 @@ const JINA_TASK_MAP = {
 
 const createJinaProvider = (options: ApiEmbeddingOptions = {}): SemanticEmbeddingProvider => {
   const env = options.env ?? process.env;
-  const apiKey = env.JINA_API_KEY;
+  const apiKey = firstNonEmpty(env.JINA_API_KEY);
+  if (!apiKey) {
+    throw new Error("Jina embedding provider requires JINA_API_KEY");
+  }
   const fetchImpl = options.fetchImpl ?? fetch;
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
 
@@ -209,7 +212,11 @@ export const resolveApiEmbeddingProvider = (
   }
 
   if (explicit === "jina") {
-    return createJinaProvider(options);
+    try {
+      return createJinaProvider(options);
+    } catch {
+      return null;
+    }
   }
 
   if (firstNonEmpty(env.OPENAI_API_KEY, env.EXPERIENCE_ENGINE_EMBEDDING_API_KEY)) {
@@ -220,5 +227,9 @@ export const resolveApiEmbeddingProvider = (
     }
   }
 
-  return createJinaProvider(options);
+  try {
+    return createJinaProvider(options);
+  } catch {
+    return null;
+  }
 };
