@@ -45,7 +45,12 @@ In practice:
 Already available in the repository:
 - host integration for `OpenClaw`, `Claude Code`, and `Codex`
 - MCP-native interaction surfaces plus CLI fallback
-- local embedding-based retrieval
+- API-first semantic retrieval with graceful fallback:
+  - OpenAI `text-embedding-3-small`
+  - Gemini `gemini-embedding-001`
+  - Jina `jina-embeddings-v3`
+  - managed local embedding fallback
+  - legacy hash-based fallback
 - quick inspection and feedback commands such as `ee inspect --last`, `ee helped`, and `ee harmed`
 - local Experience Pack workflow:
   - `draft`
@@ -72,6 +77,7 @@ If the package is installed as a binary, use:
 
 ```bash
 ee doctor codex
+ee maintenance embedding-smoke
 ```
 
 ## Prerequisites
@@ -113,6 +119,24 @@ That managed state includes:
 - per-adapter install state
 - managed local embedding model cache under `~/.experienceengine/models/embeddings`
 - managed backups and exports
+
+## Embedding Defaults
+
+Current default behavior:
+
+- `embeddingProvider = "api"`
+- provider priority:
+  - OpenAI when `OPENAI_API_KEY` is present
+  - Gemini when `GEMINI_API_KEY` is present
+  - Jina when `JINA_API_KEY` is present
+- if no API provider is available, ExperienceEngine falls back to the managed local embedding model
+
+Useful environment variables:
+
+- `EXPERIENCE_ENGINE_EMBEDDING_PROVIDER=local`
+  - force fully local embedding behavior
+- `EXPERIENCE_ENGINE_EMBEDDING_API_PROVIDER=openai|gemini|jina`
+  - force a specific API embedding provider
 
 ## User Guide
 
