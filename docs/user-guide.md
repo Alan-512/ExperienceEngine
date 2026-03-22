@@ -226,8 +226,8 @@ Default behavior (`embeddingProvider = "api"`):
 
 - ExperienceEngine first tries API embeddings for better retrieval quality
 - if `OPENAI_API_KEY` is present, it prefers OpenAI `text-embedding-3-small`
-- otherwise it tries Jina `jina-embeddings-v3`
-- Jina can run without `JINA_API_KEY`; add one if you want higher limits or more predictable production usage
+- otherwise it tries Gemini `gemini-embedding-001` when `GEMINI_API_KEY` is present
+- otherwise it tries Jina `jina-embeddings-v3` when `JINA_API_KEY` is present
 - if the API provider fails, ExperienceEngine falls back to the managed local model
 - if the local model fails, ExperienceEngine falls back to legacy hash-based retrieval
 
@@ -246,11 +246,13 @@ Legacy behavior (`embeddingProvider = "legacy"`):
 Environment variables:
 
 - `OPENAI_API_KEY` — enables OpenAI embeddings and makes OpenAI the preferred API provider
-- `JINA_API_KEY` — optional; improves Jina rate limits and reliability
+- `GEMINI_API_KEY` — enables Gemini `gemini-embedding-001`
+- `JINA_API_KEY` — enables Jina `jina-embeddings-v3`
 - `EXPERIENCE_ENGINE_EMBEDDING_API_PROVIDER` — force a specific API provider (`openai`, `jina`, or `gemini`)
 
 Notes:
 
+- The default embedding strategy on this branch is now `api` instead of `local`. Users who want fully local retrieval should set `embeddingProvider = "local"` explicitly.
 - `ee install ...` and `ee doctor ...` warn when `npm` or `pnpm` is pointed at a non-official registry
 - the recommended registry for managed model downloads is `https://registry.npmjs.org`
 - `ee doctor ...` reports a first-value readiness summary so users can see how much captured evidence exists before the first durable node is promoted
