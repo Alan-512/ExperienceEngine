@@ -18,7 +18,7 @@ const firstNonEmpty = (...values: Array<string | undefined>): string | undefined
 const DEFAULT_TIMEOUT_MS = 5_000;
 const MAX_TRANSIENT_RETRIES = 1;
 
-const describeApiFailure = (provider: "openai" | "jina", status: number): string => {
+const describeApiFailure = (provider: "openai" | "jina" | "gemini", status: number): string => {
   if (status === 401 || status === 403) {
     return `${provider} embedding API authentication failed (${status})`;
   }
@@ -197,6 +197,65 @@ const createJinaProvider = (options: ApiEmbeddingOptions = {}): SemanticEmbeddin
   };
 };
 
+const GEMINI_EMBEDDING_MODEL = "gemini-embedding-001";
+const GEMINI_EMBEDDING_VERSION = "gemini-embedding-001";
+
+const createGeminiProvider = (options: ApiEmbeddingOptions = {}): SemanticEmbeddingProvider => {
+  const env = options.env ?? process.env;
+  const apiKey = firstNonEmpty(env.GEMINI_API_KEY);
+  if (!apiKey) {
+    throw new Error("Gemini embedding provider requires GEMINI_API_KEY");
+  }
+
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+
+  const embed = async (text: string, taskType: "RETRIEVAL_QUERY" | "RETRIEVAL_DOCUMENT"): Promise<number[]> => {
+    const response = await withTransientRetry(async () =>
+      fetchWithTimeout(
+        `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_EMBEDDING_MODEL}:embedContent`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "x-goog-api-key": apiKey
+          },
+          body: JSON.stringify({
+            model: `models/${GEMINI_EMBEDDING_MODEL}`,
+            content: {
+              parts: [{ text }]
+            },
+            taskType,
+            outputDimensionality: 1536
+          })
+        },
+        fetchImpl,
+        timeoutMs
+      )
+    );
+
+    if (!response.ok) {
+      throw new Error(describeApiFailure("gemini", response.status));
+    }
+
+    const payload = (await response.json()) as { embedding?: { values?: number[] } };
+    const embedding = payload.embedding?.values;
+    if (!embedding?.length) {
+      throw new Error("Gemini embedding API returned empty vector");
+    }
+    return embedding;
+  };
+
+  return {
+    provider: "gemini",
+    model: GEMINI_EMBEDDING_MODEL,
+    version: GEMINI_EMBEDDING_VERSION,
+    dimensions: 1536,
+    embedQuery: (text) => embed(text, "RETRIEVAL_QUERY"),
+    embedPassage: (text) => embed(text, "RETRIEVAL_DOCUMENT")
+  };
+};
+
 export const resolveApiEmbeddingProvider = (
   options: ApiEmbeddingOptions = {}
 ): SemanticEmbeddingProvider | null => {
@@ -219,9 +278,25 @@ export const resolveApiEmbeddingProvider = (
     }
   }
 
+  if (explicit === "gemini") {
+    try {
+      return createGeminiProvider(options);
+    } catch {
+      return null;
+    }
+  }
+
   if (firstNonEmpty(env.OPENAI_API_KEY, env.EXPERIENCE_ENGINE_EMBEDDING_API_KEY)) {
     try {
       return createOpenAIProvider(options);
+    } catch {
+      return null;
+    }
+  }
+
+  if (firstNonEmpty(env.GEMINI_API_KEY)) {
+    try {
+      return createGeminiProvider(options);
     } catch {
       return null;
     }

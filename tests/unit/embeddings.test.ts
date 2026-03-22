@@ -90,6 +90,46 @@ describe("embedding fallback diagnostics", () => {
     });
   });
 
+  it("uses the Gemini embedding provider when explicitly selected", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url, init) => {
+        const body = JSON.parse(String(init?.body));
+        expect(body.model).toBe("models/gemini-embedding-001");
+        expect(body.taskType).toBe("RETRIEVAL_QUERY");
+        return new Response(
+          JSON.stringify({
+            embedding: {
+              values: [0.15, 0.25, 0.35]
+            }
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      })
+    );
+
+    const result = await embedQueryText("validate the first failing step", {
+      config: {
+        embeddingProvider: "api",
+        embeddingModel: "Xenova/multilingual-e5-small",
+        embeddingDtype: "q8",
+        embeddingCacheDir: "./tmp/embeddings"
+      },
+      env: {
+        ...process.env,
+        EXPERIENCE_ENGINE_EMBEDDING_PROVIDER: "gemini",
+        GEMINI_API_KEY: "test-gemini-key"
+      }
+    });
+
+    expect(result.space).toMatchObject({
+      provider: "gemini",
+      model: "gemini-embedding-001",
+      version: "gemini-embedding-001",
+      dimensions: 1536
+    });
+  });
+
   it("falls back to the local provider when the API provider fails", async () => {
     vi.stubGlobal(
       "fetch",
