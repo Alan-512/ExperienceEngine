@@ -1,6 +1,8 @@
 import { normalizeWhitespace, tokenize } from "../../utils/text.js";
 import type { ExperienceEngineConfig } from "../../config/config-schema.js";
-import { getLocalEmbeddingProvider, type SemanticEmbeddingProvider } from "./local-provider.js";
+import { resolveApiEmbeddingProvider } from "./api-embedding-provider.js";
+import { getLocalEmbeddingProvider } from "./local-provider.js";
+import type { SemanticEmbeddingProvider } from "./provider-types.js";
 
 export type EmbeddingSpace = {
   provider: string;
@@ -15,7 +17,12 @@ export type EmbeddingResult = {
 };
 
 type EmbeddingOptions = {
-  config?: Pick<ExperienceEngineConfig, "embeddingProvider" | "embeddingModel" | "embeddingDtype" | "embeddingCacheDir">;
+  config?: Partial<
+    Pick<
+    ExperienceEngineConfig,
+    "embeddingProvider" | "embeddingModel" | "embeddingDtype" | "embeddingCacheDir"
+    >
+  >;
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
 };
@@ -136,6 +143,54 @@ export const isCompatibleEmbedding = (embedding: number[] | undefined): embeddin
 
 let testProvider: SemanticEmbeddingProvider | null = null;
 let localEmbeddingWarningShown = false;
+const EMBEDDING_CACHE_TTL_MS = 5 * 60 * 1000;
+const EMBEDDING_CACHE_MAX_ENTRIES = 256;
+
+type CachedEmbeddingResult = {
+  result: EmbeddingResult;
+  cachedAt: number;
+};
+
+const queryEmbeddingCache = new Map<string, CachedEmbeddingResult>();
+const passageEmbeddingCache = new Map<string, CachedEmbeddingResult>();
+
+const getCachedEmbedding = (
+  cache: Map<string, CachedEmbeddingResult>,
+  key: string
+): EmbeddingResult | null => {
+  const entry = cache.get(key);
+  if (!entry) {
+    return null;
+  }
+  if (Date.now() - entry.cachedAt > EMBEDDING_CACHE_TTL_MS) {
+    cache.delete(key);
+    return null;
+  }
+  cache.delete(key);
+  cache.set(key, entry);
+  return entry.result;
+};
+
+const cacheEmbedding = (
+  cache: Map<string, CachedEmbeddingResult>,
+  key: string,
+  result: EmbeddingResult
+): void => {
+  if (cache.has(key)) {
+    cache.delete(key);
+  }
+  while (cache.size >= EMBEDDING_CACHE_MAX_ENTRIES) {
+    const oldestKey = cache.keys().next().value;
+    if (!oldestKey) {
+      break;
+    }
+    cache.delete(oldestKey);
+  }
+  cache.set(key, {
+    result,
+    cachedAt: Date.now()
+  });
+};
 
 const warnLocalEmbeddingFallback = (message: string): void => {
   if (localEmbeddingWarningShown) {
@@ -143,6 +198,41 @@ const warnLocalEmbeddingFallback = (message: string): void => {
   }
   localEmbeddingWarningShown = true;
   console.warn(`[ExperienceEngine] Local embedding provider unavailable, falling back to legacy retrieval: ${message}`);
+};
+
+const tryLocalFallback = async (
+  value: string,
+  mode: "query" | "passage",
+  options: EmbeddingOptions,
+  primaryFailureMessage?: string
+): Promise<EmbeddingResult | null> => {
+  try {
+    const provider = await getLocalEmbeddingProvider({
+      ...options,
+      config: {
+        ...options.config,
+        embeddingProvider: "local"
+      }
+    });
+    const embedding = mode === "query" ? await provider.embedQuery(value) : await provider.embedPassage(value);
+    return {
+      embedding,
+      space: {
+        provider: provider.provider,
+        model: provider.model,
+        version: provider.version,
+        dimensions: provider.dimensions
+      }
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    warnLocalEmbeddingFallback(
+      primaryFailureMessage
+        ? `${primaryFailureMessage}; local fallback failed: ${message}`
+        : message
+    );
+    return null;
+  }
 };
 
 export const setEmbeddingProviderForTests = (provider: SemanticEmbeddingProvider | null): void => {
@@ -154,6 +244,12 @@ export const clearEmbeddingProviderForTests = (): void => {
   localEmbeddingWarningShown = false;
 };
 
+export const clearEmbeddingRuntimeCaches = (): void => {
+  queryEmbeddingCache.clear();
+  passageEmbeddingCache.clear();
+  localEmbeddingWarningShown = false;
+};
+
 const resolveProvider = async (options: EmbeddingOptions = {}): Promise<SemanticEmbeddingProvider | null> => {
   if (testProvider) {
     return testProvider;
@@ -161,13 +257,25 @@ const resolveProvider = async (options: EmbeddingOptions = {}): Promise<Semantic
   if (options.config?.embeddingProvider === "legacy") {
     return null;
   }
-  try {
-    return await getLocalEmbeddingProvider(options);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    warnLocalEmbeddingFallback(message);
-    return null;
+
+  if (options.config?.embeddingProvider === "api" || options.config?.embeddingProvider === undefined) {
+    const apiProvider = resolveApiEmbeddingProvider({ env: options.env });
+    if (apiProvider) {
+      return apiProvider;
+    }
   }
+
+  if (options.config?.embeddingProvider === "local" || options.config?.embeddingProvider === "api" || options.config?.embeddingProvider === undefined) {
+    try {
+      return await getLocalEmbeddingProvider(options);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      warnLocalEmbeddingFallback(message);
+      return null;
+    }
+  }
+
+  return null;
 };
 
 export const buildLegacyEmbedding = (value: string): EmbeddingResult => toLegacyResult(value);
@@ -180,8 +288,13 @@ export const embedQueryText = async (
   if (!provider) {
     return toLegacyResult(value);
   }
+  const cacheKey = `${provider.provider}:${provider.model}:${provider.version}:query:${value}`;
+  const cached = getCachedEmbedding(queryEmbeddingCache, cacheKey);
+  if (cached) {
+    return cached;
+  }
   try {
-    return {
+    const result = {
       embedding: await provider.embedQuery(value),
       space: {
         provider: provider.provider,
@@ -190,9 +303,18 @@ export const embedQueryText = async (
         dimensions: provider.dimensions
       }
     };
+    cacheEmbedding(queryEmbeddingCache, cacheKey, result);
+    return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    warnLocalEmbeddingFallback(message);
+    if (provider.provider !== "local") {
+      const localResult = await tryLocalFallback(value, "query", options, message);
+      if (localResult) {
+        return localResult;
+      }
+    } else {
+      warnLocalEmbeddingFallback(message);
+    }
     return toLegacyResult(value);
   }
 };
@@ -205,8 +327,13 @@ export const embedPassageText = async (
   if (!provider) {
     return toLegacyResult(value);
   }
+  const cacheKey = `${provider.provider}:${provider.model}:${provider.version}:passage:${value}`;
+  const cached = getCachedEmbedding(passageEmbeddingCache, cacheKey);
+  if (cached) {
+    return cached;
+  }
   try {
-    return {
+    const result = {
       embedding: await provider.embedPassage(value),
       space: {
         provider: provider.provider,
@@ -215,9 +342,18 @@ export const embedPassageText = async (
         dimensions: provider.dimensions
       }
     };
+    cacheEmbedding(passageEmbeddingCache, cacheKey, result);
+    return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    warnLocalEmbeddingFallback(message);
+    if (provider.provider !== "local") {
+      const localResult = await tryLocalFallback(value, "passage", options, message);
+      if (localResult) {
+        return localResult;
+      }
+    } else {
+      warnLocalEmbeddingFallback(message);
+    }
     return toLegacyResult(value);
   }
 };

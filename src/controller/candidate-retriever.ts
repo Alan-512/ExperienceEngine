@@ -121,6 +121,41 @@ const textOverlapScore = (left: string | undefined, right: string): number => {
   return overlap / Math.max(lhs.size, rhs.size);
 };
 
+const LOW_SIGNAL_QUERY_TOKENS = new Set([
+  "ok",
+  "okay",
+  "yes",
+  "yep",
+  "thanks",
+  "thx",
+  "done",
+  "continue",
+  "go",
+  "run",
+  "retry"
+]);
+
+const shouldSkipSemanticRetrieval = (input: ExperienceInput, queryText: string): boolean => {
+  if (input.context_summary?.trim()) {
+    return false;
+  }
+
+  const tokens = tokenize(queryText);
+  if (tokens.length === 0) {
+    return true;
+  }
+
+  if (tokens.length === 1 && LOW_SIGNAL_QUERY_TOKENS.has(tokens[0] ?? "")) {
+    return true;
+  }
+
+  if (tokens.length <= 2 && tokens.every((token) => LOW_SIGNAL_QUERY_TOKENS.has(token))) {
+    return true;
+  }
+
+  return false;
+};
+
 const isExpectationCorrectionNode = (node: ExperienceNode): boolean => node.experience_kind === "expectation_correction";
 
 const passesCorrectionScopeGate = (input: ExperienceInput, node: ExperienceNode): boolean => {
@@ -184,18 +219,21 @@ export const retrieveCandidates = async (
 
   const inputTaskType = input.task_type;
   const queryText = [input.task_summary, input.context_summary].filter(Boolean).join("\n");
-  const localQuery = await embedQueryText(queryText || input.task_summary, options);
+  const shouldUseSemanticRetrieval = !shouldSkipSemanticRetrieval(input, queryText || input.task_summary);
+  const localQuery = shouldUseSemanticRetrieval
+    ? await embedQueryText(queryText || input.task_summary, options)
+    : null;
   const legacyQuery = buildLegacyEmbedding(queryText || input.task_summary);
   const vectorStore = openVectorStore();
   const scopeLocalNodes = nodes.filter((node) => isInjectableState(node) && passesCorrectionScopeGate(input, node));
   const localSemanticRecords = scopeLocalNodes
-    .filter((node) => isMatchingEmbeddingSpace(node, localQuery.space))
+    .filter((node) => localQuery && isMatchingEmbeddingSpace(node, localQuery.space))
     .map((node) => ({
       id: node.id,
       embedding: node.embedding!
     }));
   const legacyRecords = scopeLocalNodes
-    .filter((node) => !isMatchingEmbeddingSpace(node, localQuery.space))
+    .filter((node) => !localQuery || !isMatchingEmbeddingSpace(node, localQuery.space))
     .map((node) => ({
       id: node.id,
       embedding: isCompatibleEmbedding(node.embedding)
@@ -204,11 +242,13 @@ export const retrieveCandidates = async (
     }));
 
   const scoreById = new Map<string, number>();
-  for (const match of vectorStore.query(localSemanticRecords, localQuery.embedding, 16)) {
-    scoreById.set(match.id, match.score);
+  if (localQuery) {
+    for (const match of vectorStore.query(localSemanticRecords, localQuery.embedding, 16)) {
+      scoreById.set(match.id, match.score);
+    }
   }
   for (const match of vectorStore.query(legacyRecords, legacyQuery.embedding, 16)) {
-    scoreById.set(match.id, Math.max(scoreById.get(match.id) ?? 0, match.score * 0.78));
+    scoreById.set(match.id, Math.max(scoreById.get(match.id) ?? 0, localQuery ? match.score * 0.78 : match.score));
   }
 
   const minimumFamilyScore = inputTaskType === "general" ? 0.75 : 0.65;

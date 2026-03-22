@@ -3,7 +3,7 @@ const usageText =
   + " | helped|harmed"
   + " | pack <list|inspect|draft create|review|publish|compile [version] [agents|codex]|rollback>"
   + " | backup|export|import <snapshot-path>|rollback <backup-id>"
-  + " | maintenance embeddings-reset|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
+  + " | maintenance embeddings-reset|embedding-smoke|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
   + " | evaluate openclaw-baseline [--lookback-hours N] [--output-dir PATH]"
   + " | evaluate openclaw-scenarios --pack high-confidence [--repo-root PATH] [--output-dir PATH] [--dry-run]"
   + " | mcp-server"

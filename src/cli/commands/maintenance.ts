@@ -4,6 +4,7 @@ import { LlmDistiller } from "../../distillation/llm-distiller.js";
 import { runClaudePrintValidation } from "../../maintenance/claude-validate-print.js";
 import { redistillRuleNodes } from "../../maintenance/redistill-rule-nodes.js";
 import { mergeScopesWithConfig } from "../../maintenance/scope-merge.js";
+import { runEmbeddingSmoke, type EmbeddingSmokeReport } from "../../maintenance/embedding-smoke.js";
 import { bootstrapDatabase, openDatabase } from "../../store/sqlite/db.js";
 import { CandidateRepository } from "../../store/sqlite/repositories/candidate-repo.js";
 import { NodeRepository } from "../../store/sqlite/repositories/node-repo.js";
@@ -16,6 +17,7 @@ type MaintenanceDeps = {
   redistillRuleNodes?: typeof redistillRuleNodes;
   claudeValidatePrint?: typeof runClaudePrintValidation;
   mergeScopesWithConfig?: typeof mergeScopesWithConfig;
+  embeddingSmoke?: (config: ReturnType<typeof loadConfig>) => Promise<EmbeddingSmokeReport>;
 };
 
 export const runMaintenanceCommand = async (
@@ -38,6 +40,20 @@ export const runMaintenanceCommand = async (
 
     console.log(
       `[ExperienceEngine] Rebuilt managed embedding cache with ${report.model} (${report.dimensions} dimensions).`
+    );
+    return;
+  }
+
+  if (action === "embedding-smoke") {
+    const report = await (deps.embeddingSmoke ?? ((resolvedConfig) => runEmbeddingSmoke(resolvedConfig)))(config);
+    console.log(
+      `[ExperienceEngine] Embedding smoke complete for ${report.provider}/${report.model}.`
+    );
+    console.log(
+      `[ExperienceEngine] Query cold=${report.coldQueryMs}ms warm=${report.warmQueryMs}ms`
+    );
+    console.log(
+      `[ExperienceEngine] Passage cold=${report.coldPassageMs}ms warm=${report.warmPassageMs}ms`
     );
     return;
   }
@@ -116,6 +132,7 @@ export const runMaintenanceCommand = async (
       console.log("[ExperienceEngine] merge-scope requires <sourceScopeId> <targetScopeId>.");
       console.log(
         "Usage: ee maintenance embeddings-reset|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
+        .replace("embeddings-reset|", "embeddings-reset|embedding-smoke|")
       );
       return;
     }
@@ -132,6 +149,6 @@ export const runMaintenanceCommand = async (
   }
 
   console.log(
-    "Usage: ee maintenance embeddings-reset|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
+    "Usage: ee maintenance embeddings-reset|embedding-smoke|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
   );
 };
