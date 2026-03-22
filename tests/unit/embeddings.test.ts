@@ -117,7 +117,7 @@ describe("embedding fallback diagnostics", () => {
       },
       env: {
         ...process.env,
-        EXPERIENCE_ENGINE_EMBEDDING_PROVIDER: "gemini",
+        EXPERIENCE_ENGINE_EMBEDDING_API_PROVIDER: "gemini",
         GEMINI_API_KEY: "test-gemini-key"
       }
     });

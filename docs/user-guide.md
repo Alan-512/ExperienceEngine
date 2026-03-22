@@ -247,7 +247,7 @@ Environment variables:
 
 - `OPENAI_API_KEY` — enables OpenAI embeddings and makes OpenAI the preferred API provider
 - `JINA_API_KEY` — optional; improves Jina rate limits and reliability
-- `EXPERIENCE_ENGINE_EMBEDDING_PROVIDER` — force a specific API provider (`openai` or `jina`)
+- `EXPERIENCE_ENGINE_EMBEDDING_API_PROVIDER` — force a specific API provider (`openai`, `jina`, or `gemini`)
 
 Notes:
 

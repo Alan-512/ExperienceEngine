@@ -260,7 +260,7 @@ export const resolveApiEmbeddingProvider = (
   options: ApiEmbeddingOptions = {}
 ): SemanticEmbeddingProvider | null => {
   const env = options.env ?? process.env;
-  const explicit = env.EXPERIENCE_ENGINE_EMBEDDING_PROVIDER;
+  const explicit = env.EXPERIENCE_ENGINE_EMBEDDING_API_PROVIDER;
 
   if (explicit === "openai") {
     try {
