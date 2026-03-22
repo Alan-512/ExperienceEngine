@@ -143,6 +143,7 @@ export const isCompatibleEmbedding = (embedding: number[] | undefined): embeddin
 
 let testProvider: SemanticEmbeddingProvider | null = null;
 let localEmbeddingWarningShown = false;
+const queryEmbeddingCache = new Map<string, EmbeddingResult>();
 
 const warnLocalEmbeddingFallback = (message: string): void => {
   if (localEmbeddingWarningShown) {
@@ -187,6 +188,11 @@ export const clearEmbeddingProviderForTests = (): void => {
   localEmbeddingWarningShown = false;
 };
 
+export const clearEmbeddingRuntimeCaches = (): void => {
+  queryEmbeddingCache.clear();
+  localEmbeddingWarningShown = false;
+};
+
 const resolveProvider = async (options: EmbeddingOptions = {}): Promise<SemanticEmbeddingProvider | null> => {
   if (testProvider) {
     return testProvider;
@@ -225,8 +231,13 @@ export const embedQueryText = async (
   if (!provider) {
     return toLegacyResult(value);
   }
+  const cacheKey = `${provider.provider}:${provider.model}:${provider.version}:query:${value}`;
+  const cached = queryEmbeddingCache.get(cacheKey);
+  if (cached) {
+    return cached;
+  }
   try {
-    return {
+    const result = {
       embedding: await provider.embedQuery(value),
       space: {
         provider: provider.provider,
@@ -235,6 +246,8 @@ export const embedQueryText = async (
         dimensions: provider.dimensions
       }
     };
+    queryEmbeddingCache.set(cacheKey, result);
+    return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (provider.provider !== "local") {

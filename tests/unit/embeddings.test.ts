@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
+  clearEmbeddingRuntimeCaches,
   clearEmbeddingProviderForTests,
   embedQueryText,
   setEmbeddingProviderForTests
@@ -16,6 +17,7 @@ describe("embedding fallback diagnostics", () => {
   beforeEach(() => {
     warnSpy.mockClear();
     clearEmbeddingProviderForTests();
+    clearEmbeddingRuntimeCaches();
     clearLocalEmbeddingProviderCache();
     setTransformersModuleLoaderForTests(null);
     vi.unstubAllGlobals();
@@ -23,6 +25,7 @@ describe("embedding fallback diagnostics", () => {
 
   afterEach(() => {
     clearEmbeddingProviderForTests();
+    clearEmbeddingRuntimeCaches();
     clearLocalEmbeddingProviderCache();
     setTransformersModuleLoaderForTests(null);
     globalThis.fetch = originalFetch;
@@ -159,5 +162,36 @@ describe("embedding fallback diagnostics", () => {
       version: "jina-v3",
       dimensions: 1024
     });
+  });
+
+  it("caches repeated query embeddings for the same API provider and input", async () => {
+    const fetchSpy = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          data: [{ embedding: [0.11, 0.22, 0.33] }]
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const options = {
+      config: {
+        embeddingProvider: "api" as const,
+        embeddingModel: "Xenova/multilingual-e5-small",
+        embeddingDtype: "q8" as const,
+        embeddingCacheDir: "./tmp/embeddings"
+      },
+      env: {
+        ...process.env,
+        OPENAI_API_KEY: "test-openai-key"
+      }
+    };
+
+    const first = await embedQueryText("validate the first failing step", options);
+    const second = await embedQueryText("validate the first failing step", options);
+
+    expect(first.embedding).toEqual(second.embedding);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
 });
