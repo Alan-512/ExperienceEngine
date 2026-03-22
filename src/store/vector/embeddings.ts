@@ -1,6 +1,8 @@
 import { normalizeWhitespace, tokenize } from "../../utils/text.js";
 import type { ExperienceEngineConfig } from "../../config/config-schema.js";
-import { getLocalEmbeddingProvider, type SemanticEmbeddingProvider } from "./local-provider.js";
+import { resolveApiEmbeddingProvider } from "./api-embedding-provider.js";
+import { getLocalEmbeddingProvider } from "./local-provider.js";
+import type { SemanticEmbeddingProvider } from "./provider-types.js";
 
 export type EmbeddingSpace = {
   provider: string;
@@ -15,7 +17,12 @@ export type EmbeddingResult = {
 };
 
 type EmbeddingOptions = {
-  config?: Pick<ExperienceEngineConfig, "embeddingProvider" | "embeddingModel" | "embeddingDtype" | "embeddingCacheDir">;
+  config?: Partial<
+    Pick<
+    ExperienceEngineConfig,
+    "embeddingProvider" | "embeddingModel" | "embeddingDtype" | "embeddingCacheDir"
+    >
+  >;
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
 };
@@ -145,6 +152,32 @@ const warnLocalEmbeddingFallback = (message: string): void => {
   console.warn(`[ExperienceEngine] Local embedding provider unavailable, falling back to legacy retrieval: ${message}`);
 };
 
+const tryLocalFallback = async (value: string, mode: "query" | "passage", options: EmbeddingOptions): Promise<EmbeddingResult | null> => {
+  try {
+    const provider = await getLocalEmbeddingProvider({
+      ...options,
+      config: {
+        ...options.config,
+        embeddingProvider: "local"
+      }
+    });
+    const embedding = mode === "query" ? await provider.embedQuery(value) : await provider.embedPassage(value);
+    return {
+      embedding,
+      space: {
+        provider: provider.provider,
+        model: provider.model,
+        version: provider.version,
+        dimensions: provider.dimensions
+      }
+    };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    warnLocalEmbeddingFallback(message);
+    return null;
+  }
+};
+
 export const setEmbeddingProviderForTests = (provider: SemanticEmbeddingProvider | null): void => {
   testProvider = provider;
 };
@@ -161,13 +194,25 @@ const resolveProvider = async (options: EmbeddingOptions = {}): Promise<Semantic
   if (options.config?.embeddingProvider === "legacy") {
     return null;
   }
-  try {
-    return await getLocalEmbeddingProvider(options);
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    warnLocalEmbeddingFallback(message);
-    return null;
+
+  if (options.config?.embeddingProvider === "api" || options.config?.embeddingProvider === undefined) {
+    const apiProvider = resolveApiEmbeddingProvider({ env: options.env });
+    if (apiProvider) {
+      return apiProvider;
+    }
   }
+
+  if (options.config?.embeddingProvider === "local" || options.config?.embeddingProvider === "api" || options.config?.embeddingProvider === undefined) {
+    try {
+      return await getLocalEmbeddingProvider(options);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      warnLocalEmbeddingFallback(message);
+      return null;
+    }
+  }
+
+  return null;
 };
 
 export const buildLegacyEmbedding = (value: string): EmbeddingResult => toLegacyResult(value);
@@ -192,7 +237,14 @@ export const embedQueryText = async (
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    warnLocalEmbeddingFallback(message);
+    if (provider.provider !== "local") {
+      const localResult = await tryLocalFallback(value, "query", options);
+      if (localResult) {
+        return localResult;
+      }
+    } else {
+      warnLocalEmbeddingFallback(message);
+    }
     return toLegacyResult(value);
   }
 };
@@ -217,7 +269,14 @@ export const embedPassageText = async (
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    warnLocalEmbeddingFallback(message);
+    if (provider.provider !== "local") {
+      const localResult = await tryLocalFallback(value, "passage", options);
+      if (localResult) {
+        return localResult;
+      }
+    } else {
+      warnLocalEmbeddingFallback(message);
+    }
     return toLegacyResult(value);
   }
 };

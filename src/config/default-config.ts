@@ -11,7 +11,7 @@ export const defaultConfig: ExperienceEngineConfig = {
   captureDir: "./data/runtime-captures",
   maxHints: 3,
   triggerThreshold: 0.6,
-  embeddingProvider: "local",
+  embeddingProvider: "api",
   embeddingModel: "Xenova/multilingual-e5-small",
   embeddingDtype: "q8",
   embeddingCacheDir: "./data/models/embeddings",

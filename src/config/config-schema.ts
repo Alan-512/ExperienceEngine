@@ -12,7 +12,7 @@ export const configSchema = z.object({
   captureDir: z.string().default("./data/runtime-captures"),
   maxHints: z.number().int().min(1).max(3).default(3),
   triggerThreshold: z.number().min(0).max(1).default(0.6),
-  embeddingProvider: z.enum(["local", "legacy"]).default("local"),
+  embeddingProvider: z.enum(["api", "local", "legacy"]).default("api"),
   embeddingModel: z.string().default("Xenova/multilingual-e5-small"),
   embeddingDtype: z.enum(["q8", "fp32"]).default("q8"),
   embeddingCacheDir: z.string().default("./data/models/embeddings"),
@@ -83,8 +83,9 @@ export const pluginConfigJsonSchema = {
     },
     embeddingProvider: {
       type: "string",
-      enum: ["local", "legacy"],
-      description: "Embedding provider used for retrieval. `local` manages a local model, `legacy` keeps hash fallback only."
+      enum: ["api", "local", "legacy"],
+      description:
+        "Embedding provider used for retrieval. `api` prefers Jina/OpenAI embeddings, `local` manages a local model, `legacy` keeps hash fallback only."
     },
     embeddingModel: {
       type: "string",

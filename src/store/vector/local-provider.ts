@@ -3,18 +3,12 @@ import { join } from "node:path";
 import type { ExperienceEngineConfig } from "../../config/config-schema.js";
 import { resolveExperienceEnginePaths } from "../../config/path-resolver.js";
 import { normalizeWhitespace } from "../../utils/text.js";
-
-export type SemanticEmbeddingProvider = {
-  provider: "local";
-  model: string;
-  version: string;
-  dimensions: number;
-  embedQuery(text: string): Promise<number[]>;
-  embedPassage(text: string): Promise<number[]>;
-};
+import type { SemanticEmbeddingProvider } from "./provider-types.js";
 
 type ProviderOptions = {
-  config?: Pick<ExperienceEngineConfig, "embeddingProvider" | "embeddingModel" | "embeddingDtype" | "embeddingCacheDir">;
+  config?: Partial<
+    Pick<ExperienceEngineConfig, "embeddingProvider" | "embeddingModel" | "embeddingDtype" | "embeddingCacheDir">
+  >;
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
 };

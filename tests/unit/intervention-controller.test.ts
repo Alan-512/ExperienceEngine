@@ -192,7 +192,6 @@ describe("decideIntervention", () => {
   it("prefers expectation-correction nodes over generic candidates when the correction context matches", async () => {
     const correctionInput: ExperienceInput = {
       scope_id: "scope_1",
-      session_id: "session_ec",
       task_type: "config_debug",
       task_summary:
         "Correction: a previous pass focused too much on UI aliases. In exactly one sentence, say the real issue is runtime config resolution and persisted settings precedence.",

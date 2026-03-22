@@ -4,17 +4,28 @@ import {
   embedQueryText,
   setEmbeddingProviderForTests
 } from "../../src/store/vector/embeddings.js";
+import {
+  clearLocalEmbeddingProviderCache,
+  setTransformersModuleLoaderForTests
+} from "../../src/store/vector/local-provider.js";
 
 describe("embedding fallback diagnostics", () => {
   const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+  const originalFetch = globalThis.fetch;
 
   beforeEach(() => {
     warnSpy.mockClear();
     clearEmbeddingProviderForTests();
+    clearLocalEmbeddingProviderCache();
+    setTransformersModuleLoaderForTests(null);
+    vi.unstubAllGlobals();
   });
 
   afterEach(() => {
     clearEmbeddingProviderForTests();
+    clearLocalEmbeddingProviderCache();
+    setTransformersModuleLoaderForTests(null);
+    globalThis.fetch = originalFetch;
   });
 
   it("logs one warning and falls back to legacy embeddings when the local provider fails", async () => {
@@ -38,5 +49,115 @@ describe("embedding fallback diagnostics", () => {
     expect(second.space.provider).toBe("legacy");
     expect(warnSpy).toHaveBeenCalledTimes(1);
     expect(warnSpy.mock.calls[0]?.[0]).toContain("Local embedding provider unavailable");
+  });
+
+  it("prefers the OpenAI API provider when api mode is enabled and OPENAI_API_KEY is present", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        new Response(
+          JSON.stringify({
+            data: [{ embedding: [0.11, 0.22, 0.33] }]
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      )
+    );
+
+    const result = await embedQueryText("validate the first failing step", {
+      config: {
+        embeddingProvider: "api",
+        embeddingModel: "Xenova/multilingual-e5-small",
+        embeddingDtype: "q8",
+        embeddingCacheDir: "./tmp/embeddings"
+      },
+      env: {
+        ...process.env,
+        OPENAI_API_KEY: "test-openai-key"
+      }
+    });
+
+    expect(result.space).toMatchObject({
+      provider: "openai",
+      model: "text-embedding-3-small",
+      version: "openai-te3s-v1",
+      dimensions: 1536
+    });
+  });
+
+  it("falls back to the local provider when the API provider fails", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ error: "busy" }), { status: 503 }))
+    );
+
+    const pipelineSpy = vi.fn(async () =>
+      async () => ({
+        data: [0.91, 0.82, 0.73]
+      })
+    );
+
+    setTransformersModuleLoaderForTests(async () => ({
+      env: {
+        allowRemoteModels: false,
+        allowLocalModels: false,
+        cacheDir: undefined
+      },
+      pipeline: pipelineSpy
+    }));
+
+    const result = await embedQueryText("validate the first failing step", {
+      config: {
+        embeddingProvider: "api",
+        embeddingModel: "Xenova/multilingual-e5-small",
+        embeddingDtype: "q8",
+        embeddingCacheDir: "./tmp/embeddings"
+      },
+      env: {
+        ...process.env,
+        OPENAI_API_KEY: "test-openai-key"
+      }
+    });
+
+    expect(result.space.provider).toBe("local");
+    expect(result.embedding).toEqual([0.91, 0.82, 0.73]);
+    expect(pipelineSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("defaults to the Jina API provider when api mode is enabled and no OpenAI key is present", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url, init) => {
+        const body = JSON.parse(String(init?.body));
+        expect(body.task).toBe("retrieval.query");
+        return new Response(
+          JSON.stringify({
+            data: [{ embedding: [0.41, 0.52, 0.63] }]
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        );
+      })
+    );
+
+    const result = await embedQueryText("narrow the root cause before editing code", {
+      config: {
+        embeddingProvider: "api",
+        embeddingModel: "Xenova/multilingual-e5-small",
+        embeddingDtype: "q8",
+        embeddingCacheDir: "./tmp/embeddings"
+      },
+      env: {
+        ...process.env,
+        OPENAI_API_KEY: undefined,
+        EXPERIENCE_ENGINE_EMBEDDING_API_KEY: undefined
+      }
+    });
+
+    expect(result.space).toMatchObject({
+      provider: "jina",
+      model: "jina-embeddings-v3",
+      version: "jina-v3",
+      dimensions: 1024
+    });
   });
 });

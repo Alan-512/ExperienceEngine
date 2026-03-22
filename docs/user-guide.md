@@ -218,24 +218,42 @@ Before installing any adapter, make sure the host CLI itself already works on th
 
 ExperienceEngine wires itself into an existing host environment. It does not install the host CLI for you.
 
-## Local Embedding Retrieval
+## Embedding Retrieval
 
-ExperienceEngine now prefers a managed local embedding model for retrieval instead of relying on hash-only lexical vectors.
+ExperienceEngine now supports a multi-provider embedding stack for semantic retrieval.
 
-Default behavior:
+Default behavior (`embeddingProvider = "api"`):
 
-- the default model is `Xenova/multilingual-e5-small`
+- ExperienceEngine first tries API embeddings for better retrieval quality
+- if `OPENAI_API_KEY` is present, it prefers OpenAI `text-embedding-3-small`
+- otherwise it tries Jina `jina-embeddings-v3`
+- Jina can run without `JINA_API_KEY`; add one if you want higher limits or more predictable production usage
+- if the API provider fails, ExperienceEngine falls back to the managed local model
+- if the local model fails, ExperienceEngine falls back to legacy hash-based retrieval
+
+Offline behavior (`embeddingProvider = "local"`):
+
+- the default local model is `Xenova/multilingual-e5-small`
 - the default dtype is `q8`, so ExperienceEngine prefers the quantized ONNX artifact
-- ExperienceEngine manages the local cache itself
 - the first semantic retrieval may trigger a one-time model download
 - the cache lives under `~/.experienceengine/models/embeddings`
-- if local embedding initialization fails, ExperienceEngine logs a warning once and falls back to the legacy hash-based retrieval path
 - if a cached ONNX file is corrupted, ExperienceEngine clears that model cache and retries once before falling back
+
+Legacy behavior (`embeddingProvider = "legacy"`):
+
+- ExperienceEngine skips semantic providers and uses the legacy hash-based retrieval path only
+
+Environment variables:
+
+- `OPENAI_API_KEY` — enables OpenAI embeddings and makes OpenAI the preferred API provider
+- `JINA_API_KEY` — optional; improves Jina rate limits and reliability
+- `EXPERIENCE_ENGINE_EMBEDDING_PROVIDER` — force a specific API provider (`openai` or `jina`)
+
+Notes:
+
 - `ee install ...` and `ee doctor ...` warn when `npm` or `pnpm` is pointed at a non-official registry
 - the recommended registry for managed model downloads is `https://registry.npmjs.org`
 - `ee doctor ...` reports a first-value readiness summary so users can see how much captured evidence exists before the first durable node is promoted
-
-This means users do not need to prepare a separate embedding service before installing ExperienceEngine.
 
 Maintenance:
 

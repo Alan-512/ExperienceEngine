@@ -1,0 +1,162 @@
+import type { SemanticEmbeddingProvider } from "./provider-types.js";
+
+type ApiEmbeddingOptions = {
+  env?: NodeJS.ProcessEnv;
+  fetchImpl?: typeof fetch;
+  timeoutMs?: number;
+};
+
+const DEFAULT_TIMEOUT_MS = 5_000;
+
+const fetchWithTimeout = async (
+  input: string,
+  init: RequestInit,
+  fetchImpl: typeof fetch,
+  timeoutMs: number
+): Promise<Response> => {
+  const signal = AbortSignal.timeout(timeoutMs);
+  return fetchImpl(input, { ...init, signal });
+};
+
+const OPENAI_MODEL = "text-embedding-3-small";
+const OPENAI_VERSION = "openai-te3s-v1";
+
+const createOpenAIProvider = (options: ApiEmbeddingOptions = {}): SemanticEmbeddingProvider => {
+  const env = options.env ?? process.env;
+  const apiKey = env.OPENAI_API_KEY ?? env.EXPERIENCE_ENGINE_EMBEDDING_API_KEY;
+  if (!apiKey) {
+    throw new Error("OpenAI embedding provider requires OPENAI_API_KEY");
+  }
+
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+
+  const embed = async (text: string): Promise<number[]> => {
+    const response = await fetchWithTimeout(
+      "https://api.openai.com/v1/embeddings",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model: OPENAI_MODEL,
+          input: text
+        })
+      },
+      fetchImpl,
+      timeoutMs
+    );
+
+    if (!response.ok) {
+      throw new Error(`OpenAI embedding API error: ${response.status}`);
+    }
+
+    const payload = (await response.json()) as { data?: Array<{ embedding?: number[] }> };
+    const embedding = payload.data?.[0]?.embedding;
+    if (!embedding?.length) {
+      throw new Error("OpenAI embedding API returned empty vector");
+    }
+    return embedding;
+  };
+
+  return {
+    provider: "openai",
+    model: OPENAI_MODEL,
+    version: OPENAI_VERSION,
+    dimensions: 1536,
+    embedQuery: embed,
+    embedPassage: embed
+  };
+};
+
+const JINA_MODEL = "jina-embeddings-v3";
+const JINA_VERSION = "jina-v3";
+const JINA_TASK_MAP = {
+  query: "retrieval.query",
+  passage: "retrieval.passage"
+} as const;
+
+const createJinaProvider = (options: ApiEmbeddingOptions = {}): SemanticEmbeddingProvider => {
+  const env = options.env ?? process.env;
+  const apiKey = env.JINA_API_KEY;
+  const fetchImpl = options.fetchImpl ?? fetch;
+  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+
+  const embed = async (text: string, task: keyof typeof JINA_TASK_MAP): Promise<number[]> => {
+    const headers: Record<string, string> = {
+      "Content-Type": "application/json",
+      Accept: "application/json"
+    };
+    if (apiKey) {
+      headers.Authorization = `Bearer ${apiKey}`;
+    }
+
+    const response = await fetchWithTimeout(
+      "https://api.jina.ai/v1/embeddings",
+      {
+        method: "POST",
+        headers,
+        body: JSON.stringify({
+          model: JINA_MODEL,
+          input: [text],
+          task: JINA_TASK_MAP[task],
+          normalized: true
+        })
+      },
+      fetchImpl,
+      timeoutMs
+    );
+
+    if (!response.ok) {
+      throw new Error(`Jina embedding API error: ${response.status}`);
+    }
+
+    const payload = (await response.json()) as { data?: Array<{ embedding?: number[] }> };
+    const embedding = payload.data?.[0]?.embedding;
+    if (!embedding?.length) {
+      throw new Error("Jina embedding API returned empty vector");
+    }
+    return embedding;
+  };
+
+  return {
+    provider: "jina",
+    model: JINA_MODEL,
+    version: JINA_VERSION,
+    dimensions: 1024,
+    embedQuery: (text) => embed(text, "query"),
+    embedPassage: (text) => embed(text, "passage")
+  };
+};
+
+export const resolveApiEmbeddingProvider = (
+  options: ApiEmbeddingOptions = {}
+): SemanticEmbeddingProvider | null => {
+  const env = options.env ?? process.env;
+  const explicit = env.EXPERIENCE_ENGINE_EMBEDDING_PROVIDER;
+
+  if (explicit === "openai") {
+    try {
+      return createOpenAIProvider(options);
+    } catch {
+      return null;
+    }
+  }
+
+  if (explicit === "jina") {
+    return createJinaProvider(options);
+  }
+
+  if (env.OPENAI_API_KEY ?? env.EXPERIENCE_ENGINE_EMBEDDING_API_KEY) {
+    try {
+      return createOpenAIProvider(options);
+    } catch {
+      return null;
+    }
+  }
+
+  return createJinaProvider(options);
+};
+

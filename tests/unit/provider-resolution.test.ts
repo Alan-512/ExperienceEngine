@@ -17,6 +17,27 @@ afterEach(() => {
 });
 
 describe("provider resolution config surface", () => {
+  it("defaults embedding provider to api", () => {
+    const homeDir = mkdtempSync(join(tmpdir(), "experienceengine-embedding-default-"));
+    tempDirs.push(homeDir);
+    const config = loadConfig({}, { env: {}, homeDir });
+
+    expect(config.embeddingProvider).toBe("api");
+  });
+
+  it("reads an explicit api embedding provider from env", () => {
+    const config = loadConfig(
+      {},
+      {
+        env: {
+          EXPERIENCE_ENGINE_EMBEDDING_PROVIDER: "api"
+        }
+      }
+    );
+
+    expect(config.embeddingProvider).toBe("api");
+  });
+
   it("falls back to legacy openai_compatible when no explicit provider is configured", () => {
     const homeDir = mkdtempSync(join(tmpdir(), "experienceengine-provider-default-"));
     tempDirs.push(homeDir);
