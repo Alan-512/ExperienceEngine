@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearEmbeddingRuntimeCaches,
   clearEmbeddingProviderForTests,
+  embedPassageText,
   embedQueryText,
   setEmbeddingProviderForTests
 } from "../../src/store/vector/embeddings.js";
@@ -29,6 +30,7 @@ describe("embedding fallback diagnostics", () => {
     clearLocalEmbeddingProviderCache();
     setTransformersModuleLoaderForTests(null);
     globalThis.fetch = originalFetch;
+    vi.useRealTimers();
   });
 
   it("logs one warning and falls back to legacy embeddings when the local provider fails", async () => {
@@ -193,6 +195,114 @@ describe("embedding fallback diagnostics", () => {
 
     expect(first.embedding).toEqual(second.embedding);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("caches repeated passage embeddings for the same API provider and input", async () => {
+    const fetchSpy = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          data: [{ embedding: [0.44, 0.55, 0.66] }]
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const options = {
+      config: {
+        embeddingProvider: "api" as const,
+        embeddingModel: "Xenova/multilingual-e5-small",
+        embeddingDtype: "q8" as const,
+        embeddingCacheDir: "./tmp/embeddings"
+      },
+      env: {
+        ...process.env,
+        OPENAI_API_KEY: "test-openai-key"
+      }
+    };
+
+    const first = await embedPassageText("repair the provider config resolution before touching the UI", options);
+    const second = await embedPassageText("repair the provider config resolution before touching the UI", options);
+
+    expect(first.embedding).toEqual(second.embedding);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("expires cached query embeddings after the ttl window", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-03-22T12:00:00.000Z"));
+
+    const fetchSpy = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [{ embedding: [0.11, 0.22, 0.33] }]
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            data: [{ embedding: [0.21, 0.32, 0.43] }]
+          }),
+          { status: 200, headers: { "Content-Type": "application/json" } }
+        )
+      );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const options = {
+      config: {
+        embeddingProvider: "api" as const,
+        embeddingModel: "Xenova/multilingual-e5-small",
+        embeddingDtype: "q8" as const,
+        embeddingCacheDir: "./tmp/embeddings"
+      },
+      env: {
+        ...process.env,
+        OPENAI_API_KEY: "test-openai-key"
+      }
+    };
+
+    const first = await embedQueryText("validate the first failing step", options);
+    vi.setSystemTime(new Date("2026-03-22T12:06:00.000Z"));
+    const second = await embedQueryText("validate the first failing step", options);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(first.embedding).not.toEqual(second.embedding);
+  });
+
+  it("evicts the oldest cached query embedding when the cache exceeds capacity", async () => {
+    const fetchSpy = vi.fn(async (_url, init) =>
+      new Response(
+        JSON.stringify({
+          data: [{ embedding: [String(init?.body).length, 0.22, 0.33] }]
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      )
+    );
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const options = {
+      config: {
+        embeddingProvider: "api" as const,
+        embeddingModel: "Xenova/multilingual-e5-small",
+        embeddingDtype: "q8" as const,
+        embeddingCacheDir: "./tmp/embeddings"
+      },
+      env: {
+        ...process.env,
+        OPENAI_API_KEY: "test-openai-key"
+      }
+    };
+
+    for (let index = 0; index < 257; index += 1) {
+      await embedQueryText(`validate failing step ${index}`, options);
+    }
+    await embedQueryText("validate failing step 0", options);
+
+    expect(fetchSpy).toHaveBeenCalledTimes(258);
   });
 
   it("falls back cleanly when the API provider is rate limited", async () => {

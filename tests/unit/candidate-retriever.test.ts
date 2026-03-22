@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { retrieveCandidates } from "../../src/controller/candidate-retriever.js";
 import type { ExperienceInput, ExperienceNode } from "../../src/types/domain.js";
@@ -327,6 +327,39 @@ describe("retrieveCandidates", () => {
       ]
     );
 
+    expect(candidates).toEqual([]);
+  });
+
+  it("skips semantic embedding for low-signal queries and completes retrieval without calling the semantic provider", async () => {
+    const embedQuerySpy = vi.fn(async () => [1, 0, 0]);
+    setEmbeddingProviderForTests({
+      provider: "local",
+      model: "Xenova/multilingual-e5-small",
+      version: "local-e5-v1",
+      dimensions: 3,
+      embedQuery: embedQuerySpy,
+      async embedPassage() {
+        return [1, 0, 0];
+      }
+    });
+
+    const candidates = await retrieveCandidates(
+      input({
+        task_type: "general",
+        task_summary: "ok",
+        context_summary: ""
+      }),
+      [
+        node({
+          id: "legacy-general",
+          task_type: "general",
+          trigger_pattern: "Verify the repo root and report whether package.json exists",
+          compact_hint: "Use exec to verify the repo root and confirm package.json before reporting back."
+        })
+      ]
+    );
+
+    expect(embedQuerySpy).not.toHaveBeenCalled();
     expect(candidates).toEqual([]);
   });
 });

@@ -143,7 +143,54 @@ export const isCompatibleEmbedding = (embedding: number[] | undefined): embeddin
 
 let testProvider: SemanticEmbeddingProvider | null = null;
 let localEmbeddingWarningShown = false;
-const queryEmbeddingCache = new Map<string, EmbeddingResult>();
+const EMBEDDING_CACHE_TTL_MS = 5 * 60 * 1000;
+const EMBEDDING_CACHE_MAX_ENTRIES = 256;
+
+type CachedEmbeddingResult = {
+  result: EmbeddingResult;
+  cachedAt: number;
+};
+
+const queryEmbeddingCache = new Map<string, CachedEmbeddingResult>();
+const passageEmbeddingCache = new Map<string, CachedEmbeddingResult>();
+
+const getCachedEmbedding = (
+  cache: Map<string, CachedEmbeddingResult>,
+  key: string
+): EmbeddingResult | null => {
+  const entry = cache.get(key);
+  if (!entry) {
+    return null;
+  }
+  if (Date.now() - entry.cachedAt > EMBEDDING_CACHE_TTL_MS) {
+    cache.delete(key);
+    return null;
+  }
+  cache.delete(key);
+  cache.set(key, entry);
+  return entry.result;
+};
+
+const cacheEmbedding = (
+  cache: Map<string, CachedEmbeddingResult>,
+  key: string,
+  result: EmbeddingResult
+): void => {
+  if (cache.has(key)) {
+    cache.delete(key);
+  }
+  while (cache.size >= EMBEDDING_CACHE_MAX_ENTRIES) {
+    const oldestKey = cache.keys().next().value;
+    if (!oldestKey) {
+      break;
+    }
+    cache.delete(oldestKey);
+  }
+  cache.set(key, {
+    result,
+    cachedAt: Date.now()
+  });
+};
 
 const warnLocalEmbeddingFallback = (message: string): void => {
   if (localEmbeddingWarningShown) {
@@ -199,6 +246,7 @@ export const clearEmbeddingProviderForTests = (): void => {
 
 export const clearEmbeddingRuntimeCaches = (): void => {
   queryEmbeddingCache.clear();
+  passageEmbeddingCache.clear();
   localEmbeddingWarningShown = false;
 };
 
@@ -241,7 +289,7 @@ export const embedQueryText = async (
     return toLegacyResult(value);
   }
   const cacheKey = `${provider.provider}:${provider.model}:${provider.version}:query:${value}`;
-  const cached = queryEmbeddingCache.get(cacheKey);
+  const cached = getCachedEmbedding(queryEmbeddingCache, cacheKey);
   if (cached) {
     return cached;
   }
@@ -255,7 +303,7 @@ export const embedQueryText = async (
         dimensions: provider.dimensions
       }
     };
-    queryEmbeddingCache.set(cacheKey, result);
+    cacheEmbedding(queryEmbeddingCache, cacheKey, result);
     return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -279,8 +327,13 @@ export const embedPassageText = async (
   if (!provider) {
     return toLegacyResult(value);
   }
+  const cacheKey = `${provider.provider}:${provider.model}:${provider.version}:passage:${value}`;
+  const cached = getCachedEmbedding(passageEmbeddingCache, cacheKey);
+  if (cached) {
+    return cached;
+  }
   try {
-    return {
+    const result = {
       embedding: await provider.embedPassage(value),
       space: {
         provider: provider.provider,
@@ -289,6 +342,8 @@ export const embedPassageText = async (
         dimensions: provider.dimensions
       }
     };
+    cacheEmbedding(passageEmbeddingCache, cacheKey, result);
+    return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (provider.provider !== "local") {
