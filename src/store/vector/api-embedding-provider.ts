@@ -8,6 +8,19 @@ type ApiEmbeddingOptions = {
 
 const DEFAULT_TIMEOUT_MS = 5_000;
 
+const describeApiFailure = (provider: "openai" | "jina", status: number): string => {
+  if (status === 401 || status === 403) {
+    return `${provider} embedding API authentication failed (${status})`;
+  }
+  if (status === 429) {
+    return `${provider} embedding API rate limited (${status})`;
+  }
+  if (status >= 500) {
+    return `${provider} embedding API upstream failed (${status})`;
+  }
+  return `${provider} embedding API error (${status})`;
+};
+
 const fetchWithTimeout = async (
   input: string,
   init: RequestInit,
@@ -50,7 +63,7 @@ const createOpenAIProvider = (options: ApiEmbeddingOptions = {}): SemanticEmbedd
     );
 
     if (!response.ok) {
-      throw new Error(`OpenAI embedding API error: ${response.status}`);
+      throw new Error(describeApiFailure("openai", response.status));
     }
 
     const payload = (await response.json()) as { data?: Array<{ embedding?: number[] }> };
@@ -110,7 +123,7 @@ const createJinaProvider = (options: ApiEmbeddingOptions = {}): SemanticEmbeddin
     );
 
     if (!response.ok) {
-      throw new Error(`Jina embedding API error: ${response.status}`);
+      throw new Error(describeApiFailure("jina", response.status));
     }
 
     const payload = (await response.json()) as { data?: Array<{ embedding?: number[] }> };
@@ -159,4 +172,3 @@ export const resolveApiEmbeddingProvider = (
 
   return createJinaProvider(options);
 };
-

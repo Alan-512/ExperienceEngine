@@ -194,4 +194,78 @@ describe("embedding fallback diagnostics", () => {
     expect(first.embedding).toEqual(second.embedding);
     expect(fetchSpy).toHaveBeenCalledTimes(1);
   });
+
+  it("falls back cleanly when the API provider is rate limited", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ error: "rate limited" }), { status: 429 }))
+    );
+
+    const pipelineSpy = vi.fn(async () =>
+      async () => ({
+        data: [0.15, 0.26, 0.37]
+      })
+    );
+
+    setTransformersModuleLoaderForTests(async () => ({
+      env: {
+        allowRemoteModels: false,
+        allowLocalModels: false,
+        cacheDir: undefined
+      },
+      pipeline: pipelineSpy
+    }));
+
+    const result = await embedQueryText("validate the first failing step", {
+      config: {
+        embeddingProvider: "api",
+        embeddingModel: "Xenova/multilingual-e5-small",
+        embeddingDtype: "q8",
+        embeddingCacheDir: "./tmp/embeddings"
+      },
+      env: {
+        ...process.env,
+        OPENAI_API_KEY: "test-openai-key"
+      }
+    });
+
+    expect(result.space.provider).toBe("local");
+    expect(pipelineSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("includes both API and local failures in the warning when all providers fail", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(JSON.stringify({ error: "rate limited" }), { status: 429 }))
+    );
+
+    setTransformersModuleLoaderForTests(async () => ({
+      env: {
+        allowRemoteModels: false,
+        allowLocalModels: false,
+        cacheDir: undefined
+      },
+      pipeline: vi.fn(async () => {
+        throw new Error("local bootstrap failed");
+      })
+    }));
+
+    const result = await embedQueryText("validate the first failing step", {
+      config: {
+        embeddingProvider: "api",
+        embeddingModel: "Xenova/multilingual-e5-small",
+        embeddingDtype: "q8",
+        embeddingCacheDir: "./tmp/embeddings"
+      },
+      env: {
+        ...process.env,
+        OPENAI_API_KEY: "test-openai-key"
+      }
+    });
+
+    expect(result.space.provider).toBe("legacy");
+    expect(warnSpy).toHaveBeenCalledTimes(1);
+    expect(warnSpy.mock.calls[0]?.[0]).toContain("429");
+    expect(warnSpy.mock.calls[0]?.[0]).toContain("local bootstrap failed");
+  });
 });

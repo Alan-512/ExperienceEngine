@@ -153,7 +153,12 @@ const warnLocalEmbeddingFallback = (message: string): void => {
   console.warn(`[ExperienceEngine] Local embedding provider unavailable, falling back to legacy retrieval: ${message}`);
 };
 
-const tryLocalFallback = async (value: string, mode: "query" | "passage", options: EmbeddingOptions): Promise<EmbeddingResult | null> => {
+const tryLocalFallback = async (
+  value: string,
+  mode: "query" | "passage",
+  options: EmbeddingOptions,
+  primaryFailureMessage?: string
+): Promise<EmbeddingResult | null> => {
   try {
     const provider = await getLocalEmbeddingProvider({
       ...options,
@@ -174,7 +179,11 @@ const tryLocalFallback = async (value: string, mode: "query" | "passage", option
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    warnLocalEmbeddingFallback(message);
+    warnLocalEmbeddingFallback(
+      primaryFailureMessage
+        ? `${primaryFailureMessage}; local fallback failed: ${message}`
+        : message
+    );
     return null;
   }
 };
@@ -251,7 +260,7 @@ export const embedQueryText = async (
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (provider.provider !== "local") {
-      const localResult = await tryLocalFallback(value, "query", options);
+      const localResult = await tryLocalFallback(value, "query", options, message);
       if (localResult) {
         return localResult;
       }
@@ -283,7 +292,7 @@ export const embedPassageText = async (
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (provider.provider !== "local") {
-      const localResult = await tryLocalFallback(value, "passage", options);
+      const localResult = await tryLocalFallback(value, "passage", options, message);
       if (localResult) {
         return localResult;
       }
