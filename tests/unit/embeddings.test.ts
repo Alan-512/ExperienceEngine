@@ -446,4 +446,36 @@ describe("embedding fallback diagnostics", () => {
     expect(fetchSpy).toHaveBeenCalledTimes(1);
     expect(pipelineSpy).toHaveBeenCalledTimes(1);
   });
+
+  it("uses the first non-empty OpenAI embedding key when OPENAI_API_KEY is blank", async () => {
+    const fetchSpy = vi.fn(async (_url, init) => {
+      expect(init?.headers).toMatchObject({
+        Authorization: "Bearer fallback-openai-key"
+      });
+      return new Response(
+        JSON.stringify({
+          data: [{ embedding: [0.71, 0.82, 0.93] }]
+        }),
+        { status: 200, headers: { "Content-Type": "application/json" } }
+      );
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const result = await embedQueryText("validate the first failing step", {
+      config: {
+        embeddingProvider: "api",
+        embeddingModel: "Xenova/multilingual-e5-small",
+        embeddingDtype: "q8",
+        embeddingCacheDir: "./tmp/embeddings"
+      },
+      env: {
+        ...process.env,
+        OPENAI_API_KEY: "",
+        EXPERIENCE_ENGINE_EMBEDDING_API_KEY: "fallback-openai-key"
+      }
+    });
+
+    expect(result.space.provider).toBe("openai");
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
 });

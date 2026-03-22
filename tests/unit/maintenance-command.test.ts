@@ -133,7 +133,37 @@ describe("maintenance command", () => {
     await runMaintenanceCommand("unknown");
 
     expect(consoleLogSpy).toHaveBeenCalledWith(
-      "Usage: ee maintenance embeddings-reset|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
+      "Usage: ee maintenance embeddings-reset|embedding-smoke|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
+    );
+  });
+
+  it("runs embedding smoke evaluation and prints cold/warm timing summaries", async () => {
+    await runMaintenanceCommand("embedding-smoke", {
+      loadConfig: () =>
+        ({
+          embeddingProvider: "api",
+          embeddingModel: "Xenova/multilingual-e5-small",
+          embeddingDtype: "q8",
+          embeddingCacheDir: "/tmp/embeddings"
+        }) as never,
+      embeddingSmoke: async () => ({
+        provider: "openai",
+        model: "text-embedding-3-small",
+        queryText: "validate the failing auth test before editing",
+        passageText: "reproduce the failing auth test before editing and rerun it after the fix",
+        coldQueryMs: 180,
+        warmQueryMs: 2,
+        coldPassageMs: 190,
+        warmPassageMs: 1
+      })
+    } as never);
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["[ExperienceEngine] Embedding smoke complete for openai/text-embedding-3-small."],
+        ["[ExperienceEngine] Query cold=180ms warm=2ms"],
+        ["[ExperienceEngine] Passage cold=190ms warm=1ms"]
+      ])
     );
   });
 

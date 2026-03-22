@@ -6,6 +6,15 @@ type ApiEmbeddingOptions = {
   timeoutMs?: number;
 };
 
+const firstNonEmpty = (...values: Array<string | undefined>): string | undefined => {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value;
+    }
+  }
+  return undefined;
+};
+
 const DEFAULT_TIMEOUT_MS = 5_000;
 const MAX_TRANSIENT_RETRIES = 1;
 
@@ -65,7 +74,7 @@ const OPENAI_VERSION = "openai-te3s-v1";
 
 const createOpenAIProvider = (options: ApiEmbeddingOptions = {}): SemanticEmbeddingProvider => {
   const env = options.env ?? process.env;
-  const apiKey = env.OPENAI_API_KEY ?? env.EXPERIENCE_ENGINE_EMBEDDING_API_KEY;
+  const apiKey = firstNonEmpty(env.OPENAI_API_KEY, env.EXPERIENCE_ENGINE_EMBEDDING_API_KEY);
   if (!apiKey) {
     throw new Error("OpenAI embedding provider requires OPENAI_API_KEY");
   }
@@ -203,7 +212,7 @@ export const resolveApiEmbeddingProvider = (
     return createJinaProvider(options);
   }
 
-  if (env.OPENAI_API_KEY ?? env.EXPERIENCE_ENGINE_EMBEDDING_API_KEY) {
+  if (firstNonEmpty(env.OPENAI_API_KEY, env.EXPERIENCE_ENGINE_EMBEDDING_API_KEY)) {
     try {
       return createOpenAIProvider(options);
     } catch {
