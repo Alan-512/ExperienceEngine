@@ -353,11 +353,31 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     ]);
     console.log("CLI summary:");
     console.log("- Install entrypoint: use the host-specific installation command for each host.");
-    console.log(`- OpenClaw install: ${installGuidance.openclaw.command}`);
-    console.log(`- Codex install: ${installGuidance.codex.command}`);
-    console.log(`- Claude Code install: ${installGuidance["claude-code"].reason}`);
-    console.log(`  1. ${installGuidance["claude-code"].commands[0]}`);
-    console.log(`  2. ${installGuidance["claude-code"].commands[1]}`);
+    if (installGuidance.openclaw.ready) {
+      console.log(`- OpenClaw install: ${installGuidance.openclaw.command}`);
+    } else {
+      console.log(`- OpenClaw install: ${installGuidance.openclaw.reason}`);
+      if (installGuidance.openclaw.command) {
+        console.log(`  1. ${installGuidance.openclaw.command}`);
+      }
+    }
+    if (installGuidance.codex.ready) {
+      console.log(`- Codex install: ${installGuidance.codex.command}`);
+    } else {
+      console.log(`- Codex install: ${installGuidance.codex.reason}`);
+      if (installGuidance.codex.command) {
+        console.log(`  1. ${installGuidance.codex.command}`);
+      }
+    }
+    if (installGuidance["claude-code"].ready) {
+      console.log("- Claude Code install: ready");
+    } else {
+      console.log(`- Claude Code install: ${installGuidance["claude-code"].reason}`);
+    }
+    if (installGuidance["claude-code"].commands) {
+      console.log(`  1. ${installGuidance["claude-code"].commands[0]}`);
+      console.log(`  2. ${installGuidance["claude-code"].commands[1]}`);
+    }
     console.log("- Host health details: ee doctor <codex|claude-code|openclaw>");
     console.log("Distillation summary:");
     console.log(`- Provider: ${config.distillerProvider}`);

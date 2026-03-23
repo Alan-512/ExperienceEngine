@@ -1,3 +1,15 @@
+type ReadyInstallGuidance = {
+  ready: true;
+  command: string;
+};
+
+type PendingInstallGuidance = {
+  ready: false;
+  reason: string;
+  command?: string;
+  commands?: [string, string];
+};
+
 export const buildOpenClawPublicInstallCommand = (packageSpec = "experienceengine"): string =>
   `openclaw plugins install ${packageSpec}`;
 
@@ -20,22 +32,24 @@ export const buildClaudePluginInstallCommand = (
 export const buildHostNativeInstallGuidance = (
   packageSpec = "experienceengine"
 ): {
-  openclaw: { ready: true; command: string };
-  codex: { ready: true; command: string };
-  "claude-code": { ready: false; reason: string; commands: [string, string] };
+  openclaw: PendingInstallGuidance;
+  codex: PendingInstallGuidance;
+  "claude-code": PendingInstallGuidance | ReadyInstallGuidance;
 } => ({
   openclaw: {
-    ready: true,
+    ready: false,
+    reason:
+      "OpenClaw's one-step install command still depends on the public npm package 'experienceengine', which is not published yet.",
     command: buildOpenClawPublicInstallCommand(packageSpec)
   },
   codex: {
-    ready: true,
+    ready: false,
+    reason:
+      "Codex's one-step MCP install still depends on running `npx -y experienceengine`, which requires the public npm package to be published first.",
     command: buildCodexPublicInstallCommand(packageSpec)
   },
   "claude-code": {
-    ready: false,
-    reason:
-      "Claude Code now ships an official marketplace manifest and repo-backed plugin source, but Claude's official install flow still requires marketplace add plus plugin install rather than a single one-step command.",
+    ready: true,
     commands: [buildClaudeMarketplaceAddCommand(), buildClaudePluginInstallCommand()]
   }
 });
