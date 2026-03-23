@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "experienceengine": {
+      "type": "stdio",
+      "command": "node",
+      "args": [
+        "${CLAUDE_PLUGIN_DATA}/node_modules/experienceengine/dist/cli/index.js",
+        "mcp-server"
+      ],
+      "env": {
+        "NODE_PATH": "${CLAUDE_PLUGIN_DATA}/node_modules",
+        "EXPERIENCE_ENGINE_HOME": "${CLAUDE_PLUGIN_DATA}/experienceengine-home"
+      }
+    }
+  }
+}

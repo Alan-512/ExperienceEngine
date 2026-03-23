@@ -13,17 +13,8 @@ describe("Claude marketplace assets", () => {
       owner?: { name?: string };
       plugins: Array<{
         name: string;
-        source: {
-          source: string;
-          package?: string;
-          version?: string;
-        };
+        source: string;
       }>;
-    };
-
-    const packageJson = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")) as {
-      name: string;
-      version: string;
     };
 
     expect(marketplace.name).toBe("experienceengine");
@@ -31,12 +22,18 @@ describe("Claude marketplace assets", () => {
     expect(marketplace.plugins).toEqual([
       expect.objectContaining({
         name: "experienceengine",
-        source: {
-          source: "npm",
-          package: packageJson.name,
-          version: packageJson.version
-        }
+        source: "./plugins/claude-code-experienceengine"
       })
     ]);
+  });
+
+  it("keeps the Claude plugin bundle in the published package file list", () => {
+    const packageJson = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")) as {
+      files?: string[];
+    };
+
+    expect(packageJson.files).toEqual(
+      expect.arrayContaining([".claude-plugin", "plugins/claude-code-experienceengine"])
+    );
   });
 });

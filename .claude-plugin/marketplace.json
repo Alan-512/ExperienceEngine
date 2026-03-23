@@ -6,11 +6,7 @@
   "plugins": [
     {
       "name": "experienceengine",
-      "source": {
-        "source": "npm",
-        "package": "experienceengine",
-        "version": "0.1.0"
-      },
+      "source": "./plugins/claude-code-experienceengine",
       "description": "Context-aware experience intervention controller for Claude Code."
     }
   ]

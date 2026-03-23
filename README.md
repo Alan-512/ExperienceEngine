@@ -76,7 +76,7 @@ Install ExperienceEngine through the host-native command for the host you want t
 - `Claude Code`
   - add the bundled marketplace:
     - `/plugin marketplace add Alan-512/ExperienceEngine`
-  - install the npm-backed plugin:
+  - install the bundled plugin:
     - `/plugin install experienceengine@experienceengine`
   - `ee install claude-code` remains the operator fallback when you need direct hooks + MCP wiring outside the marketplace flow
 

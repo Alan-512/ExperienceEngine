@@ -23,6 +23,7 @@
     ".claude-plugin",
     ".mcp.json",
     "hooks",
+    "plugins/claude-code-experienceengine",
     "README.md",
     "docs/user-guide.md",
     "docs/releases",

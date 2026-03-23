@@ -37,7 +37,7 @@ describe("public install guidance", () => {
       "claude-code": {
         ready: false,
         reason:
-          "Claude Code now ships an official marketplace manifest and npm-backed plugin package, but Claude's official install flow still requires marketplace add plus plugin install rather than a single one-step command.",
+          "Claude Code now ships an official marketplace manifest and repo-backed plugin source, but Claude's official install flow still requires marketplace add plus plugin install rather than a single one-step command.",
         commands: [
           "/plugin marketplace add Alan-512/ExperienceEngine",
           "/plugin install experienceengine@experienceengine"
