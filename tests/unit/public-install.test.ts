@@ -19,7 +19,9 @@ describe("public install guidance", () => {
   });
 
   it("builds the documented Claude marketplace distribution commands", () => {
-    expect(buildClaudeMarketplaceAddCommand()).toBe("/plugin marketplace add Alan-512/ExperienceEngine");
+    expect(buildClaudeMarketplaceAddCommand()).toBe(
+      "/plugin marketplace add https://github.com/Alan-512/ExperienceEngine.git"
+    );
     expect(buildClaudePluginInstallCommand()).toBe("/plugin install experienceengine@experienceengine");
   });
 
@@ -39,7 +41,7 @@ describe("public install guidance", () => {
         reason:
           "Claude Code now ships an official marketplace manifest and repo-backed plugin source, but Claude's official install flow still requires marketplace add plus plugin install rather than a single one-step command.",
         commands: [
-          "/plugin marketplace add Alan-512/ExperienceEngine",
+          "/plugin marketplace add https://github.com/Alan-512/ExperienceEngine.git",
           "/plugin install experienceengine@experienceengine"
         ]
       }

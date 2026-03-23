@@ -7,7 +7,9 @@ export const buildCodexPublicInstallCommand = (
 ): string =>
   `codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=${productHome} -- npx -y ${packageSpec} codex-mcp-server`;
 
-export const buildClaudeMarketplaceAddCommand = (repo = "Alan-512/ExperienceEngine"): string =>
+export const buildClaudeMarketplaceAddCommand = (
+  repo = "https://github.com/Alan-512/ExperienceEngine.git"
+): string =>
   `/plugin marketplace add ${repo}`;
 
 export const buildClaudePluginInstallCommand = (

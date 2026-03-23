@@ -110,7 +110,7 @@ describe("doctor command", () => {
         [
           "- Claude Code install: Claude Code now ships an official marketplace manifest and repo-backed plugin source, but Claude's official install flow still requires marketplace add plus plugin install rather than a single one-step command."
         ],
-        ["  1. /plugin marketplace add Alan-512/ExperienceEngine"],
+        ["  1. /plugin marketplace add https://github.com/Alan-512/ExperienceEngine.git"],
         ["  2. /plugin install experienceengine@experienceengine"],
         ["- Host health details: ee doctor <codex|claude-code|openclaw>"],
         ["Distillation summary:"],

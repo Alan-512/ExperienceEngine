@@ -70,7 +70,7 @@ Install ExperienceEngine through the host-specific flow for:
   - `codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y experienceengine codex-mcp-server`
 - `Claude Code`
   - add the bundled marketplace:
-    - `/plugin marketplace add Alan-512/ExperienceEngine`
+    - `/plugin marketplace add https://github.com/Alan-512/ExperienceEngine.git`
   - install the bundled plugin:
     - `/plugin install experienceengine@experienceengine`
   - `ee install claude-code` remains the explicit operator fallback when you need direct hooks + MCP wiring outside the marketplace flow
