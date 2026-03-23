@@ -56,6 +56,39 @@ You can also turn inline notices off:
 ee config set notices.inline false
 ```
 
+## Install And First Run
+
+ExperienceEngine installation is now host-native.
+
+That means the first installation step belongs to the host you want to use, not to the `ee` CLI.
+
+Install ExperienceEngine through the host-specific flow for:
+
+- `OpenClaw`
+- `Claude Code`
+- `Codex`
+
+Then use the `ee` CLI for validation and operations:
+
+```bash
+ee doctor <openclaw|claude-code|codex>
+ee status
+```
+
+You do **not** need to clone the repository or run `pnpm build` for normal user installation.
+
+### Operational CLI
+
+After a host-native installation succeeds, `ee` becomes the shared operational surface.
+
+Use it for:
+
+- installation validation
+- repair guidance
+- runtime status checks
+- learning and intervention inspection
+- quick helped / harmed feedback
+
 ## How MCP Interaction Works
 
 For `Codex` and `Claude Code`, ExperienceEngine is designed to work mainly through MCP.
@@ -210,13 +243,23 @@ These surfaces show which targets the current Pack version has already compiled,
 
 ## Host-Specific Setup
 
-Before installing any adapter, make sure the host CLI itself already works on this machine:
+Before installing ExperienceEngine into any host, make sure the host CLI itself already works on this machine:
 
 - `openclaw` for the OpenClaw plugin/runtime integration
 - `claude` for the Claude Code adapter
 - `codex` for the Codex adapter
 
 ExperienceEngine wires itself into an existing host environment. It does not install the host CLI for you.
+
+If you are operating or debugging the product directly, the explicit fallback commands still exist:
+
+```bash
+ee install openclaw
+ee install claude-code
+ee install codex
+```
+
+These are operator-facing controls, not the preferred public onboarding path.
 
 ## Embedding Retrieval
 
@@ -265,9 +308,9 @@ ee maintenance embeddings-reset
 
 That command clears the configured managed embedding cache for the active model and immediately rebuilds it.
 
-### OpenClaw
+### OpenClaw Advanced Commands
 
-Install:
+Explicit host install:
 
 ```bash
 ee install openclaw
@@ -303,9 +346,9 @@ Success looks like:
 - OpenClaw reports the plugin as loaded or enabled
 - a real task later produces ExperienceEngine runtime records under `~/.experienceengine`
 
-### Claude Code
+### Claude Code Advanced Commands
 
-Install:
+Explicit host install:
 
 ```bash
 ee install claude-code
@@ -351,9 +394,9 @@ Host note:
 - hooks drive runtime capture and injection
 - MCP drives inspect/control/operational interaction
 
-### Codex
+### Codex Advanced Commands
 
-Install:
+Explicit host install:
 
 ```bash
 ee install codex

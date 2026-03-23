@@ -18,14 +18,23 @@
   "bin": {
     "ee": "./dist/cli/index.js"
   },
+  "files": [
+    "dist",
+    "README.md",
+    "docs/user-guide.md",
+    "docs/releases",
+    "openclaw.plugin.json",
+    ".env.example"
+  ],
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node scripts/build/copy-sqlite-schema.mjs",
+    "build": "node scripts/build/clean-dist.mjs && tsc -p tsconfig.build.json && node scripts/build/copy-sqlite-schema.mjs",
     "dev": "tsx watch src/cli/index.ts",
     "evaluate:openclaw-baseline": "tsx src/cli/index.ts evaluate openclaw-baseline",
     "evaluate:openclaw-scenarios": "tsx src/cli/index.ts evaluate openclaw-scenarios --pack high-confidence",
     "maintenance:merge-warning-variants": "tsx scripts/maintenance/merge-warning-variants.ts",
     "runtime:promote-payload": "tsx scripts/openclaw/promote-runtime-payload.ts",
     "runtime:replay-fixture": "tsx scripts/openclaw/replay-runtime-fixture.ts",
+    "prepack": "pnpm build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "check": "pnpm typecheck && pnpm test && pnpm build"
