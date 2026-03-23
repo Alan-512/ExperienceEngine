@@ -69,9 +69,11 @@ Install ExperienceEngine through the host-specific flow for:
 - `Codex`
   - `codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y experienceengine codex-mcp-server`
 - `Claude Code`
-  - plugin assets are bundled in the package
-  - a Claude-side marketplace or direct plugin install path is still needed for a true one-step host-native install
-  - until that lands, `ee install claude-code` remains the explicit operator fallback
+  - add the bundled marketplace:
+    - `/plugin marketplace add Alan-512/ExperienceEngine`
+  - install the npm-backed plugin:
+    - `/plugin install experienceengine@experienceengine`
+  - `ee install claude-code` remains the explicit operator fallback when you need direct hooks + MCP wiring outside the marketplace flow
 
 Then use the `ee` CLI for validation and operations:
 

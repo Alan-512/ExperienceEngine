@@ -108,8 +108,10 @@ describe("doctor command", () => {
           "- Codex install: codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y experienceengine codex-mcp-server"
         ],
         [
-          "- Claude Code install: Claude Code now bundles plugin assets in the package, but a Claude-side marketplace or direct plugin install path is still needed for a true one-step host-native install."
+          "- Claude Code install: Claude Code now ships an official marketplace manifest and npm-backed plugin package, but Claude's official install flow still requires marketplace add plus plugin install rather than a single one-step command."
         ],
+        ["  1. /plugin marketplace add Alan-512/ExperienceEngine"],
+        ["  2. /plugin install experienceengine@experienceengine"],
         ["- Host health details: ee doctor <codex|claude-code|openclaw>"],
         ["Distillation summary:"],
         ["Embedding summary:"]

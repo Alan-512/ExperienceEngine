@@ -1,0 +1,17 @@
+{
+  "name": "experienceengine",
+  "owner": {
+    "name": "ExperienceEngine"
+  },
+  "plugins": [
+    {
+      "name": "experienceengine",
+      "source": {
+        "source": "npm",
+        "package": "experienceengine",
+        "version": "0.1.0"
+      },
+      "description": "Context-aware experience intervention controller for Claude Code."
+    }
+  ]
+}

@@ -74,9 +74,11 @@ Install ExperienceEngine through the host-native command for the host you want t
 - `Codex`
   - `codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y experienceengine codex-mcp-server`
 - `Claude Code`
-  - plugin assets are bundled in the package
-  - a Claude-side marketplace or direct plugin install path is still needed for a true one-step host-native install
-  - until that lands, `ee install claude-code` remains an operator fallback
+  - add the bundled marketplace:
+    - `/plugin marketplace add Alan-512/ExperienceEngine`
+  - install the npm-backed plugin:
+    - `/plugin install experienceengine@experienceengine`
+  - `ee install claude-code` remains the operator fallback when you need direct hooks + MCP wiring outside the marketplace flow
 
 After the host-native installation completes, use:
 
@@ -106,7 +108,7 @@ ExperienceEngine now treats installation and operations as separate concerns:
 That means:
 
 - `Codex` uses a Codex-native MCP integration flow
-- `Claude Code` is moving toward a Claude-native plugin / marketplace flow
+- `Claude Code` uses Claude-native plugin assets and marketplace distribution
 - `OpenClaw` uses plugin/runtime integration
 
 Once installation is complete, `ee` becomes the operational surface for:

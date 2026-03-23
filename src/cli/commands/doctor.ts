@@ -356,6 +356,8 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     console.log(`- OpenClaw install: ${installGuidance.openclaw.command}`);
     console.log(`- Codex install: ${installGuidance.codex.command}`);
     console.log(`- Claude Code install: ${installGuidance["claude-code"].reason}`);
+    console.log(`  1. ${installGuidance["claude-code"].commands[0]}`);
+    console.log(`  2. ${installGuidance["claude-code"].commands[1]}`);
     console.log("- Host health details: ee doctor <codex|claude-code|openclaw>");
     console.log("Distillation summary:");
     console.log(`- Provider: ${config.distillerProvider}`);

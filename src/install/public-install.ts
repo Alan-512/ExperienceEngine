@@ -7,12 +7,20 @@ export const buildCodexPublicInstallCommand = (
 ): string =>
   `codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=${productHome} -- npx -y ${packageSpec} codex-mcp-server`;
 
+export const buildClaudeMarketplaceAddCommand = (repo = "Alan-512/ExperienceEngine"): string =>
+  `/plugin marketplace add ${repo}`;
+
+export const buildClaudePluginInstallCommand = (
+  pluginName = "experienceengine",
+  marketplaceName = "experienceengine"
+): string => `/plugin install ${pluginName}@${marketplaceName}`;
+
 export const buildHostNativeInstallGuidance = (
   packageSpec = "experienceengine"
 ): {
   openclaw: { ready: true; command: string };
   codex: { ready: true; command: string };
-  "claude-code": { ready: false; reason: string };
+  "claude-code": { ready: false; reason: string; commands: [string, string] };
 } => ({
   openclaw: {
     ready: true,
@@ -25,6 +33,7 @@ export const buildHostNativeInstallGuidance = (
   "claude-code": {
     ready: false,
     reason:
-      "Claude Code now bundles plugin assets in the package, but a Claude-side marketplace or direct plugin install path is still needed for a true one-step host-native install."
+      "Claude Code now ships an official marketplace manifest and npm-backed plugin package, but Claude's official install flow still requires marketplace add plus plugin install rather than a single one-step command.",
+    commands: [buildClaudeMarketplaceAddCommand(), buildClaudePluginInstallCommand()]
   }
 });
