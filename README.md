@@ -69,9 +69,13 @@ ExperienceEngine no longer treats the `ee` CLI as the first-install entrypoint.
 
 Install ExperienceEngine through the host-native command for the host you want to use:
 
-- `OpenClaw` -> install the ExperienceEngine plugin through the OpenClaw plugin flow
-- `Claude Code` -> install through the Claude-side plugin / integration flow
-- `Codex` -> install through the Codex-side MCP / integration flow
+- `OpenClaw`
+  - `openclaw plugins install experienceengine`
+- `Codex`
+  - `codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y experienceengine codex-mcp-server`
+- `Claude Code`
+  - host-native marketplace/plugin packaging is still in progress
+  - use the Claude-side integration path when it lands; for now, `ee install claude-code` remains an operator fallback
 
 After the host-native installation completes, use:
 
@@ -101,7 +105,7 @@ ExperienceEngine now treats installation and operations as separate concerns:
 That means:
 
 - `Codex` uses a Codex-native MCP integration flow
-- `Claude Code` uses a Claude-native plugin / integration flow
+- `Claude Code` is moving toward a Claude-native plugin / marketplace flow
 - `OpenClaw` uses plugin/runtime integration
 
 Once installation is complete, `ee` becomes the operational surface for:

@@ -102,7 +102,14 @@ describe("doctor command", () => {
     expect(consoleLogSpy.mock.calls).toEqual(
       expect.arrayContaining([
         ["CLI summary:"],
-        ["- Install entrypoint: use the host-specific installation command for codex, claude-code, or openclaw."],
+        ["- Install entrypoint: use the host-specific installation command for each host."],
+        ["- OpenClaw install: openclaw plugins install experienceengine"],
+        [
+          "- Codex install: codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y experienceengine codex-mcp-server"
+        ],
+        [
+          "- Claude Code install: Claude Code still needs a marketplace/plugin packaging path to become a true one-step host-native install."
+        ],
         ["- Host health details: ee doctor <codex|claude-code|openclaw>"],
         ["Distillation summary:"],
         ["Embedding summary:"]

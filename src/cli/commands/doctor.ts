@@ -13,6 +13,7 @@ import {
   getOpenClawRepairHint,
   inspectOpenClawInstall
 } from "../../install/openclaw-installer.js";
+import { buildHostNativeInstallGuidance } from "../../install/public-install.js";
 import {
   buildRegistryRecommendationCommands,
   readRegistryHealth,
@@ -325,6 +326,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     const claudeStatus = (deps.inspectClaudeCodeInstall ?? inspectClaudeCodeInstall)();
     const openclawStatus = (deps.inspectOpenClawInstall ?? inspectOpenClawInstall)();
     const config = loadConfig();
+    const installGuidance = buildHostNativeInstallGuidance();
 
     console.table([
       {
@@ -350,7 +352,10 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
       }
     ]);
     console.log("CLI summary:");
-    console.log("- Install entrypoint: use the host-specific installation command for codex, claude-code, or openclaw.");
+    console.log("- Install entrypoint: use the host-specific installation command for each host.");
+    console.log(`- OpenClaw install: ${installGuidance.openclaw.command}`);
+    console.log(`- Codex install: ${installGuidance.codex.command}`);
+    console.log(`- Claude Code install: ${installGuidance["claude-code"].reason}`);
     console.log("- Host health details: ee doctor <codex|claude-code|openclaw>");
     console.log("Distillation summary:");
     console.log(`- Provider: ${config.distillerProvider}`);

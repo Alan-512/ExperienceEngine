@@ -65,8 +65,12 @@ That means the first installation step belongs to the host you want to use, not 
 Install ExperienceEngine through the host-specific flow for:
 
 - `OpenClaw`
-- `Claude Code`
+  - `openclaw plugins install experienceengine`
 - `Codex`
+  - `codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y experienceengine codex-mcp-server`
+- `Claude Code`
+  - Claude-native marketplace/plugin packaging is still in progress
+  - until that lands, `ee install claude-code` remains the explicit operator fallback
 
 Then use the `ee` CLI for validation and operations:
 
