@@ -33,14 +33,17 @@ describe("Claude plugin assets", () => {
 
   it("defines an MCP server that runs from the plugin root and persists data in plugin data", () => {
     const mcp = JSON.parse(readFileSync(join(repoRoot, ".mcp.json"), "utf8")) as {
-      [key: string]: {
-        command: string;
-        args?: string[];
-        env?: Record<string, string>;
-      };
+      mcpServers: Record<
+        string,
+        {
+          command: string;
+          args?: string[];
+          env?: Record<string, string>;
+        }
+      >;
     };
 
-    const server = mcp.experienceengine;
+    const server = mcp.mcpServers.experienceengine;
     expect(server.command).toBe("node");
     expect(server.args).toEqual([
       "${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js",

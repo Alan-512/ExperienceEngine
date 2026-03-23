@@ -12,7 +12,6 @@ data/vector/*
 !data/vector/.gitkeep
 data/logs/*.jsonl
 .claude/
-.mcp.json
 internal-docs/
 artifacts/
 .worktrees/
