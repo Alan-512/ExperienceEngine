@@ -65,18 +65,24 @@ Already available in the repository:
 
 ## Quick Start
 
-From a source checkout:
+ExperienceEngine no longer treats the `ee` CLI as the first-install entrypoint.
+
+Install ExperienceEngine through the host-native command for the host you want to use:
+
+- `OpenClaw`
+  - `openclaw plugins install experienceengine`
+- `Codex`
+  - `codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y experienceengine codex-mcp-server`
+- `Claude Code`
+  - plugin assets are bundled in the package
+  - a Claude-side marketplace or direct plugin install path is still needed for a true one-step host-native install
+  - until that lands, `ee install claude-code` remains an operator fallback
+
+After the host-native installation completes, use:
 
 ```bash
-pnpm install
-pnpm build
-node dist/cli/index.js doctor codex
-```
-
-If the package is installed as a binary, use:
-
-```bash
-ee doctor codex
+ee doctor <openclaw|claude-code|codex>
+ee status
 ee maintenance embedding-smoke
 ```
 
@@ -90,7 +96,29 @@ Before installing an adapter, make sure the host CLI already works on this machi
 
 ExperienceEngine does not install those host CLIs for you. It wires itself into an already working host environment.
 
-## Install By Host
+## Installation Model
+
+ExperienceEngine now treats installation and operations as separate concerns:
+
+- installation belongs to the host
+- validation and maintenance belong to `ee`
+
+That means:
+
+- `Codex` uses a Codex-native MCP integration flow
+- `Claude Code` is moving toward a Claude-native plugin / marketplace flow
+- `OpenClaw` uses plugin/runtime integration
+
+Once installation is complete, `ee` becomes the operational surface for:
+
+- health checks
+- repair guidance
+- status inspection
+- learning and intervention feedback
+
+## Advanced Per-Host Commands
+
+If you need explicit per-host control as an operator or while developing the product, these commands still exist:
 
 ```bash
 ee install openclaw
@@ -104,6 +132,8 @@ Notes:
 - `Codex` installs the shared ExperienceEngine MCP server.
 - `ee install ...` and `ee doctor ...` now warn if `npm` or `pnpm` uses a non-official registry, because managed model downloads are most reliable with `https://registry.npmjs.org`.
 - successful `ee install ...` also explains the cold-start expectation: capture starts immediately, but formal experience usually appears after a few similar tasks in the same repo.
+
+These commands are operator-oriented fallback controls. They are not the preferred public onboarding path.
 
 ## Data Location
 

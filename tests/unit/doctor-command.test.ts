@@ -55,6 +55,122 @@ const codexStatus = (overrides: Record<string, unknown> = {}) =>
   }) as never;
 
 describe("doctor command", () => {
+  it("prints a consolidated summary when no host target is provided", async () => {
+    await runDoctorCommand(undefined, {
+      inspectCodexInstall: () => codexStatus(),
+      inspectClaudeCodeInstall: () =>
+        ({
+          adapter: "claude-code",
+          installed: true,
+          versionStatus: {
+            recordedVersion: "0.1.0",
+            currentVersion: "0.1.0",
+            state: "current",
+            updateAvailable: false
+          },
+          hooksPresent: {
+            userPromptSubmit: true,
+            preToolUse: true,
+            postToolUse: true,
+            postToolUseFailure: true,
+            sessionEnd: true
+          },
+          hostWiring: {
+            wired: true
+          }
+        }) as never,
+      inspectOpenClawInstall: () =>
+        ({
+          adapter: "openclaw",
+          installed: true,
+          versionStatus: {
+            recordedVersion: "0.1.0",
+            currentVersion: "0.1.0",
+            state: "current",
+            updateAvailable: false
+          },
+          hostWiring: {
+            wired: true
+          },
+          hostState: {
+            enabled: true
+          }
+        }) as never
+    });
+
+    expect(consoleTableSpy).toHaveBeenCalled();
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["CLI summary:"],
+        ["- Install entrypoint: use the host-specific installation command for each host."],
+        ["- OpenClaw install: openclaw plugins install experienceengine"],
+        [
+          "- Codex install: codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y experienceengine codex-mcp-server"
+        ],
+        [
+          "- Claude Code install: Claude Code now bundles plugin assets in the package, but a Claude-side marketplace or direct plugin install path is still needed for a true one-step host-native install."
+        ],
+        ["- Host health details: ee doctor <codex|claude-code|openclaw>"],
+        ["Distillation summary:"],
+        ["Embedding summary:"]
+      ])
+    );
+  });
+
+  it("does not mark Claude Code as enabled when hooks exist but MCP wiring is missing", async () => {
+    await runDoctorCommand(undefined, {
+      inspectCodexInstall: () => codexStatus(),
+      inspectClaudeCodeInstall: () =>
+        ({
+          adapter: "claude-code",
+          installed: true,
+          versionStatus: {
+            recordedVersion: "0.1.0",
+            currentVersion: "0.1.0",
+            state: "current",
+            updateAvailable: false
+          },
+          hooksPresent: {
+            userPromptSubmit: true,
+            preToolUse: true,
+            postToolUse: true,
+            postToolUseFailure: true,
+            sessionEnd: true
+          },
+          hostWiring: {
+            wired: false
+          }
+        }) as never,
+      inspectOpenClawInstall: () =>
+        ({
+          adapter: "openclaw",
+          installed: true,
+          versionStatus: {
+            recordedVersion: "0.1.0",
+            currentVersion: "0.1.0",
+            state: "current",
+            updateAvailable: false
+          },
+          hostWiring: {
+            wired: true
+          },
+          hostState: {
+            enabled: true
+          }
+        }) as never
+    });
+
+    expect(consoleTableSpy).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          host: "claude-code",
+          wired: false,
+          enabled: false
+        })
+      ])
+    );
+  });
+
   it("reports remote package updates separately from host wiring upgrades", async () => {
     await runDoctorCommand("codex", {
       inspectCodexInstall: () => codexStatus(),

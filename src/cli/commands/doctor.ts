@@ -13,6 +13,7 @@ import {
   getOpenClawRepairHint,
   inspectOpenClawInstall
 } from "../../install/openclaw-installer.js";
+import { buildHostNativeInstallGuidance } from "../../install/public-install.js";
 import {
   buildRegistryRecommendationCommands,
   readRegistryHealth,
@@ -320,6 +321,56 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
         process.cwd()
       )
     : undefined;
+  if (!target) {
+    const codexStatus = (deps.inspectCodexInstall ?? inspectCodexInstall)();
+    const claudeStatus = (deps.inspectClaudeCodeInstall ?? inspectClaudeCodeInstall)();
+    const openclawStatus = (deps.inspectOpenClawInstall ?? inspectOpenClawInstall)();
+    const config = loadConfig();
+    const installGuidance = buildHostNativeInstallGuidance();
+
+    console.table([
+      {
+        host: "codex",
+        installed: codexStatus.installed,
+        wired: codexStatus.hostWiring.wired,
+        enabled: codexStatus.hostWiring.enabled
+      },
+      {
+        host: "claude-code",
+        installed: claudeStatus.installed,
+        wired: claudeStatus.hostWiring.wired,
+        enabled:
+          claudeStatus.hostWiring.wired &&
+          claudeStatus.hooksPresent.userPromptSubmit &&
+          claudeStatus.hooksPresent.sessionEnd
+      },
+      {
+        host: "openclaw",
+        installed: openclawStatus.installed,
+        wired: openclawStatus.hostWiring.wired,
+        enabled: openclawStatus.hostState.enabled ?? false
+      }
+    ]);
+    console.log("CLI summary:");
+    console.log("- Install entrypoint: use the host-specific installation command for each host.");
+    console.log(`- OpenClaw install: ${installGuidance.openclaw.command}`);
+    console.log(`- Codex install: ${installGuidance.codex.command}`);
+    console.log(`- Claude Code install: ${installGuidance["claude-code"].reason}`);
+    console.log("- Host health details: ee doctor <codex|claude-code|openclaw>");
+    console.log("Distillation summary:");
+    console.log(`- Provider: ${config.distillerProvider}`);
+    console.log(`- Model: ${config.distillerModel}`);
+    console.log("Embedding summary:");
+    console.log(`- Mode: ${config.embeddingProvider}`);
+    console.log(
+      `- API provider override: ${process.env.EXPERIENCE_ENGINE_EMBEDDING_API_PROVIDER ?? "auto"}`
+    );
+    logRegistryHealth(registryHealth);
+    logEvaluationMode();
+    logFirstValueReadiness(firstValueReadiness);
+    logScopePackStatus(scopePackStatus, latestScopeDeploymentStatus);
+    return;
+  }
   if (target === "claude-code") {
     const status = (deps.inspectClaudeCodeInstall ?? inspectClaudeCodeInstall)();
     const remoteStatus = await resolveRemoteStatus({
