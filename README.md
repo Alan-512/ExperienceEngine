@@ -74,8 +74,9 @@ Install ExperienceEngine through the host-native command for the host you want t
 - `Codex`
   - `codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y experienceengine codex-mcp-server`
 - `Claude Code`
-  - host-native marketplace/plugin packaging is still in progress
-  - use the Claude-side integration path when it lands; for now, `ee install claude-code` remains an operator fallback
+  - plugin assets are bundled in the package
+  - a Claude-side marketplace or direct plugin install path is still needed for a true one-step host-native install
+  - until that lands, `ee install claude-code` remains an operator fallback
 
 After the host-native installation completes, use:
 

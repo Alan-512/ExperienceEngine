@@ -29,7 +29,8 @@ describe("public install guidance", () => {
       },
       "claude-code": {
         ready: false,
-        reason: "Claude Code still needs a marketplace/plugin packaging path to become a true one-step host-native install."
+        reason:
+          "Claude Code now bundles plugin assets in the package, but a Claude-side marketplace or direct plugin install path is still needed for a true one-step host-native install."
       }
     });
   });

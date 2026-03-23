@@ -20,10 +20,14 @@
   },
   "files": [
     "dist",
+    ".claude-plugin",
+    ".mcp.json",
+    "hooks",
     "README.md",
     "docs/user-guide.md",
     "docs/releases",
     "openclaw.plugin.json",
+    "scripts/claude-plugin",
     ".env.example"
   ],
   "scripts": {
