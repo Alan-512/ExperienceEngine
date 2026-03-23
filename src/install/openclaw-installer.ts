@@ -338,7 +338,7 @@ const identifyExperienceEnginePath = (rootPath: string): boolean => {
   if (existsSync(packagePath)) {
     try {
       const pkg = JSON.parse(readFileSync(packagePath, "utf8")) as { name?: string };
-      return pkg.name === "experienceengine";
+      return pkg.name === "experienceengine" || pkg.name === "@alan512/experienceengine";
     } catch {
       return false;
     }

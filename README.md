@@ -70,15 +70,11 @@ ExperienceEngine no longer treats the `ee` CLI as the first-install entrypoint.
 Install ExperienceEngine through the host-native command for the host you want to use:
 
 - `OpenClaw`
-  - planned one-step command:
-    - `openclaw plugins install experienceengine`
-  - current status:
-    - blocked until the public npm package `experienceengine` is published
+  - one-step command:
+    - `openclaw plugins install @alan512/experienceengine`
 - `Codex`
-  - planned one-step command:
-    - `codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y experienceengine codex-mcp-server`
-  - current status:
-    - blocked until the public npm package `experienceengine` is published
+  - one-step command:
+    - `codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y @alan512/experienceengine codex-mcp-server`
 - `Claude Code`
   - add the bundled marketplace from GitHub:
     - `/plugin marketplace add https://github.com/Alan-512/ExperienceEngine.git`

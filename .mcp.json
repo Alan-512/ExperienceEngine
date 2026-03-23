@@ -2,14 +2,10 @@
   "mcpServers": {
     "experienceengine": {
       "type": "stdio",
-      "command": "node",
-      "args": [
-        "${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js",
-        "mcp-server"
-      ],
+      "command": "/mnt/d/ExperienceEngineData/.experienceengine/bin/experienceengine-mcp-server",
+      "args": [],
       "env": {
-        "NODE_PATH": "${CLAUDE_PLUGIN_DATA}/node_modules",
-        "EXPERIENCE_ENGINE_HOME": "${CLAUDE_PLUGIN_DATA}/experienceengine-home"
+        "EXPERIENCE_ENGINE_HOME": "/home/seed/.experienceengine"
       }
     }
   }

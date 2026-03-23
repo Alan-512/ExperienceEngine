@@ -12,7 +12,7 @@ describe("Claude plugin assets", () => {
 
     expect(manifest.name).toBe("experienceengine");
     expect(manifest.description).toBeTypeOf("string");
-    expect(manifest.version).toBeTypeOf("string");
+    expect(manifest.version).toBe("0.1.2");
   });
 
   it("defines hooks that bootstrap dependencies and route Claude hook events into EE", () => {
@@ -31,7 +31,7 @@ describe("Claude plugin assets", () => {
     expect(hooks.hooks.SessionEnd?.[0]?.hooks[0]?.command).toContain("claude-hook.sh");
   });
 
-  it("defines an MCP server that runs from the plugin root and persists data in plugin data", () => {
+  it("defines an MCP server that uses the installed product launcher and shared EE home", () => {
     const mcp = JSON.parse(readFileSync(join(repoRoot, ".mcp.json"), "utf8")) as {
       mcpServers: Record<
         string,
@@ -44,15 +44,11 @@ describe("Claude plugin assets", () => {
     };
 
     const server = mcp.mcpServers.experienceengine;
-    expect(server.command).toBe("node");
-    expect(server.args).toEqual([
-      "${CLAUDE_PLUGIN_ROOT}/dist/cli/index.js",
-      "mcp-server"
-    ]);
+    expect(server.command).toContain("/.experienceengine/bin/experienceengine-mcp-server");
+    expect(server.args).toEqual([]);
     expect(server.env).toEqual(
       expect.objectContaining({
-        NODE_PATH: "${CLAUDE_PLUGIN_DATA}/node_modules",
-        EXPERIENCE_ENGINE_HOME: "${CLAUDE_PLUGIN_DATA}/experienceengine-home"
+        EXPERIENCE_ENGINE_HOME: "/home/seed/.experienceengine"
       })
     );
   });

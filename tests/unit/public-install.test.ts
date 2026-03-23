@@ -18,17 +18,13 @@ describe("public install guidance", () => {
   it("summarizes current host-native readiness by host", () => {
     expect(buildHostNativeInstallGuidance()).toEqual({
       openclaw: {
-        ready: false,
-        reason:
-          "OpenClaw's one-step install command still depends on the public npm package 'experienceengine', which is not published yet.",
-        command: "openclaw plugins install experienceengine"
+        ready: true,
+        command: "openclaw plugins install @alan512/experienceengine"
       },
       codex: {
-        ready: false,
-        reason:
-          "Codex's one-step MCP install still depends on running `npx -y experienceengine`, which requires the public npm package to be published first.",
+        ready: true,
         command:
-          "codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y experienceengine codex-mcp-server"
+          "codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y @alan512/experienceengine codex-mcp-server"
       },
       "claude-code": {
         ready: true,

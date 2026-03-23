@@ -103,15 +103,11 @@ describe("doctor command", () => {
       expect.arrayContaining([
         ["CLI summary:"],
         ["- Install entrypoint: use the host-specific installation command for each host."],
+        ["- OpenClaw install: ready"],
+        ["  1. openclaw plugins install @alan512/experienceengine"],
+        ["- Codex install: ready"],
         [
-          "- OpenClaw install: OpenClaw's one-step install command still depends on the public npm package 'experienceengine', which is not published yet."
-        ],
-        ["  1. openclaw plugins install experienceengine"],
-        [
-          "- Codex install: Codex's one-step MCP install still depends on running `npx -y experienceengine`, which requires the public npm package to be published first."
-        ],
-        [
-          "  1. codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y experienceengine codex-mcp-server"
+          "  1. codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y @alan512/experienceengine codex-mcp-server"
         ],
         ["- Claude Code install: ready"],
         ["  1. /plugin marketplace add https://github.com/Alan-512/ExperienceEngine.git"],

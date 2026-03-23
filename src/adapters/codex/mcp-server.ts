@@ -484,7 +484,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
   const stateArtifacts = createCodexStateArtifactService(options);
   const server = new McpServer({
     name: "experienceengine",
-    version: "0.1.0"
+    version: "0.1.2"
   });
 
   server.registerResource(

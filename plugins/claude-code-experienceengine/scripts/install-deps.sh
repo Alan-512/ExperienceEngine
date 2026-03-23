@@ -2,11 +2,11 @@
 set -euo pipefail
 
 PLUGIN_DATA="${CLAUDE_PLUGIN_DATA:?CLAUDE_PLUGIN_DATA is required}"
-PACKAGE_DIR="${PLUGIN_DATA}/node_modules/experienceengine"
+PACKAGE_DIR="${PLUGIN_DATA}/node_modules/@alan512/experienceengine"
 STAMP_PATH="${PLUGIN_DATA}/.experienceengine-plugin-version"
 REPO_URL="${EXPERIENCE_ENGINE_PLUGIN_GIT_URL:-https://github.com/Alan-512/ExperienceEngine.git}"
 REPO_REF="${EXPERIENCE_ENGINE_PLUGIN_GIT_REF:-main}"
-PACKAGE_VERSION="0.1.0"
+PACKAGE_VERSION="0.1.2"
 
 mkdir -p "${PLUGIN_DATA}"
 

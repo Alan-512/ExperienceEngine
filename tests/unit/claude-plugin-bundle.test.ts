@@ -12,7 +12,7 @@ describe("Claude plugin bundle", () => {
     ) as Record<string, unknown>;
 
     expect(manifest.name).toBe("experienceengine");
-    expect(manifest.version).toBeTypeOf("string");
+    expect(manifest.version).toBe("0.1.2");
   });
 
   it("uses plugin-local hooks and runtime scripts", () => {
@@ -38,7 +38,7 @@ describe("Claude plugin bundle", () => {
 
     expect(mcp.mcpServers.experienceengine.command).toBe("node");
     expect(mcp.mcpServers.experienceengine.args).toEqual([
-      "${CLAUDE_PLUGIN_DATA}/node_modules/experienceengine/dist/cli/index.js",
+      "${CLAUDE_PLUGIN_DATA}/node_modules/@alan512/experienceengine/dist/cli/index.js",
       "mcp-server"
     ]);
     expect(mcp.mcpServers.experienceengine.env).toEqual(

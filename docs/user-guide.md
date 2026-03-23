@@ -65,15 +65,11 @@ That means the first installation step belongs to the host you want to use, not 
 Install ExperienceEngine through the host-specific flow for:
 
 - `OpenClaw`
-  - planned one-step command:
-    - `openclaw plugins install experienceengine`
-  - current status:
-    - blocked until the public npm package `experienceengine` is published
+  - one-step command:
+    - `openclaw plugins install @alan512/experienceengine`
 - `Codex`
-  - planned one-step command:
-    - `codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y experienceengine codex-mcp-server`
-  - current status:
-    - blocked until the public npm package `experienceengine` is published
+  - one-step command:
+    - `codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y @alan512/experienceengine codex-mcp-server`
 - `Claude Code`
   - add the bundled marketplace from GitHub:
     - `/plugin marketplace add https://github.com/Alan-512/ExperienceEngine.git`

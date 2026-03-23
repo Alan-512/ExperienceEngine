@@ -4,14 +4,14 @@
 
 ExperienceEngine 是一个面向编程 Agent 的本地经验介入层。
 
-它会从真实编码任务中学习简短、任务相关的经验，在后续相似任务中注入这些经验，并记录这次介入到底是帮到了还是干扰了结果。
+它会从真实编码任务中学习简短、任务相关的经验，在后续相似任务中决定是否注入这些经验，并记录这次介入到底是帮到了还是干扰了结果。
 
-当前已验证的宿主：
-- `OpenClaw`：runtime / plugin 集成
-- `Claude Code`：hooks + MCP 交互
-- `Codex`：MCP-first runtime 与交互
+当前支持的宿主：
+- `OpenClaw`
+- `Claude Code`
+- `Codex`
 
-## 它能做什么
+## 它到底做什么
 
 ExperienceEngine 不是通用记忆库，也不是 context engine 的替代品。
 
@@ -40,12 +40,17 @@ ExperienceEngine 解决的是另一层问题：
 - memory 更像“记住事实和偏好”
 - ExperienceEngine 更像“治理可复用的编码经验”
 
-## 当前能直接使用的能力
+## 当前已经能用什么
 
 当前仓库已经实现并可用：
 - `OpenClaw`、`Claude Code`、`Codex` 三个宿主接入
-- 基于 MCP 的主交互面，以及 CLI fallback
-- 基于本地 embedding 的检索
+- MCP 原生交互面，以及 CLI fallback
+- API-first 语义检索与平滑回退：
+  - OpenAI `text-embedding-3-small`
+  - Gemini `gemini-embedding-001`
+  - Jina `jina-embeddings-v3`
+  - 受管本地 embedding fallback
+  - legacy hash-based fallback
 - 快速查看与反馈：
   - `ee inspect --last`
   - `ee helped`
@@ -63,31 +68,65 @@ ExperienceEngine 解决的是另一层问题：
 
 ## 快速开始
 
-从源码目录启动：
+ExperienceEngine 现在采用**宿主原生安装**。
+
+也就是说，第一步安装命令属于你要使用的宿主，而不是 `ee` CLI。
+
+- `OpenClaw`
+  - 一步安装：
+    - `openclaw plugins install @alan512/experienceengine`
+- `Codex`
+  - 一步接入：
+    - `codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y @alan512/experienceengine codex-mcp-server`
+- `Claude Code`
+  - 先添加 GitHub marketplace：
+    - `/plugin marketplace add https://github.com/Alan-512/ExperienceEngine.git`
+  - 再安装插件：
+    - `/plugin install experienceengine@experienceengine`
+  - 如果你需要显式 hooks + MCP wiring，仍可用：
+    - `ee install claude-code`
+
+宿主安装完成后，再用：
 
 ```bash
-pnpm install
-pnpm build
-node dist/cli/index.js doctor codex
-```
-
-如果已经作为命令安装，可直接使用：
-
-```bash
-ee doctor codex
+ee doctor <openclaw|claude-code|codex>
+ee status
+ee maintenance embedding-smoke
 ```
 
 ## 前置条件
 
-在安装任一 adapter 前，请先确认对应宿主 CLI 已经能在当前机器正常工作：
+在安装任一宿主前，请先确认对应宿主 CLI 已经能在当前机器正常工作：
 
-- `openclaw`：用于 OpenClaw adapter
-- `claude`：用于 Claude Code adapter
-- `codex`：用于 Codex adapter
+- `openclaw`
+- `claude`
+- `codex`
 
-ExperienceEngine 不会替你安装这些宿主 CLI。它只会把自己接入一个已经可用的宿主环境。
+ExperienceEngine 不会替你安装这些宿主 CLI。它只负责把自己接入一个已经可用的宿主环境。
 
-## 按宿主安装
+## 安装模型
+
+ExperienceEngine 现在把“安装”和“运维”明确分开：
+
+- 安装属于宿主
+- 验证、修复、状态查看属于 `ee`
+
+这意味着：
+
+- `Codex` 走 Codex 原生 MCP 接入
+- `Claude Code` 走 Claude 原生插件资产与 marketplace 分发
+- `OpenClaw` 走 plugin/runtime 集成
+
+一旦安装完成，`ee` CLI 主要负责：
+
+- 健康检查
+- 修复建议
+- 状态查看
+- 学习与介入反馈
+
+## 高级按宿主命令
+
+如果你是运维者、开发者，或者想显式控制某个宿主，仍然可以使用：
 
 ```bash
 ee install openclaw
@@ -95,12 +134,12 @@ ee install claude-code
 ee install codex
 ```
 
-说明：
-- `OpenClaw` 走 plugin/runtime 集成，管理面更多依赖 CLI fallback
-- `Claude Code` 会同时安装 hooks 和共享 MCP server
-- `Codex` 会安装共享 MCP server
-- `ee install ...` 和 `ee doctor ...` 现在会检查 `npm/pnpm` 是否使用非官方 registry；受管模型下载默认建议使用 `https://registry.npmjs.org`
-- `ee install ...` 成功后还会主动说明冷启动预期：采集会立刻开始，但正式经验通常需要同仓库内几次相似任务后才会出现
+这些命令仍然有效，但它们更适合作为：
+- 运维 fallback
+- 显式修复
+- 产品开发期调试
+
+而不是默认公开安装路径。
 
 ## 数据目录
 
@@ -116,6 +155,24 @@ ee install codex
 - 各 adapter 的 install state
 - 受管本地 embedding 模型缓存，默认位于 `~/.experienceengine/models/embeddings`
 - 受管备份与导出快照
+
+## Embedding 默认行为
+
+当前默认行为：
+
+- `embeddingProvider = "api"`
+- provider 优先级：
+  - 设置了 `OPENAI_API_KEY` 时优先 OpenAI
+  - 设置了 `GEMINI_API_KEY` 时使用 Gemini
+  - 设置了 `JINA_API_KEY` 时使用 Jina
+- 如果没有任何 API provider 可用，会自动回退到受管本地 embedding
+
+常用环境变量：
+
+- `EXPERIENCE_ENGINE_EMBEDDING_PROVIDER=local`
+  - 强制完全本地 embedding
+- `EXPERIENCE_ENGINE_EMBEDDING_API_PROVIDER=openai|gemini|jina`
+  - 强制指定某个 API embedding provider
 
 ## 用户手册
 
