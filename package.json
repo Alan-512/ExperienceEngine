@@ -16,7 +16,7 @@
     "node": ">=20.0.0"
   },
   "bin": {
-    "ee": "./dist/cli/index.js"
+    "ee": "dist/cli/index.js"
   },
   "files": [
     "dist",

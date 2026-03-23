@@ -1,6 +1,7 @@
 type ReadyInstallGuidance = {
   ready: true;
-  command: string;
+  command?: string;
+  commands?: [string, string];
 };
 
 type PendingInstallGuidance = {
