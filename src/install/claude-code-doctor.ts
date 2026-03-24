@@ -113,6 +113,7 @@ export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
   };
   const distillationResolution = resolveDistillationResolution({
     env: resolutionEnv,
+    homeDir: options.homeDir,
     configProvider: config.distillerProvider,
     configAuthMode: config.distillationAuthMode,
     configModel: config.distillerModel,

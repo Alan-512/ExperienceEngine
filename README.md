@@ -44,14 +44,14 @@ In practice:
 
 Already available in the repository:
 - host integration for `OpenClaw`, `Claude Code`, and `Codex`
-- MCP-native interaction surfaces plus CLI fallback
+- MCP-native interaction surfaces plus CLI/operator fallback
 - API-first semantic retrieval with graceful fallback:
   - OpenAI `text-embedding-3-small`
   - Gemini `gemini-embedding-001`
   - Jina `jina-embeddings-v3`
   - managed local embedding fallback
   - legacy hash-based fallback
-- quick inspection and feedback commands such as `ee inspect --last`, `ee helped`, and `ee harmed`
+- host-agent driven inspection and feedback, with CLI fallback commands such as `ee inspect --last`, `ee helped`, and `ee harmed`
 - local Experience Pack workflow:
   - `draft`
   - `review`
@@ -82,13 +82,28 @@ Install ExperienceEngine through the host-native command for the host you want t
     - `/plugin install experienceengine@experienceengine`
   - `ee install claude-code` remains the operator fallback when you need direct hooks + MCP wiring outside the marketplace flow
 
-After the host-native installation completes, use:
+After the host-native installation completes, the normal user path is to keep working through the host agent itself.
+
+Ask the host agent naturally for ExperienceEngine state or feedback actions, for example:
+
+- "What did ExperienceEngine just inject?"
+- "Show the last ExperienceEngine intervention."
+- "Mark the last ExperienceEngine intervention as helpful."
+
+Use the `ee` CLI only when you need explicit operator validation or troubleshooting:
 
 ```bash
+ee init distillation --provider <provider> --model <modelId> [--auth-mode api_key|google_adc]
+ee init secret <ENV_KEY> <value>
 ee doctor <openclaw|claude-code|codex>
 ee status
 ee maintenance embedding-smoke
 ```
+
+The `ee init ...` commands are shared-product initialization, not host-specific setup.
+
+- Run them once after your first host installation.
+- Later host installations reuse the same ExperienceEngine home, settings, and shared secrets.
 
 ## Prerequisites
 
@@ -113,8 +128,11 @@ That means:
 - `Claude Code` uses Claude-native plugin assets and marketplace distribution
 - `OpenClaw` uses plugin/runtime integration
 
-Once installation is complete, `ee` becomes the operational surface for:
+Once installation is complete, the host agent remains the primary interaction surface.
 
+`ee` is the operational surface for:
+
+- shared provider/model initialization
 - health checks
 - repair guidance
 - status inspection

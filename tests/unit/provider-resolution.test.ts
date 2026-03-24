@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { configSchema } from "../../src/config/config-schema.js";
 import { loadConfig } from "../../src/config/load-config.js";
+import { resolveDistillationResolution } from "../../src/distillation/host-llm.js";
 
 const tempDirs: string[] = [];
 
@@ -273,6 +274,51 @@ describe("provider resolution config surface", () => {
     expect(config.distillerProvider).toBe("gemini");
     expect(config.distillationAuthMode).toBe("api_key");
     expect(config.distillerModel).toBe("gemini-3.1-flash-lite-preview");
+  });
+
+  it("hydrates distillation auth from shared secrets when env is missing the api key", () => {
+    const homeDir = mkdtempSync(join(tmpdir(), "experienceengine-provider-secrets-"));
+    tempDirs.push(homeDir);
+    const productHome = join(homeDir, ".experienceengine");
+    mkdirSync(productHome, { recursive: true });
+    writeFileSync(
+      join(productHome, "settings.json"),
+      `${JSON.stringify(
+        {
+          distillation: {
+            provider: "gemini",
+            auth_mode: "api_key",
+            model: "gemini-3.1-flash-lite-preview"
+          }
+        },
+        null,
+        2
+      )}\n`,
+      "utf8"
+    );
+    writeFileSync(
+      join(productHome, "secrets.json"),
+      `${JSON.stringify(
+        {
+          GEMINI_API_KEY: "gemini-test-key"
+        },
+        null,
+        2
+      )}\n`,
+      "utf8"
+    );
+
+    const config = loadConfig({}, { env: { EXPERIENCE_ENGINE_HOME: productHome } as NodeJS.ProcessEnv, homeDir });
+    const resolution = resolveDistillationResolution({
+      env: { EXPERIENCE_ENGINE_HOME: productHome } as NodeJS.ProcessEnv,
+      homeDir,
+      configProvider: config.distillerProvider,
+      configAuthMode: config.distillationAuthMode,
+      configModel: config.distillerModel
+    });
+
+    expect(resolution.distillationMode).toBe("llm");
+    expect(resolution.diagnostics.missingEnv).toEqual([]);
   });
 
   it("rejects unsupported distiller providers", () => {

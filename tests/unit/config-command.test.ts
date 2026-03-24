@@ -165,4 +165,45 @@ describe("config command", () => {
 
     expect(config.distillerProvider).toBe("openrouter");
   });
+
+  it("persists shared secrets outside settings.json", async () => {
+    const home = makeTempDir();
+    const productHome = join(home, ".experienceengine");
+    process.env.EXPERIENCE_ENGINE_HOME = productHome;
+
+    await runConfigCommand("set", "secret.GEMINI_API_KEY", "gemini-test-key");
+
+    expect(consoleLogSpy).toHaveBeenCalledWith("[ExperienceEngine] Stored secret GEMINI_API_KEY.");
+    expect(JSON.parse(readFileSync(join(productHome, "secrets.json"), "utf8"))).toEqual({
+      GEMINI_API_KEY: "gemini-test-key"
+    });
+    expect(existsSync(join(productHome, "settings.json"))).toBe(false);
+  });
+
+  it("reads shared secret state without printing the secret value", async () => {
+    const home = makeTempDir();
+    const productHome = join(home, ".experienceengine");
+    process.env.EXPERIENCE_ENGINE_HOME = productHome;
+
+    await runConfigCommand("set", "secret.GEMINI_API_KEY", "gemini-test-key");
+    consoleLogSpy.mockClear();
+
+    await runConfigCommand("get", "secret.GEMINI_API_KEY");
+
+    expect(consoleLogSpy).toHaveBeenCalledWith("<set>");
+  });
+
+  it("unsets shared secrets", async () => {
+    const home = makeTempDir();
+    const productHome = join(home, ".experienceengine");
+    process.env.EXPERIENCE_ENGINE_HOME = productHome;
+
+    await runConfigCommand("set", "secret.GEMINI_API_KEY", "gemini-test-key");
+    consoleLogSpy.mockClear();
+
+    await runConfigCommand("unset", "secret.GEMINI_API_KEY");
+
+    expect(consoleLogSpy).toHaveBeenCalledWith("[ExperienceEngine] Removed secret GEMINI_API_KEY.");
+    expect(JSON.parse(readFileSync(join(productHome, "secrets.json"), "utf8"))).toEqual({});
+  });
 });

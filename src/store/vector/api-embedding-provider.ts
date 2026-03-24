@@ -1,7 +1,9 @@
 import type { SemanticEmbeddingProvider } from "./provider-types.js";
+import { resolveExperienceEngineRuntimeEnv } from "../../config/runtime-env.js";
 
 type ApiEmbeddingOptions = {
   env?: NodeJS.ProcessEnv;
+  homeDir?: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
 };
@@ -73,7 +75,7 @@ const OPENAI_MODEL = "text-embedding-3-small";
 const OPENAI_VERSION = "openai-te3s-v1";
 
 const createOpenAIProvider = (options: ApiEmbeddingOptions = {}): SemanticEmbeddingProvider => {
-  const env = options.env ?? process.env;
+  const env = resolveExperienceEngineRuntimeEnv({ env: options.env ?? process.env, homeDir: options.homeDir });
   const apiKey = firstNonEmpty(env.OPENAI_API_KEY, env.EXPERIENCE_ENGINE_EMBEDDING_API_KEY);
   if (!apiKey) {
     throw new Error("OpenAI embedding provider requires OPENAI_API_KEY");
@@ -136,7 +138,7 @@ const JINA_TASK_MAP = {
 } as const;
 
 const createJinaProvider = (options: ApiEmbeddingOptions = {}): SemanticEmbeddingProvider => {
-  const env = options.env ?? process.env;
+  const env = resolveExperienceEngineRuntimeEnv({ env: options.env ?? process.env, homeDir: options.homeDir });
   const apiKey = firstNonEmpty(env.JINA_API_KEY);
   if (!apiKey) {
     throw new Error("Jina embedding provider requires JINA_API_KEY");
@@ -201,7 +203,7 @@ const GEMINI_EMBEDDING_MODEL = "gemini-embedding-001";
 const GEMINI_EMBEDDING_VERSION = "gemini-embedding-001";
 
 const createGeminiProvider = (options: ApiEmbeddingOptions = {}): SemanticEmbeddingProvider => {
-  const env = options.env ?? process.env;
+  const env = resolveExperienceEngineRuntimeEnv({ env: options.env ?? process.env, homeDir: options.homeDir });
   const apiKey = firstNonEmpty(env.GEMINI_API_KEY);
   if (!apiKey) {
     throw new Error("Gemini embedding provider requires GEMINI_API_KEY");
@@ -259,7 +261,7 @@ const createGeminiProvider = (options: ApiEmbeddingOptions = {}): SemanticEmbedd
 export const resolveApiEmbeddingProvider = (
   options: ApiEmbeddingOptions = {}
 ): SemanticEmbeddingProvider | null => {
-  const env = options.env ?? process.env;
+  const env = resolveExperienceEngineRuntimeEnv({ env: options.env ?? process.env, homeDir: options.homeDir });
   const explicit = env.EXPERIENCE_ENGINE_EMBEDDING_API_PROVIDER;
 
   if (explicit === "openai") {

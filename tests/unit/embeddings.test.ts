@@ -1,3 +1,6 @@
+import { mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   clearEmbeddingRuntimeCaches,
@@ -14,8 +17,16 @@ import {
 describe("embedding fallback diagnostics", () => {
   const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
   const originalFetch = globalThis.fetch;
+  let runtimeHome = "";
+
+  const runtimeEnv = (overrides: NodeJS.ProcessEnv = {}): NodeJS.ProcessEnv => ({
+    ...process.env,
+    EXPERIENCE_ENGINE_HOME: runtimeHome,
+    ...overrides
+  });
 
   beforeEach(() => {
+    runtimeHome = mkdtempSync(join(tmpdir(), "experienceengine-embedding-runtime-"));
     warnSpy.mockClear();
     clearEmbeddingProviderForTests();
     clearEmbeddingRuntimeCaches();
@@ -31,6 +42,7 @@ describe("embedding fallback diagnostics", () => {
     setTransformersModuleLoaderForTests(null);
     globalThis.fetch = originalFetch;
     vi.useRealTimers();
+    rmSync(runtimeHome, { recursive: true, force: true });
   });
 
   it("logs one warning and falls back to legacy embeddings when the local provider fails", async () => {
@@ -76,10 +88,9 @@ describe("embedding fallback diagnostics", () => {
         embeddingDtype: "q8",
         embeddingCacheDir: "./tmp/embeddings"
       },
-      env: {
-        ...process.env,
+      env: runtimeEnv({
         OPENAI_API_KEY: "test-openai-key"
-      }
+      })
     });
 
     expect(result.space).toMatchObject({
@@ -115,11 +126,10 @@ describe("embedding fallback diagnostics", () => {
         embeddingDtype: "q8",
         embeddingCacheDir: "./tmp/embeddings"
       },
-      env: {
-        ...process.env,
+      env: runtimeEnv({
         EXPERIENCE_ENGINE_EMBEDDING_API_PROVIDER: "gemini",
         GEMINI_API_KEY: "test-gemini-key"
-      }
+      })
     });
 
     expect(result.space).toMatchObject({
@@ -158,10 +168,9 @@ describe("embedding fallback diagnostics", () => {
         embeddingDtype: "q8",
         embeddingCacheDir: "./tmp/embeddings"
       },
-      env: {
-        ...process.env,
+      env: runtimeEnv({
         OPENAI_API_KEY: "test-openai-key"
-      }
+      })
     });
 
     expect(result.space.provider).toBe("local");
@@ -191,12 +200,11 @@ describe("embedding fallback diagnostics", () => {
         embeddingDtype: "q8",
         embeddingCacheDir: "./tmp/embeddings"
       },
-      env: {
-        ...process.env,
+      env: runtimeEnv({
         OPENAI_API_KEY: undefined,
         EXPERIENCE_ENGINE_EMBEDDING_API_KEY: undefined,
         JINA_API_KEY: "test-jina-key"
-      }
+      })
     });
 
     expect(result.space).toMatchObject({
@@ -235,12 +243,11 @@ describe("embedding fallback diagnostics", () => {
         embeddingDtype: "q8",
         embeddingCacheDir: "./tmp/embeddings"
       },
-      env: {
-        ...process.env,
+      env: runtimeEnv({
         OPENAI_API_KEY: undefined,
         EXPERIENCE_ENGINE_EMBEDDING_API_KEY: undefined,
         JINA_API_KEY: undefined
-      }
+      })
     });
 
     expect(result.space.provider).toBe("local");
@@ -266,10 +273,9 @@ describe("embedding fallback diagnostics", () => {
         embeddingDtype: "q8" as const,
         embeddingCacheDir: "./tmp/embeddings"
       },
-      env: {
-        ...process.env,
+      env: runtimeEnv({
         OPENAI_API_KEY: "test-openai-key"
-      }
+      })
     };
 
     const first = await embedQueryText("validate the first failing step", options);
@@ -297,10 +303,9 @@ describe("embedding fallback diagnostics", () => {
         embeddingDtype: "q8" as const,
         embeddingCacheDir: "./tmp/embeddings"
       },
-      env: {
-        ...process.env,
+      env: runtimeEnv({
         OPENAI_API_KEY: "test-openai-key"
-      }
+      })
     };
 
     const first = await embedPassageText("repair the provider config resolution before touching the UI", options);
@@ -341,10 +346,9 @@ describe("embedding fallback diagnostics", () => {
         embeddingDtype: "q8" as const,
         embeddingCacheDir: "./tmp/embeddings"
       },
-      env: {
-        ...process.env,
+      env: runtimeEnv({
         OPENAI_API_KEY: "test-openai-key"
-      }
+      })
     };
 
     const first = await embedQueryText("validate the first failing step", options);
@@ -373,10 +377,9 @@ describe("embedding fallback diagnostics", () => {
         embeddingDtype: "q8" as const,
         embeddingCacheDir: "./tmp/embeddings"
       },
-      env: {
-        ...process.env,
+      env: runtimeEnv({
         OPENAI_API_KEY: "test-openai-key"
-      }
+      })
     };
 
     for (let index = 0; index < 257; index += 1) {
@@ -415,10 +418,9 @@ describe("embedding fallback diagnostics", () => {
         embeddingDtype: "q8",
         embeddingCacheDir: "./tmp/embeddings"
       },
-      env: {
-        ...process.env,
+      env: runtimeEnv({
         OPENAI_API_KEY: "test-openai-key"
-      }
+      })
     });
 
     expect(result.space.provider).toBe("local");
@@ -449,10 +451,9 @@ describe("embedding fallback diagnostics", () => {
         embeddingDtype: "q8",
         embeddingCacheDir: "./tmp/embeddings"
       },
-      env: {
-        ...process.env,
+      env: runtimeEnv({
         OPENAI_API_KEY: "test-openai-key"
-      }
+      })
     });
 
     expect(result.space.provider).toBe("legacy");
@@ -482,10 +483,9 @@ describe("embedding fallback diagnostics", () => {
         embeddingDtype: "q8",
         embeddingCacheDir: "./tmp/embeddings"
       },
-      env: {
-        ...process.env,
+      env: runtimeEnv({
         OPENAI_API_KEY: "test-openai-key"
-      }
+      })
     });
 
     expect(result.space.provider).toBe("openai");
@@ -518,10 +518,9 @@ describe("embedding fallback diagnostics", () => {
         embeddingDtype: "q8",
         embeddingCacheDir: "./tmp/embeddings"
       },
-      env: {
-        ...process.env,
+      env: runtimeEnv({
         OPENAI_API_KEY: "test-openai-key"
-      }
+      })
     });
 
     expect(result.space.provider).toBe("local");
@@ -550,11 +549,10 @@ describe("embedding fallback diagnostics", () => {
         embeddingDtype: "q8",
         embeddingCacheDir: "./tmp/embeddings"
       },
-      env: {
-        ...process.env,
+      env: runtimeEnv({
         OPENAI_API_KEY: "",
         EXPERIENCE_ENGINE_EMBEDDING_API_KEY: "fallback-openai-key"
-      }
+      })
     });
 
     expect(result.space.provider).toBe("openai");

@@ -1,4 +1,10 @@
 import {
+  getExperienceEngineSecret,
+  isSupportedSecretKey,
+  setExperienceEngineSecret,
+  unsetExperienceEngineSecret
+} from "../../config/secrets-store.js";
+import {
   readExperienceEngineSettings,
   setDistillationAuthMode,
   setDistillationModel,
@@ -18,6 +24,17 @@ export const runConfigCommand = async (
   value?: string,
   deps: ConfigCommandDeps = {}
 ): Promise<void> => {
+  if (action === "get" && key?.startsWith("secret.")) {
+    const secretKey = key.slice("secret.".length);
+    if (!isSupportedSecretKey(secretKey)) {
+      console.log(`Usage: ee config get secret.<ENV_KEY>`);
+      return;
+    }
+
+    console.log(getExperienceEngineSecret(secretKey) ? "<set>" : "<unset>");
+    return;
+  }
+
   if (action === "get" && key === "notices.inline") {
     const settings = readExperienceEngineSettings();
     console.log(String(settings.notices?.inline ?? true));
@@ -106,7 +123,31 @@ export const runConfigCommand = async (
     return;
   }
 
+  if (action === "set" && key?.startsWith("secret.")) {
+    const secretKey = key.slice("secret.".length);
+    if (!value || !isSupportedSecretKey(secretKey)) {
+      console.log("Usage: ee config set secret.<ENV_KEY> <value>");
+      return;
+    }
+
+    setExperienceEngineSecret(secretKey, value);
+    console.log(`[ExperienceEngine] Stored secret ${secretKey}.`);
+    return;
+  }
+
+  if (action === "unset" && key?.startsWith("secret.")) {
+    const secretKey = key.slice("secret.".length);
+    if (!isSupportedSecretKey(secretKey)) {
+      console.log("Usage: ee config unset secret.<ENV_KEY>");
+      return;
+    }
+
+    unsetExperienceEngineSecret(secretKey);
+    console.log(`[ExperienceEngine] Removed secret ${secretKey}.`);
+    return;
+  }
+
   console.log(
-    "Usage: ee config <get|set> notices.inline|distillation.provider|distillation.auth_mode|distillation.model [value]"
+    "Usage: ee config <get|set|unset> notices.inline|distillation.provider|distillation.auth_mode|distillation.model|secret.<ENV_KEY> [value]"
   );
 };

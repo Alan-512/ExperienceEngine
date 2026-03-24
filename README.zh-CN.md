@@ -44,14 +44,14 @@ ExperienceEngine 解决的是另一层问题：
 
 当前仓库已经实现并可用：
 - `OpenClaw`、`Claude Code`、`Codex` 三个宿主接入
-- MCP 原生交互面，以及 CLI fallback
+- MCP 原生交互面，以及 CLI / 运维 fallback
 - API-first 语义检索与平滑回退：
   - OpenAI `text-embedding-3-small`
   - Gemini `gemini-embedding-001`
   - Jina `jina-embeddings-v3`
   - 受管本地 embedding fallback
   - legacy hash-based fallback
-- 快速查看与反馈：
+- 通过宿主 agent 直接查看和反馈经验，并保留 CLI fallback：
   - `ee inspect --last`
   - `ee helped`
   - `ee harmed`
@@ -86,13 +86,28 @@ ExperienceEngine 现在采用**宿主原生安装**。
   - 如果你需要显式 hooks + MCP wiring，仍可用：
     - `ee install claude-code`
 
-宿主安装完成后，再用：
+宿主安装完成后，普通用户应继续直接和宿主 agent 交互。
+
+例如你可以直接问宿主 agent：
+
+- “ExperienceEngine 刚刚注入了什么？”
+- “显示最近一次 ExperienceEngine 介入。”
+- “把刚才那次 ExperienceEngine 提示标记为 helpful。”
+
+只有在需要显式运维、排障或高级调试时，再使用：
 
 ```bash
+ee init distillation --provider <provider> --model <modelId> [--auth-mode api_key|google_adc]
+ee init secret <ENV_KEY> <value>
 ee doctor <openclaw|claude-code|codex>
 ee status
 ee maintenance embedding-smoke
 ```
+
+这里的 `ee init ...` 属于 ExperienceEngine 的**共享初始化**，不是某个宿主自己的安装步骤。
+
+- 第一次把 EE 接到任意一个宿主后，做一次初始化即可。
+- 之后再安装新的宿主，会复用同一个 EE 数据目录、配置和共享 secret。
 
 ## 前置条件
 
@@ -117,8 +132,11 @@ ExperienceEngine 现在把“安装”和“运维”明确分开：
 - `Claude Code` 走 Claude 原生插件资产与 marketplace 分发
 - `OpenClaw` 走 plugin/runtime 集成
 
-一旦安装完成，`ee` CLI 主要负责：
+一旦安装完成，宿主 agent 仍然是主交互面。
 
+`ee` CLI 主要负责：
+
+- 共享 provider/model 初始化
 - 健康检查
 - 修复建议
 - 状态查看

@@ -245,6 +245,79 @@ env_key = "OPENROUTER_API_KEY"
     expect(status.distillationStatus?.reason).toContain("explicit");
   });
 
+  it("uses shared distillation secrets when the Codex MCP env does not include provider keys", () => {
+    const homeDir = makeTempDir();
+    const productHome = join(homeDir, ".experienceengine");
+    mkdirSync(productHome, { recursive: true });
+    writeFileSync(
+      join(productHome, "settings.json"),
+      `${JSON.stringify(
+        {
+          distillation: {
+            provider: "gemini",
+            auth_mode: "api_key",
+            model: "gemini-3.1-flash-lite-preview"
+          }
+        },
+        null,
+        2
+      )}\n`,
+      "utf8"
+    );
+    writeFileSync(
+      join(productHome, "secrets.json"),
+      `${JSON.stringify(
+        {
+          GEMINI_API_KEY: "gemini-test-key"
+        },
+        null,
+        2
+      )}\n`,
+      "utf8"
+    );
+
+    installCodexAdapter({
+      homeDir,
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        if (key === "codex mcp get experienceengine") {
+          return `experienceengine
+  enabled: true
+  transport: stdio
+  command: node
+  args: --no-warnings /tmp/experienceengine/dist/cli/index.js codex-mcp-server
+  cwd: -
+  env: EXPERIENCE_ENGINE_HOME=${productHome}
+  startup_timeout_sec: 120
+  remove: codex mcp remove experienceengine`;
+        }
+        return "";
+      }
+    });
+
+    const status = inspectCodexInstall({
+      homeDir,
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        if (key === "codex mcp get experienceengine") {
+          return `experienceengine
+  enabled: true
+  transport: stdio
+  command: node
+  args: --no-warnings /tmp/experienceengine/dist/cli/index.js codex-mcp-server
+  cwd: -
+  env: EXPERIENCE_ENGINE_HOME=${productHome}
+  startup_timeout_sec: 120
+  remove: codex mcp remove experienceengine`;
+        }
+        return "";
+      }
+    });
+
+    expect(status.distillationStatus?.distillationMode).toBe("llm");
+    expect(status.distillationStatus?.diagnostics.missingEnv).toEqual([]);
+  });
+
   it("writes windows-compatible launcher commands when runtime target is windows", () => {
     const homeDir = makeMountedTempDir();
     const commands: string[] = [];

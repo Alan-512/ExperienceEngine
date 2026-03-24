@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { defaultConfig } from "./default-config.js";
 import { configSchema, type ExperienceEngineConfig } from "./config-schema.js";
 import { resolveExperienceEnginePaths } from "./path-resolver.js";
+import { resolveExperienceEngineRuntimeEnv } from "./runtime-env.js";
 import { readExperienceEngineSettings } from "./settings-store.js";
 
 type LoadConfigOptions = {
@@ -13,7 +14,11 @@ export const loadConfig = (
   overrides: Partial<ExperienceEngineConfig> = {},
   options: LoadConfigOptions = {}
 ): ExperienceEngineConfig => {
-  const env = options.env ?? process.env;
+  const env = resolveExperienceEngineRuntimeEnv({
+    env: options.env ?? process.env,
+    homeDir: options.homeDir,
+    overrides
+  });
   const paths = resolveExperienceEnginePaths({ overrides, env, homeDir: options.homeDir });
   const settings = readExperienceEngineSettings({ env, homeDir: options.homeDir, overrides });
   const captureRawPayloads =

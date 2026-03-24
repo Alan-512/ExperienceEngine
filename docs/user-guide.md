@@ -77,21 +77,34 @@ Install ExperienceEngine through the host-specific flow for:
     - `/plugin install experienceengine@experienceengine`
   - `ee install claude-code` remains the explicit operator fallback when you need direct hooks + MCP wiring outside the marketplace flow
 
-Then use the `ee` CLI for validation and operations:
+Then continue using your host agent normally.
+
+For most users, ExperienceEngine should stay in the background and be inspected through the host agent itself. Typical prompts are:
+
+- "What did ExperienceEngine just inject?"
+- "Show the last ExperienceEngine intervention."
+- "Mark the last ExperienceEngine intervention as helpful."
+
+Use the `ee` CLI only when you need explicit validation, repair, or operator-style troubleshooting:
 
 ```bash
+ee init distillation --provider <provider> --model <modelId> [--auth-mode api_key|google_adc]
+ee init secret <ENV_KEY> <value>
 ee doctor <openclaw|claude-code|codex>
 ee status
 ```
+
+Use `ee init ...` once to initialize ExperienceEngine's shared provider/model/secret state. New host installations should reuse that same shared EE state instead of asking you to re-enter the same API key per host window.
 
 You do **not** need to clone the repository or run `pnpm build` for normal user installation.
 
 ### Operational CLI
 
-After a host-native installation succeeds, `ee` becomes the shared operational surface.
+After a host-native installation succeeds, the host agent remains the primary interaction surface.
 
-Use it for:
+Use `ee` for:
 
+- one-time shared initialization after the first host-native install
 - installation validation
 - repair guidance
 - runtime status checks
@@ -490,7 +503,11 @@ ee rollback <backup-id>
 
 ## Doctor, Repair, and Upgrade
 
-Use doctor first if something looks wrong:
+If something feels wrong in normal use, ask the host agent to inspect ExperienceEngine first.
+
+Use the `ee` CLI when you need explicit local validation or the host cannot currently surface enough state.
+
+CLI fallback:
 
 ```bash
 ee doctor openclaw
@@ -507,7 +524,7 @@ What doctor tells you:
 - how many raw task records / task runs / pending candidates / formal nodes exist today
 - the next step to reach first durable value when the system is still warming up
 
-Use repair when host wiring drifted:
+Use repair when host wiring drifted and you need an explicit local recovery step:
 
 ```bash
 ee repair openclaw
@@ -554,7 +571,7 @@ Managed artifacts live under:
 
 Use backup when you want a restorable checkpoint of current ExperienceEngine state.
 
-In an MCP-capable host, ask the agent to create a backup. The agent should first show you a plan and only execute after you confirm.
+In an MCP-capable host, ask the agent to create a backup first. The agent should show a plan and only execute after you confirm.
 
 CLI fallback:
 
@@ -583,6 +600,8 @@ Import restores a valid ExperienceEngine snapshot directory.
 
 Before import overwrites current ExperienceEngine state, the system creates a safeguard backup automatically.
 
+In MCP-capable hosts, prefer asking the agent to plan the import first.
+
 CLI fallback:
 
 ```bash
@@ -594,6 +613,8 @@ ee import <snapshot-path>
 Rollback restores one of the managed backups.
 
 Before rollback overwrites current ExperienceEngine state, the system also creates a safeguard backup automatically.
+
+In MCP-capable hosts, prefer asking the agent to plan the rollback first.
 
 CLI fallback:
 
@@ -614,6 +635,11 @@ For risky changes:
 
 ### Review what happened last
 
+For normal day-to-day usage in Claude Code or Codex, ask the host agent first:
+
+- "What did ExperienceEngine just inject?"
+- "Show the last ExperienceEngine intervention."
+
 Fallback CLI:
 
 ```bash
@@ -625,11 +651,11 @@ This view now also shows:
 - origin record ids when they exist
 - the node evidence summary attached to each injected hint
 
+### Review recent injected turns
+
 In MCP-capable hosts, ask:
 
-- "What did ExperienceEngine just inject?"
-
-### Review recent injected turns
+- "Show the recent injected ExperienceEngine turns."
 
 Fallback CLI:
 
@@ -637,11 +663,9 @@ Fallback CLI:
 ee inspect recent injected 10
 ```
 
-In MCP-capable hosts, ask:
-
-- "Show the recent injected ExperienceEngine turns."
-
 ### Review current node inventory
+
+In MCP-capable hosts, ask for the current active strategies or warnings first.
 
 Fallback CLI:
 
@@ -653,6 +677,8 @@ ee inspect node <id>
 ```
 
 ### Manually correct feedback
+
+In MCP-capable hosts, prefer asking the agent to mark the last intervention as helpful or harmful.
 
 Fallback CLI:
 
@@ -668,6 +694,8 @@ ee feedback node <id> harmed
 `ee helped` and `ee harmed` are shortcuts for the common “last injected guidance helped / harmed” case.
 
 ### Temporarily pause interventions
+
+In MCP-capable hosts, prefer asking the agent to pause or resume ExperienceEngine for the current scope.
 
 Fallback CLI:
 

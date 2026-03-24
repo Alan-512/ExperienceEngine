@@ -1,9 +1,11 @@
 import type { DistillationMode, DistillationSource } from "../types/domain.js";
+import { resolveExperienceEngineRuntimeEnv } from "../config/runtime-env.js";
 import { getDistillerProviderAdapter } from "./providers/registry.js";
 import type { DistillationDiagnostics, DistillerEndpoint, DistillerProvider } from "./providers/types.js";
 
 type ResolveOptions = {
   env?: NodeJS.ProcessEnv;
+  homeDir?: string;
   configProvider?: DistillerProvider;
   configAuthMode?: string;
   configModel?: string;
@@ -44,7 +46,10 @@ const resolveRequestedProvider = (env: NodeJS.ProcessEnv): DistillerProvider =>
 export const resolveDistillationResolution = (
   options: DistillationResolveOptions = {}
 ): DistillationResolution => {
-  const baseEnv = options.env ?? process.env;
+  const baseEnv = resolveExperienceEngineRuntimeEnv({
+    env: options.env ?? process.env,
+    homeDir: options.homeDir
+  });
   const env: NodeJS.ProcessEnv = {
     ...baseEnv
   };

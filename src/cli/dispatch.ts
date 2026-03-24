@@ -7,6 +7,7 @@ const usageText =
   + " | evaluate openclaw-baseline [--lookback-hours N] [--output-dir PATH]"
   + " | evaluate openclaw-scenarios --pack high-confidence [--repo-root PATH] [--output-dir PATH] [--dry-run]"
   + " | mcp-server"
+  + " | init <distillation|secret|show>"
   + " | models list <provider> [query]"
   + " | config <get|set> notices.inline|distillation.provider|distillation.model [value]";
 
@@ -59,6 +60,11 @@ export const runCliCommand = async (command: string | undefined, args: string[])
     case "models": {
       const { runModelsCommand } = await import("./commands/models.js");
       await runModelsCommand(args[0], args[1], args[2]);
+      break;
+    }
+    case "init": {
+      const { runInitCommand } = await import("./commands/init.js");
+      await runInitCommand(args[0], args.slice(1));
       break;
     }
     case "repair": {
