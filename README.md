@@ -11,34 +11,56 @@ Supported hosts today:
 - `Claude Code`
 - `Codex`
 
-## What It Does
+## The Problem It Solves
 
-ExperienceEngine is not a general memory store and not a replacement context engine.
+Coding agents repeat the same mistakes for a simple reason: most sessions do not accumulate reusable execution experience in a governed way.
 
-It focuses on four things:
-- capture task/tool/outcome signals from the host agent
-- compress useful prior experience into short `strategy` or `warning` nodes
-- decide whether to inject guidance for a similar task
-- update node state from real `helped` / `harmed` outcomes
+The usual failure modes are:
+- a fix worked yesterday, but the next similar session starts from zero again
+- memory systems keep adding facts and preferences, but they rarely retire low-value guidance
+- as recalled memory grows, context gets heavier and the agent's attention gets diluted
 
-## Why It Is Not Just Memory
-
-Most agent memory systems answer:
-
-- what facts should be remembered
-- what user preferences should be carried forward
-- what repository context should be loaded next time
-
-ExperienceEngine answers a different question:
-
-- when should prior experience intervene
+ExperienceEngine is designed for that gap. It does not try to remember everything. It tries to decide:
+- when prior experience should intervene
 - which `strategy` or `warning` should be injected
 - whether that intervention actually helped
 - whether the experience should stay active, cool down, or retire
 
-In practice:
-- memory keeps facts and preferences
-- ExperienceEngine governs reusable coding tactics and failure-avoidance guidance
+**Memory does addition. ExperienceEngine does governance.**
+
+## ExperienceEngine vs Memory
+
+| Question | Memory Systems | ExperienceEngine |
+|---|---|---|
+| Persist facts and preferences across sessions | Yes | Not the primary job |
+| Capture repeated failure → fix → success paths | Partial, usually manual | Yes, from real task signals |
+| Track whether a recalled item helped or harmed | Usually no | Yes, per intervention |
+| Retire stale or harmful guidance automatically | Usually no | Yes, cooling and retirement are built in |
+| Keep context small and intervention-focused | Not the main goal | Yes, it injects short task-specific guidance |
+
+## Where It Sits In The Agent Loop
+
+```text
+User task
+  -> before_prompt_build: retrieve and inject matching experience
+  -> agent reasoning + tools: capture failures, retries, corrections, and outcomes
+  -> task finalization: distill new candidates into reusable experience
+  -> helped / harmed feedback: promote, cool, or retire nodes
+```
+
+ExperienceEngine works at the context layer. It does not modify the host model's weights.
+
+## Experience Lifecycle
+
+```text
+task signals
+  -> candidate
+  -> active
+  -> cooling
+  -> retired
+```
+
+Each node moves through that lifecycle using real task outcomes, not just time-based cleanup. Helpful experience gets reinforced; harmful experience gets cooled or retired.
 
 ## What You Can Use Today
 
@@ -62,6 +84,10 @@ Already available in the repository:
   - `CODEX.md`
   - `CLAUDE.md`
   - GitHub agent profile markdown
+
+For a more detailed explanation of what ExperienceEngine records and how an experience node is structured, see:
+
+- [Experience Model Overview](./docs/development/experience-model.md)
 
 ## Quick Start
 

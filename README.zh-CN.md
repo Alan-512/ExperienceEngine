@@ -11,34 +11,56 @@ ExperienceEngine 是一个面向编程 Agent 的本地经验介入层。
 - `Claude Code`
 - `Codex`
 
-## 它到底做什么
+## 它解决的问题
 
-ExperienceEngine 不是通用记忆库，也不是 context engine 的替代品。
+Coding agent 会重复踩同类坑，通常不是因为模型不够聪明，而是因为它缺少**可治理的经验积累机制**。
 
-它主要做 4 件事：
-- 从宿主 Agent 捕获任务、工具和结果信号
-- 把有价值的经验压缩成短小的 `strategy` 或 `warning` 节点
-- 判断当前任务是否值得注入经验
-- 根据真实 `helped` / `harmed` 结果更新节点状态
+常见问题是：
+- 上一轮任务的教训，在新会话里直接丢失
+- memory 会一直加，但通常不会主动退役低价值内容
+- 记住的东西越来越多，context 越来越重，agent 的注意力反而被稀释
 
-## 它和 Memory 有什么不同
-
-大多数 agent memory 系统解决的是：
-
-- 记住哪些事实
-- 记住哪些用户偏好
-- 下次会话该带上哪些仓库上下文
-
-ExperienceEngine 解决的是另一层问题：
-
+ExperienceEngine 处理的正是这一层问题。它不试图记住一切，而是专门治理：
 - 什么时候该让历史经验介入
 - 该注入哪条 `strategy` 或 `warning`
 - 这次介入到底有没有帮到任务
 - 这条经验是否应该继续保留、降温或退役
 
-简单说：
-- memory 更像“记住事实和偏好”
-- ExperienceEngine 更像“治理可复用的编码经验”
+**Memory 做加法，EE 做治理。**
+
+## 它和 Memory 的区别
+
+| 问题 | Memory 系统 | ExperienceEngine |
+|---|---|---|
+| 跨会话保留事实和偏好 | ✅ | 不是核心目标 |
+| 记录失败 → 修复 → 成功的经验路径 | 部分解决，通常依赖手工记录 | ✅ 来自真实任务信号 |
+| 知道某次注入到底有没有帮助 | ❌ 通常没有 | ✅ 有 helped / harmed 追踪 |
+| 自动退役过时或有害经验 | ❌ 通常没有 | ✅ 有 cooling / retired 生命周期 |
+| 把注入控制在短小、任务相关的 guidance | 不是核心目标 | ✅ 是核心设计 |
+
+## 它在 Agent Loop 里的位置
+
+```text
+用户任务
+  -> before_prompt_build：检索并注入匹配经验
+  -> agent 推理 + 工具调用：捕获失败、重试、纠正和结果
+  -> task finalize：把候选信号提炼成可复用经验
+  -> helped / harmed：提升、降温或退役节点
+```
+
+ExperienceEngine 工作在 context 层，不会去修改宿主模型权重。
+
+## 经验生命周期
+
+```text
+任务信号
+  -> candidate
+  -> active
+  -> cooling
+  -> retired
+```
+
+每条经验都依赖真实任务结果来演化，而不是简单按时间清理。帮到任务的经验会被强化，反复有害的经验会被降温或退役。
 
 ## 当前已经能用什么
 
@@ -65,6 +87,10 @@ ExperienceEngine 解决的是另一层问题：
   - `CODEX.md`
   - `CLAUDE.md`
   - GitHub agent profile markdown
+
+如果你想看更细的 ExperienceNode 结构和治理字段，见：
+
+- [Experience Model Overview](./docs/development/experience-model.md)
 
 ## 快速开始
 

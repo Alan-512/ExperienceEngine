@@ -11,6 +11,10 @@ In practice, this means:
 - noisy or harmful prior patterns can be cooled or retired
 - the system gradually learns which guidance is actually useful
 
+For a focused explanation of what ExperienceEngine stores and how an experience node is governed, see:
+
+- [docs/development/experience-model.md](development/experience-model.md)
+
 For a practical end-to-end workflow on a real repository, see:
 
 - [docs/development/real-repo-playbook.md](development/real-repo-playbook.md)
