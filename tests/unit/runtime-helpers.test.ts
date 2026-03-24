@@ -209,4 +209,16 @@ describe("runtime helpers", () => {
     expect(input.task_summary).toBe("Fix the failing vitest auth test in the current workspace.");
     expect(input.task_type).toBe("test_debug");
   });
+
+  it("strips expanded ExperienceEngine injection blocks before building experience input", () => {
+    const input = buildExperienceInput({
+      sessionId: "sess_expanded_injected",
+      cwd: "/repo/runtime",
+      userMessage:
+        "Execution hints from prior similar tasks:\n- Validate the failing migration before changing unrelated schema code.\n  Goal: Narrow the failing migration before touching unrelated schema code.\n  Steps:\n    1. Run the focused migration once to reproduce the failure.\n    2. Inspect the failing SQL and compare it with the expected schema.\n  Avoid:\n    - Do not edit unrelated schema files before reproducing the failure.\n\n[Thu 2026-03-12 09:56 GMT+8] Fix the failing sqlite migration in the current workspace."
+    });
+
+    expect(input.task_summary).toBe("Fix the failing sqlite migration in the current workspace.");
+    expect(input.task_type).toBe("integration_fix");
+  });
 });
