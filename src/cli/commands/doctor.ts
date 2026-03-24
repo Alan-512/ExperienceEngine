@@ -390,9 +390,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     console.log(`- Model: ${config.distillerModel}`);
     console.log("Embedding summary:");
     console.log(`- Mode: ${config.embeddingProvider}`);
-    console.log(
-      `- API provider override: ${process.env.EXPERIENCE_ENGINE_EMBEDDING_API_PROVIDER ?? "auto"}`
-    );
+    console.log(`- API provider override: ${config.embeddingApiProvider}`);
     logRegistryHealth(registryHealth);
     logEvaluationMode();
     logFirstValueReadiness(firstValueReadiness);

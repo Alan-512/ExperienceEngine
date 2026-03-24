@@ -93,16 +93,18 @@ Ask the host agent naturally for ExperienceEngine state or feedback actions, for
 Use the `ee` CLI only when you need explicit operator validation or troubleshooting:
 
 ```bash
-ee init distillation --provider <provider> --model <modelId> [--auth-mode api_key|google_adc]
-ee init secret <ENV_KEY> <value>
+ee init
 ee doctor <openclaw|claude-code|codex>
 ee status
 ee maintenance embedding-smoke
 ```
 
-The `ee init ...` commands are shared-product initialization, not host-specific setup.
+`ee init` is shared-product initialization, not host-specific setup.
 
-- Run them once after your first host installation.
+- Run it once after your first host installation to configure:
+  - distillation provider/model/auth
+  - embedding mode/provider
+  - any shared provider secrets
 - Later host installations reuse the same ExperienceEngine home, settings, and shared secrets.
 
 ## Prerequisites

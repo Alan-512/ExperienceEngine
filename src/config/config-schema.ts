@@ -13,6 +13,7 @@ export const configSchema = z.object({
   maxHints: z.number().int().min(1).max(3).default(3),
   triggerThreshold: z.number().min(0).max(1).default(0.6),
   embeddingProvider: z.enum(["api", "local", "legacy"]).default("api"),
+  embeddingApiProvider: z.enum(["auto", "openai", "gemini", "jina"]).default("auto"),
   embeddingModel: z.string().default("Xenova/multilingual-e5-small"),
   embeddingDtype: z.enum(["q8", "fp32"]).default("q8"),
   embeddingCacheDir: z.string().default("./data/models/embeddings"),
@@ -86,6 +87,11 @@ export const pluginConfigJsonSchema = {
       enum: ["api", "local", "legacy"],
       description:
         "Embedding provider used for retrieval. `api` prefers Jina/OpenAI embeddings, `local` manages a local model, `legacy` keeps hash fallback only."
+    },
+    embeddingApiProvider: {
+      type: "string",
+      enum: ["auto", "openai", "gemini", "jina"],
+      description: "Preferred API embedding provider when embeddingProvider is `api`."
     },
     embeddingModel: {
       type: "string",
@@ -183,6 +189,9 @@ export const pluginUiHints = {
   },
   embeddingProvider: {
     label: "Embedding Provider"
+  },
+  embeddingApiProvider: {
+    label: "Embedding API Provider"
   },
   embeddingModel: {
     label: "Embedding Model"

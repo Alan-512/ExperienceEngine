@@ -12,6 +12,7 @@ export const defaultConfig: ExperienceEngineConfig = {
   maxHints: 3,
   triggerThreshold: 0.6,
   embeddingProvider: "api",
+  embeddingApiProvider: "auto",
   embeddingModel: "Xenova/multilingual-e5-small",
   embeddingDtype: "q8",
   embeddingCacheDir: "./data/models/embeddings",

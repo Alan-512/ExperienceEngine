@@ -97,16 +97,18 @@ ExperienceEngine 现在采用**宿主原生安装**。
 只有在需要显式运维、排障或高级调试时，再使用：
 
 ```bash
-ee init distillation --provider <provider> --model <modelId> [--auth-mode api_key|google_adc]
-ee init secret <ENV_KEY> <value>
+ee init
 ee doctor <openclaw|claude-code|codex>
 ee status
 ee maintenance embedding-smoke
 ```
 
-这里的 `ee init ...` 属于 ExperienceEngine 的**共享初始化**，不是某个宿主自己的安装步骤。
+这里的 `ee init` 属于 ExperienceEngine 的**共享初始化**，不是某个宿主自己的安装步骤。
 
-- 第一次把 EE 接到任意一个宿主后，做一次初始化即可。
+- 第一次把 EE 接到任意一个宿主后，做一次初始化即可。它会统一引导你配置：
+  - distillation provider / model / auth
+  - embedding 模式 / provider
+  - 共享 provider secret
 - 之后再安装新的宿主，会复用同一个 EE 数据目录、配置和共享 secret。
 
 ## 前置条件

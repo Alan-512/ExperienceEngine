@@ -6,6 +6,10 @@ import {
 } from "../../config/secrets-store.js";
 import {
   readExperienceEngineSettings,
+  setEmbeddingApiProvider,
+  setEmbeddingDtype,
+  setEmbeddingModel,
+  setEmbeddingProvider,
   setDistillationAuthMode,
   setDistillationModel,
   setDistillationProvider,
@@ -56,6 +60,30 @@ export const runConfigCommand = async (
   if (action === "get" && key === "distillation.auth_mode") {
     const settings = readExperienceEngineSettings();
     console.log(String(settings.distillation?.auth_mode ?? "api_key"));
+    return;
+  }
+
+  if (action === "get" && key === "embedding.provider") {
+    const settings = readExperienceEngineSettings();
+    console.log(String(settings.embedding?.provider ?? "api"));
+    return;
+  }
+
+  if (action === "get" && key === "embedding.api_provider") {
+    const settings = readExperienceEngineSettings();
+    console.log(String(settings.embedding?.api_provider ?? "auto"));
+    return;
+  }
+
+  if (action === "get" && key === "embedding.model") {
+    const settings = readExperienceEngineSettings();
+    console.log(String(settings.embedding?.model ?? "Xenova/multilingual-e5-small"));
+    return;
+  }
+
+  if (action === "get" && key === "embedding.dtype") {
+    const settings = readExperienceEngineSettings();
+    console.log(String(settings.embedding?.dtype ?? "q8"));
     return;
   }
 
@@ -123,6 +151,50 @@ export const runConfigCommand = async (
     return;
   }
 
+  if (action === "set" && key === "embedding.provider") {
+    if (value !== "api" && value !== "local" && value !== "legacy") {
+      console.log("Usage: ee config set embedding.provider api|local|legacy");
+      return;
+    }
+
+    setEmbeddingProvider(value);
+    console.log(`[ExperienceEngine] Embedding provider set to ${value}.`);
+    return;
+  }
+
+  if (action === "set" && key === "embedding.api_provider") {
+    if (value !== "auto" && value !== "openai" && value !== "gemini" && value !== "jina") {
+      console.log("Usage: ee config set embedding.api_provider auto|openai|gemini|jina");
+      return;
+    }
+
+    setEmbeddingApiProvider(value);
+    console.log(`[ExperienceEngine] Embedding API provider set to ${value}.`);
+    return;
+  }
+
+  if (action === "set" && key === "embedding.model") {
+    if (!value) {
+      console.log("Usage: ee config set embedding.model <modelId>");
+      return;
+    }
+
+    setEmbeddingModel(value);
+    console.log(`[ExperienceEngine] Embedding model set to ${value}.`);
+    return;
+  }
+
+  if (action === "set" && key === "embedding.dtype") {
+    if (value !== "q8" && value !== "fp32") {
+      console.log("Usage: ee config set embedding.dtype q8|fp32");
+      return;
+    }
+
+    setEmbeddingDtype(value);
+    console.log(`[ExperienceEngine] Embedding dtype set to ${value}.`);
+    return;
+  }
+
   if (action === "set" && key?.startsWith("secret.")) {
     const secretKey = key.slice("secret.".length);
     if (!value || !isSupportedSecretKey(secretKey)) {
@@ -148,6 +220,6 @@ export const runConfigCommand = async (
   }
 
   console.log(
-    "Usage: ee config <get|set|unset> notices.inline|distillation.provider|distillation.auth_mode|distillation.model|secret.<ENV_KEY> [value]"
+    "Usage: ee config <get|set|unset> notices.inline|distillation.provider|distillation.auth_mode|distillation.model|embedding.provider|embedding.api_provider|embedding.model|embedding.dtype|secret.<ENV_KEY> [value]"
   );
 };

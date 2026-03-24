@@ -12,6 +12,12 @@ export type ExperienceEngineSettings = {
     auth_mode?: string;
     model?: string;
   };
+  embedding?: {
+    provider?: string;
+    api_provider?: string;
+    model?: string;
+    dtype?: string;
+  };
 };
 
 type SettingsOptions = {
@@ -110,6 +116,70 @@ export const setDistillationModel = (
       ...(current.distillation ?? {}),
       provider,
       model
+    }
+  };
+
+  return writeExperienceEngineSettings(next, options);
+};
+
+export const setEmbeddingProvider = (
+  provider: string,
+  options: SettingsOptions = {}
+): ExperienceEngineSettings => {
+  const current = readExperienceEngineSettings(options);
+  const next: ExperienceEngineSettings = {
+    ...current,
+    embedding: {
+      ...(current.embedding ?? {}),
+      provider
+    }
+  };
+
+  return writeExperienceEngineSettings(next, options);
+};
+
+export const setEmbeddingApiProvider = (
+  apiProvider: string,
+  options: SettingsOptions = {}
+): ExperienceEngineSettings => {
+  const current = readExperienceEngineSettings(options);
+  const next: ExperienceEngineSettings = {
+    ...current,
+    embedding: {
+      ...(current.embedding ?? {}),
+      api_provider: apiProvider
+    }
+  };
+
+  return writeExperienceEngineSettings(next, options);
+};
+
+export const setEmbeddingModel = (
+  model: string,
+  options: SettingsOptions = {}
+): ExperienceEngineSettings => {
+  const current = readExperienceEngineSettings(options);
+  const next: ExperienceEngineSettings = {
+    ...current,
+    embedding: {
+      ...(current.embedding ?? {}),
+      model
+    }
+  };
+
+  return writeExperienceEngineSettings(next, options);
+};
+
+export const setEmbeddingDtype = (
+  dtype: string,
+  options: SettingsOptions = {}
+): ExperienceEngineSettings => {
+  const current = readExperienceEngineSettings(options);
+  const next: ExperienceEngineSettings = {
+    ...current,
+    embedding: {
+      ...(current.embedding ?? {}),
+      dtype
     }
   };
 

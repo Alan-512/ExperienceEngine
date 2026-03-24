@@ -88,13 +88,12 @@ For most users, ExperienceEngine should stay in the background and be inspected 
 Use the `ee` CLI only when you need explicit validation, repair, or operator-style troubleshooting:
 
 ```bash
-ee init distillation --provider <provider> --model <modelId> [--auth-mode api_key|google_adc]
-ee init secret <ENV_KEY> <value>
+ee init
 ee doctor <openclaw|claude-code|codex>
 ee status
 ```
 
-Use `ee init ...` once to initialize ExperienceEngine's shared provider/model/secret state. New host installations should reuse that same shared EE state instead of asking you to re-enter the same API key per host window.
+Use `ee init` once to initialize ExperienceEngine's shared distillation, embedding, and secret state. New host installations should reuse that same shared EE state instead of asking you to re-enter the same API key per host window.
 
 You do **not** need to clone the repository or run `pnpm build` for normal user installation.
 

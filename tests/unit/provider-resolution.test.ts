@@ -31,12 +31,44 @@ describe("provider resolution config surface", () => {
       {},
       {
         env: {
-          EXPERIENCE_ENGINE_EMBEDDING_PROVIDER: "api"
+          EXPERIENCE_ENGINE_EMBEDDING_PROVIDER: "api",
+          EXPERIENCE_ENGINE_EMBEDDING_API_PROVIDER: "gemini"
         }
       }
     );
 
     expect(config.embeddingProvider).toBe("api");
+    expect(config.embeddingApiProvider).toBe("gemini");
+  });
+
+  it("reads persisted embedding settings from shared settings", () => {
+    const homeDir = mkdtempSync(join(tmpdir(), "experienceengine-embedding-settings-"));
+    tempDirs.push(homeDir);
+    const productHome = join(homeDir, ".experienceengine");
+    mkdirSync(productHome, { recursive: true });
+    writeFileSync(
+      join(productHome, "settings.json"),
+      `${JSON.stringify(
+        {
+          embedding: {
+            provider: "api",
+            api_provider: "gemini",
+            model: "Xenova/multilingual-e5-small",
+            dtype: "q8"
+          }
+        },
+        null,
+        2
+      )}\n`,
+      "utf8"
+    );
+
+    const config = loadConfig({}, { env: {}, homeDir });
+
+    expect(config.embeddingProvider).toBe("api");
+    expect(config.embeddingApiProvider).toBe("gemini");
+    expect(config.embeddingModel).toBe("Xenova/multilingual-e5-small");
+    expect(config.embeddingDtype).toBe("q8");
   });
 
   it("falls back to legacy openai_compatible when no explicit provider is configured", () => {

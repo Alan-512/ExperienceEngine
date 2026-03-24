@@ -38,13 +38,13 @@ vi.mock("../../src/config/load-config.js", () => ({
   loadConfig: () => ({
     distillerProvider: "gemini",
     distillerModel: "gemini-3.1-flash-lite-preview",
-    embeddingProvider: "api"
+    embeddingProvider: "api",
+    embeddingApiProvider: "gemini"
   })
 }));
 
 describe("status command", () => {
   it("prints a compact product-facing summary", () => {
-    process.env.EXPERIENCE_ENGINE_EMBEDDING_API_PROVIDER = "gemini";
     runStatusCommand();
 
     expect(consoleLogSpy.mock.calls).toEqual(

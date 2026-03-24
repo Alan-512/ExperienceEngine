@@ -20,7 +20,7 @@ type EmbeddingOptions = {
   config?: Partial<
     Pick<
     ExperienceEngineConfig,
-    "embeddingProvider" | "embeddingModel" | "embeddingDtype" | "embeddingCacheDir"
+    "embeddingProvider" | "embeddingApiProvider" | "embeddingModel" | "embeddingDtype" | "embeddingCacheDir"
     >
   >;
   env?: NodeJS.ProcessEnv;
@@ -259,7 +259,10 @@ const resolveProvider = async (options: EmbeddingOptions = {}): Promise<Semantic
   }
 
   if (options.config?.embeddingProvider === "api" || options.config?.embeddingProvider === undefined) {
-    const apiProvider = resolveApiEmbeddingProvider({ env: options.env });
+    const apiProvider = resolveApiEmbeddingProvider({
+      env: options.env,
+      explicitProvider: options.config?.embeddingApiProvider
+    });
     if (apiProvider) {
       return apiProvider;
     }

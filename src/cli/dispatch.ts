@@ -7,9 +7,9 @@ const usageText =
   + " | evaluate openclaw-baseline [--lookback-hours N] [--output-dir PATH]"
   + " | evaluate openclaw-scenarios --pack high-confidence [--repo-root PATH] [--output-dir PATH] [--dry-run]"
   + " | mcp-server"
-  + " | init <distillation|secret|show>"
+  + " | init [distillation|embedding|secret|show]"
   + " | models list <provider> [query]"
-  + " | config <get|set> notices.inline|distillation.provider|distillation.model [value]";
+  + " | config <get|set|unset> notices.inline|distillation.provider|distillation.auth_mode|distillation.model|embedding.provider|embedding.api_provider|embedding.model|embedding.dtype|secret.<ENV_KEY> [value]";
 
 export const printCliUsage = (): void => {
   console.log(usageText);

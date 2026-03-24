@@ -25,7 +25,5 @@ export const runStatusCommand = (): void => {
   console.log(`- Distillation provider: ${config.distillerProvider}`);
   console.log(`- Distillation model: ${config.distillerModel}`);
   console.log(`- Embedding provider mode: ${config.embeddingProvider}`);
-  console.log(
-    `- Embedding API provider override: ${process.env.EXPERIENCE_ENGINE_EMBEDDING_API_PROVIDER ?? "auto"}`
-  );
+  console.log(`- Embedding API provider override: ${config.embeddingApiProvider}`);
 };

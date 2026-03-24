@@ -6,6 +6,7 @@ type ApiEmbeddingOptions = {
   homeDir?: string;
   fetchImpl?: typeof fetch;
   timeoutMs?: number;
+  explicitProvider?: "auto" | "openai" | "jina" | "gemini";
 };
 
 const firstNonEmpty = (...values: Array<string | undefined>): string | undefined => {
@@ -262,7 +263,7 @@ export const resolveApiEmbeddingProvider = (
   options: ApiEmbeddingOptions = {}
 ): SemanticEmbeddingProvider | null => {
   const env = resolveExperienceEngineRuntimeEnv({ env: options.env ?? process.env, homeDir: options.homeDir });
-  const explicit = env.EXPERIENCE_ENGINE_EMBEDDING_API_PROVIDER;
+  const explicit = options.explicitProvider ?? env.EXPERIENCE_ENGINE_EMBEDDING_API_PROVIDER ?? "auto";
 
   if (explicit === "openai") {
     try {
@@ -283,30 +284,34 @@ export const resolveApiEmbeddingProvider = (
   if (explicit === "gemini") {
     try {
       return createGeminiProvider(options);
-    } catch {
+      } catch {
       return null;
     }
   }
 
-  if (firstNonEmpty(env.OPENAI_API_KEY, env.EXPERIENCE_ENGINE_EMBEDDING_API_KEY)) {
+  if (explicit === "auto") {
+    if (firstNonEmpty(env.OPENAI_API_KEY, env.EXPERIENCE_ENGINE_EMBEDDING_API_KEY)) {
+      try {
+        return createOpenAIProvider(options);
+      } catch {
+        return null;
+      }
+    }
+
+    if (firstNonEmpty(env.GEMINI_API_KEY)) {
+      try {
+        return createGeminiProvider(options);
+      } catch {
+        return null;
+      }
+    }
+
     try {
-      return createOpenAIProvider(options);
+      return createJinaProvider(options);
     } catch {
       return null;
     }
   }
 
-  if (firstNonEmpty(env.GEMINI_API_KEY)) {
-    try {
-      return createGeminiProvider(options);
-    } catch {
-      return null;
-    }
-  }
-
-  try {
-    return createJinaProvider(options);
-  } catch {
-    return null;
-  }
+  return null;
 };

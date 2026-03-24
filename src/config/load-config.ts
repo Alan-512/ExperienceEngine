@@ -53,14 +53,22 @@ export const loadConfig = (
     embeddingProvider:
       (env.EXPERIENCE_ENGINE_EMBEDDING_PROVIDER as ExperienceEngineConfig["embeddingProvider"] | undefined) ??
       overrides.embeddingProvider ??
+      (settings.embedding?.provider as ExperienceEngineConfig["embeddingProvider"] | undefined) ??
       defaultConfig.embeddingProvider,
+    embeddingApiProvider:
+      (env.EXPERIENCE_ENGINE_EMBEDDING_API_PROVIDER as ExperienceEngineConfig["embeddingApiProvider"] | undefined) ??
+      overrides.embeddingApiProvider ??
+      (settings.embedding?.api_provider as ExperienceEngineConfig["embeddingApiProvider"] | undefined) ??
+      defaultConfig.embeddingApiProvider,
     embeddingModel:
       env.EXPERIENCE_ENGINE_EMBEDDING_MODEL ??
       overrides.embeddingModel ??
+      settings.embedding?.model ??
       defaultConfig.embeddingModel,
     embeddingDtype:
       (env.EXPERIENCE_ENGINE_EMBEDDING_DTYPE as ExperienceEngineConfig["embeddingDtype"] | undefined) ??
       overrides.embeddingDtype ??
+      (settings.embedding?.dtype as ExperienceEngineConfig["embeddingDtype"] | undefined) ??
       defaultConfig.embeddingDtype,
     embeddingCacheDir:
       env.EXPERIENCE_ENGINE_EMBEDDING_CACHE_DIR ??

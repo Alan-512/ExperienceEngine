@@ -180,6 +180,21 @@ describe("config command", () => {
     expect(existsSync(join(productHome, "settings.json"))).toBe(false);
   });
 
+  it("persists embedding provider selection", async () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+
+    await runConfigCommand("set", "embedding.provider", "api");
+    await runConfigCommand("set", "embedding.api_provider", "gemini");
+
+    expect(JSON.parse(readFileSync(join(process.env.EXPERIENCE_ENGINE_HOME, "settings.json"), "utf8"))).toEqual({
+      embedding: {
+        provider: "api",
+        api_provider: "gemini"
+      }
+    });
+  });
+
   it("reads shared secret state without printing the secret value", async () => {
     const home = makeTempDir();
     const productHome = join(home, ".experienceengine");
