@@ -49,7 +49,9 @@ git commit -m "test: define phase-one retrieval gate behavior"
 - Modify: `src/controller/trigger-evaluator.ts`
 - Modify: `src/controller/intervention-controller.ts`
 - Modify: `src/controller/injection-scorecard.ts` only if shared decision reasons/helpers are needed
+- Modify: `tests/unit/candidate-retriever.test.ts`
 - Modify: `tests/unit/trigger-evaluator.test.ts`
+- Test: `tests/unit/candidate-retriever.test.ts`
 - Test: `tests/unit/trigger-evaluator.test.ts`
 - Test: `tests/unit/intervention-controller.test.ts`
 
@@ -74,12 +76,17 @@ Then extend `tests/unit/trigger-evaluator.test.ts` to cover:
 - a weak candidate still fails
 - failure or retry signals still short-circuit to allow injection
 
+Also extend `tests/unit/candidate-retriever.test.ts` to cover the new scored-candidate boundary:
+- retrieved candidates carry semantic/fused score metadata
+- top1/top2 score margin can be derived from the returned structure
+- any ranking step used before `decideIntervention()` preserves the metadata instead of collapsing back to bare `ExperienceNode[]`
+
 - [ ] **Step 2: Run the targeted tests to verify the new API and gate rules fail first**
 
 Run:
 
 ```bash
-pnpm exec vitest run tests/unit/trigger-evaluator.test.ts tests/unit/intervention-controller.test.ts
+pnpm exec vitest run tests/unit/candidate-retriever.test.ts tests/unit/trigger-evaluator.test.ts tests/unit/intervention-controller.test.ts
 ```
 
 Expected:
@@ -112,12 +119,19 @@ In `src/controller/intervention-controller.ts`:
 
 Keep the selection rules deterministic and host-agnostic.
 
+At the same time, extend the intervention decision payload so controller-level diagnostics can be carried forward into runtime scorecards, for example:
+- top candidates considered
+- top candidate score
+- score margin
+- fast-path applied / not applied
+- final gate reason
+
 - [ ] **Step 5: Re-run the targeted tests**
 
 Run:
 
 ```bash
-pnpm exec vitest run tests/unit/trigger-evaluator.test.ts tests/unit/intervention-controller.test.ts
+pnpm exec vitest run tests/unit/candidate-retriever.test.ts tests/unit/trigger-evaluator.test.ts tests/unit/intervention-controller.test.ts
 ```
 
 Expected:
@@ -126,7 +140,7 @@ Expected:
 - [ ] **Step 6: Commit the phase-1 decision logic**
 
 ```bash
-git add src/controller/candidate-retriever.ts src/controller/node-ranker.ts src/controller/trigger-evaluator.ts src/controller/intervention-controller.ts src/controller/injection-scorecard.ts tests/unit/trigger-evaluator.test.ts tests/unit/intervention-controller.test.ts
+git add src/controller/candidate-retriever.ts src/controller/node-ranker.ts src/controller/trigger-evaluator.ts src/controller/intervention-controller.ts src/controller/injection-scorecard.ts tests/unit/candidate-retriever.test.ts tests/unit/trigger-evaluator.test.ts tests/unit/intervention-controller.test.ts
 git commit -m "feat: add candidate-quality retrieval gate"
 ```
 
@@ -137,6 +151,7 @@ git commit -m "feat: add candidate-quality retrieval gate"
 - Modify: `src/types/domain.ts`
 - Modify: `src/cli/commands/inspect.ts`
 - Modify: `src/runtime/service.ts`
+- Modify: `src/controller/intervention-controller.ts`
 - Test: `tests/unit/inspect-command.test.ts`
 - Test: `tests/unit/runtime-service.test.ts`
 
@@ -187,6 +202,8 @@ Persist only the minimum information needed for operator debugging and regressio
 
 Update `src/runtime/service.ts` so the richer decision/scorecard payload is carried into `injection_events.scorecard_json` during live runtime writes.
 
+If `buildInjectionScorecard()` cannot derive these fields from selected nodes alone, thread the controller diagnostics through `InterventionDecision` in `src/controller/intervention-controller.ts` and consume that payload from `src/runtime/service.ts`.
+
 - [ ] **Step 4: Update inspection output**
 
 In `src/cli/commands/inspect.ts`, print the new fields in a short, readable format so operators can tell:
@@ -208,7 +225,7 @@ Expected:
 - [ ] **Step 6: Commit the explainability changes**
 
 ```bash
-git add src/types/domain.ts src/controller/injection-scorecard.ts src/runtime/service.ts src/cli/commands/inspect.ts tests/unit/runtime-service.test.ts tests/unit/inspect-command.test.ts
+git add src/types/domain.ts src/controller/intervention-controller.ts src/controller/injection-scorecard.ts src/runtime/service.ts src/cli/commands/inspect.ts tests/unit/runtime-service.test.ts tests/unit/inspect-command.test.ts
 git commit -m "feat: expose retrieval decision reasons"
 ```
 
@@ -381,3 +398,17 @@ If phase-2 should begin immediately, create a follow-up plan focused only on:
 git add docs/superpowers/specs/2026-03-25-three-layer-retrieval-injection-design.md docs/superpowers/plans/2026-03-25-hybrid-retrieval-followup.md
 git commit -m "docs: capture phase-one retrieval findings"
 ```
+
+---
+
+## Phase-1 Findings
+
+- The live blocker was in the decision layer, not primary retrieval. Real runtime checks showed the mature `payments auth` node was already being retrieved, but a hard gate still returned `skip`.
+- `scoreMargin` cannot be treated as a strict fast-path requirement when the competing runner-up is an immature `candidate` with no helped history. In the real Codex scope, fresh sandbox-related candidates compressed the margin enough to suppress a clearly reusable active node.
+- The phase-1 fix keeps the gate quality-driven while allowing a mature same-scope active node to bypass immature competition. This is what moved the real Codex `payments auth` prompt from `skip` to `inject`.
+- The new `doctor/status/scorecard` summaries are necessary, not optional. They exposed the real failure mode quickly:
+  - top candidates existed
+  - the top score was strong
+  - fast path did not fire
+  - the decision still ended in `candidate_quality_rejected`
+- Phase 2 should still target lexical/BM25 and fusion, but phase 1 already resolved the current production-style false negative without requiring retrieval replacement.
