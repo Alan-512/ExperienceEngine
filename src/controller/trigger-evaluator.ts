@@ -1,5 +1,23 @@
-import type { ExperienceInput, ScopeTaskStats } from "../types/domain.js";
+import type { ExperienceInput, ExperienceState, ScopeTaskStats, ValidationState } from "../types/domain.js";
 import { tokenize } from "../utils/text.js";
+
+export type TriggerCandidateQuality = {
+  semanticScore: number;
+  totalScore: number;
+  familyScore: number;
+  scopeMatch: boolean;
+  taskFamilyMatch: boolean;
+  state: ExperienceState;
+  helpedCount: number;
+  harmedCount: number;
+  validationState?: ValidationState;
+  scoreMargin: number;
+};
+
+export type TriggerEvaluationContext = {
+  knownRiskSummary?: string;
+  candidateQuality?: TriggerCandidateQuality;
+};
 
 const overlapScore = (left: string, right?: string): number => {
   const lhs = new Set(tokenize(left));
@@ -17,7 +35,7 @@ const overlapScore = (left: string, right?: string): number => {
 export const evaluateTrigger = (
   input: ExperienceInput,
   stats?: ScopeTaskStats,
-  knownRiskSummary?: string,
+  knownRiskSummaryOrContext?: string | TriggerEvaluationContext,
   threshold = 0.6
 ): boolean => {
   if (input.task_type === "unknown") {
@@ -26,6 +44,12 @@ export const evaluateTrigger = (
 
   const failureRate =
     stats && stats.total_tasks > 0 ? stats.failed_tasks / stats.total_tasks : 0;
+  const evaluationContext =
+    typeof knownRiskSummaryOrContext === "string"
+      ? { knownRiskSummary: knownRiskSummaryOrContext }
+      : knownRiskSummaryOrContext;
+  const knownRiskSummary = evaluationContext?.knownRiskSummary;
+  const candidateQuality = evaluationContext?.candidateQuality;
   const knownPattern = knownRiskSummary ?? input.context_summary;
   const taskRisk = overlapScore(input.task_summary, knownPattern);
   const contextRisk = overlapScore(input.context_summary ?? "", knownPattern);
@@ -36,6 +60,15 @@ export const evaluateTrigger = (
   const triggerRisk = Math.max(taskRisk, contextRisk, combinedRisk);
   const candidateRiskThreshold = knownRiskSummary ? Math.min(threshold, 0.5) : threshold;
   const explicitFailure = input.tool_events.some((event) => event.status === "failure");
+  const strongCandidate =
+    candidateQuality &&
+    candidateQuality.scopeMatch &&
+    candidateQuality.taskFamilyMatch &&
+    candidateQuality.state === "active" &&
+    candidateQuality.totalScore >= 0.75 &&
+    candidateQuality.scoreMargin >= 0.08 &&
+    (candidateQuality.helpedCount > candidateQuality.harmedCount || candidateQuality.validationState === "validated_by_reuse") &&
+    (candidateQuality.helpedCount >= 2 || candidateQuality.validationState === "validated_by_reuse");
 
-  return explicitFailure || failureRate >= threshold || triggerRisk >= candidateRiskThreshold;
+  return explicitFailure || failureRate >= threshold || Boolean(strongCandidate) || triggerRisk >= candidateRiskThreshold;
 };

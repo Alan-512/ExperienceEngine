@@ -9,6 +9,16 @@ import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import { openVectorStore } from "../store/vector/lancedb.js";
 import { tokenize } from "../utils/text.js";
 
+export type RetrievedCandidate = {
+  node: ExperienceNode;
+  semanticScore: number;
+  familyScore: number;
+  totalScore: number;
+  scopeMatch: boolean;
+  taskFamilyMatch: boolean;
+  scoreMargin: number;
+};
+
 const TASK_FAMILY_PROXIMITY: Record<TaskType, Partial<Record<TaskType, number>>> = {
   bug_fix: {
     bug_fix: 1,
@@ -213,6 +223,15 @@ export const retrieveCandidates = async (
   nodes: ExperienceNode[],
   options: RetrieveOptions = {}
 ): Promise<ExperienceNode[]> => {
+  const scored = await retrieveScoredCandidates(input, nodes, options);
+  return scored.map(({ node }) => node);
+};
+
+export const retrieveScoredCandidates = async (
+  input: ExperienceInput,
+  nodes: ExperienceNode[],
+  options: RetrieveOptions = {}
+): Promise<RetrievedCandidate[]> => {
   if (input.task_type === "unknown") {
     return [];
   }
@@ -253,7 +272,7 @@ export const retrieveCandidates = async (
 
   const minimumFamilyScore = inputTaskType === "general" ? 0.75 : 0.65;
 
-  return scopeLocalNodes
+  const ranked = scopeLocalNodes
     .map((node) => {
       const semanticScore = scoreById.get(node.id) ?? 0;
       const familyScore = getFamilyScore(inputTaskType, node.task_type);
@@ -261,10 +280,21 @@ export const retrieveCandidates = async (
         getSpecificityBonus(node) + getFeedbackAdjustment(node) - getGenericPenalty(node);
       const totalScore =
         semanticScore * 0.68 + familyScore * 0.22 + qualityAdjustment + getExpectationCorrectionAdjustment(input, node);
-      return { node, semanticScore, familyScore, totalScore };
+      return {
+        node,
+        semanticScore,
+        familyScore,
+        totalScore,
+        scopeMatch: node.scope_id === input.scope_id,
+        taskFamilyMatch: node.task_type === input.task_type
+      };
     })
     .filter(({ semanticScore, familyScore }) => semanticScore >= 0.12 && familyScore >= minimumFamilyScore)
     .sort((left, right) => right.totalScore - left.totalScore)
-    .slice(0, 8)
-    .map(({ node }) => node);
+    .slice(0, 8);
+
+  return ranked.map((entry, index) => ({
+    ...entry,
+    scoreMargin: Math.max(0, entry.totalScore - (ranked[index + 1]?.totalScore ?? 0))
+  }));
 };

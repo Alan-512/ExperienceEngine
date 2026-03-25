@@ -3,18 +3,51 @@ import type {
   ExperienceNode,
   InjectionMode,
   ResolvedTaskType,
-  ScopeTaskStats
+  ScopeTaskStats,
+  ValidationState
 } from "../types/domain.js";
-import { retrieveCandidates } from "./candidate-retriever.js";
+import { retrieveCandidates, retrieveScoredCandidates, type RetrievedCandidate } from "./candidate-retriever.js";
 import { renderInjection } from "./injection-renderer.js";
 import { rankNodes } from "./node-ranker.js";
-import { evaluateTrigger } from "./trigger-evaluator.js";
+import { evaluateTrigger, type TriggerCandidateQuality } from "./trigger-evaluator.js";
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
 
 export type InterventionDecision = {
   mode: InjectionMode;
   selected: ExperienceNode[];
   text?: string;
+};
+
+const isStrongCandidate = (quality: TriggerCandidateQuality): boolean =>
+  quality.scopeMatch &&
+  quality.taskFamilyMatch &&
+  quality.state === "active" &&
+  quality.totalScore >= 0.75 &&
+  quality.scoreMargin >= 0.08 &&
+  (quality.helpedCount >= 2 || quality.validationState === "validated_by_reuse") &&
+  quality.helpedCount >= quality.harmedCount;
+
+const toCandidateQuality = (
+  input: ExperienceInput,
+  node: ExperienceNode | undefined,
+  candidate: RetrievedCandidate | undefined
+): TriggerCandidateQuality | undefined => {
+  if (!node || !candidate) {
+    return undefined;
+  }
+
+  return {
+    semanticScore: candidate.semanticScore,
+    totalScore: candidate.totalScore,
+    familyScore: candidate.familyScore,
+    scopeMatch: candidate.scopeMatch,
+    taskFamilyMatch: candidate.taskFamilyMatch || node.task_type === input.task_type,
+    state: node.state,
+    helpedCount: node.helped_count,
+    harmedCount: node.harmed_count,
+    validationState: node.validation_state as ValidationState | undefined,
+    scoreMargin: candidate.scoreMargin
+  };
 };
 
 const CORRECTION_INTENT_PATTERNS = [
@@ -89,9 +122,11 @@ const decideInterventionInternal = async (
   maxHints = 3,
   config?: Pick<ExperienceEngineConfig, "embeddingProvider" | "embeddingModel" | "embeddingDtype" | "embeddingCacheDir">
 ): Promise<InterventionDecision> => {
-  const candidates = await retrieveCandidates(input, nodes, { config });
+  const scoredCandidates = await retrieveScoredCandidates(input, nodes, { config });
+  const candidates = scoredCandidates.map(({ node }) => node);
   const rankingSummary = [input.task_summary, input.context_summary].filter(Boolean).join("\n");
   const ranked = rankNodes(rankingSummary || input.task_summary, candidates, input.task_type);
+  const candidateById = new Map(scoredCandidates.map((candidate) => [candidate.node.id, candidate]));
   const correctionAwareRanked = hasCorrectionIntent(input)
     ? [
         ...ranked.filter((node) => node.experience_kind === "expectation_correction"),
@@ -110,10 +145,29 @@ const decideInterventionInternal = async (
     mode === "inject_conservative" ? 1 : maxHints,
     input.task_type
   );
+  const topCandidateQuality = toCandidateQuality(input, selected[0], selected[0] ? candidateById.get(selected[0].id) : undefined);
   const candidateRiskSummary = buildCandidateRiskSummary(selected[0]);
   const triggerThreshold = resolveTriggerThreshold(selected[0], threshold);
 
-  if (!evaluateTrigger(input, stats, candidateRiskSummary, triggerThreshold)) {
+  if (topCandidateQuality && isStrongCandidate(topCandidateQuality)) {
+    return {
+      mode,
+      selected,
+      text: renderInjection(mode, selected, maxHints)
+    };
+  }
+
+  if (
+    !evaluateTrigger(
+      input,
+      stats,
+      {
+        knownRiskSummary: candidateRiskSummary,
+        candidateQuality: topCandidateQuality
+      },
+      triggerThreshold
+    )
+  ) {
     return { mode: "skip", selected: [] };
   }
 
