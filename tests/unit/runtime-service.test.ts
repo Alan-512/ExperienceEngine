@@ -461,6 +461,13 @@ describe("ExperienceRuntimeService finalize transaction", () => {
       fastPathApplied: false,
       gateReason: expect.any(String),
       decisionReason: expect.any(String),
+      topCandidates: [
+        expect.objectContaining({
+          semanticScore: expect.any(Number),
+          lexicalScore: expect.any(Number),
+          fusedScore: expect.any(Number)
+        })
+      ],
       nodes: [
         expect.objectContaining({
           riskLevel: "low",

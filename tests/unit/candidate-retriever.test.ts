@@ -391,4 +391,79 @@ describe("retrieveCandidates", () => {
     });
     expect(candidates[0]!.totalScore).toBeGreaterThan(candidates[1]!.totalScore);
   });
+
+  it("recovers a same-family node from strong lexical overlap even when semantic similarity is weak", async () => {
+    const candidates = await retrieveScoredCandidates(
+      input({
+        task_type: "test_debug",
+        task_summary: "Diagnose the payments auth timeout by checking the auth fixture handshake first"
+      }),
+      [
+        node({
+          id: "lexical-recovery",
+          task_type: "test_debug",
+          trigger_pattern: "Diagnose the payments auth timeout by checking the auth fixture handshake first",
+          compact_hint: "Check the auth fixture handshake before changing the payments auth code path.",
+          retrieval_text:
+            "Diagnose the payments auth timeout by checking the auth fixture handshake first\nCheck the auth fixture handshake before changing the payments auth code path.",
+          embedding: [0, 1, 0],
+          embedding_provider: "local",
+          embedding_model: "Xenova/multilingual-e5-small",
+          embedding_version: "local-e5-v1",
+          embedding_dimensions: 3
+        })
+      ]
+    );
+
+    expect(candidates[0]).toMatchObject({
+      node: expect.objectContaining({ id: "lexical-recovery" }),
+      semanticScore: 0,
+      lexicalScore: expect.any(Number),
+      fusedScore: expect.any(Number)
+    });
+    expect(candidates[0]!.lexicalScore).toBeGreaterThan(0.5);
+  });
+
+  it("prefers a candidate supported by both semantic and lexical signals over a semantic-only candidate", async () => {
+    const candidates = await retrieveScoredCandidates(
+      input({
+        task_type: "test_debug",
+        task_summary: "Fix the failing payments auth test by checking the auth fixture handshake first"
+      }),
+      [
+        node({
+          id: "semantic-only",
+          task_type: "test_debug",
+          trigger_pattern: "Resolve the auth failure after inspecting the repo",
+          compact_hint: "Inspect the repo before changing auth code.",
+          retrieval_text: "Resolve the auth failure after inspecting the repo\nInspect the repo before changing auth code.",
+          embedding: [1, 0, 0],
+          embedding_provider: "local",
+          embedding_model: "Xenova/multilingual-e5-small",
+          embedding_version: "local-e5-v1",
+          embedding_dimensions: 3
+        }),
+        node({
+          id: "semantic-and-lexical",
+          task_type: "test_debug",
+          trigger_pattern: "Fix the failing payments auth test by checking the auth fixture handshake first",
+          compact_hint: "Check the auth fixture handshake first, then make the smallest payments auth fix.",
+          retrieval_text:
+            "Fix the failing payments auth test by checking the auth fixture handshake first\nCheck the auth fixture handshake first, then make the smallest payments auth fix.",
+          embedding: [1, 0, 0],
+          embedding_provider: "local",
+          embedding_model: "Xenova/multilingual-e5-small",
+          embedding_version: "local-e5-v1",
+          embedding_dimensions: 3
+        })
+      ]
+    );
+
+    expect(candidates[0]).toMatchObject({
+      node: expect.objectContaining({ id: "semantic-and-lexical" }),
+      lexicalScore: expect.any(Number),
+      fusedScore: expect.any(Number)
+    });
+    expect(candidates[0]!.fusedScore).toBeGreaterThan(candidates[1]!.fusedScore);
+  });
 });

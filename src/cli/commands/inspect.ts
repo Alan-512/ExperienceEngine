@@ -80,6 +80,16 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
       if (typeof record.scorecard.fastPathApplied === "boolean") {
         console.log(`- Fast path applied: ${record.scorecard.fastPathApplied ? "yes" : "no"}`);
       }
+      const topCandidate = record.scorecard.topCandidates?.[0];
+      if (typeof topCandidate?.semanticScore === "number") {
+        console.log(`- Top candidate semantic score: ${topCandidate.semanticScore}`);
+      }
+      if (typeof topCandidate?.lexicalScore === "number") {
+        console.log(`- Top candidate lexical score: ${topCandidate.lexicalScore}`);
+      }
+      if (typeof topCandidate?.fusedScore === "number") {
+        console.log(`- Top candidate fused score: ${topCandidate.fusedScore}`);
+      }
       if (record.scorecard.gateReason) {
         console.log(`- Gate reason: ${record.scorecard.gateReason}`);
       }

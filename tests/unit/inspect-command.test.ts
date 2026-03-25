@@ -323,6 +323,15 @@ describe("inspect command", () => {
         riskLevel: "low",
         recommendation: "Apply these hints normally, then mark helped or harmed after the task.",
         reasons: ["Exact task-family match was found in historical experience."],
+        topCandidates: [
+          {
+            id: "node_shadow",
+            semanticScore: 0.74,
+            lexicalScore: 0.66,
+            fusedScore: 0.82,
+            taskFamilyMatch: true
+          }
+        ],
         topCandidateScore: 0.93,
         scoreMargin: 0.28,
         fastPathApplied: true,
@@ -352,6 +361,9 @@ describe("inspect command", () => {
         ["- Top candidate score: 0.93"],
         ["- Score margin: 0.28"],
         ["- Fast path applied: yes"],
+        ["- Top candidate semantic score: 0.74"],
+        ["- Top candidate lexical score: 0.66"],
+        ["- Top candidate fused score: 0.82"],
         ["- Gate reason: strong_candidate_fast_path"],
         ["- Decision reason: mature_validated_candidate"]
       ])

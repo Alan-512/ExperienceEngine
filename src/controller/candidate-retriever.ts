@@ -12,6 +12,8 @@ import { tokenize } from "../utils/text.js";
 export type RetrievedCandidate = {
   node: ExperienceNode;
   semanticScore: number;
+  lexicalScore: number;
+  fusedScore: number;
   familyScore: number;
   totalScore: number;
   scopeMatch: boolean;
@@ -218,6 +220,130 @@ type RetrieveOptions = {
   homeDir?: string;
 };
 
+type LexicalDocument = {
+  node: ExperienceNode;
+  length: number;
+  frequencies: Map<string, number>;
+};
+
+const buildLexicalDocument = (node: ExperienceNode): LexicalDocument => {
+  const text = node.retrieval_text ?? `${node.trigger_pattern}\n${node.compact_hint}`;
+  const tokens = tokenize(text);
+  const frequencies = new Map<string, number>();
+
+  for (const token of tokens) {
+    frequencies.set(token, (frequencies.get(token) ?? 0) + 1);
+  }
+
+  return {
+    node,
+    length: tokens.length,
+    frequencies
+  };
+};
+
+const computeBm25Scores = (queryText: string, nodes: ExperienceNode[]): Map<string, number> => {
+  const queryTokens = [...new Set(tokenize(queryText))];
+  if (!queryTokens.length || !nodes.length) {
+    return new Map();
+  }
+
+  const documents = nodes.map(buildLexicalDocument);
+  const averageLength =
+    documents.reduce((sum, document) => sum + Math.max(1, document.length), 0) / Math.max(1, documents.length);
+  const documentFrequency = new Map<string, number>();
+  for (const token of queryTokens) {
+    let count = 0;
+    for (const document of documents) {
+      if (document.frequencies.has(token)) {
+        count += 1;
+      }
+    }
+    documentFrequency.set(token, count);
+  }
+
+  const k1 = 1.4;
+  const b = 0.75;
+  const rawScores = new Map<string, number>();
+  let maxScore = 0;
+
+  for (const document of documents) {
+    let score = 0;
+
+    for (const token of queryTokens) {
+      const termFrequency = document.frequencies.get(token) ?? 0;
+      if (!termFrequency) {
+        continue;
+      }
+
+      const df = documentFrequency.get(token) ?? 0;
+      const idf = Math.log(1 + (documents.length - df + 0.5) / (df + 0.5));
+      const denominator = termFrequency + k1 * (1 - b + b * (document.length / averageLength));
+      score += idf * ((termFrequency * (k1 + 1)) / denominator);
+    }
+
+    rawScores.set(document.node.id, score);
+    maxScore = Math.max(maxScore, score);
+  }
+
+  if (maxScore <= 0) {
+    return new Map();
+  }
+
+  return new Map(
+    [...rawScores.entries()].map(([id, score]) => [id, Number((score / maxScore).toFixed(6))])
+  );
+};
+
+const buildRankMap = (entries: Array<{ id: string; score: number }>): Map<string, number> =>
+  new Map(
+    [...entries]
+      .filter((entry) => entry.score > 0)
+      .sort((left, right) => right.score - left.score)
+      .map((entry, index) => [entry.id, index + 1])
+  );
+
+const buildFusedScores = (
+  semanticScores: Map<string, number>,
+  lexicalScores: Map<string, number>,
+  ids: string[]
+): Map<string, number> => {
+  const semanticRanks = buildRankMap([...semanticScores.entries()].map(([id, score]) => ({ id, score })));
+  const lexicalRanks = buildRankMap([...lexicalScores.entries()].map(([id, score]) => ({ id, score })));
+  const rawFused = new Map<string, number>();
+  let maxFused = 0;
+  const rankConstant = 20;
+
+  for (const id of ids) {
+    const semanticRank = semanticRanks.get(id);
+    const lexicalRank = lexicalRanks.get(id);
+    const fused =
+      (semanticRank ? 1 / (rankConstant + semanticRank) : 0) +
+      (lexicalRank ? 1 / (rankConstant + lexicalRank) : 0);
+    rawFused.set(id, fused);
+    maxFused = Math.max(maxFused, fused);
+  }
+
+  if (maxFused <= 0) {
+    return new Map();
+  }
+
+  return new Map(
+    [...rawFused.entries()].map(([id, score]) => {
+      const rankFusionScore = score / maxFused;
+      const semanticScore = semanticScores.get(id) ?? 0;
+      const lexicalScore = lexicalScores.get(id) ?? 0;
+      const multiChannelBonus = semanticScore > 0 && lexicalScore > 0 ? 0.05 : 0;
+      const fused = Math.min(
+        1,
+        rankFusionScore * 0.55 + semanticScore * 0.2 + lexicalScore * 0.2 + multiChannelBonus
+      );
+
+      return [id, Number(fused.toFixed(6))];
+    })
+  );
+};
+
 export const retrieveCandidates = async (
   input: ExperienceInput,
   nodes: ExperienceNode[],
@@ -269,27 +395,40 @@ export const retrieveScoredCandidates = async (
   for (const match of vectorStore.query(legacyRecords, legacyQuery.embedding, 16)) {
     scoreById.set(match.id, Math.max(scoreById.get(match.id) ?? 0, localQuery ? match.score * 0.78 : match.score));
   }
+  const lexicalScoreById = computeBm25Scores(queryText || input.task_summary, scopeLocalNodes);
+  const fusedScoreById = buildFusedScores(
+    scoreById,
+    lexicalScoreById,
+    scopeLocalNodes.map((node) => node.id)
+  );
 
   const minimumFamilyScore = inputTaskType === "general" ? 0.75 : 0.65;
 
   const ranked = scopeLocalNodes
     .map((node) => {
       const semanticScore = scoreById.get(node.id) ?? 0;
+      const lexicalScore = lexicalScoreById.get(node.id) ?? 0;
+      const fusedScore = fusedScoreById.get(node.id) ?? Math.max(semanticScore, lexicalScore);
       const familyScore = getFamilyScore(inputTaskType, node.task_type);
       const qualityAdjustment =
         getSpecificityBonus(node) + getFeedbackAdjustment(node) - getGenericPenalty(node);
       const totalScore =
-        semanticScore * 0.68 + familyScore * 0.22 + qualityAdjustment + getExpectationCorrectionAdjustment(input, node);
+        fusedScore * 0.68 + familyScore * 0.22 + qualityAdjustment + getExpectationCorrectionAdjustment(input, node);
       return {
         node,
         semanticScore,
+        lexicalScore,
+        fusedScore,
         familyScore,
         totalScore,
         scopeMatch: node.scope_id === input.scope_id,
         taskFamilyMatch: node.task_type === input.task_type
       };
     })
-    .filter(({ semanticScore, familyScore }) => semanticScore >= 0.12 && familyScore >= minimumFamilyScore)
+    .filter(
+      ({ semanticScore, lexicalScore, fusedScore, familyScore }) =>
+        Math.max(semanticScore, lexicalScore, fusedScore) >= 0.12 && familyScore >= minimumFamilyScore
+    )
     .sort((left, right) => right.totalScore - left.totalScore)
     .slice(0, 8);
 
