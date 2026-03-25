@@ -1,6 +1,7 @@
 import type {
   ExperienceInput,
   ExperienceNode,
+  InjectionScorecardCandidate,
   InjectionMode,
   InjectionRiskLevel,
   InjectionScorecard,
@@ -128,7 +129,15 @@ export const buildInjectionScorecard = (
   input: ExperienceInput,
   mode: Exclude<InjectionMode, "skip">,
   nodes: ExperienceNode[],
-  sessionId?: string
+  sessionId?: string,
+  diagnostics?: {
+    topCandidates?: InjectionScorecardCandidate[];
+    topCandidateScore?: number;
+    scoreMargin?: number;
+    fastPathApplied?: boolean;
+    gateReason?: string;
+    decisionReason?: string;
+  }
 ): InjectionScorecard => {
   const scoredNodes = nodes.map((node) => buildNodeScorecard(input, node, nodes));
   const riskLevel = scoredNodes.reduce<InjectionRiskLevel>(
@@ -145,6 +154,12 @@ export const buildInjectionScorecard = (
     riskLevel,
     recommendation: recommendationForRisk(riskLevel),
     reasons: summarizeReasons(scoredNodes, mode),
+    topCandidates: diagnostics?.topCandidates,
+    topCandidateScore: diagnostics?.topCandidateScore,
+    scoreMargin: diagnostics?.scoreMargin,
+    fastPathApplied: diagnostics?.fastPathApplied,
+    gateReason: diagnostics?.gateReason,
+    decisionReason: diagnostics?.decisionReason,
     nodes: scoredNodes,
     createdAt: nowIso()
   };

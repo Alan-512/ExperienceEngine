@@ -71,6 +71,21 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
       console.log("Scorecard:");
       console.log(`- Risk: ${record.scorecard.riskLevel}`);
       console.log(`- Recommendation: ${record.scorecard.recommendation}`);
+      if (typeof record.scorecard.topCandidateScore === "number") {
+        console.log(`- Top candidate score: ${record.scorecard.topCandidateScore}`);
+      }
+      if (typeof record.scorecard.scoreMargin === "number") {
+        console.log(`- Score margin: ${record.scorecard.scoreMargin}`);
+      }
+      if (typeof record.scorecard.fastPathApplied === "boolean") {
+        console.log(`- Fast path applied: ${record.scorecard.fastPathApplied ? "yes" : "no"}`);
+      }
+      if (record.scorecard.gateReason) {
+        console.log(`- Gate reason: ${record.scorecard.gateReason}`);
+      }
+      if (record.scorecard.decisionReason) {
+        console.log(`- Decision reason: ${record.scorecard.decisionReason}`);
+      }
       if (record.scorecard.reasons.length) {
         console.log("- Why it matched:");
         for (const reason of record.scorecard.reasons) {

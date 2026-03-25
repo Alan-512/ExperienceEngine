@@ -210,6 +210,14 @@ export type InjectionScorecardNode = {
   whyMatched: string[];
 };
 
+export type InjectionScorecardCandidate = {
+  id: string;
+  semanticScore?: number;
+  lexicalScore?: number;
+  fusedScore?: number;
+  taskFamilyMatch: boolean;
+};
+
 export type InjectionScorecard = {
   sessionId?: string;
   scopeId: string;
@@ -219,6 +227,12 @@ export type InjectionScorecard = {
   riskLevel: InjectionRiskLevel;
   recommendation: string;
   reasons: string[];
+  topCandidates?: InjectionScorecardCandidate[];
+  topCandidateScore?: number;
+  scoreMargin?: number;
+  fastPathApplied?: boolean;
+  gateReason?: string;
+  decisionReason?: string;
   nodes: InjectionScorecardNode[];
   createdAt: string;
 };

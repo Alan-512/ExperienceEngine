@@ -323,6 +323,11 @@ describe("inspect command", () => {
         riskLevel: "low",
         recommendation: "Apply these hints normally, then mark helped or harmed after the task.",
         reasons: ["Exact task-family match was found in historical experience."],
+        topCandidateScore: 0.93,
+        scoreMargin: 0.28,
+        fastPathApplied: true,
+        gateReason: "strong_candidate_fast_path",
+        decisionReason: "mature_validated_candidate",
         nodes: [],
         createdAt: "2026-03-13T01:00:00.000Z"
       },
@@ -343,7 +348,12 @@ describe("inspect command", () => {
         ["Injected nodes:"],
         ["- node_shadow strategy active system_derived"],
         ["Hints:"],
-        ["- Run the failing auth test before editing and verify after the fix."]
+        ["- Run the failing auth test before editing and verify after the fix."],
+        ["- Top candidate score: 0.93"],
+        ["- Score margin: 0.28"],
+        ["- Fast path applied: yes"],
+        ["- Gate reason: strong_candidate_fast_path"],
+        ["- Decision reason: mature_validated_candidate"]
       ])
     );
   });

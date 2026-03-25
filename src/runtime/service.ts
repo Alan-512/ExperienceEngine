@@ -566,7 +566,13 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     };
 
     if (decision.mode !== "skip") {
-      const scorecard = buildInjectionScorecard(input, decision.mode, decision.selected, sessionId);
+      const scorecard = buildInjectionScorecard(
+        input,
+        decision.mode,
+        decision.selected,
+        sessionId,
+        decision.diagnostics
+      );
       const injectionEvent: InjectionEvent = {
         injection_id: createId("inject"),
         session_id: sessionId,

@@ -1,6 +1,7 @@
 import type {
   ExperienceInput,
   ExperienceNode,
+  InjectionScorecardCandidate,
   InjectionMode,
   ResolvedTaskType,
   ScopeTaskStats,
@@ -16,6 +17,14 @@ export type InterventionDecision = {
   mode: InjectionMode;
   selected: ExperienceNode[];
   text?: string;
+  diagnostics?: {
+    topCandidates: InjectionScorecardCandidate[];
+    topCandidateScore?: number;
+    scoreMargin?: number;
+    fastPathApplied: boolean;
+    gateReason: string;
+    decisionReason: string;
+  };
 };
 
 const isStrongCandidate = (quality: TriggerCandidateQuality): boolean =>
@@ -49,6 +58,13 @@ const toCandidateQuality = (
     scoreMargin: candidate.scoreMargin
   };
 };
+
+const toScorecardCandidate = (candidate: RetrievedCandidate): InjectionScorecardCandidate => ({
+  id: candidate.node.id,
+  semanticScore: Number(candidate.semanticScore.toFixed(4)),
+  fusedScore: Number(candidate.totalScore.toFixed(4)),
+  taskFamilyMatch: candidate.taskFamilyMatch
+});
 
 const CORRECTION_INTENT_PATTERNS = [
   /\bcorrection\b/i,
@@ -135,7 +151,16 @@ const decideInterventionInternal = async (
     : ranked;
 
   if (!correctionAwareRanked.length) {
-    return { mode: "skip", selected: [] };
+    return {
+      mode: "skip",
+      selected: [],
+      diagnostics: {
+        topCandidates: [],
+        fastPathApplied: false,
+        gateReason: "no_candidates",
+        decisionReason: "no_matching_candidates"
+      }
+    };
   }
 
   const mode: InjectionMode =
@@ -148,12 +173,26 @@ const decideInterventionInternal = async (
   const topCandidateQuality = toCandidateQuality(input, selected[0], selected[0] ? candidateById.get(selected[0].id) : undefined);
   const candidateRiskSummary = buildCandidateRiskSummary(selected[0]);
   const triggerThreshold = resolveTriggerThreshold(selected[0], threshold);
+  const diagnostics = {
+    topCandidates: scoredCandidates.slice(0, 3).map(toScorecardCandidate),
+    topCandidateScore: topCandidateQuality ? Number(topCandidateQuality.totalScore.toFixed(4)) : undefined,
+    scoreMargin: topCandidateQuality ? Number(topCandidateQuality.scoreMargin.toFixed(4)) : undefined,
+    fastPathApplied: false,
+    gateReason: "candidate_quality_gate",
+    decisionReason: "candidate_quality_positive"
+  };
 
   if (topCandidateQuality && isStrongCandidate(topCandidateQuality)) {
     return {
       mode,
       selected,
-      text: renderInjection(mode, selected, maxHints)
+      text: renderInjection(mode, selected, maxHints),
+      diagnostics: {
+        ...diagnostics,
+        fastPathApplied: true,
+        gateReason: "strong_candidate_fast_path",
+        decisionReason: "mature_validated_candidate"
+      }
     };
   }
 
@@ -168,16 +207,33 @@ const decideInterventionInternal = async (
       triggerThreshold
     )
   ) {
-    return { mode: "skip", selected: [] };
+    return {
+      mode: "skip",
+      selected: [],
+      diagnostics: {
+        ...diagnostics,
+        gateReason: "candidate_quality_gate",
+        decisionReason: "candidate_quality_rejected"
+      }
+    };
   }
 
   if (!selected.length) {
-    return { mode: "skip", selected: [] };
+    return {
+      mode: "skip",
+      selected: [],
+      diagnostics: {
+        ...diagnostics,
+        gateReason: "no_selected_nodes",
+        decisionReason: "selection_empty"
+      }
+    };
   }
 
   return {
     mode,
     selected,
-    text: renderInjection(mode, selected, maxHints)
+    text: renderInjection(mode, selected, maxHints),
+    diagnostics
   };
 };

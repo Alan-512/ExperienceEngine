@@ -456,6 +456,11 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     expect(injectionRow.mode).toBe("inject");
     expect(JSON.parse(injectionRow.scorecard_json ?? "{}")).toMatchObject({
       riskLevel: "low",
+      topCandidateScore: expect.any(Number),
+      scoreMargin: expect.any(Number),
+      fastPathApplied: false,
+      gateReason: expect.any(String),
+      decisionReason: expect.any(String),
       nodes: [
         expect.objectContaining({
           riskLevel: "low",
