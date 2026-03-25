@@ -1,7 +1,15 @@
-import type { EvaluationMode, ExperienceInput, InjectionMode, InjectionScorecard, ToolEvent } from "./domain.js";
+import type {
+  EvaluationMode,
+  ExperienceInput,
+  InjectionMode,
+  InjectionScorecard,
+  TaskRun,
+  ToolEvent
+} from "./domain.js";
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
 
 export type HostPromptContext = {
+  host?: TaskRun["host"];
   sessionId?: string;
   cwd?: string;
   userMessage: string;

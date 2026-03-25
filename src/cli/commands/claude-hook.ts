@@ -212,9 +212,13 @@ export const processClaudeHookPayload = async (
   const promptContext = toClaudePromptContext(event);
   if (promptContext) {
     const runtime = await createClaudeRuntime(options);
-    const promptResult = await runtime.beforePromptBuild(promptContext);
+    const promptResult = await runtime.beforePromptBuild({
+      ...promptContext,
+      host: "claude-code"
+    });
     const rememberedContext = {
       ...promptContext,
+      host: "claude-code" as const,
       injectedNodeIds: promptResult.input.injected_node_ids
     };
     rememberClaudePromptContext(rememberedContext, options);
@@ -242,7 +246,10 @@ export const processClaudeHookPayload = async (
       for (const pendingToolResult of stored?.toolResults ?? []) {
         await runtime.persistToolResult(pendingToolResult);
       }
-      await runtime.finalizeTask(promptContext);
+      await runtime.finalizeTask({
+        ...promptContext,
+        host: "claude-code"
+      });
     }
 
     clearClaudeSession(event.sessionId, options);

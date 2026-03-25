@@ -18,7 +18,12 @@ vi.mock("../../src/install/host-detection.js", () => ({
 
 vi.mock("../../src/install/codex-installer.js", () => ({
   inspectCodexInstall: () => ({
-    installed: true
+    installed: true,
+    learningLoop: {
+      state: "instruction_installed",
+      instructionState: "present",
+      recentTaskRuns: 0
+    }
   })
 }));
 
@@ -55,7 +60,10 @@ describe("status command", () => {
         ["- Distillation provider: gemini"],
         ["- Distillation model: gemini-3.1-flash-lite-preview"],
         ["- Embedding provider mode: api"],
-        ["- Embedding API provider override: gemini"]
+        ["- Embedding API provider override: gemini"],
+        ["- Codex learning loop: instruction_installed"],
+        ["- Codex instruction block: present"],
+        ["- Codex task runs in current repo: 0"]
       ])
     );
   });

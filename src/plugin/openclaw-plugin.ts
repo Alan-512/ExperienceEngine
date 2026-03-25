@@ -26,7 +26,10 @@ class OpenClawExperiencePlugin implements ExperiencePlugin {
   constructor(private readonly runtime: ExperienceRuntimeService) {}
 
   async beforePromptBuild(context: HostPromptContext) {
-    return this.runtime.beforePromptBuild(context);
+    return this.runtime.beforePromptBuild({
+      ...context,
+      host: "openclaw"
+    });
   }
 
   async persistToolResult(result: HostToolResult) {
@@ -34,7 +37,10 @@ class OpenClawExperiencePlugin implements ExperiencePlugin {
   }
 
   async finalizeTask(context: HostPromptContext): Promise<ExperienceInput> {
-    return this.runtime.finalizeTask(context);
+    return this.runtime.finalizeTask({
+      ...context,
+      host: "openclaw"
+    });
   }
 
   register(api: OpenClawPluginApi): void {

@@ -13,6 +13,7 @@ import { resolveScope } from "../../src/input/scope-resolver.js";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
 import { ScopeRepository } from "../../src/store/sqlite/repositories/scope-repo.js";
+import { TaskRunRepository } from "../../src/store/sqlite/repositories/task-run-repo.js";
 import { clearEmbeddingProviderForTests, setEmbeddingProviderForTests } from "../../src/store/vector/embeddings.js";
 import { nowIso } from "../../src/utils/clock.js";
 import type { ExperienceNode } from "../../src/types/domain.js";
@@ -54,8 +55,14 @@ const parseTextPayload = <T>(result: { content: Array<{ type: string; text?: str
   JSON.parse(result.content[0]?.text ?? "null") as T;
 
 const getRegisteredTool = (server: ReturnType<typeof createCodexMcpServer>, name: string) =>
-  (server as unknown as { _registeredTools: Record<string, { handler: (args: unknown) => Promise<unknown> }> })
-    ._registeredTools[name];
+  (
+    server as unknown as {
+      _registeredTools: Record<
+        string,
+        { handler: (args: unknown) => Promise<unknown>; description?: string; title?: string }
+      >;
+    }
+  )._registeredTools[name];
 
 const getRegisteredResource = (server: ReturnType<typeof createCodexMcpServer>, uri: string) =>
   (
@@ -201,6 +208,7 @@ describe("Codex MCP behavior loop", () => {
     const db = openDatabase(config);
     bootstrapDatabase(db);
     const nodeRepo = new NodeRepository(db);
+    const taskRunRepo = new TaskRunRepository(db);
     seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_codex_helped");
 
     const loop = createCodexBehaviorLoop({ homeDir, env });
@@ -231,9 +239,11 @@ describe("Codex MCP behavior loop", () => {
     expect(finalized.evidence).toContain("Bash: success: auth test now passes");
 
     const node = nodeRepo.getById("node_codex_helped");
+    const taskRun = taskRunRepo.getLatestBySessionId("codex-helped-session");
     expect(node?.usage_count).toBe(1);
     expect(node?.helped_count).toBe(1);
     expect(node?.harmed_count).toBe(0);
+    expect(taskRun?.host).toBe("codex");
   });
 
   it("records a failed tool result and finalizes harmed feedback", async () => {
@@ -581,6 +591,23 @@ describe("Codex MCP behavior loop", () => {
 
     const node = nodeRepo.getById("node_codex_mcp_quick_feedback");
     expect(node?.harmed_count).toBe(1);
+  });
+
+  it("describes the Codex tools as a default learning workflow", () => {
+    const server = createCodexMcpServer();
+    const lookupTool = getRegisteredTool(server, "experienceengine_lookup_hints");
+    const recordTool = getRegisteredTool(server, "experienceengine_record_tool_result");
+    const finalizeTool = getRegisteredTool(server, "experienceengine_finalize_task");
+    const feedbackTool = getRegisteredTool(server, "experienceengine_quick_feedback");
+
+    expect(lookupTool.description).toContain("once at task start");
+    expect(lookupTool.description).toContain("real coding or debugging task");
+    expect(recordTool.description).toContain("important tool outcomes");
+    expect(recordTool.description).toContain("before finalization");
+    expect(finalizeTool.description).toContain("task end");
+    expect(finalizeTool.description).toContain("persist the learning loop");
+    expect(feedbackTool.description).toContain("after injected guidance");
+    expect(feedbackTool.description).toContain("helped or harmed");
   });
 
   it("registers MCP prompts for review and control workflows", async () => {

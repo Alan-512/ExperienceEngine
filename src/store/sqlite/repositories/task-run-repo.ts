@@ -100,4 +100,20 @@ export class TaskRunRepository {
         .get(scopeId) as { count: number }
     ).count;
   }
+
+  countByHost(host: TaskRun["host"]): number {
+    return (
+      this.db
+        .prepare("SELECT COUNT(*) AS count FROM task_runs WHERE host = ?")
+        .get(host) as { count: number }
+    ).count;
+  }
+
+  countByScopeAndHost(scopeId: string, host: TaskRun["host"]): number {
+    return (
+      this.db
+        .prepare("SELECT COUNT(*) AS count FROM task_runs WHERE scope_id = ? AND host = ?")
+        .get(scopeId, host) as { count: number }
+    ).count;
+  }
 }

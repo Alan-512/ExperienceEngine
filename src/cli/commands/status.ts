@@ -26,4 +26,9 @@ export const runStatusCommand = (): void => {
   console.log(`- Distillation model: ${config.distillerModel}`);
   console.log(`- Embedding provider mode: ${config.embeddingProvider}`);
   console.log(`- Embedding API provider override: ${config.embeddingApiProvider}`);
+  if (codex.learningLoop) {
+    console.log(`- Codex learning loop: ${codex.learningLoop.state}`);
+    console.log(`- Codex instruction block: ${codex.learningLoop.instructionState}`);
+    console.log(`- Codex task runs in current repo: ${codex.learningLoop.recentTaskRuns}`);
+  }
 };

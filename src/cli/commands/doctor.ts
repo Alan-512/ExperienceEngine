@@ -213,6 +213,39 @@ const logCodexRuntimeStatus = (status?: {
   }
 };
 
+const logCodexLearningLoopStatus = (status?: {
+  instruction?: {
+    path: string;
+    state: "missing" | "present" | "drifted";
+  };
+  learningLoop?: {
+    instructionState: "missing" | "present" | "drifted";
+    recentTaskRuns: number;
+    state: "tools_only" | "instruction_installed" | "learning_loop_active";
+  };
+}): void => {
+  if (!status?.instruction && !status?.learningLoop) {
+    return;
+  }
+
+  console.log("Codex learning loop:");
+  if (status.instruction) {
+    console.log(`- Instruction block: ${status.instruction.state}`);
+    console.log(`- Instruction path: ${status.instruction.path}`);
+  }
+  if (status.learningLoop) {
+    console.log(`- State: ${status.learningLoop.state}`);
+    console.log(`- Codex task runs in current repo: ${status.learningLoop.recentTaskRuns}`);
+    if (status.learningLoop.state === "tools_only") {
+      console.log(
+        "- Recommended next step: run `ee install codex` from this repo root to write the ExperienceEngine instruction block."
+      );
+    } else if (status.learningLoop.state === "instruction_installed") {
+      console.log("- Recommended next step: use Codex on a real coding task so ExperienceEngine can persist codex task runs.");
+    }
+  }
+};
+
 export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): Promise<void> => {
   const resolveRemoteStatus = deps.fetchLatestGitHubReleaseStatus ?? fetchLatestGitHubReleaseStatus;
   const registryHealth = (deps.readRegistryHealth ?? readRegistryHealth)();
@@ -279,6 +312,10 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     if (installGuidance["claude-code"].commands) {
       console.log(`  1. ${installGuidance["claude-code"].commands[0]}`);
       console.log(`  2. ${installGuidance["claude-code"].commands[1]}`);
+    }
+    if (codexStatus.learningLoop) {
+      console.log(`- Codex learning loop: ${codexStatus.learningLoop.state}`);
+      console.log(`- Codex instruction block: ${codexStatus.learningLoop.instructionState}`);
     }
     console.log("- Host health details: ee doctor <codex|claude-code|openclaw>");
     console.log("Distillation summary:");
@@ -350,7 +387,9 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
         host_enabled: status.hostWiring.enabled,
         transport: status.hostWiring.transport ?? "",
         command: status.hostWiring.command ?? "",
-        capture_dir: status.captureDir
+        capture_dir: status.captureDir,
+        instruction_state: status.instruction?.state ?? "",
+        learning_loop: status.learningLoop?.state ?? ""
       }
     ]);
     if (status.versionStatus.updateAvailable) {
@@ -359,6 +398,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     logRemoteReleaseStatus("codex", remoteStatus);
     logDistillationStatus(status.distillationStatus);
     logCodexRuntimeStatus(status);
+    logCodexLearningLoopStatus(status);
     logRegistryHealth(registryHealth);
     logEvaluationMode();
     logFirstValueReadiness(firstValueReadiness);

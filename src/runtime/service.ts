@@ -82,7 +82,7 @@ const toTaskRun = (input: ExperienceInput, sessionId: string, context: HostPromp
 
   return {
     id: stableId("taskrun", `${sessionId}:${input.task_summary}:${timestamp}`),
-    host: "openclaw",
+    host: context.host ?? "openclaw",
     scope_id: input.scope_id,
     session_id: sessionId,
     task_type: input.task_type,

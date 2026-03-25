@@ -38,6 +38,15 @@ const codexStatus = (overrides: Record<string, unknown> = {}) =>
       transport: "stdio",
       command: "node dist/cli/index.js codex-mcp-server"
     },
+    instruction: {
+      path: "/repo/AGENTS.md",
+      state: "present"
+    },
+    learningLoop: {
+      instructionState: "present",
+      recentTaskRuns: 0,
+      state: "instruction_installed"
+    },
     distillationStatus: {
       distillationMode: "rule",
       distillationSource: "rule",
@@ -112,6 +121,8 @@ describe("doctor command", () => {
         ["- Claude Code install: ready"],
         ["  1. /plugin marketplace add https://github.com/Alan-512/ExperienceEngine.git"],
         ["  2. /plugin install experienceengine@experienceengine"],
+        ["- Codex learning loop: instruction_installed"],
+        ["- Codex instruction block: present"],
         ["- Host health details: ee doctor <codex|claude-code|openclaw>"],
         ["Distillation summary:"],
         ["Embedding summary:"]
@@ -195,6 +206,81 @@ describe("doctor command", () => {
       "Latest release: https://github.com/Alan-512/ExperienceEngine/releases/tag/v0.2.0"
     );
   }, 15000);
+
+  it("reports codex instruction state and learning-loop health for targeted doctor", async () => {
+    await runDoctorCommand("codex", {
+      inspectCodexInstall: () =>
+        codexStatus({
+          instruction: {
+            path: "/repo/AGENTS.md",
+            state: "present"
+          },
+          learningLoop: {
+            instructionState: "present",
+            recentTaskRuns: 2,
+            state: "learning_loop_active"
+          }
+        }),
+      fetchLatestGitHubReleaseStatus: async () => ({
+        source: "github-releases",
+        repository: "Alan-512/ExperienceEngine",
+        latestVersion: null,
+        releaseUrl: null,
+        publishedAt: null,
+        state: "current",
+        updateAvailable: false
+      })
+    });
+
+    expect(consoleTableSpy).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          adapter: "codex",
+          instruction_state: "present",
+          learning_loop: "learning_loop_active"
+        })
+      ])
+    );
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Codex learning loop:"],
+        ["- Instruction block: present"],
+        ["- Instruction path: /repo/AGENTS.md"],
+        ["- State: learning_loop_active"],
+        ["- Codex task runs in current repo: 2"]
+      ])
+    );
+  });
+
+  it("suggests the next codex action when the instruction exists but no codex task runs are recorded yet", async () => {
+    await runDoctorCommand("codex", {
+      inspectCodexInstall: () =>
+        codexStatus({
+          instruction: {
+            path: "/repo/AGENTS.md",
+            state: "present"
+          },
+          learningLoop: {
+            instructionState: "present",
+            recentTaskRuns: 0,
+            state: "instruction_installed"
+          }
+        }),
+      fetchLatestGitHubReleaseStatus: async () => ({
+        source: "github-releases",
+        repository: "Alan-512/ExperienceEngine",
+        latestVersion: null,
+        releaseUrl: null,
+        publishedAt: null,
+        state: "current",
+        updateAvailable: false
+      })
+    });
+
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      "- Recommended next step: use Codex on a real coding task so ExperienceEngine can persist codex task runs."
+    );
+  });
 
   it("keeps doctor usable when remote release lookup is unavailable", async () => {
     await runDoctorCommand("claude-code", {

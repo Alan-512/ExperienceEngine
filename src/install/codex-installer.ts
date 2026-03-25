@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import {
   buildCodexAddCommand,
   buildCodexGetCommand,
@@ -18,6 +19,11 @@ import {
   type CodexRuntimeTarget
 } from "./codex-runtime-target.js";
 import {
+  CODEX_EXPERIENCEENGINE_INSTRUCTION_END,
+  CODEX_EXPERIENCEENGINE_INSTRUCTION_START,
+  renderCodexExperienceEngineInstruction
+} from "../adapters/codex/instruction-template.js";
+import {
   resolveExperienceEnginePaths,
   resolveProductStateDir,
   type ResolvedPathInfo
@@ -26,6 +32,9 @@ import { resolveExperienceEnginePackageRoot } from "./openclaw-cli.js";
 import { resolveDistillationResolution } from "../distillation/host-llm.js";
 import { loadConfig } from "../config/load-config.js";
 import { buildVersionStatus, readCurrentPackageVersion } from "../version/package-version.js";
+import { bootstrapDatabase, openDatabase } from "../store/sqlite/db.js";
+import { TaskRunRepository } from "../store/sqlite/repositories/task-run-repo.js";
+import { resolveScope } from "../input/scope-resolver.js";
 
 type InstallerOptions = {
   env?: NodeJS.ProcessEnv;
@@ -33,6 +42,7 @@ type InstallerOptions = {
   cliEnv?: NodeJS.ProcessEnv;
   runner?: CodexCommandRunner;
   runtimeTarget?: CodexRuntimeTarget | string;
+  cwd?: string;
 };
 
 export type CodexInstallReport = {
@@ -52,6 +62,10 @@ export type CodexInstallReport = {
     wired: boolean;
     command?: string;
     transport?: string;
+  };
+  instruction?: {
+    path: string;
+    state: "present";
   };
   distillationStatus?: {
     distillationMode: "llm" | "rule" | "disabled";
@@ -95,6 +109,112 @@ type CodexInstallState = {
     command?: string;
     transport?: string;
   };
+  instruction?: {
+    path: string;
+  };
+};
+
+export type CodexInstructionStatus = {
+  path: string;
+  present: boolean;
+  current: boolean;
+  state: "missing" | "present" | "drifted";
+};
+
+export type CodexLearningLoopStatus = {
+  instructionState: CodexInstructionStatus["state"];
+  recentTaskRuns: number;
+  state: "tools_only" | "instruction_installed" | "learning_loop_active";
+};
+
+const resolveCodexInstructionPath = (cwd = process.cwd()): string => join(cwd, "AGENTS.md");
+
+const renderManagedInstructionBlock = (): string =>
+  [CODEX_EXPERIENCEENGINE_INSTRUCTION_START, renderCodexExperienceEngineInstruction(), CODEX_EXPERIENCEENGINE_INSTRUCTION_END].join(
+    "\n"
+  );
+
+const upsertManagedInstructionBlock = (path: string): CodexInstructionStatus => {
+  const managedBlock = renderManagedInstructionBlock();
+  const existing = existsSync(path) ? readFileSync(path, "utf8") : "";
+  const blockPattern = new RegExp(
+    `${CODEX_EXPERIENCEENGINE_INSTRUCTION_START}[\\s\\S]*?${CODEX_EXPERIENCEENGINE_INSTRUCTION_END}`,
+    "m"
+  );
+  const next = existing.match(blockPattern)
+    ? existing.replace(blockPattern, managedBlock)
+    : existing.trimEnd()
+      ? `${existing.trimEnd()}\n\n${managedBlock}\n`
+      : `${managedBlock}\n`;
+
+  if (next !== existing) {
+    writeFileSync(path, next, "utf8");
+  }
+
+  return {
+    path,
+    present: true,
+    current: true,
+    state: "present"
+  };
+};
+
+const inspectManagedInstructionBlock = (path: string): CodexInstructionStatus => {
+  if (!existsSync(path)) {
+    return {
+      path,
+      present: false,
+      current: false,
+      state: "missing"
+    };
+  }
+
+  const existing = readFileSync(path, "utf8");
+  const blockPattern = new RegExp(
+    `${CODEX_EXPERIENCEENGINE_INSTRUCTION_START}[\\s\\S]*?${CODEX_EXPERIENCEENGINE_INSTRUCTION_END}`,
+    "m"
+  );
+  const match = existing.match(blockPattern);
+  if (!match) {
+    return {
+      path,
+      present: false,
+      current: false,
+      state: "missing"
+    };
+  }
+
+  const current = match[0] === renderManagedInstructionBlock();
+  return {
+    path,
+    present: true,
+    current,
+    state: current ? "present" : "drifted"
+  };
+};
+
+const inspectCodexLearningLoop = (options: {
+  config: ReturnType<typeof loadConfig>;
+  cwd?: string;
+  instruction: CodexInstructionStatus;
+}): CodexLearningLoopStatus => {
+  const db = openDatabase(options.config);
+  bootstrapDatabase(db);
+  const taskRunRepo = new TaskRunRepository(db);
+  const scope = resolveScope(options.cwd);
+  const recentTaskRuns = taskRunRepo.countByScopeAndHost(scope.scope_id, "codex");
+  const state =
+    recentTaskRuns > 0
+      ? "learning_loop_active"
+      : options.instruction.present
+        ? "instruction_installed"
+        : "tools_only";
+
+  return {
+    instructionState: options.instruction.state,
+    recentTaskRuns,
+    state
+  };
 };
 
 const inspectCodexHost = (
@@ -126,6 +246,7 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
     packageRoot
   });
   const existing = inspectCodexHost(runner, options.cliEnv);
+  const instructionPath = resolveCodexInstructionPath(options.cwd);
 
   mkdirSync(paths.dataDir, { recursive: true });
   mkdirSync(resolveProductStateDir(paths), { recursive: true });
@@ -144,6 +265,7 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
   ensureCodexMcpServerStartupTimeout("experienceengine", CODEX_EXPERIENCEENGINE_STARTUP_TIMEOUT_SEC, {
     homeDir: options.homeDir
   });
+  const instruction = upsertManagedInstructionBlock(instructionPath);
 
   const hostInfo = inspectCodexHost(runner, options.cliEnv);
   const state: CodexInstallState = {
@@ -168,6 +290,9 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
       wired: Boolean(hostInfo?.commandDisplay),
       command: hostInfo?.commandDisplay,
       transport: hostInfo?.transport
+    },
+    instruction: {
+      path: instruction.path
     }
   };
 
@@ -187,6 +312,11 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
     },
     captureDir: paths.captureDir,
     hostWiring: state.hostWiring
+    ,
+    instruction: {
+      path: instruction.path,
+      state: "present"
+    }
   };
 };
 
@@ -202,7 +332,14 @@ export const inspectCodexInstall = (options: InstallerOptions = {}) => {
     : null;
   const packageRoot = resolveExperienceEnginePackageRoot();
   const hostInfo = inspectCodexHost(runner, options.cliEnv);
+  const instructionPath = resolveCodexInstructionPath(options.cwd);
+  const instruction = inspectManagedInstructionBlock(instructionPath);
   const config = loadConfig({}, { env: options.env ?? process.env, homeDir: options.homeDir });
+  const learningLoop = inspectCodexLearningLoop({
+    config,
+    cwd: options.cwd,
+    instruction
+  });
   const resolutionEnv: NodeJS.ProcessEnv = {
     ...(options.env ?? process.env),
     EXPERIENCE_ENGINE_ADAPTER: "codex"
@@ -233,6 +370,8 @@ export const inspectCodexInstall = (options: InstallerOptions = {}) => {
       transport: hostInfo?.transport,
       enabled: hostInfo?.enabled ?? false
     },
+    instruction,
+    learningLoop,
     distillationStatus: {
       distillationMode: distillationResolution.distillationMode,
       distillationSource: distillationResolution.distillationSource,

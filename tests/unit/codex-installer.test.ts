@@ -6,6 +6,10 @@ import { inspectCodexInstall, installCodexAdapter } from "../../src/install/code
 import { readCurrentPackageVersion } from "../../src/version/package-version.js";
 
 const tempDirs: string[] = [];
+const originalAgentsPath = join(process.cwd(), "AGENTS.md");
+const originalAgentsContent = existsSync(originalAgentsPath)
+  ? readFileSync(originalAgentsPath, "utf8")
+  : null;
 
 const makeTempDir = (): string => {
   const dir = mkdtempSync(join(tmpdir(), "experienceengine-codex-install-"));
@@ -27,6 +31,12 @@ afterEach(() => {
     if (dir) {
       rmSync(dir, { recursive: true, force: true });
     }
+  }
+
+  if (originalAgentsContent === null) {
+    rmSync(originalAgentsPath, { force: true });
+  } else {
+    writeFileSync(originalAgentsPath, originalAgentsContent, "utf8");
   }
 });
 
@@ -94,6 +104,70 @@ env_key = "OPENROUTER_API_KEY"
     expect(payload.installedVersion).toBe(report.installedVersion);
     expect(payload.serverName).toBe("experienceengine");
     expect(payload.hostWiring.wired).toBe(true);
+  });
+
+  it("writes a managed ExperienceEngine instruction block into AGENTS.md", () => {
+    const homeDir = makeTempDir();
+
+    installCodexAdapter({
+      homeDir,
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        if (key === "codex mcp get experienceengine") {
+          return `experienceengine
+  enabled: true
+  transport: stdio
+  command: node
+  args: --no-warnings /tmp/experienceengine/dist/cli/index.js codex-mcp-server
+  cwd: -
+  env: EXPERIENCE_ENGINE_HOME=${join(homeDir, ".experienceengine")}
+  startup_timeout_sec: 120
+  remove: codex mcp remove experienceengine`;
+        }
+        return "";
+      }
+    });
+
+    const agents = readFileSync(originalAgentsPath, "utf8");
+    expect(agents).toContain("<!-- EXPERIENCEENGINE:CODEX-INSTRUCTION START -->");
+    expect(agents).toContain("experienceengine_lookup_hints");
+    expect(agents).toContain("experienceengine_finalize_task");
+  });
+
+  it("preserves unrelated AGENTS.md content and updates the managed block idempotently", () => {
+    const homeDir = makeTempDir();
+
+    writeFileSync(
+      originalAgentsPath,
+      ["# Local project guidance", "", "Keep existing content untouched.", ""].join("\n"),
+      "utf8"
+    );
+
+    const runner = (command: { bin: string; args: string[] }) => {
+      const key = [command.bin, ...command.args].join(" ");
+      if (key === "codex mcp get experienceengine") {
+        return `experienceengine
+  enabled: true
+  transport: stdio
+  command: node
+  args: --no-warnings /tmp/experienceengine/dist/cli/index.js codex-mcp-server
+  cwd: -
+  env: EXPERIENCE_ENGINE_HOME=${join(homeDir, ".experienceengine")}
+  startup_timeout_sec: 120
+  remove: codex mcp remove experienceengine`;
+      }
+      return "";
+    };
+
+    installCodexAdapter({ homeDir, runner });
+    const first = readFileSync(originalAgentsPath, "utf8");
+    installCodexAdapter({ homeDir, runner });
+    const second = readFileSync(originalAgentsPath, "utf8");
+
+    expect(first).toContain("# Local project guidance");
+    expect(first).toContain("Keep existing content untouched.");
+    expect(first.match(/EXPERIENCEENGINE:CODEX-INSTRUCTION START/g)).toHaveLength(1);
+    expect(second).toBe(first);
   });
 
   it("removes and re-adds the MCP server when a prior registration exists", () => {

@@ -246,6 +246,7 @@ export const createCodexBehaviorLoop = (options: CodexServerOptions = {}) => {
   return {
     async lookupHints(args: CodexLookupArgs) {
       const result = await runtime.beforePromptBuild({
+        host: "codex",
         sessionId: args.sessionId,
         cwd: args.cwd,
         userMessage: args.prompt,
@@ -286,6 +287,7 @@ export const createCodexBehaviorLoop = (options: CodexServerOptions = {}) => {
 
     async finalizeTask(args: CodexFinalizeArgs) {
       const input = await runtime.finalizeTask({
+        host: "codex",
         sessionId: args.sessionId,
         cwd: args.cwd,
         userMessage: args.prompt,
@@ -1055,7 +1057,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
     {
       title: "ExperienceEngine Lookup Hints",
       description:
-        "Look up concise prior experience hints for the current coding task without assuming host lifecycle hooks.",
+        "Use once at task start for a real coding or debugging task to check whether ExperienceEngine has relevant prior guidance.",
       inputSchema: z.object({
         cwd: z.string().optional(),
         prompt: z.string().min(1),
@@ -1071,7 +1073,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
     {
       title: "ExperienceEngine Record Tool Result",
       description:
-        "Record a Codex tool result into the active ExperienceEngine session before finalization.",
+        "Record only important tool outcomes that changed the task direction, especially notable shell, test, build, or edit results, before finalization.",
       inputSchema: z.object({
         sessionId: z.string().min(1),
         toolName: z.string().min(1),
@@ -1090,7 +1092,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
     {
       title: "ExperienceEngine Finalize Task",
       description:
-        "Finalize a Codex task after hint lookup and optional tool-result recording to persist outcomes and feedback.",
+        "Call at task end after hint lookup and any important tool-result recording to persist the learning loop outcome.",
       inputSchema: z.object({
         sessionId: z.string().min(1),
         cwd: z.string().optional(),
@@ -1106,7 +1108,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
     {
       title: "ExperienceEngine Quick Feedback",
       description:
-        "Record helped or harmed feedback for the last injected ExperienceEngine guidance using the shortest possible interaction path.",
+        "Use after injected guidance when it clearly helped or harmed the completed task, using the shortest possible feedback path.",
       inputSchema: z.object({
         feedback: z.enum(["helped", "harmed"])
       }),
