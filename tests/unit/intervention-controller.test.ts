@@ -400,6 +400,40 @@ describe("decideIntervention", () => {
     expect(decision.selected.map((entry) => entry.id)).toEqual(["family-tertiary", "family-primary"]);
   });
 
+  it("injects a mature exact-family candidate even when the prompt is long and noisy", async () => {
+    const decision = await decideIntervention(
+      {
+        ...input,
+        task_summary:
+          "Fix the failing payments auth test in ExperienceEngine. Keep the fix narrow, inspect the repo first, and explain the likely root cause and first corrective step. Do not modify files."
+      },
+      [
+        node({
+          id: "payments-mature",
+          task_type: "test_debug",
+          trigger_pattern: "Fix the failing payments auth test in ExperienceEngine",
+          compact_hint: "Run the failing payments auth test before editing and rerun it after the fix.",
+          goal: "Keep the payments auth test fix narrow",
+          recommended_steps: [
+            "Run the focused auth test once.",
+            "Apply the minimal fix.",
+            "Rerun the focused auth test."
+          ],
+          helped_count: 9,
+          support_count: 7,
+          validation_state: "validated_by_reuse",
+          state: "active"
+        })
+      ],
+      stats,
+      0.6,
+      3
+    );
+
+    expect(decision.mode).toBe("inject");
+    expect(decision.selected.map((entry) => entry.id)).toEqual(["payments-mature"]);
+  });
+
   it("does not append related-family strategies when an exact-family strategy already matches", async () => {
     const decision = await decideIntervention(
       {

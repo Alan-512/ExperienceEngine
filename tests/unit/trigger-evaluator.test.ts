@@ -12,6 +12,18 @@ const baseInput: ExperienceInput = {
 };
 
 describe("evaluateTrigger", () => {
+  const lowFailureStats: ScopeTaskStats = {
+    scope_id: "scope_1",
+    task_type: "bug_fix",
+    total_tasks: 10,
+    success_tasks: 9,
+    failed_tasks: 1,
+    unknown_tasks: 0,
+    injected_tasks: 0,
+    injected_success_tasks: 0,
+    updated_at: new Date().toISOString()
+  };
+
   it("fires when failure rate is high", () => {
     const stats: ScopeTaskStats = {
       scope_id: "scope_1",
@@ -93,6 +105,26 @@ describe("evaluateTrigger", () => {
         "Focusing on UI/presentation layer instead of backend configuration logic.\nState the issue as runtime config resolution and persisted settings precedence.\nAgent focuses on UI labels, aliases, or cosmetic symptoms during configuration troubleshooting.",
         0.4
       )
+    ).toBe(true);
+  });
+
+  it("allows a strong mature candidate even when lexical overlap is below the old threshold", () => {
+    expect(
+      evaluateTrigger(baseInput, lowFailureStats, {
+        knownRiskSummary: "Fix the failing payments auth test in ExperienceEngine",
+        candidateQuality: {
+          semanticScore: 0.81,
+          totalScore: 0.93,
+          familyScore: 1,
+          scopeMatch: true,
+          taskFamilyMatch: true,
+          state: "active",
+          helpedCount: 9,
+          harmedCount: 0,
+          validationState: "validated_by_reuse",
+          scoreMargin: 0.28
+        }
+      })
     ).toBe(true);
   });
 });

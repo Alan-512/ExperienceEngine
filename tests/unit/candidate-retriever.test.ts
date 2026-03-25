@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { retrieveCandidates } from "../../src/controller/candidate-retriever.js";
+import { retrieveCandidates, retrieveScoredCandidates } from "../../src/controller/candidate-retriever.js";
 import type { ExperienceInput, ExperienceNode } from "../../src/types/domain.js";
 import {
   clearEmbeddingProviderForTests,
@@ -361,5 +361,34 @@ describe("retrieveCandidates", () => {
 
     expect(embedQuerySpy).not.toHaveBeenCalled();
     expect(candidates).toEqual([]);
+  });
+
+  it("returns scored candidates with semantic/fused score metadata and sortable margins", async () => {
+    const candidates = await retrieveScoredCandidates(input(), [
+      node({
+        id: "strong-match",
+        task_type: "test_debug",
+        trigger_pattern: "Fix the failing payments auth test in ExperienceEngine",
+        compact_hint: "Run the failing payments auth test before editing and rerun it after the fix.",
+        helped_count: 9,
+        support_count: 7
+      }),
+      node({
+        id: "weaker-match",
+        task_type: "test_debug",
+        trigger_pattern: "Check the current workspace before fixing the payments auth test",
+        compact_hint: "Check the current workspace path before attempting the payments auth-test fix.",
+        helped_count: 1,
+        support_count: 1
+      })
+    ]);
+
+    expect(candidates[0]).toMatchObject({
+      node: expect.objectContaining({ id: "strong-match" }),
+      semanticScore: expect.any(Number),
+      totalScore: expect.any(Number),
+      familyScore: expect.any(Number)
+    });
+    expect(candidates[0]!.totalScore).toBeGreaterThan(candidates[1]!.totalScore);
   });
 });
