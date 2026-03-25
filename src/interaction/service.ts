@@ -166,6 +166,16 @@ export type ExperienceFirstValueReadiness = {
   nextStep: string;
 };
 
+export type ExperienceDecisionHealth = {
+  scopeId: string;
+  recentDecisions: number;
+  recentInjects: number;
+  recentConservativeInjects: number;
+  recentSkips: number;
+  recentFastPathActivations: number;
+  lastDecisionMode?: "inject" | "inject_conservative" | "skip";
+};
+
 const toReviewEvent = (
   nodeId: string,
   eventType: ReviewEvent["event_type"],
@@ -601,6 +611,49 @@ export class ExperienceInteractionService {
       candidates,
       nodes,
       nextStep
+    };
+  }
+
+  inspectDecisionHealth(cwd: string = process.cwd(), limit = 10): ExperienceDecisionHealth {
+    const scope = resolveScope(cwd);
+    const recentRecords = this.inputRepo.listRecentByScope(scope.scope_id, limit);
+    let recentInjects = 0;
+    let recentConservativeInjects = 0;
+    let recentSkips = 0;
+    let recentFastPathActivations = 0;
+    let lastDecisionMode: ExperienceDecisionHealth["lastDecisionMode"];
+
+    for (const record of recentRecords) {
+      const injectionEvent = record.session_id
+        ? this.injectionRepo.getLatestBySessionId(record.session_id)
+        : undefined;
+      const decisionMode = injectionEvent?.mode ?? "skip";
+
+      if (!lastDecisionMode) {
+        lastDecisionMode = decisionMode;
+      }
+
+      if (decisionMode === "inject") {
+        recentInjects += 1;
+      } else if (decisionMode === "inject_conservative") {
+        recentConservativeInjects += 1;
+      } else {
+        recentSkips += 1;
+      }
+
+      if (injectionEvent?.scorecard?.fastPathApplied) {
+        recentFastPathActivations += 1;
+      }
+    }
+
+    return {
+      scopeId: scope.scope_id,
+      recentDecisions: recentRecords.length,
+      recentInjects,
+      recentConservativeInjects,
+      recentSkips,
+      recentFastPathActivations,
+      lastDecisionMode
     };
   }
 

@@ -48,6 +48,22 @@ vi.mock("../../src/config/load-config.js", () => ({
   })
 }));
 
+vi.mock("../../src/interaction/service.js", () => ({
+  ExperienceInteractionService: class {
+    inspectDecisionHealth() {
+      return {
+        scopeId: "scope_repo",
+        recentDecisions: 3,
+        recentInjects: 1,
+        recentConservativeInjects: 1,
+        recentSkips: 1,
+        recentFastPathActivations: 1,
+        lastDecisionMode: "inject_conservative"
+      };
+    }
+  }
+}));
+
 describe("status command", () => {
   it("prints a compact product-facing summary", () => {
     runStatusCommand();
@@ -63,7 +79,12 @@ describe("status command", () => {
         ["- Embedding API provider override: gemini"],
         ["- Codex learning loop: instruction_installed"],
         ["- Codex instruction block: present"],
-        ["- Codex task runs in current repo: 0"]
+        ["- Codex task runs in current repo: 0"],
+        ["- Recent retrieval decisions in current repo: 3"],
+        ["- Recent injects: 1"],
+        ["- Recent conservative injects: 1"],
+        ["- Recent skips: 1"],
+        ["- Recent fast-path activations: 1"]
       ])
     );
   });

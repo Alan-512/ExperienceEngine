@@ -221,6 +221,15 @@ describe("doctor command", () => {
             state: "learning_loop_active"
           }
         }),
+      inspectDecisionHealth: () => ({
+        scopeId: "scope_repo",
+        recentDecisions: 4,
+        recentInjects: 2,
+        recentConservativeInjects: 1,
+        recentSkips: 1,
+        recentFastPathActivations: 1,
+        lastDecisionMode: "inject"
+      }),
       fetchLatestGitHubReleaseStatus: async () => ({
         source: "github-releases",
         repository: "Alan-512/ExperienceEngine",
@@ -247,7 +256,13 @@ describe("doctor command", () => {
         ["- Instruction block: present"],
         ["- Instruction path: /repo/AGENTS.md"],
         ["- State: learning_loop_active"],
-        ["- Codex task runs in current repo: 2"]
+        ["- Codex task runs in current repo: 2"],
+        ["Recent retrieval activity:"],
+        ["- Decisions in current repo: 4"],
+        ["- Injects: 2"],
+        ["- Conservative injects: 1"],
+        ["- Skips: 1"],
+        ["- Fast-path activations: 1"]
       ])
     );
   });
@@ -266,6 +281,15 @@ describe("doctor command", () => {
             state: "instruction_installed"
           }
         }),
+      inspectDecisionHealth: () => ({
+        scopeId: "scope_repo",
+        recentDecisions: 3,
+        recentInjects: 0,
+        recentConservativeInjects: 0,
+        recentSkips: 3,
+        recentFastPathActivations: 0,
+        lastDecisionMode: "skip"
+      }),
       fetchLatestGitHubReleaseStatus: async () => ({
         source: "github-releases",
         repository: "Alan-512/ExperienceEngine",
@@ -279,6 +303,9 @@ describe("doctor command", () => {
 
     expect(consoleLogSpy).toHaveBeenCalledWith(
       "- Recommended next step: use Codex on a real coding task so ExperienceEngine can persist codex task runs."
+    );
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      "- Recommended next step: recent Codex retrievals are still mostly skipping in this repo. Run `ee inspect --last` after a close-match task to inspect gate reasons."
     );
   });
 

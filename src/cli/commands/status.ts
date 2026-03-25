@@ -1,3 +1,4 @@
+import { ExperienceInteractionService } from "../../interaction/service.js";
 import { inspectClaudeCodeInstall } from "../../install/claude-code-doctor.js";
 import { inspectCodexInstall } from "../../install/codex-installer.js";
 import { inspectOpenClawInstall } from "../../install/openclaw-installer.js";
@@ -6,6 +7,8 @@ import { detectAvailableHosts } from "../../install/host-detection.js";
 
 export const runStatusCommand = (): void => {
   const config = loadConfig();
+  const interaction = new ExperienceInteractionService(config);
+  const decisionHealth = interaction.inspectDecisionHealth();
   const availableHosts = detectAvailableHosts().map((host) => host.id);
   const codex = inspectCodexInstall();
   const claude = inspectClaudeCodeInstall();
@@ -31,4 +34,9 @@ export const runStatusCommand = (): void => {
     console.log(`- Codex instruction block: ${codex.learningLoop.instructionState}`);
     console.log(`- Codex task runs in current repo: ${codex.learningLoop.recentTaskRuns}`);
   }
+  console.log(`- Recent retrieval decisions in current repo: ${decisionHealth.recentDecisions}`);
+  console.log(`- Recent injects: ${decisionHealth.recentInjects}`);
+  console.log(`- Recent conservative injects: ${decisionHealth.recentConservativeInjects}`);
+  console.log(`- Recent skips: ${decisionHealth.recentSkips}`);
+  console.log(`- Recent fast-path activations: ${decisionHealth.recentFastPathActivations}`);
 };

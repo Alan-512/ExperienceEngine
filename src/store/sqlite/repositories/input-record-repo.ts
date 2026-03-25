@@ -203,6 +203,35 @@ export class InputRecordRepository {
       );
   }
 
+  listRecentByScope(scopeId: string, limit = 10): ExperienceInputRecord[] {
+    return this.db
+      .prepare(
+        `SELECT record_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary,
+                evidence_json, injected_node_ids_json, created_at
+         FROM experience_input_records
+         WHERE scope_id = ?
+         ORDER BY created_at DESC
+         LIMIT ?`
+      )
+      .all(scopeId, limit)
+      .map((row) =>
+        this.mapRecord(
+          row as {
+            record_id: string;
+            scope_id: string;
+            session_id: string | null;
+            task_type: ExperienceInputRecord["task_type"];
+            task_summary: string;
+            outcome_signal: ExperienceInputRecord["outcome_signal"];
+            context_summary: string | null;
+            evidence_json: string;
+            injected_node_ids_json: string;
+            created_at: string;
+          }
+        )
+      );
+  }
+
   count(): number {
     return (this.db.prepare("SELECT COUNT(*) AS count FROM experience_input_records").get() as { count: number }).count;
   }

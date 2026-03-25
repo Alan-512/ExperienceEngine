@@ -27,12 +27,23 @@ export type InterventionDecision = {
   };
 };
 
-const isStrongCandidate = (quality: TriggerCandidateQuality): boolean =>
+const isStrongCandidate = (
+  quality: TriggerCandidateQuality,
+  runnerUpQuality?: TriggerCandidateQuality
+): boolean =>
   quality.scopeMatch &&
   quality.taskFamilyMatch &&
   quality.state === "active" &&
   quality.totalScore >= 0.75 &&
-  quality.scoreMargin >= 0.08 &&
+  (
+    quality.scoreMargin >= 0.08 ||
+    !runnerUpQuality ||
+    (
+      runnerUpQuality.state === "candidate" &&
+      runnerUpQuality.helpedCount === 0 &&
+      runnerUpQuality.validationState !== "validated_by_reuse"
+    )
+  ) &&
   (quality.helpedCount >= 2 || quality.validationState === "validated_by_reuse") &&
   quality.helpedCount >= quality.harmedCount;
 
@@ -171,6 +182,7 @@ const decideInterventionInternal = async (
     input.task_type
   );
   const topCandidateQuality = toCandidateQuality(input, selected[0], selected[0] ? candidateById.get(selected[0].id) : undefined);
+  const runnerUpQuality = toCandidateQuality(input, selected[1], selected[1] ? candidateById.get(selected[1].id) : undefined);
   const candidateRiskSummary = buildCandidateRiskSummary(selected[0]);
   const triggerThreshold = resolveTriggerThreshold(selected[0], threshold);
   const diagnostics = {
@@ -182,11 +194,11 @@ const decideInterventionInternal = async (
     decisionReason: "candidate_quality_positive"
   };
 
-  if (topCandidateQuality && isStrongCandidate(topCandidateQuality)) {
+  if (topCandidateQuality && isStrongCandidate(topCandidateQuality, runnerUpQuality)) {
     return {
       mode,
-      selected,
-      text: renderInjection(mode, selected, maxHints),
+      selected: selected[0] ? [selected[0]] : [],
+      text: renderInjection(mode, selected[0] ? [selected[0]] : [], maxHints),
       diagnostics: {
         ...diagnostics,
         fastPathApplied: true,

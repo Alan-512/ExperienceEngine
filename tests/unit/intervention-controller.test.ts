@@ -434,6 +434,43 @@ describe("decideIntervention", () => {
     expect(decision.selected.map((entry) => entry.id)).toEqual(["payments-mature"]);
   });
 
+  it("ignores immature runner-up candidates when a mature exact-family candidate is clearly reusable", async () => {
+    const decision = await decideIntervention(
+      {
+        ...input,
+        task_summary:
+          "Fix the failing payments auth test in ExperienceEngine. Keep the fix narrow, inspect the repo first, and explain the likely root cause and first corrective step. Do not modify files."
+      },
+      [
+        node({
+          id: "payments-mature",
+          task_type: "test_debug",
+          trigger_pattern: "Fix the failing payments auth test in ExperienceEngine",
+          compact_hint: "Run the failing payments auth test before editing and rerun it after the fix.",
+          helped_count: 9,
+          support_count: 7,
+          state: "active"
+        }),
+        node({
+          id: "sandbox-candidate",
+          task_type: "test_debug",
+          trigger_pattern: "Vitest startup failure with EROFS error in read-only sandbox environment",
+          compact_hint: "Treat read-only sandbox failures as environmental until a writable repro exists.",
+          helped_count: 0,
+          support_count: 1,
+          state: "candidate"
+        })
+      ],
+      stats,
+      0.6,
+      3
+    );
+
+    expect(decision.mode).toBe("inject");
+    expect(decision.selected.map((entry) => entry.id)).toEqual(["payments-mature"]);
+    expect(decision.diagnostics?.fastPathApplied).toBe(true);
+  });
+
   it("does not append related-family strategies when an exact-family strategy already matches", async () => {
     const decision = await decideIntervention(
       {

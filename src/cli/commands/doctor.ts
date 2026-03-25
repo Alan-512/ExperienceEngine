@@ -1,5 +1,6 @@
 import { loadConfig } from "../../config/load-config.js";
 import {
+  ExperienceDecisionHealth,
   ExperienceInteractionService,
   type ExperienceFirstValueReadiness
 } from "../../interaction/service.js";
@@ -25,6 +26,7 @@ type DoctorDeps = {
   inspectOpenClawInstall?: typeof inspectOpenClawInstall;
   readRegistryHealth?: typeof readRegistryHealth;
   inspectFirstValueReadiness?: () => ExperienceFirstValueReadiness;
+  inspectDecisionHealth?: () => ExperienceDecisionHealth;
 };
 
 const logRemoteReleaseStatus = (target: string, remoteStatus: RemoteReleaseStatus): void => {
@@ -59,6 +61,9 @@ const logRegistryHealth = (health: RegistryHealth): void => {
 
 const inspectFirstValueReadiness = (): ExperienceFirstValueReadiness =>
   new ExperienceInteractionService(loadConfig()).inspectFirstValueReadiness();
+
+const inspectDecisionHealth = (): ExperienceDecisionHealth =>
+  new ExperienceInteractionService(loadConfig()).inspectDecisionHealth();
 
 const logEvaluationMode = (): void => {
   const config = loadConfig();
@@ -246,10 +251,24 @@ const logCodexLearningLoopStatus = (status?: {
   }
 };
 
+const logDecisionHealth = (summary?: ExperienceDecisionHealth): void => {
+  if (!summary) {
+    return;
+  }
+
+  console.log("Recent retrieval activity:");
+  console.log(`- Decisions in current repo: ${summary.recentDecisions}`);
+  console.log(`- Injects: ${summary.recentInjects}`);
+  console.log(`- Conservative injects: ${summary.recentConservativeInjects}`);
+  console.log(`- Skips: ${summary.recentSkips}`);
+  console.log(`- Fast-path activations: ${summary.recentFastPathActivations}`);
+};
+
 export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): Promise<void> => {
   const resolveRemoteStatus = deps.fetchLatestGitHubReleaseStatus ?? fetchLatestGitHubReleaseStatus;
   const registryHealth = (deps.readRegistryHealth ?? readRegistryHealth)();
   const firstValueReadiness = (deps.inspectFirstValueReadiness ?? inspectFirstValueReadiness)();
+  const decisionHealth = (deps.inspectDecisionHealth ?? inspectDecisionHealth)();
   if (!target) {
     const codexStatus = (deps.inspectCodexInstall ?? inspectCodexInstall)();
     const claudeStatus = (deps.inspectClaudeCodeInstall ?? inspectClaudeCodeInstall)();
@@ -399,6 +418,17 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     logDistillationStatus(status.distillationStatus);
     logCodexRuntimeStatus(status);
     logCodexLearningLoopStatus(status);
+    logDecisionHealth(decisionHealth);
+    if (
+      decisionHealth.recentDecisions > 0 &&
+      decisionHealth.recentInjects === 0 &&
+      decisionHealth.recentConservativeInjects === 0 &&
+      decisionHealth.recentSkips > 0
+    ) {
+      console.log(
+        "- Recommended next step: recent Codex retrievals are still mostly skipping in this repo. Run `ee inspect --last` after a close-match task to inspect gate reasons."
+      );
+    }
     logRegistryHealth(registryHealth);
     logEvaluationMode();
     logFirstValueReadiness(firstValueReadiness);
