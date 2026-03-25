@@ -113,6 +113,12 @@ const getSpecificityBonus = (node: ExperienceNode): number => {
 const getFeedbackAdjustment = (node: ExperienceNode): number =>
   Math.max(-0.12, Math.min(0.12, (node.helped_count - node.harmed_count) * 0.02));
 
+const getMaturityAdjustment = (node: ExperienceNode): number => {
+  const supportBonus = Math.min(0.12, node.support_count * 0.015);
+  const validationBonus = node.validation_state === "validated_by_reuse" ? 0.08 : 0;
+  return supportBonus + validationBonus;
+};
+
 const getGenericPenalty = (node: ExperienceNode): number => (isLegacyGenericNode(node) ? 0.22 : 0);
 
 const getFamilyScore = (inputTaskType: TaskType, nodeTaskType: TaskType): number =>
@@ -411,7 +417,7 @@ export const retrieveScoredCandidates = async (
       const fusedScore = fusedScoreById.get(node.id) ?? Math.max(semanticScore, lexicalScore);
       const familyScore = getFamilyScore(inputTaskType, node.task_type);
       const qualityAdjustment =
-        getSpecificityBonus(node) + getFeedbackAdjustment(node) - getGenericPenalty(node);
+        getSpecificityBonus(node) + getFeedbackAdjustment(node) + getMaturityAdjustment(node) - getGenericPenalty(node);
       const totalScore =
         fusedScore * 0.68 + familyScore * 0.22 + qualityAdjustment + getExpectationCorrectionAdjustment(input, node);
       return {

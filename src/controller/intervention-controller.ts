@@ -27,25 +27,46 @@ export type InterventionDecision = {
   };
 };
 
-const isStrongCandidate = (
+const isTrustedSameFamilyCluster = (
   quality: TriggerCandidateQuality,
   runnerUpQuality?: TriggerCandidateQuality
 ): boolean =>
-  quality.scopeMatch &&
-  quality.taskFamilyMatch &&
-  quality.state === "active" &&
-  quality.totalScore >= 0.75 &&
-  (
-    quality.scoreMargin >= 0.08 ||
-    !runnerUpQuality ||
+  Boolean(
+    runnerUpQuality &&
+    quality.scopeMatch &&
+    quality.taskFamilyMatch &&
+    runnerUpQuality.scopeMatch &&
+    runnerUpQuality.taskFamilyMatch &&
+    quality.state === "active" &&
+    runnerUpQuality.state === "active" &&
+    quality.helpedCount >= 2 &&
+    runnerUpQuality.helpedCount >= 2 &&
+    quality.totalScore >= 1.1 &&
+    runnerUpQuality.totalScore >= 0.95 &&
+    quality.helpedCount >= runnerUpQuality.helpedCount
+  );
+
+const isStrongCandidate = (
+  quality: TriggerCandidateQuality,
+  runnerUpQuality?: TriggerCandidateQuality
+): boolean => {
+  return quality.scopeMatch &&
+    quality.taskFamilyMatch &&
+    quality.state === "active" &&
+    quality.totalScore >= 0.75 &&
     (
-      runnerUpQuality.state === "candidate" &&
-      runnerUpQuality.helpedCount === 0 &&
-      runnerUpQuality.validationState !== "validated_by_reuse"
-    )
-  ) &&
-  (quality.helpedCount >= 2 || quality.validationState === "validated_by_reuse") &&
-  quality.helpedCount >= quality.harmedCount;
+      quality.scoreMargin >= 0.08 ||
+      !runnerUpQuality ||
+      (
+        runnerUpQuality.state === "candidate" &&
+        runnerUpQuality.helpedCount === 0 &&
+        runnerUpQuality.validationState !== "validated_by_reuse"
+      ) ||
+      isTrustedSameFamilyCluster(quality, runnerUpQuality)
+    ) &&
+    (quality.helpedCount >= 2 || quality.validationState === "validated_by_reuse") &&
+    quality.helpedCount >= quality.harmedCount;
+};
 
 const toCandidateQuality = (
   input: ExperienceInput,
@@ -151,9 +172,25 @@ const decideInterventionInternal = async (
   config?: Pick<ExperienceEngineConfig, "embeddingProvider" | "embeddingModel" | "embeddingDtype" | "embeddingCacheDir">
 ): Promise<InterventionDecision> => {
   const scoredCandidates = await retrieveScoredCandidates(input, nodes, { config });
-  const candidates = scoredCandidates.map(({ node }) => node);
   const rankingSummary = [input.task_summary, input.context_summary].filter(Boolean).join("\n");
-  const ranked = rankNodes(rankingSummary || input.task_summary, candidates, input.task_type);
+  const rankTieBreakOrder = new Map(
+    rankNodes(
+      rankingSummary || input.task_summary,
+      scoredCandidates.map(({ node }) => node),
+      input.task_type
+    ).map((node, index) => [node.id, index])
+  );
+  const ranked = [...scoredCandidates]
+    .sort((left, right) => {
+      const scoreDiff = right.totalScore - left.totalScore;
+      if (Math.abs(scoreDiff) > 0.01) {
+        return scoreDiff;
+      }
+
+      return (rankTieBreakOrder.get(left.node.id) ?? Number.MAX_SAFE_INTEGER) -
+        (rankTieBreakOrder.get(right.node.id) ?? Number.MAX_SAFE_INTEGER);
+    })
+    .map(({ node }) => node);
   const candidateById = new Map(scoredCandidates.map((candidate) => [candidate.node.id, candidate]));
   const correctionAwareRanked = hasCorrectionIntent(input)
     ? [
@@ -196,10 +233,16 @@ const decideInterventionInternal = async (
   };
 
   if (topCandidateQuality && isStrongCandidate(topCandidateQuality, runnerUpQuality)) {
+    const fastPathSelection =
+      isTrustedSameFamilyCluster(topCandidateQuality, runnerUpQuality)
+        ? selected
+        : selected[0]
+          ? [selected[0]]
+          : [];
     return {
       mode,
-      selected: selected[0] ? [selected[0]] : [],
-      text: renderInjection(mode, selected[0] ? [selected[0]] : [], maxHints),
+      selected: fastPathSelection,
+      text: renderInjection(mode, fastPathSelection, maxHints),
       diagnostics: {
         ...diagnostics,
         fastPathApplied: true,

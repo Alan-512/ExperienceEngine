@@ -358,7 +358,7 @@ describe("decideIntervention", () => {
     expect(decision.selected.map((entry) => entry.id)).toEqual(["payments-primary", "payments-secondary"]);
   });
 
-  it("caps exact-family strategy injection at two hints when coverage is already strong", async () => {
+  it("caps exact-family strategy injection at the two strongest mature hints when coverage is already strong", async () => {
     const decision = await decideIntervention(
       {
         ...input,
@@ -397,7 +397,7 @@ describe("decideIntervention", () => {
     );
 
     expect(decision.mode).toBe("inject");
-    expect(decision.selected.map((entry) => entry.id)).toEqual(["family-tertiary", "family-primary"]);
+    expect(decision.selected.map((entry) => entry.id)).toEqual(["family-primary", "family-secondary"]);
   });
 
   it("injects a mature exact-family candidate even when the prompt is long and noisy", async () => {
@@ -469,6 +469,48 @@ describe("decideIntervention", () => {
     expect(decision.mode).toBe("inject");
     expect(decision.selected.map((entry) => entry.id)).toEqual(["payments-mature"]);
     expect(decision.diagnostics?.fastPathApplied).toBe(true);
+  });
+
+  it("keeps the injected node aligned with the top fused candidate when lexical paraphrases compete", async () => {
+    const decision = await decideIntervention(
+      {
+        ...input,
+        task_summary:
+          "Investigate payments auth test regression by checking auth fixture handshake first; no file modifications."
+      },
+      [
+        node({
+          id: "payments-mature-top",
+          task_type: "test_debug",
+          state: "active",
+          trigger_pattern: "Fix the failing payments auth test in ExperienceEngine",
+          compact_hint: "Check the auth fixture handshake before changing the payments auth code path.",
+          retrieval_text:
+            "Fix the failing payments auth test in ExperienceEngine\nCheck the auth fixture handshake before changing the payments auth code path.",
+          helped_count: 9,
+          support_count: 7,
+          validation_state: "validated_by_reuse"
+        }),
+        node({
+          id: "workspace-paraphrase-runner-up",
+          task_type: "test_debug",
+          state: "active",
+          trigger_pattern: "Investigate payments auth test regression by checking auth fixture handshake first",
+          compact_hint: "Check the current workspace path before attempting the payments auth-test fix.",
+          retrieval_text:
+            "Investigate payments auth test regression by checking auth fixture handshake first\nCheck the current workspace path before attempting the payments auth-test fix.",
+          helped_count: 1,
+          support_count: 1
+        })
+      ],
+      stats,
+      0.6,
+      3
+    );
+
+    expect(decision.mode).toBe("inject");
+    expect(decision.diagnostics?.topCandidates[0]?.id).toBe("payments-mature-top");
+    expect(decision.selected.map((entry) => entry.id)).toEqual(["payments-mature-top"]);
   });
 
   it("does not append related-family strategies when an exact-family strategy already matches", async () => {
