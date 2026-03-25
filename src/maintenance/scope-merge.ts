@@ -1,7 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
 import { bootstrapDatabase, openDatabase, withTransaction } from "../store/sqlite/db.js";
 import { ScopeRepository } from "../store/sqlite/repositories/scope-repo.js";
-import { ExperiencePackRepository } from "../store/sqlite/repositories/pack-repo.js";
 import { StatsRepository } from "../store/sqlite/repositories/stats-repo.js";
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import type { ScopeTaskStats } from "../types/domain.js";
@@ -17,7 +16,6 @@ export type ScopeMergeReport = {
     candidates: number;
   };
   merged: {
-    packActivations: number;
     taskStats: number;
   };
 };
@@ -35,33 +33,6 @@ const updateScopeId = (db: DatabaseSync, table: string, sourceScopeId: string, t
       changes: number;
     }
   ).changes;
-
-const mergePackActivations = (
-  db: DatabaseSync,
-  sourceScopeId: string,
-  targetScopeId: string
-): number => {
-  const repo = new ExperiencePackRepository(db);
-  const source = repo.listActivations(sourceScopeId);
-  const targetByPack = new Map(repo.listActivations(targetScopeId).map((activation) => [activation.pack_id, activation]));
-
-  for (const activation of source) {
-    const existing = targetByPack.get(activation.pack_id);
-    repo.upsertActivation({
-      scope_id: targetScopeId,
-      pack_id: activation.pack_id,
-      enabled: existing ? existing.enabled || activation.enabled : activation.enabled,
-      pinned_version: existing?.pinned_version ?? activation.pinned_version,
-      created_at:
-        existing && existing.created_at < activation.created_at ? existing.created_at : activation.created_at,
-      updated_at:
-        existing && existing.updated_at > activation.updated_at ? existing.updated_at : activation.updated_at
-    });
-  }
-
-  db.prepare("DELETE FROM experience_pack_activations WHERE scope_id = ?").run(sourceScopeId);
-  return source.length;
-};
 
 const mergeTaskStats = (db: DatabaseSync, sourceScopeId: string, targetScopeId: string): number => {
   const repo = new StatsRepository(db);
@@ -131,7 +102,6 @@ export const mergeScopes = (args: {
     };
 
     const merged = {
-      packActivations: mergePackActivations(db, sourceScopeId, targetScopeId),
       taskStats: mergeTaskStats(db, sourceScopeId, targetScopeId)
     };
 

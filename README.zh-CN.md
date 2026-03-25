@@ -77,16 +77,6 @@ ExperienceEngine 工作在 context 层，不会去修改宿主模型权重。
   - `ee inspect --last`
   - `ee helped`
   - `ee harmed`
-- 本机共享目录的 `Experience Pack` 工作流：
-  - `draft`
-  - `review`
-  - `publish`
-  - `rollback`
-- 面向宿主文件的编译与部署：
-  - `AGENTS.md`
-  - `CODEX.md`
-  - `CLAUDE.md`
-  - GitHub agent profile markdown
 
 如果你想看更细的 ExperienceNode 结构和治理字段，见：
 
@@ -226,4 +216,4 @@ ee install codex
 
 - [ExperienceEngine 用户手册](./docs/user-guide.md)
 
-用户手册里包含安装、宿主差异、首次验证、pack 工作流、compiler/deploy 命令、维护命令和故障排查说明。
+用户手册里包含安装、宿主差异、首次验证、维护命令和故障排查说明。

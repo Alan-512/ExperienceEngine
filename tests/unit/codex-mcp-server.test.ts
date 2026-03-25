@@ -10,11 +10,8 @@ import {
 import { loadConfig } from "../../src/config/load-config.js";
 import { ExperienceStateArtifactService } from "../../src/interaction/state-artifact-service.js";
 import { resolveScope } from "../../src/input/scope-resolver.js";
-import { ExperiencePackRegistry } from "../../src/packs/fs-registry.js";
-import { ExperiencePackIndexSync } from "../../src/packs/index-sync.js";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
-import { ExperiencePackRepository } from "../../src/store/sqlite/repositories/pack-repo.js";
 import { ScopeRepository } from "../../src/store/sqlite/repositories/scope-repo.js";
 import { clearEmbeddingProviderForTests, setEmbeddingProviderForTests } from "../../src/store/vector/embeddings.js";
 import { nowIso } from "../../src/utils/clock.js";
@@ -125,151 +122,6 @@ const seedStrategyNode = (
     created_at: timestamp,
     updated_at: timestamp
   });
-};
-
-const seedPack = (
-  homeDir: string,
-  db: ReturnType<typeof openDatabase>,
-  nodeRepo: NodeRepository,
-  cwd: string,
-  timestamp: string,
-  packId: string,
-  nodeId: string
-): void => {
-  seedStrategyNode(nodeRepo, cwd, timestamp, nodeId);
-  const registry = new ExperiencePackRegistry({
-    packsDir: join(homeDir, ".experienceengine", "packs")
-  });
-  const packRepo = new ExperiencePackRepository(db);
-  const indexSync = new ExperiencePackIndexSync(registry, packRepo);
-  const node = nodeRepo.getById(nodeId);
-
-  if (!node) {
-    throw new Error(`Missing seeded node ${nodeId}`);
-  }
-
-  registry.createDraft({
-    packId,
-    name: "Auth Recovery Pack",
-    description: "Recover the auth test flow",
-    owner: "tester",
-    scopeHints: [`scope:${resolveScope(cwd).scope_id}`],
-    taskFamilies: [node.task_type],
-    hostCompatibility: ["codex", "claude-code"],
-    nodes: [node]
-  });
-  registry.reviewPack(packId, {
-      description: "Reviewed auth recovery guidance",
-      evidenceSummary: "Recovered the auth test failure twice",
-      riskLevel: "medium"
-  });
-  registry.publishPack(packId);
-  indexSync.syncPack(packId);
-  packRepo.upsertActivation({
-    scope_id: resolveScope(cwd).scope_id,
-    pack_id: packId,
-    enabled: true,
-    pinned_version: "v1",
-    created_at: timestamp,
-    updated_at: timestamp
-  });
-};
-
-const seedReviewedPack = (
-  homeDir: string,
-  db: ReturnType<typeof openDatabase>,
-  nodeRepo: NodeRepository,
-  cwd: string,
-  timestamp: string,
-  packId: string,
-  nodeId: string
-): void => {
-  seedStrategyNode(nodeRepo, cwd, timestamp, nodeId);
-  const registry = new ExperiencePackRegistry({
-    packsDir: join(homeDir, ".experienceengine", "packs")
-  });
-  const packRepo = new ExperiencePackRepository(db);
-  const indexSync = new ExperiencePackIndexSync(registry, packRepo);
-  const node = nodeRepo.getById(nodeId);
-
-  if (!node) {
-    throw new Error(`Missing seeded node ${nodeId}`);
-  }
-
-  registry.createDraft({
-    packId,
-    name: "Reviewed Pack",
-    description: "Needs publish confirmation",
-    owner: "tester",
-    scopeHints: [`scope:${resolveScope(cwd).scope_id}`],
-    taskFamilies: [node.task_type],
-    hostCompatibility: ["codex"],
-    nodes: [node]
-  });
-  registry.reviewPack(packId, {
-    description: "Reviewed pack waiting for publish",
-    evidenceSummary: "Reviewed once",
-    riskLevel: "medium"
-  });
-  indexSync.syncPack(packId);
-};
-
-const seedRollbackablePack = (
-  homeDir: string,
-  db: ReturnType<typeof openDatabase>,
-  nodeRepo: NodeRepository,
-  cwd: string,
-  timestamp: string,
-  packId: string
-): void => {
-  seedStrategyNode(nodeRepo, cwd, timestamp, `${packId}_node_v1`);
-  seedStrategyNode(nodeRepo, cwd, timestamp, `${packId}_node_v2`);
-  const registry = new ExperiencePackRegistry({
-    packsDir: join(homeDir, ".experienceengine", "packs")
-  });
-  const packRepo = new ExperiencePackRepository(db);
-  const indexSync = new ExperiencePackIndexSync(registry, packRepo);
-  const nodeV1 = nodeRepo.getById(`${packId}_node_v1`);
-  const nodeV2 = nodeRepo.getById(`${packId}_node_v2`);
-
-  if (!nodeV1 || !nodeV2) {
-    throw new Error("Missing rollbackable seeded nodes");
-  }
-
-  registry.createDraft({
-    packId,
-    name: "Rollback Pack",
-    description: "Rollback pack",
-    owner: "tester",
-    scopeHints: [`scope:${resolveScope(cwd).scope_id}`],
-    taskFamilies: [nodeV1.task_type],
-    hostCompatibility: ["codex"],
-    nodes: [nodeV1]
-  });
-  registry.reviewPack(packId, {
-    description: "Rollback pack v1",
-    evidenceSummary: "First reviewed version",
-    riskLevel: "medium"
-  });
-  registry.publishPack(packId);
-
-  registry.createDraft({
-    packId,
-    name: "Rollback Pack",
-    description: "Rollback pack v2",
-    owner: "tester",
-    scopeHints: [`scope:${resolveScope(cwd).scope_id}`],
-    taskFamilies: [nodeV2.task_type],
-    hostCompatibility: ["codex"],
-    nodes: [nodeV2]
-  });
-  registry.reviewPack(packId, {
-    description: "Rollback pack v2",
-    evidenceSummary: "Second reviewed version",
-    riskLevel: "medium"
-  });
-  registry.publishPack(packId);
-  indexSync.syncPack(packId);
 };
 
 describe("Codex MCP behavior loop", () => {
@@ -623,10 +475,6 @@ describe("Codex MCP behavior loop", () => {
       benchmark: expect.objectContaining({
         verdict: expect.any(String)
       }),
-      packs: expect.objectContaining({
-        enabledCount: expect.any(Number)
-      }),
-      deployment: expect.any(Array),
       recommendedNextAction: expect.any(String)
     });
     expect(JSON.parse((nodePayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({
@@ -635,404 +483,6 @@ describe("Codex MCP behavior loop", () => {
       sourceKind: "system_derived",
       originRecordIds: ["input_origin"]
     });
-  });
-
-  it("serves pack views through the codex interaction surface and MCP resources", async () => {
-    const homeDir = makeTempDir();
-    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
-    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
-    const db = openDatabase(config);
-    bootstrapDatabase(db);
-    const nodeRepo = new NodeRepository(db);
-    seedPack(homeDir, db, nodeRepo, "/repo", nowIso(), "pack_auth_recovery", "node_pack_auth_recovery");
-
-    const surface = createCodexInteractionSurface({ homeDir, env });
-    const packs = await surface.listPacks();
-    const pack = await surface.inspectPack({ packId: "pack_auth_recovery" });
-
-    expect(packs).toEqual([
-      expect.objectContaining({
-        packId: "pack_auth_recovery",
-        status: "published",
-        currentVersion: "v1"
-      })
-    ]);
-    expect(pack).toMatchObject({
-      packId: "pack_auth_recovery",
-      status: "published",
-      currentVersion: "v1",
-      manifest: expect.objectContaining({
-        version: "v1",
-        statusSnapshot: "published"
-      }),
-      nodeIds: ["node_pack_auth_recovery"],
-      activations: [
-        expect.objectContaining({
-          enabled: true,
-          pinnedVersion: "v1"
-        })
-      ]
-    });
-
-    const server = createCodexMcpServer({ homeDir, env });
-    const packsResource = getRegisteredResource(server, "experienceengine://packs");
-    const packResource = getRegisteredResourceTemplate(server, "experienceengine_pack");
-
-    const packsPayload = await packsResource.readCallback(new URL("experienceengine://packs"), {});
-    const packPayload = await packResource.readCallback(
-      new URL("experienceengine://pack/pack_auth_recovery"),
-      { id: "pack_auth_recovery" },
-      {}
-    );
-
-    expect(JSON.parse((packsPayload as { contents: Array<{ text: string }> }).contents[0].text)).toEqual([
-      expect.objectContaining({
-        packId: "pack_auth_recovery",
-        status: "published"
-      })
-    ]);
-    expect(JSON.parse((packPayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({
-      packId: "pack_auth_recovery",
-      manifest: expect.objectContaining({
-        version: "v1"
-      }),
-      nodeIds: ["node_pack_auth_recovery"],
-      activations: [
-        expect.objectContaining({
-          enabled: true
-        })
-      ]
-    });
-  });
-
-  it("supports pack status, compile, and deploy preview through the codex interaction surface", async () => {
-    const homeDir = makeTempDir();
-    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
-    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
-    const db = openDatabase(config);
-    bootstrapDatabase(db);
-    const nodeRepo = new NodeRepository(db);
-    seedPack(homeDir, db, nodeRepo, "/repo", nowIso(), "pack_compile_flow", "node_pack_compile_flow");
-    const repoPath = join(homeDir, "target-repo");
-    mkdirSync(repoPath, { recursive: true });
-
-    const surface = createCodexInteractionSurface({ homeDir, env });
-    const initialStatus = await surface.inspectPackDeploymentStatus({
-      packId: "pack_compile_flow",
-      target: "codex",
-      repoPath
-    });
-    const compiled = await surface.compilePack({
-      packId: "pack_compile_flow",
-      target: "codex"
-    });
-    const preview = await surface.deployPackPreview({
-      packId: "pack_compile_flow",
-      target: "codex",
-      repoPath
-    });
-
-    expect(initialStatus).toMatchObject({
-      target: "codex",
-      deploymentStatus: "missing",
-      statusOnly: true
-    });
-    expect(compiled).toMatchObject({
-      packId: "pack_compile_flow",
-      version: "v1",
-      target: "codex"
-    });
-    expect(preview).toMatchObject({
-      target: "codex",
-      deploymentStatus: "missing",
-      dryRun: true,
-      statusOnly: false
-    });
-  });
-
-  it("registers pack management MCP tools for status, compile, and deploy preview", async () => {
-    const homeDir = makeTempDir();
-    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
-    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
-    const db = openDatabase(config);
-    bootstrapDatabase(db);
-    const nodeRepo = new NodeRepository(db);
-    seedPack(homeDir, db, nodeRepo, "/repo", nowIso(), "pack_codex_tools", "node_pack_codex_tools");
-    const repoPath = join(homeDir, "repo-under-test");
-    mkdirSync(repoPath, { recursive: true });
-
-    const server = createCodexMcpServer({ homeDir, env });
-    const statusTool = getRegisteredTool(server, "experienceengine_pack_status");
-    const compileTool = getRegisteredTool(server, "experienceengine_pack_compile");
-    const deployPreviewTool = getRegisteredTool(server, "experienceengine_pack_deploy_preview");
-
-    const statusResult = parseTextPayload<{ deploymentStatus: string; statusOnly: boolean }>(
-      (await statusTool.handler({
-        packId: "pack_codex_tools",
-        target: "codex",
-        repoPath
-      })) as {
-        content: Array<{ type: string; text?: string }>;
-      }
-    );
-    const compileResult = parseTextPayload<{ packId: string; version: string; target: string }>(
-      (await compileTool.handler({
-        packId: "pack_codex_tools",
-        target: "codex"
-      })) as {
-        content: Array<{ type: string; text?: string }>;
-      }
-    );
-    const deployPreviewResult = parseTextPayload<{ deploymentStatus: string; dryRun: boolean }>(
-      (await deployPreviewTool.handler({
-        packId: "pack_codex_tools",
-        target: "codex",
-        repoPath
-      })) as {
-        content: Array<{ type: string; text?: string }>;
-      }
-    );
-
-    expect(statusResult).toMatchObject({
-      deploymentStatus: "missing",
-      statusOnly: true
-    });
-    expect(compileResult).toMatchObject({
-      packId: "pack_codex_tools",
-      version: "v1",
-      target: "codex"
-    });
-    expect(deployPreviewResult).toMatchObject({
-      deploymentStatus: "missing",
-      dryRun: true
-    });
-  });
-
-  it("registers pack list and inspect MCP tools", async () => {
-    const homeDir = makeTempDir();
-    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
-    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
-    const db = openDatabase(config);
-    bootstrapDatabase(db);
-    const nodeRepo = new NodeRepository(db);
-    seedPack(homeDir, db, nodeRepo, "/repo", nowIso(), "pack_tool_views", "node_pack_tool_views");
-
-    const server = createCodexMcpServer({ homeDir, env });
-    const listTool = getRegisteredTool(server, "experienceengine_pack_list");
-    const inspectTool = getRegisteredTool(server, "experienceengine_pack_inspect");
-
-    const listResult = parseTextPayload<{ packs: Array<{ packId: string; status: string }> }>(
-      (await listTool.handler({})) as {
-        content: Array<{ type: string; text?: string }>;
-      }
-    );
-    const inspectResult = parseTextPayload<{ packId: string; nodeIds: string[] }>(
-      (await inspectTool.handler({ packId: "pack_tool_views" })) as {
-        content: Array<{ type: string; text?: string }>;
-      }
-    );
-
-    expect(listResult).toMatchObject({
-      packs: [
-        expect.objectContaining({
-          packId: "pack_tool_views",
-          status: "published"
-        })
-      ]
-    });
-    expect(inspectResult).toMatchObject({
-      packId: "pack_tool_views",
-      nodeIds: ["node_pack_tool_views"]
-    });
-  });
-
-  it("supports enabling and disabling a pack for the current scope through the codex interaction surface and MCP tools", async () => {
-    const homeDir = makeTempDir();
-    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
-    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
-    const db = openDatabase(config);
-    bootstrapDatabase(db);
-    const nodeRepo = new NodeRepository(db);
-    seedPack(homeDir, db, nodeRepo, "/repo", nowIso(), "pack_toggle_scope", "node_pack_toggle_scope");
-
-    const surface = createCodexInteractionSurface({ homeDir, env });
-    const enabled = await surface.enablePack({
-      packId: "pack_toggle_scope",
-      cwd: "/repo"
-    });
-    const disabled = await surface.disablePack({
-      packId: "pack_toggle_scope",
-      cwd: "/repo"
-    });
-
-    expect(enabled).toMatchObject({
-      scopeId: resolveScope("/repo").scope_id,
-      packId: "pack_toggle_scope",
-      enabled: true,
-      pinnedVersion: "v1"
-    });
-    expect(disabled).toMatchObject({
-      scopeId: resolveScope("/repo").scope_id,
-      packId: "pack_toggle_scope",
-      enabled: false,
-      pinnedVersion: "v1"
-    });
-
-    const server = createCodexMcpServer({ homeDir, env });
-    const enableTool = getRegisteredTool(server, "experienceengine_pack_enable");
-    const disableTool = getRegisteredTool(server, "experienceengine_pack_disable");
-
-    const enabledViaTool = parseTextPayload<{ enabled: boolean; packId: string }>(
-      (await enableTool.handler({ packId: "pack_toggle_scope", cwd: "/repo" })) as {
-        content: Array<{ type: string; text?: string }>;
-      }
-    );
-    const disabledViaTool = parseTextPayload<{ enabled: boolean; packId: string }>(
-      (await disableTool.handler({ packId: "pack_toggle_scope", cwd: "/repo" })) as {
-        content: Array<{ type: string; text?: string }>;
-      }
-    );
-
-    expect(enabledViaTool).toMatchObject({
-      packId: "pack_toggle_scope",
-      enabled: true
-    });
-    expect(disabledViaTool).toMatchObject({
-      packId: "pack_toggle_scope",
-      enabled: false
-    });
-  });
-
-  it("registers plan-and-confirm MCP tools for pack publish and rollback", async () => {
-    const homeDir = makeTempDir();
-    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
-    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
-    const db = openDatabase(config);
-    bootstrapDatabase(db);
-    const nodeRepo = new NodeRepository(db);
-    seedReviewedPack(homeDir, db, nodeRepo, "/repo", nowIso(), "pack_publish_plan", "node_publish_plan");
-    seedRollbackablePack(homeDir, db, nodeRepo, "/repo", nowIso(), "pack_rollback_plan");
-
-    const server = createCodexMcpServer({ homeDir, env });
-    const planPublishTool = getRegisteredTool(server, "experienceengine_plan_pack_publish");
-    const planRollbackTool = getRegisteredTool(server, "experienceengine_plan_pack_rollback");
-    const executeTool = getRegisteredTool(server, "experienceengine_execute_planned_pack_operation");
-    const inspectSurface = createCodexInteractionSurface({ homeDir, env });
-
-    const publishPlan = parseTextPayload<{ planId: string; confirmationToken: string; commandHint: string }>(
-      (await planPublishTool.handler({ packId: "pack_publish_plan" })) as {
-        content: Array<{ type: string; text?: string }>;
-      }
-    );
-    const publishExecution = parseTextPayload<{ status: string; result: { currentVersion: string; status: string } }>(
-      (await executeTool.handler({
-        planId: publishPlan.planId,
-        confirmationToken: publishPlan.confirmationToken
-      })) as {
-        content: Array<{ type: string; text?: string }>;
-      }
-    );
-
-    expect(publishPlan.commandHint).toContain("pack publish pack_publish_plan");
-    expect(publishExecution).toMatchObject({
-      status: "executed",
-      result: {
-        currentVersion: "v1",
-        status: "published"
-      }
-    });
-
-    const rollbackPlan = parseTextPayload<{ planId: string; confirmationToken: string; commandHint: string }>(
-      (await planRollbackTool.handler({ packId: "pack_rollback_plan", version: "v1" })) as {
-        content: Array<{ type: string; text?: string }>;
-      }
-    );
-    const rollbackExecution = parseTextPayload<{ status: string; result: { currentVersion: string; status: string } }>(
-      (await executeTool.handler({
-        planId: rollbackPlan.planId,
-        confirmationToken: rollbackPlan.confirmationToken
-      })) as {
-        content: Array<{ type: string; text?: string }>;
-      }
-    );
-
-    expect(rollbackPlan.commandHint).toContain("pack rollback pack_rollback_plan v1");
-    expect(rollbackExecution).toMatchObject({
-      status: "executed",
-      result: {
-        currentVersion: "v1",
-        status: "rolled_back"
-      }
-    });
-
-    const publishedPack = await inspectSurface.inspectPack({ packId: "pack_publish_plan" });
-    const rolledBackPack = await inspectSurface.inspectPack({ packId: "pack_rollback_plan" });
-    expect(publishedPack?.status).toBe("published");
-    expect(rolledBackPack).toMatchObject({
-      status: "rolled_back",
-      currentVersion: "v1"
-    });
-  });
-
-  it("registers plan-and-confirm MCP tools for pack deploy", async () => {
-    const homeDir = makeTempDir();
-    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
-    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
-    const db = openDatabase(config);
-    bootstrapDatabase(db);
-    const nodeRepo = new NodeRepository(db);
-    seedPack(homeDir, db, nodeRepo, "/repo", nowIso(), "pack_deploy_plan", "node_deploy_plan");
-
-    const server = createCodexMcpServer({ homeDir, env });
-    const planDeployTool = getRegisteredTool(server, "experienceengine_plan_pack_deploy");
-    const executeTool = getRegisteredTool(server, "experienceengine_execute_planned_pack_operation");
-    const repoPath = join(homeDir, "target-repo");
-
-    const deployPlan = parseTextPayload<{
-      planId: string;
-      confirmationToken: string;
-      commandHint: string;
-      summary: string;
-    }>(
-      (await planDeployTool.handler({
-        packId: "pack_deploy_plan",
-        target: "codex",
-        repoPath
-      })) as {
-        content: Array<{ type: string; text?: string }>;
-      }
-    );
-
-    expect(deployPlan.commandHint).toContain("pack deploy pack_deploy_plan");
-    expect(deployPlan.summary).toContain("Deploy Experience Pack");
-
-    const deployExecution = parseTextPayload<{
-      status: string;
-      operation: string;
-      result: {
-        target: string;
-        destinationPath: string;
-        deploymentStatus: string;
-      };
-    }>(
-      (await executeTool.handler({
-        planId: deployPlan.planId,
-        confirmationToken: deployPlan.confirmationToken
-      })) as {
-        content: Array<{ type: string; text?: string }>;
-      }
-    );
-
-    expect(deployExecution).toMatchObject({
-      status: "executed",
-      operation: "deploy",
-      result: {
-        target: "codex",
-        destinationPath: join(repoPath, "CODEX.md"),
-        deploymentStatus: "missing"
-      }
-    });
-    expect(existsSync(join(repoPath, "CODEX.md"))).toBe(true);
   });
 
   it("registers low-risk MCP tools for feedback and scope toggles", async () => {
@@ -1141,11 +591,6 @@ describe("Codex MCP behavior loop", () => {
     const recentPrompt = getRegisteredPrompt(server, "experienceengine_review_recent_injected");
     const pausePrompt = getRegisteredPrompt(server, "experienceengine_pause_current_project");
     const harmfulPrompt = getRegisteredPrompt(server, "experienceengine_mark_last_experience_harmful");
-    const reviewPackStatusPrompt = getRegisteredPrompt(server, "experienceengine_review_pack_status");
-    const preparePackPublishPrompt = getRegisteredPrompt(server, "experienceengine_prepare_pack_publish");
-    const preparePackRollbackPrompt = getRegisteredPrompt(server, "experienceengine_prepare_pack_rollback");
-    const preparePackDeployPrompt = getRegisteredPrompt(server, "experienceengine_prepare_pack_deploy");
-
     const reviewCapabilities = (await reviewCapabilitiesPrompt.callback({})) as {
       messages: Array<{ role: string; content: { type: string; text?: string; uri?: string } }>;
     };
@@ -1164,31 +609,6 @@ describe("Codex MCP behavior loop", () => {
     const harmful = (await harmfulPrompt.callback({})) as {
       messages: Array<{ role: string; content: { type: string; text?: string } }>;
     };
-    const reviewPackStatus = (await reviewPackStatusPrompt.callback({
-      packId: "compiler-blackbox-pack",
-      target: "codex",
-      repoPath: "/repo"
-    })) as {
-      messages: Array<{ role: string; content: { type: string; text?: string } }>;
-    };
-    const preparePackPublish = (await preparePackPublishPrompt.callback({
-      packId: "compiler-blackbox-pack"
-    })) as {
-      messages: Array<{ role: string; content: { type: string; text?: string } }>;
-    };
-    const preparePackRollback = (await preparePackRollbackPrompt.callback({
-      packId: "compiler-blackbox-pack",
-      version: "v1"
-    })) as {
-      messages: Array<{ role: string; content: { type: string; text?: string } }>;
-    };
-    const preparePackDeploy = (await preparePackDeployPrompt.callback({
-      packId: "compiler-blackbox-pack",
-      target: "codex",
-      repoPath: "/repo"
-    })) as {
-      messages: Array<{ role: string; content: { type: string; text?: string } }>;
-    };
     expect(reviewCapabilities.messages[0].content.text).toContain("experienceengine://capabilities");
     expect(reviewCapabilities.messages[0].content.text).toContain("direct low-risk tools");
     expect(reviewRepoStatus.messages[0].content.text).toContain("experienceengine://repo-summary");
@@ -1205,14 +625,6 @@ describe("Codex MCP behavior loop", () => {
     expect(pause.messages[0].content.text).toContain("experienceengine_disable_scope");
     expect(pause.messages[0].content.text).toContain("/repo");
     expect(harmful.messages[0].content.text).toContain("feedback=harmed");
-    expect(reviewPackStatus.messages[0].content.text).toContain("experienceengine_pack_status");
-    expect(reviewPackStatus.messages[0].content.text).toContain("experienceengine_pack_inspect");
-    expect(preparePackPublish.messages[0].content.text).toContain("experienceengine_plan_pack_publish");
-    expect(preparePackPublish.messages[0].content.text).toContain("experienceengine_execute_planned_pack_operation");
-    expect(preparePackRollback.messages[0].content.text).toContain("experienceengine_plan_pack_rollback");
-    expect(preparePackRollback.messages[0].content.text).toContain("v1");
-    expect(preparePackDeploy.messages[0].content.text).toContain("experienceengine_plan_pack_deploy");
-    expect(preparePackDeploy.messages[0].content.text).toContain("experienceengine_execute_planned_pack_operation");
   });
 
   it("registers operational MCP resources and read-only tools", async () => {
@@ -1250,8 +662,6 @@ describe("Codex MCP behavior loop", () => {
     );
     const capabilitiesToolPayload = parseTextPayload<{
       model: string;
-      compiler: { targets: string[] };
-      packs: { directTools: string[] };
     }>((await capabilitiesTool.handler({})) as {
       content: Array<{ type: string; text?: string }>;
     });
@@ -1267,16 +677,10 @@ describe("Codex MCP behavior loop", () => {
     );
 
     expect(JSON.parse((capabilitiesPayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({
-      model: "agent-first",
-      compiler: {
-        targets: ["agents", "codex", "github", "claude"]
-      }
+      model: "agent-first"
     });
     expect(capabilitiesToolPayload).toMatchObject({
-      model: "agent-first",
-      packs: {
-        directTools: expect.arrayContaining(["experienceengine_pack_list", "experienceengine_pack_status"])
-      }
+      model: "agent-first"
     });
     expect(JSON.parse((doctorPayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({
       adapter: "codex"
@@ -1305,7 +709,7 @@ describe("Codex MCP behavior loop", () => {
     const db = openDatabase(config);
     bootstrapDatabase(db);
     const nodeRepo = new NodeRepository(db);
-    seedPack(homeDir, db, nodeRepo, process.cwd(), nowIso(), "pack_repo_summary_tool", "node_repo_summary_tool");
+    seedStrategyNode(nodeRepo, process.cwd(), nowIso(), "node_repo_summary_tool");
 
     const server = createCodexMcpServer({ homeDir, env });
     const repoSummaryTool = getRegisteredTool(server, "experienceengine_get_repo_summary");
@@ -1313,8 +717,6 @@ describe("Codex MCP behavior loop", () => {
     const result = parseTextPayload<{
       scope: { scopeId: string };
       benchmark: { verdict: string };
-      packs: { enabledCount: number };
-      deployment: Array<{ target: string; status: string }>;
       recommendedNextAction: string;
     }>(
       (await repoSummaryTool.handler({ cwd: process.cwd() })) as {
@@ -1329,19 +731,8 @@ describe("Codex MCP behavior loop", () => {
       benchmark: {
         verdict: expect.any(String)
       },
-      packs: {
-        enabledCount: 1
-      },
       recommendedNextAction: expect.any(String)
     });
-    expect(result.deployment).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          target: "codex",
-          status: expect.any(String)
-        })
-      ])
-    );
   });
 
   it("registers MCP tools for node lifecycle control", async () => {

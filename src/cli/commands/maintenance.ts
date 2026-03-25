@@ -143,7 +143,7 @@ export const runMaintenanceCommand = async (
       `[ExperienceEngine] Moved: records=${report.moved.inputRecords} taskRuns=${report.moved.taskRuns} injections=${report.moved.injections} nodes=${report.moved.nodes} candidates=${report.moved.candidates}`
     );
     console.log(
-      `[ExperienceEngine] Merged aggregates: packActivations=${report.merged.packActivations} taskStats=${report.merged.taskStats}`
+      `[ExperienceEngine] Merged aggregates: taskStats=${report.merged.taskStats}`
     );
     return;
   }

@@ -26,7 +26,7 @@ At the start of this pass:
 - ExperienceEngine was already wired into `Codex`, `Claude Code`, and `OpenClaw`
 - the core learning loop was functioning, but product work was still focused on making the outputs more reusable:
   - Experience Pack
-  - compiler targets
+  - runtime delivery path
   - deploy/status visibility
 - repeated validation tasks in the repository created a realistic stream of similar build/test work
 
@@ -135,8 +135,7 @@ In practice, the useful pattern was not “more memory.” It was:
 The main friction observed in this case study was not runtime correctness. It was product-shape friction:
 
 - most durable evidence still lives in generated artifacts and CLI output rather than a dedicated review UI
-- Pack publication and compiler/deploy flows now exist, but they were not yet the main mechanism driving the latest Codex scope
-- the current scope had no published Pack enabled, so this pass mostly validated runtime learning rather than packaged reuse
+- the current scope relied on runtime learning and intervention rather than any separate static asset flow
 
 This means the runtime loop is ahead of the asset adoption loop.
 

@@ -1,14 +1,4 @@
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
-import { compilePack } from "../compiler/compiler.js";
-import { deployCompiledPack, type DeployCompiledPackResult } from "../compiler/deployer.js";
-import type { CompilerTarget, CompileResult } from "../compiler/types.js";
-import { ExperiencePackRegistry } from "../packs/fs-registry.js";
-import type {
-  ExperiencePackCompiledArtifact,
-  ExperiencePackCompileStatus,
-  ExperiencePackSummary,
-  ExperiencePackVersionManifest
-} from "../packs/types.js";
 import { buildInjectionScorecard } from "../controller/injection-scorecard.js";
 import { buildBenchmarkSummary, type BenchmarkSummary } from "../evaluation/benchmark-summary.js";
 import { resolveScope } from "../input/scope-resolver.js";
@@ -22,7 +12,6 @@ import { OutcomeRecordRepository } from "../store/sqlite/repositories/outcome-re
 import { ReviewEventRepository } from "../store/sqlite/repositories/review-event-repo.js";
 import { ScopeRepository } from "../store/sqlite/repositories/scope-repo.js";
 import { TaskRunRepository } from "../store/sqlite/repositories/task-run-repo.js";
-import { ExperiencePackRepository } from "../store/sqlite/repositories/pack-repo.js";
 import type {
   CandidateLifecycleState,
   DistillationSource,
@@ -42,8 +31,7 @@ import { nowIso } from "../utils/clock.js";
 import { createId } from "../utils/ids.js";
 import {
   buildRepoSummary,
-  type ExperienceRepoSummary,
-  type ExperienceRepoDeploymentStatus
+  type ExperienceRepoSummary
 } from "./repo-summary.js";
 
 export type ExperienceNodeSummary = {
@@ -98,8 +86,6 @@ export type ExperienceLastInspection = {
   evidence: string[];
   scorecard?: InjectionScorecard;
   timeline: ExperienceTimelineEntry[];
-  activePacks: ExperienceScopePackActivationView[];
-  matchedPacks: ExperienceScopePackActivationView[];
   summary: string;
   createdAt: string;
 };
@@ -168,12 +154,6 @@ export type ExperienceLearningSummary = {
     taskRuns: number;
     outcomes: number;
     reviews: number;
-  };
-  compiler: {
-    publishedPacks: number;
-    compiledTargets: number;
-    stalePublishedPacks: number;
-    latestCompiledArtifact?: (ExperiencePackCompiledArtifact & { packId: string }) | undefined;
   };
   latestRecordCreatedAt?: string;
 };
@@ -250,55 +230,6 @@ const applyNodeFeedback = (node: ExperienceNode, feedback: FeedbackValue): Exper
     state: node.state === "retired" ? "retired" : transitionState(next)
   };
 };
-
-export type ExperiencePackSummaryView = ExperiencePackSummary;
-
-export type ExperiencePackDetailView = ExperiencePackSummary & {
-  manifest: ExperiencePackVersionManifest;
-  nodeIds: string[];
-  compiledArtifacts: ExperiencePackCompiledArtifact[];
-  compileStatus: ExperiencePackCompileStatus;
-  activations: Array<{
-    scopeId: string;
-    enabled: boolean;
-    pinnedVersion?: string;
-    updatedAt: string;
-  }>;
-};
-
-export type ExperienceScopePackActivationView = {
-  scopeId: string;
-  packId: string;
-  status: ExperiencePackSummary["status"];
-  currentVersion: string;
-  pinnedVersion?: string;
-  enabled: boolean;
-  updatedAt: string;
-};
-
-export type ExperienceScopePackStatusView = {
-  scopeId: string;
-  enabledCount: number;
-  activations: ExperienceScopePackActivationView[];
-  compiler: {
-    publishedPacks: number;
-    compiledTargets: number;
-    stalePublishedPacks: number;
-    latestCompiledArtifact?: (ExperiencePackCompiledArtifact & { packId: string }) | undefined;
-  };
-};
-
-export type ExperiencePackCompileView = CompileResult;
-export type ExperiencePackDeploymentStatusView = DeployCompiledPackResult;
-export type ExperiencePackActivationResult = {
-  scopeId: string;
-  packId: string;
-  enabled: boolean;
-  pinnedVersion?: string;
-  updatedAt: string;
-};
-
-const REPO_SUMMARY_TARGETS: CompilerTarget[] = ["codex", "agents", "claude", "github"];
 
 const summarizeAutomaticFeedback = (events: ReviewEvent[]): "helped" | "harmed" | "none" => {
   const automatic = events.filter((event) => event.source === "automatic");
@@ -413,56 +344,6 @@ const buildLatestTimeline = (input: {
   return entries.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
 };
 
-const toScopePackActivation = (
-  pack: ReturnType<ExperiencePackRepository["getPack"]>,
-  activation: ReturnType<ExperiencePackRepository["listActivations"]>[number]
-): ExperienceScopePackActivationView | undefined => {
-  if (!pack) {
-    return undefined;
-  }
-
-  return {
-    scopeId: activation.scope_id,
-    packId: activation.pack_id,
-    status: pack.status,
-    currentVersion: pack.current_version,
-    pinnedVersion: activation.pinned_version,
-    enabled: activation.enabled,
-    updatedAt: activation.updated_at
-  };
-};
-
-const toCompiledArtifactWithPack = (packId: string, artifact: ExperiencePackCompiledArtifact) => ({
-  ...artifact,
-  packId
-});
-
-const summarizePackCompiler = (
-  registry: ExperiencePackRegistry,
-  packIds: string[],
-  versionByPackId: Map<string, string>
-): {
-  publishedPacks: number;
-  compiledTargets: number;
-  stalePublishedPacks: number;
-  latestCompiledArtifact?: (ExperiencePackCompiledArtifact & { packId: string }) | undefined;
-} => {
-  const compiledArtifacts = packIds.flatMap((packId) =>
-    registry.listCompiledArtifacts(packId).map((artifact) => toCompiledArtifactWithPack(packId, artifact))
-  );
-  const stalePublishedPacks = packIds.filter((packId) => {
-    const currentVersion = versionByPackId.get(packId);
-    return currentVersion ? registry.getCompileStatus(packId, currentVersion).stale : false;
-  }).length;
-
-  return {
-    publishedPacks: packIds.length,
-    compiledTargets: compiledArtifacts.length,
-    stalePublishedPacks,
-    latestCompiledArtifact: compiledArtifacts[0]
-  };
-};
-
 export class ExperienceInteractionService {
   private readonly inputRepo;
   private readonly injectionRepo;
@@ -473,11 +354,8 @@ export class ExperienceInteractionService {
   private readonly outcomeRepo;
   private readonly reviewEventRepo;
   private readonly scopeRepo;
-  private readonly packRepo;
-  private readonly packRegistry;
-  private readonly packsDir: string;
 
-  constructor(config: ExperienceEngineConfig, options: { packsDir?: string } = {}) {
+  constructor(config: ExperienceEngineConfig) {
     const db = openDatabase(config);
     bootstrapDatabase(db);
     this.inputRepo = new InputRecordRepository(db);
@@ -489,11 +367,6 @@ export class ExperienceInteractionService {
     this.outcomeRepo = new OutcomeRecordRepository(db);
     this.reviewEventRepo = new ReviewEventRepository(db);
     this.scopeRepo = new ScopeRepository(db);
-    this.packRepo = new ExperiencePackRepository(db);
-    this.packsDir = options.packsDir ?? `${config.dataDir}/packs`;
-    this.packRegistry = new ExperiencePackRegistry({
-      packsDir: this.packsDir
-    });
   }
 
   private inspectRecord(record: ExperienceInputRecord | undefined): ExperienceLastInspection | undefined {
@@ -541,16 +414,6 @@ export class ExperienceInteractionService {
           : "inject";
     const outcomeRecord = taskRun?.id ? this.outcomeRepo.listByTaskRunId(taskRun.id)[0] : undefined;
     const latestAutomaticFeedback = reviewEvents.find((event) => event.source === "automatic");
-    const scopePackStatus = this.inspectScopePackStatusByScopeId(record.scope_id);
-    const matchedPackIds = new Set<string>();
-    for (const activation of scopePackStatus.activations.filter((entry) => entry.enabled)) {
-      const version = activation.pinnedVersion ?? activation.currentVersion;
-      for (const membership of this.packRepo.listMemberships(activation.packId, version)) {
-        if (selectedNodeIds.includes(membership.node_id)) {
-          matchedPackIds.add(activation.packId);
-        }
-      }
-    }
     const autoFeedbackReason = inferAutoFeedbackReason({
       explicitReason: injectionEvent?.attribution_reason,
       autoFeedback,
@@ -583,8 +446,6 @@ export class ExperienceInteractionService {
         autoFeedback,
         autoFeedbackCreatedAt: latestAutomaticFeedback?.created_at
       }),
-      activePacks: scopePackStatus.activations.filter((activation) => activation.enabled),
-      matchedPacks: scopePackStatus.activations.filter((activation) => matchedPackIds.has(activation.packId)),
       summary: record.task_summary,
       createdAt: record.created_at
     };
@@ -616,188 +477,6 @@ export class ExperienceInteractionService {
   inspectNode(nodeId: string): ExperienceNodeDetail | undefined {
     const node = this.nodeRepo.getById(nodeId);
     return node ? toNodeDetail(node) : undefined;
-  }
-
-  listPacks(): ExperiencePackSummaryView[] {
-    return this.packRepo.listPacks().map((pack) => ({
-      packId: pack.pack_id,
-      name: pack.name,
-      description: pack.description,
-      owner: pack.owner,
-      status: pack.status,
-      currentVersion: pack.current_version,
-      createdAt: pack.created_at,
-      updatedAt: pack.updated_at,
-      publishedAt: pack.published_at,
-      rolledBackAt: pack.rolled_back_at,
-      scopeHints: pack.scope_hints,
-      taskFamilies: pack.task_families,
-      hostCompatibility: pack.host_compatibility
-    }));
-  }
-
-  inspectPack(packId: string): ExperiencePackDetailView | undefined {
-    const pack = this.packRepo.getPack(packId);
-    if (!pack) {
-      return undefined;
-    }
-
-    const manifest = this.packRegistry.readVersionManifest(packId, pack.current_version);
-    const nodes = this.packRegistry.readVersionNodes(packId, pack.current_version);
-
-    return {
-      packId: pack.pack_id,
-      name: pack.name,
-      description: pack.description,
-      owner: pack.owner,
-      status: pack.status,
-      currentVersion: pack.current_version,
-      createdAt: pack.created_at,
-      updatedAt: pack.updated_at,
-      publishedAt: pack.published_at,
-      rolledBackAt: pack.rolled_back_at,
-      scopeHints: pack.scope_hints,
-      taskFamilies: pack.task_families,
-      hostCompatibility: pack.host_compatibility,
-      manifest,
-      nodeIds: nodes.map((node) => node.id),
-      compiledArtifacts: this.packRegistry.listCompiledArtifacts(packId),
-      compileStatus: this.packRegistry.getCompileStatus(packId, pack.current_version),
-      activations: this.packRepo.listActivationsByPack(packId).map((activation) => ({
-        scopeId: activation.scope_id,
-        enabled: activation.enabled,
-        pinnedVersion: activation.pinned_version,
-        updatedAt: activation.updated_at
-      }))
-    };
-  }
-
-  enablePack(args: { packId: string; cwd?: string }): ExperiencePackActivationResult {
-    const scopeId = resolveScope(args.cwd).scope_id;
-    const pack = this.packRepo.getPack(args.packId);
-    if (!pack) {
-      throw new Error(`Unknown experience pack: ${args.packId}`);
-    }
-
-    const existing = this.packRepo.listActivations(scopeId).find((activation) => activation.pack_id === args.packId);
-    const updatedAt = nowIso();
-    this.packRepo.upsertActivation({
-      scope_id: scopeId,
-      pack_id: args.packId,
-      enabled: true,
-      pinned_version: pack.current_version,
-      created_at: existing?.created_at ?? updatedAt,
-      updated_at: updatedAt
-    });
-
-    return {
-      scopeId,
-      packId: args.packId,
-      enabled: true,
-      pinnedVersion: pack.current_version,
-      updatedAt
-    };
-  }
-
-  disablePack(args: { packId: string; cwd?: string }): ExperiencePackActivationResult {
-    const scopeId = resolveScope(args.cwd).scope_id;
-    const existing = this.packRepo.listActivations(scopeId).find((activation) => activation.pack_id === args.packId);
-    const updatedAt = nowIso();
-    this.packRepo.upsertActivation({
-      scope_id: scopeId,
-      pack_id: args.packId,
-      enabled: false,
-      pinned_version: existing?.pinned_version,
-      created_at: existing?.created_at ?? updatedAt,
-      updated_at: updatedAt
-    });
-
-    return {
-      scopeId,
-      packId: args.packId,
-      enabled: false,
-      pinnedVersion: existing?.pinned_version,
-      updatedAt
-    };
-  }
-
-  compilePack(args: {
-    packId: string;
-    version?: string;
-    target: CompilerTarget;
-  }): ExperiencePackCompileView {
-    return compilePack({
-      packsDir: this.packsDir,
-      packId: args.packId,
-      version: args.version,
-      target: args.target
-    });
-  }
-
-  inspectPackDeploymentStatus(args: {
-    packId: string;
-    version?: string;
-    target: CompilerTarget;
-    repoPath: string;
-  }): ExperiencePackDeploymentStatusView {
-    return deployCompiledPack({
-      packsDir: this.packsDir,
-      packId: args.packId,
-      version: args.version,
-      target: args.target,
-      repoPath: args.repoPath,
-      statusOnly: true
-    });
-  }
-
-  deployPackPreview(args: {
-    packId: string;
-    version?: string;
-    target: CompilerTarget;
-    repoPath: string;
-  }): ExperiencePackDeploymentStatusView {
-    return deployCompiledPack({
-      packsDir: this.packsDir,
-      packId: args.packId,
-      version: args.version,
-      target: args.target,
-      repoPath: args.repoPath,
-      dryRun: true
-    });
-  }
-
-  inspectScopePackStatus(cwd: string = process.cwd()): ExperienceScopePackStatusView {
-    return this.inspectScopePackStatusByScopeId(resolveScope(cwd).scope_id);
-  }
-
-  private inspectScopePackStatusByScopeId(scopeId: string): ExperienceScopePackStatusView {
-    const activations = this.packRepo
-      .listActivations(scopeId)
-      .map((activation) => toScopePackActivation(this.packRepo.getPack(activation.pack_id), activation))
-      .filter((activation): activation is ExperienceScopePackActivationView => Boolean(activation));
-    const publishedPackIds = Array.from(
-      new Set(
-        activations
-          .filter((activation) => activation.status === "published" || activation.status === "rolled_back")
-          .map((activation) => activation.packId)
-      )
-    );
-    const compiler = summarizePackCompiler(
-      this.packRegistry,
-      publishedPackIds,
-      new Map(
-        activations
-          .filter((activation) => activation.status === "published" || activation.status === "rolled_back")
-          .map((activation) => [activation.packId, activation.currentVersion])
-      )
-    );
-
-    return {
-      scopeId,
-      enabledCount: activations.filter((activation) => activation.enabled).length,
-      activations,
-      compiler
-    };
   }
 
   listNodesByState(state: ExperienceState): ExperienceNodeSummary[] {
@@ -833,15 +512,6 @@ export class ExperienceInteractionService {
       : candidateStates.flatMap((state) => this.candidateRepo.listByLifecycleState(state));
     const candidateIds = new Set(candidates.map((candidate) => candidate.id));
     const jobs = jobStates.flatMap((state) => this.jobRepo.listByStatus(state)).filter((job) => candidateIds.has(job.candidate_id));
-    const publishedPacks = this.packRepo
-      .listPacks()
-      .filter((pack) => pack.status === "published" || pack.status === "rolled_back");
-    const compiler = summarizePackCompiler(
-      this.packRegistry,
-      publishedPacks.map((pack) => pack.pack_id),
-      new Map(publishedPacks.map((pack) => [pack.pack_id, pack.current_version]))
-    );
-
     const effectiveness = {
       decisions: scopeId ? this.injectionRepo.countByScope(scopeId) : this.injectionRepo.count(),
       live: scopeId ? this.injectionRepo.countByScopeAndDeliveryMode(scopeId, "live") : this.injectionRepo.countByDeliveryMode("live"),
@@ -887,7 +557,6 @@ export class ExperienceInteractionService {
         outcomes: scopeId ? this.outcomeRepo.countByScope(scopeId) : this.outcomeRepo.count(),
         reviews: scopeId ? this.reviewEventRepo.countByNodeScope(scopeId) : this.reviewEventRepo.count()
       },
-      compiler,
       latestRecordCreatedAt: latestRecord?.created_at
     };
   }
@@ -897,11 +566,6 @@ export class ExperienceInteractionService {
     const latestRecord = this.inputRepo.getLatestByScope(scope.scope_id);
     const latest = latestRecord ? this.inspectRecord(latestRecord) : undefined;
     const learning = this.buildLearningSummary(scope.scope_id);
-    const scopePackStatus = this.inspectScopePackStatusByScopeId(scope.scope_id);
-    const activePacks = scopePackStatus.activations.filter((activation) => activation.enabled);
-    const matchedPackIds = new Set(latest?.matchedPacks.map((pack) => pack.packId) ?? []);
-    const matchedPacks = scopePackStatus.activations.filter((activation) => matchedPackIds.has(activation.packId));
-    const deployments = this.inspectRepoDeploymentStatuses(scopePackStatus.activations, cwd);
 
     return buildRepoSummary({
       scope: {
@@ -910,10 +574,7 @@ export class ExperienceInteractionService {
         rootPath: scope.root_path
       },
       latest: latest && latest.scopeId === scope.scope_id ? latest : undefined,
-      learning,
-      activePacks,
-      matchedPacks,
-      deployments
+      learning
     });
   }
 
@@ -1053,43 +714,5 @@ export class ExperienceInteractionService {
       nodeId,
       state: updated.state
     };
-  }
-
-  private inspectRepoDeploymentStatuses(
-    activations: ExperienceScopePackActivationView[],
-    repoPath: string
-  ): ExperienceRepoDeploymentStatus[] {
-    const published = activations.find(
-      (activation) =>
-        activation.enabled && (activation.status === "published" || activation.status === "rolled_back")
-    );
-
-    if (!published) {
-      return REPO_SUMMARY_TARGETS.map((target) => ({
-        target,
-        status: "missing"
-      }));
-    }
-
-    return REPO_SUMMARY_TARGETS.map((target) => {
-      try {
-        const result = this.inspectPackDeploymentStatus({
-          packId: published.packId,
-          version: published.pinnedVersion ?? published.currentVersion,
-          target,
-          repoPath
-        });
-        return {
-          target,
-          status: result.deploymentStatus,
-          destination: result.destinationPath
-        };
-      } catch {
-        return {
-          target,
-          status: "missing"
-        };
-      }
-    });
   }
 }

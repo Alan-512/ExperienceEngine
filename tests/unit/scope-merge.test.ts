@@ -10,7 +10,6 @@ import { TaskRunRepository } from "../../src/store/sqlite/repositories/task-run-
 import { InjectionRepository } from "../../src/store/sqlite/repositories/injection-repo.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
 import { CandidateRepository } from "../../src/store/sqlite/repositories/candidate-repo.js";
-import { ExperiencePackRepository } from "../../src/store/sqlite/repositories/pack-repo.js";
 import { StatsRepository } from "../../src/store/sqlite/repositories/stats-repo.js";
 import { mergeScopes } from "../../src/maintenance/scope-merge.js";
 import type { ExperienceCandidate, ExperienceNode } from "../../src/types/domain.js";
@@ -78,7 +77,6 @@ describe("mergeScopes", () => {
     const injectionRepo = new InjectionRepository(db);
     const nodeRepo = new NodeRepository(db);
     const candidateRepo = new CandidateRepository(db);
-    const packRepo = new ExperiencePackRepository(db);
     const statsRepo = new StatsRepository(db);
 
     scopeRepo.upsert({
@@ -142,22 +140,6 @@ describe("mergeScopes", () => {
     nodeRepo.upsert(makeNode("scope_source", "node_source"));
     candidateRepo.upsert(makeCandidate("scope_source", "candidate_source", "input_source"));
 
-    packRepo.upsertActivation({
-      scope_id: "scope_source",
-      pack_id: "pack_auth",
-      enabled: true,
-      pinned_version: "v1",
-      created_at: "2026-03-20T00:00:00.000Z",
-      updated_at: "2026-03-20T00:00:00.000Z"
-    });
-    packRepo.upsertActivation({
-      scope_id: "scope_target",
-      pack_id: "pack_auth",
-      enabled: false,
-      pinned_version: "v2",
-      created_at: "2026-03-20T00:00:10.000Z",
-      updated_at: "2026-03-20T00:00:10.000Z"
-    });
     statsRepo.upsert({
       scope_id: "scope_source",
       task_type: "test_debug",
@@ -199,7 +181,6 @@ describe("mergeScopes", () => {
         candidates: 1
       },
       merged: {
-        packActivations: 1,
         taskStats: 1
       }
     });
@@ -212,13 +193,6 @@ describe("mergeScopes", () => {
     expect(taskRunRepo.getLatestBySessionId("session_source")?.scope_id).toBe("scope_target");
     expect(nodeRepo.getById("node_source")?.scope_id).toBe("scope_target");
     expect(candidateRepo.getById("candidate_source")?.scope_id).toBe("scope_target");
-    expect(packRepo.listActivations("scope_target")).toEqual([
-      expect.objectContaining({
-        pack_id: "pack_auth",
-        enabled: true,
-        pinned_version: "v2"
-      })
-    ]);
     expect(statsRepo.get("scope_target", "test_debug")).toMatchObject({
       total_tasks: 5,
       success_tasks: 3,

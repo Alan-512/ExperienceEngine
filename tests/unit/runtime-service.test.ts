@@ -6,11 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadConfig } from "../../src/config/load-config.js";
 import { resolveScope } from "../../src/input/scope-resolver.js";
 import { ExperienceRuntimeService } from "../../src/runtime/service.js";
-import { ExperiencePackRegistry } from "../../src/packs/fs-registry.js";
-import { ExperiencePackIndexSync } from "../../src/packs/index-sync.js";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
-import { ExperiencePackRepository } from "../../src/store/sqlite/repositories/pack-repo.js";
 import { clearEmbeddingProviderForTests, setEmbeddingProviderForTests } from "../../src/store/vector/embeddings.js";
 import { nowIso } from "../../src/utils/clock.js";
 
@@ -76,48 +73,6 @@ const seedStrategyNode = (sqlitePath: string, cwd: string, id: string): void => 
     last_harmed_at: undefined,
     created_at: timestamp,
     updated_at: timestamp
-  });
-};
-
-const seedPackActivation = (runtimeDir: string, cwd: string, packId: string, nodeIds: string[]): void => {
-  const dataDir = join(runtimeDir, "data");
-  const sqlitePath = join(dataDir, "sqlite", "experienceengine.db");
-  const db = openDatabase(loadConfig({ dataDir, sqlitePath }));
-  bootstrapDatabase(db);
-  const nodeRepo = new NodeRepository(db);
-  const packRepo = new ExperiencePackRepository(db);
-  const registry = new ExperiencePackRegistry({ packsDir: join(dataDir, "packs") });
-  const indexSync = new ExperiencePackIndexSync(registry, packRepo);
-  const nodes = nodeIds.map((id) => nodeRepo.getById(id)).filter((node): node is NonNullable<typeof node> => Boolean(node));
-
-  if (nodes.length !== nodeIds.length) {
-    throw new Error(`Missing node for pack activation ${packId}`);
-  }
-
-  registry.createDraft({
-    packId,
-    name: packId,
-    description: packId,
-    owner: "tester",
-    scopeHints: [`scope:${resolveScope(cwd).scope_id}`],
-    taskFamilies: [nodes[0].task_type],
-    hostCompatibility: ["codex"],
-    nodes
-  });
-  registry.reviewPack(packId, {
-    description: `reviewed ${packId}`,
-    evidenceSummary: `evidence ${packId}`,
-    riskLevel: "medium"
-  });
-  registry.publishPack(packId);
-  indexSync.syncPack(packId);
-  packRepo.upsertActivation({
-    scope_id: resolveScope(cwd).scope_id,
-    pack_id: packId,
-    enabled: true,
-    pinned_version: "v1",
-    created_at: nowIso(),
-    updated_at: nowIso()
   });
 };
 
@@ -705,42 +660,4 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     ]);
   });
 
-  it("keeps direct scope nodes available alongside enabled pack memberships", async () => {
-    const runtimeDir = makeTempDir();
-    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
-    seedStrategyNode(sqlitePath, "/repo", "node_runtime_pack_enabled");
-    seedStrategyNode(sqlitePath, "/repo", "node_runtime_pack_excluded");
-    seedPackActivation(runtimeDir, "/repo", "pack_runtime_scope", ["node_runtime_pack_enabled"]);
-    const service = new ExperienceRuntimeService(
-      loadConfig({
-        dataDir: join(runtimeDir, "data"),
-        sqlitePath,
-        captureDir: join(runtimeDir, "captures")
-      }, { homeDir: runtimeDir }),
-      undefined,
-      { homeDir: runtimeDir, env: {} }
-    );
-
-    const prompt = await service.beforePromptBuild({
-      sessionId: "runtime-pack-session",
-      cwd: "/repo",
-      userMessage: "Fix the failing vitest auth test",
-      taskSummary: "Fix the failing vitest auth test"
-    });
-
-    expect(prompt.mode).toBe("inject");
-    expect(prompt.input.injected_node_ids).toEqual(
-      expect.arrayContaining(["node_runtime_pack_enabled", "node_runtime_pack_excluded"])
-    );
-    expect(prompt.scorecard?.nodes).toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          id: "node_runtime_pack_enabled"
-        }),
-        expect.objectContaining({
-          id: "node_runtime_pack_excluded"
-        })
-      ])
-    );
-  });
 });

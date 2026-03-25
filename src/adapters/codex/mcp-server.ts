@@ -17,11 +17,9 @@ import {
   type OperationalActionsDeps,
 } from "../../interaction/operational-actions-service.js";
 import { ExperienceStateArtifactService } from "../../interaction/state-artifact-service.js";
-import { ExperiencePackActionsService } from "../../interaction/pack-actions-service.js";
 import { ExperienceRuntimeService } from "../../runtime/service.js";
 import type { ExperienceNodeType, ExperienceState, ToolEventStatus } from "../../types/domain.js";
 import { fetchLatestGitHubReleaseStatus } from "../../version/remote-release.js";
-import type { CompilerTarget } from "../../compiler/types.js";
 
 type CodexLookupArgs = {
   cwd?: string;
@@ -52,7 +50,6 @@ type CodexServerOptions = {
   fetchImpl?: typeof fetch;
   operationalActionsDeps?: OperationalActionsDeps;
   operationalActionsService?: ExperienceOperationalActionsService;
-  packActionsService?: ExperiencePackActionsService;
   stateArtifactService?: ExperienceStateArtifactService;
 };
 
@@ -65,7 +62,6 @@ const NODE_STATES: ExperienceState[] = ["candidate", "active", "cooling", "retir
 const NODE_TYPES: ExperienceNodeType[] = ["strategy", "warning"];
 const EXPERIENCE_ADAPTERS = ["openclaw", "claude-code", "codex"] as const;
 const HIGH_IMPACT_OPERATIONS = ["install", "repair", "upgrade"] as const satisfies readonly HighImpactOperation[];
-const COMPILER_TARGETS = ["agents", "codex", "github", "claude"] as const satisfies readonly CompilerTarget[];
 
 const buildExperienceCapabilities = () => ({
   model: "agent-first",
@@ -74,43 +70,12 @@ const buildExperienceCapabilities = () => ({
     "Low-risk read and preview operations should be direct MCP tools.",
     "High-risk write operations should use plan -> review -> confirm flows."
   ],
-  packs: {
-    directTools: [
-      "experienceengine_pack_list",
-      "experienceengine_pack_inspect",
-      "experienceengine_pack_status",
-      "experienceengine_pack_enable",
-      "experienceengine_pack_disable"
-    ],
-    guardedTools: [
-      "experienceengine_plan_pack_publish",
-      "experienceengine_plan_pack_rollback",
-      "experienceengine_execute_planned_pack_operation"
-    ]
-  },
-  compiler: {
-    directTools: [
-      "experienceengine_pack_compile",
-      "experienceengine_pack_deploy_preview"
-    ],
-    guardedTools: [
-      "experienceengine_plan_pack_deploy",
-      "experienceengine_execute_planned_pack_operation"
-    ],
-    targets: [...COMPILER_TARGETS]
-  },
   prompts: [
-    "experienceengine_review_repo_status",
-    "experienceengine_review_pack_status",
-    "experienceengine_prepare_pack_publish",
-    "experienceengine_prepare_pack_rollback",
-    "experienceengine_prepare_pack_deploy"
+    "experienceengine_review_repo_status"
   ],
   resources: [
     "experienceengine://capabilities",
     "experienceengine://repo-summary",
-    "experienceengine://packs",
-    "experienceengine://pack/{id}",
     "experienceengine://last",
     "experienceengine://learning/summary"
   ],
@@ -164,9 +129,6 @@ const createCodexInteractionService = (
         homeDir: options.homeDir
       }
     ),
-    {
-      packsDir: paths.packsDir
-    }
   );
 };
 
@@ -196,15 +158,6 @@ const createCodexStateArtifactService = (
 ): ExperienceStateArtifactService =>
   options.stateArtifactService ??
   new ExperienceStateArtifactService({
-    env: options.env ?? process.env,
-    homeDir: options.homeDir
-  });
-
-const createCodexPackActionsService = (
-  options: CodexServerOptions = {}
-): ExperiencePackActionsService =>
-  options.packActionsService ??
-  new ExperiencePackActionsService({
     env: options.env ?? process.env,
     homeDir: options.homeDir
   });
@@ -382,48 +335,6 @@ export const createCodexInteractionSurface = (options: CodexServerOptions = {}) 
       return interaction.inspectNode(args.nodeId);
     },
 
-    async listPacks() {
-      return interaction.listPacks();
-    },
-
-    async inspectPack(args: { packId: string }) {
-      return interaction.inspectPack(args.packId);
-    },
-
-    async enablePack(args: { packId: string; cwd?: string }) {
-      return interaction.enablePack(args);
-    },
-
-    async disablePack(args: { packId: string; cwd?: string }) {
-      return interaction.disablePack(args);
-    },
-
-    async inspectPackDeploymentStatus(args: {
-      packId: string;
-      version?: string;
-      target: CompilerTarget;
-      repoPath: string;
-    }) {
-      return interaction.inspectPackDeploymentStatus(args);
-    },
-
-    async compilePack(args: {
-      packId: string;
-      version?: string;
-      target: CompilerTarget;
-    }) {
-      return interaction.compilePack(args);
-    },
-
-    async deployPackPreview(args: {
-      packId: string;
-      version?: string;
-      target: CompilerTarget;
-      repoPath: string;
-    }) {
-      return interaction.deployPackPreview(args);
-    },
-
     async listNodesByState(args: { state: ExperienceState }) {
       return interaction.listNodesByState(args.state);
     },
@@ -480,7 +391,6 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
   const interactionSurface = createCodexInteractionSurface(options);
   const operationalSurface = createCodexOperationalService(options);
   const operationalActions = createCodexOperationalActionsService(options);
-  const packActions = createCodexPackActionsService(options);
   const stateArtifacts = createCodexStateArtifactService(options);
   const server = new McpServer({
     name: "experienceengine",
@@ -589,35 +499,10 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
     "experienceengine://repo-summary",
     {
       title: "ExperienceEngine Repo Summary",
-      description: "Repo-level ExperienceEngine summary for the current scope, including benchmark, packs, deployment, and next action.",
+      description: "Repo-level ExperienceEngine summary for the current scope, including benchmark and next action.",
       mimeType: "application/json"
     },
     async (uri) => toJsonResourceResult(uri.toString(), await interactionSurface.inspectRepoSummary())
-  );
-
-  server.registerResource(
-    "experienceengine_packs",
-    "experienceengine://packs",
-    {
-      title: "ExperienceEngine Packs",
-      description: "Published and draft local Experience Pack assets in the shared registry.",
-      mimeType: "application/json"
-    },
-    async (uri) => toJsonResourceResult(uri.toString(), await interactionSurface.listPacks())
-  );
-
-  server.registerResource(
-    "experienceengine_pack",
-    new ResourceTemplate("experienceengine://pack/{id}", {
-      list: undefined
-    }),
-    {
-      title: "ExperienceEngine Pack Detail",
-      description: "A single Experience Pack and its current version detail.",
-      mimeType: "application/json"
-    },
-    async (uri, variables) =>
-      toJsonResourceResult(uri.toString(), await interactionSurface.inspectPack({ packId: String(variables.id) }))
   );
 
   server.registerResource(
@@ -713,7 +598,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
           content: {
             type: "text",
             text:
-              "First read the experienceengine://repo-summary resource. Then call experienceengine_get_repo_summary if you need the structured form. Summarize the repo benchmark verdict, suggested mode, active packs, deploy status, and the most conservative next action."
+              "First read the experienceengine://repo-summary resource. Then call experienceengine_get_repo_summary if you need the structured form. Summarize the repo benchmark verdict, suggested mode, and the most conservative next action."
           }
         }
       ]
@@ -724,7 +609,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
     "experienceengine_review_capabilities",
     {
       title: "ExperienceEngine Review Capabilities",
-      description: "Guide the host agent to review ExperienceEngine's agent-first MCP surface before operating packs or compiler targets."
+      description: "Guide the host agent to review ExperienceEngine's agent-first MCP surface before using advanced ExperienceEngine operations."
     },
     async () => ({
       messages: [
@@ -800,103 +685,6 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
             type: "text",
             text:
               `First call experienceengine_plan_${operation} with adapter=${adapter}. Review the returned summary, effects, and commandHint with the user. Only if the user explicitly confirms should you call experienceengine_execute_planned_operation with the returned planId and confirmationToken.`
-          }
-        }
-      ]
-    })
-  );
-
-  server.registerPrompt(
-    "experienceengine_review_pack_status",
-    {
-      title: "ExperienceEngine Review Pack Status",
-      description: "Guide the agent to inspect one pack, its compile state, and current repo deployment status.",
-      argsSchema: {
-        packId: z.string().min(1),
-        target: z.enum(COMPILER_TARGETS),
-        repoPath: z.string().min(1)
-      }
-    },
-    async ({ packId, target, repoPath }) => ({
-      messages: [
-        {
-          role: "user",
-          content: {
-            type: "text",
-            text:
-              `Review the Experience Pack ${packId}. First call experienceengine_pack_inspect to inspect the pack itself. Then call experienceengine_pack_status with target=${target} and repoPath=${repoPath} to inspect whether the current repository is missing, up to date, or drifted. Summarize the pack state, compile state, deployment state, and the next recommended action.`
-          }
-        }
-      ]
-    })
-  );
-
-  server.registerPrompt(
-    "experienceengine_prepare_pack_publish",
-    {
-      title: "ExperienceEngine Prepare Pack Publish",
-      description: "Guide the agent through the confirmation flow for publishing an Experience Pack.",
-      argsSchema: {
-        packId: z.string().min(1)
-      }
-    },
-    async ({ packId }) => ({
-      messages: [
-        {
-          role: "user",
-          content: {
-            type: "text",
-            text:
-              `First call experienceengine_plan_pack_publish with packId=${packId}. Review the returned summary, effects, and commandHint with the user. Only if the user explicitly confirms should you call experienceengine_execute_planned_pack_operation with the returned planId and confirmationToken.`
-          }
-        }
-      ]
-    })
-  );
-
-  server.registerPrompt(
-    "experienceengine_prepare_pack_rollback",
-    {
-      title: "ExperienceEngine Prepare Pack Rollback",
-      description: "Guide the agent through the confirmation flow for rolling an Experience Pack back to a selected version.",
-      argsSchema: {
-        packId: z.string().min(1),
-        version: z.string().min(1)
-      }
-    },
-    async ({ packId, version }) => ({
-      messages: [
-        {
-          role: "user",
-          content: {
-            type: "text",
-            text:
-              `First call experienceengine_plan_pack_rollback with packId=${packId} and version=${version}. Review the returned summary, effects, and commandHint with the user. Only if the user explicitly confirms should you call experienceengine_execute_planned_pack_operation with the returned planId and confirmationToken.`
-          }
-        }
-      ]
-    })
-  );
-
-  server.registerPrompt(
-    "experienceengine_prepare_pack_deploy",
-    {
-      title: "ExperienceEngine Prepare Pack Deploy",
-      description: "Guide the agent through the confirmation flow for deploying a compiled Experience Pack into a repository.",
-      argsSchema: {
-        packId: z.string().min(1),
-        target: z.enum(COMPILER_TARGETS),
-        repoPath: z.string().min(1)
-      }
-    },
-    async ({ packId, target, repoPath }) => ({
-      messages: [
-        {
-          role: "user",
-          content: {
-            type: "text",
-            text:
-              `First call experienceengine_plan_pack_deploy with packId=${packId}, target=${target}, and repoPath=${repoPath}. Review the returned summary, effects, and commandHint with the user. Only if the user explicitly confirms should you call experienceengine_execute_planned_pack_operation with the returned planId and confirmationToken.`
           }
         }
       ]
@@ -1234,172 +1022,6 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
       }
     },
     async ({ adapter }) => toTextToolResult(await operationalSurface.checkUpdate(adapter))
-  );
-
-  server.registerTool(
-    "experienceengine_plan_pack_publish",
-    {
-      title: "ExperienceEngine Plan Pack Publish",
-      description: "Create a structured confirmation plan for publishing an Experience Pack.",
-      inputSchema: z.object({
-        packId: z.string().min(1)
-      })
-    },
-    async ({ packId }) => toStructuredToolResult(packActions.planPublish(packId))
-  );
-
-  server.registerTool(
-    "experienceengine_plan_pack_rollback",
-    {
-      title: "ExperienceEngine Plan Pack Rollback",
-      description: "Create a structured confirmation plan for rolling an Experience Pack back to an earlier version.",
-      inputSchema: z.object({
-        packId: z.string().min(1),
-        version: z.string().min(1)
-      })
-    },
-    async ({ packId, version }) => toStructuredToolResult(packActions.planRollback(packId, version))
-  );
-
-  server.registerTool(
-    "experienceengine_plan_pack_deploy",
-    {
-      title: "ExperienceEngine Plan Pack Deploy",
-      description: "Create a structured confirmation plan for deploying a compiled Experience Pack into a repository.",
-      inputSchema: z.object({
-        packId: z.string().min(1),
-        version: z.string().optional(),
-        target: z.enum(COMPILER_TARGETS),
-        repoPath: z.string().min(1)
-      })
-    },
-    async ({ packId, version, target, repoPath }) =>
-      toStructuredToolResult(packActions.planDeploy(packId, target, repoPath, version))
-  );
-
-  server.registerTool(
-    "experienceengine_execute_planned_pack_operation",
-    {
-      title: "ExperienceEngine Execute Planned Pack Operation",
-      description: "Execute a previously planned pack publish, rollback, or deploy after explicit confirmation.",
-      inputSchema: z.object({
-        planId: z.string().min(1),
-        confirmationToken: z.string().min(1)
-      })
-    },
-    async ({ planId, confirmationToken }) =>
-      toStructuredToolResult(packActions.executePlannedOperation({ planId, confirmationToken }))
-  );
-
-  server.registerTool(
-    "experienceengine_pack_list",
-    {
-      title: "ExperienceEngine Pack List",
-      description: "List local Experience Packs available in the shared registry.",
-      inputSchema: z.object({}),
-      annotations: {
-        readOnlyHint: true,
-        openWorldHint: false
-      }
-    },
-    async () => toStructuredToolResult({ packs: await interactionSurface.listPacks() })
-  );
-
-  server.registerTool(
-    "experienceengine_pack_inspect",
-    {
-      title: "ExperienceEngine Pack Inspect",
-      description: "Inspect one Experience Pack, including its current version, nodes, activations, and compiled artifacts.",
-      inputSchema: z.object({
-        packId: z.string().min(1)
-      }),
-      annotations: {
-        readOnlyHint: true,
-        openWorldHint: false
-      }
-    },
-    async ({ packId }) => toStructuredToolResult(await interactionSurface.inspectPack({ packId }))
-  );
-
-  server.registerTool(
-    "experienceengine_pack_enable",
-    {
-      title: "ExperienceEngine Pack Enable",
-      description: "Enable an Experience Pack for the current repository scope.",
-      inputSchema: z.object({
-        packId: z.string().min(1),
-        cwd: z.string().optional()
-      })
-    },
-    async ({ packId, cwd }) => toStructuredToolResult(await interactionSurface.enablePack({ packId, cwd }))
-  );
-
-  server.registerTool(
-    "experienceengine_pack_disable",
-    {
-      title: "ExperienceEngine Pack Disable",
-      description: "Disable an Experience Pack for the current repository scope.",
-      inputSchema: z.object({
-        packId: z.string().min(1),
-        cwd: z.string().optional()
-      })
-    },
-    async ({ packId, cwd }) => toStructuredToolResult(await interactionSurface.disablePack({ packId, cwd }))
-  );
-
-  server.registerTool(
-    "experienceengine_pack_status",
-    {
-      title: "ExperienceEngine Pack Status",
-      description: "Inspect whether a compiled Experience Pack target is missing, up to date, or drifted in a repository.",
-      inputSchema: z.object({
-        packId: z.string().min(1),
-        version: z.string().optional(),
-        target: z.enum(COMPILER_TARGETS),
-        repoPath: z.string().min(1)
-      }),
-      annotations: {
-        readOnlyHint: true,
-        openWorldHint: false
-      }
-    },
-    async ({ packId, version, target, repoPath }) =>
-      toStructuredToolResult(
-        await interactionSurface.inspectPackDeploymentStatus({ packId, version, target, repoPath })
-      )
-  );
-
-  server.registerTool(
-    "experienceengine_pack_compile",
-    {
-      title: "ExperienceEngine Pack Compile",
-      description: "Compile a published Experience Pack into a host-friendly artifact without deploying it.",
-      inputSchema: z.object({
-        packId: z.string().min(1),
-        version: z.string().optional(),
-        target: z.enum(COMPILER_TARGETS)
-      })
-    },
-    async ({ packId, version, target }) =>
-      toStructuredToolResult(await interactionSurface.compilePack({ packId, version, target }))
-  );
-
-  server.registerTool(
-    "experienceengine_pack_deploy_preview",
-    {
-      title: "ExperienceEngine Pack Deploy Preview",
-      description: "Preview where a compiled Experience Pack artifact would deploy and whether it would overwrite drifted content.",
-      inputSchema: z.object({
-        packId: z.string().min(1),
-        version: z.string().optional(),
-        target: z.enum(COMPILER_TARGETS),
-        repoPath: z.string().min(1)
-      })
-    },
-    async ({ packId, version, target, repoPath }) =>
-      toStructuredToolResult(
-        await interactionSurface.deployPackPreview({ packId, version, target, repoPath })
-      )
   );
 
   server.registerTool(

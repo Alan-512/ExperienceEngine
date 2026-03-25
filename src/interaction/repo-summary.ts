@@ -1,15 +1,5 @@
 import type { BenchmarkSummary } from "../evaluation/benchmark-summary.js";
-import type {
-  ExperienceLastInspection,
-  ExperienceLearningSummary,
-  ExperienceScopePackActivationView
-} from "./service.js";
-
-export type ExperienceRepoDeploymentStatus = {
-  target: string;
-  status: "missing" | "up_to_date" | "drifted";
-  destination?: string;
-};
+import type { ExperienceLastInspection, ExperienceLearningSummary } from "./service.js";
 
 export type ExperienceRepoSummary = {
   scope: {
@@ -26,40 +16,19 @@ export type ExperienceRepoSummary = {
     latestAutoFeedbackReason?: ExperienceLastInspection["autoFeedbackReason"];
   };
   benchmark: BenchmarkSummary;
-  packs: {
-    active: ExperienceScopePackActivationView[];
-    matched: ExperienceScopePackActivationView[];
-    enabledCount: number;
-    stalePublishedPacks: number;
-    latestCompiledTarget?: string;
-  };
-  deployment: ExperienceRepoDeploymentStatus[];
   recommendedNextAction: string;
 };
 
-const summarizeRecommendation = (input: {
-  benchmark: BenchmarkSummary;
-  activePacks: ExperienceScopePackActivationView[];
-  deployments: ExperienceRepoDeploymentStatus[];
-}): string => {
-  const drifted = input.deployments.filter((entry) => entry.status === "drifted");
-  if (drifted.length > 0) {
-    return `Review drifted deployed targets first: ${drifted.map((entry) => entry.target).join(", ")}.`;
-  }
-
-  if (input.activePacks.length === 0) {
-    return "No packs are active for this repo yet; keep using ExperienceEngine and publish a reviewed pack when repeated patterns stabilize.";
-  }
-
-  switch (input.benchmark.verdict) {
+const summarizeRecommendation = (benchmark: BenchmarkSummary): string => {
+  switch (benchmark.verdict) {
     case "healthy":
-      return "Keep the current live setup and deploy compiled artifacts only when the repo needs host-native guidance files.";
+      return "Keep the current live setup and continue collecting helped and harmed signals.";
     case "warming_up":
-      return "Stay in shadow-style observation until this repo accumulates more repeated tasks and stronger feedback signals.";
+      return "Stay in observation mode until this repo accumulates more repeated tasks and stronger feedback signals.";
     case "failing":
-      return "Pause new live interventions for this repo, inspect harmful signals, and review active packs before redeploying guidance.";
+      return "Pause new live interventions for this repo, inspect harmful signals, and review the active node set.";
     default:
-      return "Review the current repo summary, inspect active packs, and use deploy status before deciding whether to stay live or move back to shadow.";
+      return "Review the current repo summary and recent interventions before deciding whether to stay live or move back to shadow.";
   }
 };
 
@@ -71,9 +40,6 @@ export const buildRepoSummary = (input: {
   };
   latest?: ExperienceLastInspection;
   learning: ExperienceLearningSummary;
-  activePacks: ExperienceScopePackActivationView[];
-  matchedPacks: ExperienceScopePackActivationView[];
-  deployments: ExperienceRepoDeploymentStatus[];
 }): ExperienceRepoSummary => ({
   scope: input.scope,
   recent: {
@@ -85,17 +51,5 @@ export const buildRepoSummary = (input: {
     latestAutoFeedbackReason: input.latest?.autoFeedbackReason
   },
   benchmark: input.learning.benchmark,
-  packs: {
-    active: input.activePacks,
-    matched: input.matchedPacks,
-    enabledCount: input.activePacks.filter((entry) => entry.enabled).length,
-    stalePublishedPacks: input.learning.compiler.stalePublishedPacks,
-    latestCompiledTarget: input.learning.compiler.latestCompiledArtifact?.target
-  },
-  deployment: input.deployments,
-  recommendedNextAction: summarizeRecommendation({
-    benchmark: input.learning.benchmark,
-    activePacks: input.activePacks,
-    deployments: input.deployments
-  })
+  recommendedNextAction: summarizeRecommendation(input.learning.benchmark)
 });

@@ -74,16 +74,6 @@ Already available in the repository:
   - managed local embedding fallback
   - legacy hash-based fallback
 - host-agent driven inspection and feedback, with CLI fallback commands such as `ee inspect --last`, `ee helped`, and `ee harmed`
-- local Experience Pack workflow:
-  - `draft`
-  - `review`
-  - `publish`
-  - `rollback`
-- compiler and deploy workflow for host instruction files:
-  - `AGENTS.md`
-  - `CODEX.md`
-  - `CLAUDE.md`
-  - GitHub agent profile markdown
 
 For a more detailed explanation of what ExperienceEngine records and how an experience node is structured, see:
 
@@ -224,4 +214,4 @@ See the full user guide here:
 
 - [ExperienceEngine User Guide](./docs/user-guide.md)
 
-The user guide covers installation, host-specific notes, first-run validation, pack workflows, compiler/deploy commands, troubleshooting, and maintenance operations.
+The user guide covers installation, host-specific notes, first-run validation, troubleshooting, and maintenance operations.

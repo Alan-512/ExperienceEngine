@@ -3,11 +3,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runInspectCommand } from "../../src/cli/commands/inspect.js";
-import { compilePack } from "../../src/compiler/compiler.js";
 import { loadConfig } from "../../src/config/load-config.js";
 import { resolveScope } from "../../src/input/scope-resolver.js";
-import { ExperiencePackRegistry } from "../../src/packs/fs-registry.js";
-import { ExperiencePackIndexSync } from "../../src/packs/index-sync.js";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
 import { CandidateRepository } from "../../src/store/sqlite/repositories/candidate-repo.js";
 import { DistillationJobRepository } from "../../src/store/sqlite/repositories/distillation-job-repo.js";
@@ -15,7 +12,6 @@ import { InputRecordRepository } from "../../src/store/sqlite/repositories/input
 import { InjectionRepository } from "../../src/store/sqlite/repositories/injection-repo.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
 import { OutcomeRecordRepository } from "../../src/store/sqlite/repositories/outcome-record-repo.js";
-import { ExperiencePackRepository } from "../../src/store/sqlite/repositories/pack-repo.js";
 import { ReviewEventRepository } from "../../src/store/sqlite/repositories/review-event-repo.js";
 import { TaskRunRepository } from "../../src/store/sqlite/repositories/task-run-repo.js";
 import { nowIso } from "../../src/utils/clock.js";
@@ -174,39 +170,6 @@ const makeJob = (overrides: Partial<DistillationJob> = {}): DistillationJob => (
   ...overrides
 });
 
-const seedPackActivation = (home: string, db: ReturnType<typeof openDatabase>, node: ExperienceNode): void => {
-  const registry = new ExperiencePackRegistry({
-    packsDir: join(home, ".experienceengine", "packs")
-  });
-  const packRepo = new ExperiencePackRepository(db);
-  const indexSync = new ExperiencePackIndexSync(registry, packRepo);
-  registry.createDraft({
-    packId: "auth-pack",
-    name: "Auth Pack",
-    description: "Auth Pack",
-    owner: "tester",
-    scopeHints: [`scope:${node.scope_id}`],
-    taskFamilies: [node.task_type],
-    hostCompatibility: ["codex"],
-    nodes: [node]
-  });
-  registry.reviewPack("auth-pack", {
-    description: "Reviewed auth pack",
-    evidenceSummary: "Reviewed auth pack",
-    riskLevel: "medium"
-  });
-  registry.publishPack("auth-pack");
-  indexSync.syncPack("auth-pack");
-  packRepo.upsertActivation({
-    scope_id: node.scope_id,
-    pack_id: "auth-pack",
-    enabled: true,
-    pinned_version: "v1",
-    created_at: nowIso(),
-    updated_at: nowIso()
-  });
-};
-
 afterEach(() => {
   while (tempDirs.length) {
     const dir = tempDirs.pop();
@@ -243,8 +206,6 @@ describe("inspect command", () => {
     taskRunRepo.upsert(makeTaskRun());
     outcomeRepo.upsert(makeOutcomeRecord());
     reviewEventRepo.upsert(makeReviewEvent({ source: "automatic" }));
-    seedPackActivation(home, db, node);
-
     runInspectCommand("--last");
 
     expect(consoleLogSpy.mock.calls).toEqual(
@@ -263,10 +224,6 @@ describe("inspect command", () => {
         ["- Recommendation: Apply these hints normally, then mark helped or harmed after the task."],
         ["- Why it matched:"],
         ["  - Exact task-family match was found in historical experience."],
-        ["Active packs:"],
-        ["- auth-pack@v1 [published enabled]"],
-        ["Matched packs:"],
-        ["- auth-pack@v1"],
         ["Automatic feedback: helped"],
         ["Automatic feedback reason: success_outcome"],
         ["Timeline:"],
@@ -282,7 +239,7 @@ describe("inspect command", () => {
     );
   });
 
-  it("prints compiler visibility in learning summary", () => {
+  it("prints learning summary without pack/compiler sections", () => {
     const home = makeTempDir();
     process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
     const db = openDatabase(loadConfig());
@@ -291,42 +248,23 @@ describe("inspect command", () => {
     const nodeRepo = new NodeRepository(db);
     const node = makeNode({ scope_id: resolveScope(process.cwd()).scope_id });
     nodeRepo.upsert(node);
-    seedPackActivation(home, db, node);
-    compilePack({
-      packsDir: join(home, ".experienceengine", "packs"),
-      packId: "auth-pack",
-      target: "agents",
-      generatedAt: "2026-03-19T05:00:00.000Z"
-    });
-
     runInspectCommand("learning");
 
     expect(consoleLogSpy.mock.calls).toEqual(
       expect.arrayContaining([
-        ["Compiler:"],
-        ["Current scope packs:"],
-        [`- Scope: ${resolveScope(process.cwd()).scope_id}`],
-        ["- Enabled packs: 1"],
-        ["- auth-pack@v1 [published enabled]"],
-        ["- Latest compiled target: auth-pack@v1 -> agents (1 nodes)"],
-        ["- Stale published packs: 0"]
+        ["Candidate lifecycle:"],
+        ["Distillation jobs:"],
+        ["Formal nodes:"],
+        ["Node sources:"],
+        ["Effectiveness:"],
+        ["Benchmark summary:"],
+        ["Attribution reasons:"],
+        ["Runtime records:"]
       ])
-    );
-    expect(consoleTableSpy).toHaveBeenCalledWith(
-      expect.objectContaining({
-        publishedPacks: 1,
-        compiledTargets: 1,
-        stalePublishedPacks: 0,
-        latestCompiledArtifact: expect.objectContaining({
-          packId: "auth-pack",
-          target: "agents",
-          version: "v1"
-        })
-      })
     );
   });
 
-  it("prints a repo summary fallback with benchmark, packs, deployment, and next action", () => {
+  it("prints a repo summary fallback with benchmark and next action", () => {
     const home = makeTempDir();
     process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
     const db = openDatabase(loadConfig());
@@ -335,14 +273,6 @@ describe("inspect command", () => {
     const nodeRepo = new NodeRepository(db);
     const node = makeNode({ scope_id: resolveScope(process.cwd()).scope_id });
     nodeRepo.upsert(node);
-    seedPackActivation(home, db, node);
-    compilePack({
-      packsDir: join(home, ".experienceengine", "packs"),
-      packId: "auth-pack",
-      target: "codex",
-      generatedAt: "2026-03-20T05:00:00.000Z"
-    });
-
     runInspectCommand("repo");
 
     expect(consoleLogSpy.mock.calls).toEqual(
@@ -351,14 +281,6 @@ describe("inspect command", () => {
         [`- Scope: ${resolveScope(process.cwd()).scope_id}`],
         ["- Benchmark verdict: warming_up"],
         ["- Suggested mode: shadow"],
-        ["- Enabled packs: 1"],
-        ["- auth-pack@v1 [published enabled]"],
-        ["- Latest compiled target: codex"],
-        ["Deployment status:"],
-        ["- codex: missing"],
-        ["- agents: missing"],
-        ["- claude: missing"],
-        ["- github: missing"],
         ["Recommended next action:"]
       ])
     );

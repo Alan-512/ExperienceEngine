@@ -24,9 +24,9 @@ describe("claude print validation", () => {
             content: [
               {
                 type: "tool_use",
-                name: "mcp__experienceengine__experienceengine_pack_compile",
+                name: "mcp__experienceengine__experienceengine_get_capabilities",
                 id: "call_1",
-                input: { packId: "compiler-blackbox-pack", target: "claude" }
+                input: {}
               }
             ]
           }
@@ -38,7 +38,7 @@ describe("claude print validation", () => {
               {
                 type: "tool_result",
                 tool_use_id: "call_1",
-                content: "{\"target\":\"claude\",\"version\":\"v1\"}"
+                content: "{\"directTools\":[\"experienceengine_get_capabilities\"]}"
               }
             ]
           }
@@ -46,19 +46,19 @@ describe("claude print validation", () => {
         JSON.stringify({
           type: "assistant",
           message: {
-            content: [{ type: "text", text: "The compiled target is claude with version v1." }]
+            content: [{ type: "text", text: "Capabilities loaded successfully." }]
           }
         })
       ].join("\n"),
       "utf8"
     );
 
-    const result = analyzeClaudeTranscript(transcriptPath, "mcp__experienceengine__experienceengine_pack_compile");
+    const result = analyzeClaudeTranscript(transcriptPath, "mcp__experienceengine__experienceengine_get_capabilities");
 
     expect(result.transcriptPath).toBe(transcriptPath);
     expect(result.toolSeen).toBe(true);
     expect(result.toolResultSeen).toBe(true);
-    expect(result.assistantText).toBe("The compiled target is claude with version v1.");
+    expect(result.assistantText).toBe("Capabilities loaded successfully.");
     expect(result.usedTranscriptConclusion).toBe(true);
   });
 
@@ -98,7 +98,7 @@ describe("claude print validation", () => {
               {
                 type: "tool_result",
                 tool_use_id: "call_caps",
-                content: "{\"directTools\":[\"experienceengine_pack_list\"]}"
+                content: "{\"directTools\":[\"experienceengine_get_capabilities\"]}"
               }
             ]
           }

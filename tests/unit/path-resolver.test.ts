@@ -34,7 +34,6 @@ describe("resolveExperienceEnginePaths", () => {
     expect(paths.dataDir).toBe("/tmp/custom-root");
     expect(paths.sqlitePath).toBe("/tmp/custom-root/sqlite/experienceengine.db");
     expect(paths.captureDir).toBe("/tmp/custom-root/captures");
-    expect(paths.packsDir).toBe("/tmp/custom-root/packs");
   });
 
   it("uses compatibility mode when legacy OpenClaw data exists and no install state is present", () => {
@@ -61,7 +60,6 @@ describe("resolveExperienceEnginePaths", () => {
     expect(paths.mode).toBe("product");
     expect(paths.activeHome).toBe(join(homeDir, ".experienceengine"));
     expect(paths.usedInstallState).toBe(true);
-    expect(paths.packsDir).toBe(join(homeDir, ".experienceengine", "packs"));
   });
 
   it("isolates non-openclaw adapter captures under the adapter state directory", () => {

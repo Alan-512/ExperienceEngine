@@ -100,17 +100,17 @@ Pull the key numbers from artifacts:
 
 Also record:
 
-- active packs
-- matched packs
-- deployed target status if relevant
+- intervention mode
+- injected node count
+- any feedback or attribution reason if relevant
 
 ### 5. What Actually Helped
 
 Summarize the most useful interventions:
 
 - which task family benefited
-- which node or Pack patterns helped
-- whether compiled host-facing files improved reuse
+- which node patterns helped
+- whether the guidance was specific enough to change the agent's execution path
 
 Prefer 2 to 5 concrete observations over a long generic summary.
 

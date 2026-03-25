@@ -465,7 +465,7 @@ describe("Claude hook capture", () => {
         hook_event_name: "PreToolUse",
         session_id: "session-pretool-lazy",
         cwd: "/repo",
-        tool_name: "mcp__experienceengine__experienceengine_pack_list",
+        tool_name: "mcp__experienceengine__experienceengine_get_capabilities",
         tool_input: {}
       }),
       { homeDir }

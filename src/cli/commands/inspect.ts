@@ -79,20 +79,6 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
       }
     }
 
-    if (record.activePacks.length) {
-      console.log("Active packs:");
-      for (const pack of record.activePacks) {
-        console.log(`- ${pack.packId}@${pack.pinnedVersion ?? pack.currentVersion} [${pack.status} enabled]`);
-      }
-    }
-
-    if (record.matchedPacks.length) {
-      console.log("Matched packs:");
-      for (const pack of record.matchedPacks) {
-        console.log(`- ${pack.packId}@${pack.pinnedVersion ?? pack.currentVersion}`);
-      }
-    }
-
     if (record.timeline.length) {
       console.log("Timeline:");
       for (const entry of record.timeline) {
@@ -163,7 +149,6 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
 
   if (target === "learning") {
     const summary = interaction.inspectLearningSummary();
-    const scopePacks = interaction.inspectScopePackStatus();
     console.log("Candidate lifecycle:");
     console.table(summary.candidates);
     console.log("Distillation jobs:");
@@ -181,21 +166,6 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
     console.table(summary.attributionReasons);
     console.log("Runtime records:");
     console.table(summary.runtime);
-    console.log("Compiler:");
-    console.table(summary.compiler);
-    console.log("Current scope packs:");
-    console.log(`- Scope: ${scopePacks.scopeId}`);
-    console.log(`- Enabled packs: ${scopePacks.enabledCount}`);
-    for (const pack of scopePacks.activations.filter((activation) => activation.enabled)) {
-      console.log(`- ${pack.packId}@${pack.pinnedVersion ?? pack.currentVersion} [${pack.status} enabled]`);
-    }
-    if (scopePacks.compiler.latestCompiledArtifact) {
-      const latest = scopePacks.compiler.latestCompiledArtifact;
-      console.log(
-        `- Latest compiled target: ${latest.packId}@${latest.version} -> ${latest.target} (${latest.renderedNodeCount} nodes)`
-      );
-    }
-    console.log(`- Stale published packs: ${scopePacks.compiler.stalePublishedPacks}`);
     if (summary.latestRecordCreatedAt) {
       console.log(`Latest task record: ${summary.latestRecordCreatedAt}`);
     }
@@ -208,17 +178,6 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
     console.log(`- Scope: ${summary.scope.scopeId}`);
     console.log(`- Benchmark verdict: ${summary.benchmark.verdict}`);
     console.log(`- Suggested mode: ${summary.benchmark.suggestedMode}`);
-    console.log(`- Enabled packs: ${summary.packs.enabledCount}`);
-    for (const pack of summary.packs.active) {
-      console.log(`- ${pack.packId}@${pack.pinnedVersion ?? pack.currentVersion} [${pack.status} enabled]`);
-    }
-    if (summary.packs.latestCompiledTarget) {
-      console.log(`- Latest compiled target: ${summary.packs.latestCompiledTarget}`);
-    }
-    console.log("Deployment status:");
-    for (const deployment of summary.deployment) {
-      console.log(`- ${deployment.target}: ${deployment.status}`);
-    }
     console.log("Recommended next action:");
     console.log(`- ${summary.recommendedNextAction}`);
     return;

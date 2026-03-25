@@ -1,129 +1,8 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { buildRepoSummary } from "../../src/interaction/repo-summary.js";
-import { loadConfig } from "../../src/config/load-config.js";
-import { resolveScope } from "../../src/input/scope-resolver.js";
-import { ExperienceInteractionService } from "../../src/interaction/service.js";
-import { ExperiencePackRegistry } from "../../src/packs/fs-registry.js";
-import { ExperiencePackIndexSync } from "../../src/packs/index-sync.js";
-import { compilePack } from "../../src/compiler/compiler.js";
-import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
-import { ExperiencePackRepository } from "../../src/store/sqlite/repositories/pack-repo.js";
-import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
-import { InputRecordRepository } from "../../src/store/sqlite/repositories/input-record-repo.js";
-import { InjectionRepository } from "../../src/store/sqlite/repositories/injection-repo.js";
-import { OutcomeRecordRepository } from "../../src/store/sqlite/repositories/outcome-record-repo.js";
-import { ReviewEventRepository } from "../../src/store/sqlite/repositories/review-event-repo.js";
-import { TaskRunRepository } from "../../src/store/sqlite/repositories/task-run-repo.js";
-import type { ExperienceNode } from "../../src/types/domain.js";
-import { join } from "node:path";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { nowIso } from "../../src/utils/clock.js";
-
-const tempDirs: string[] = [];
-
-const makeTempDir = (): string => {
-  const dir = mkdtempSync(join(tmpdir(), "experienceengine-repo-summary-"));
-  tempDirs.push(dir);
-  return dir;
-};
-
-const makeNode = (overrides: Partial<ExperienceNode> = {}): ExperienceNode => ({
-  id: "node_repo_summary",
-  node_type: "strategy",
-  scope_id: resolveScope("/repo").scope_id,
-  task_type: "test_debug",
-  trigger_pattern: "Fix the failing auth test",
-  applicability_notes: "Same repo",
-  env_signature: undefined,
-  compact_hint: "Run the failing auth test before editing and verify after the fix.",
-  goal: "Stabilize the auth test",
-  recommended_steps: [],
-  avoid_steps: [],
-  fallback_steps: [],
-  success_signal: "The test passes",
-  stop_condition: undefined,
-  escalation_condition: undefined,
-  evidence_summary: "Recovered the same auth test failure.",
-  retrieval_text: "Fix the failing auth test\nRun the failing auth test before editing and verify after the fix.",
-  source_kind: "system_derived",
-  distillation_mode_used: "rule",
-  distillation_source: "rule",
-  origin_record_ids: ["input_origin"],
-  helped_record_ids: [],
-  harmed_record_ids: [],
-  state: "active",
-  usage_count: 0,
-  helped_count: 0,
-  harmed_count: 0,
-  support_count: 1,
-  last_used_at: undefined,
-  last_helped_at: undefined,
-  last_harmed_at: undefined,
-  created_at: "2026-03-20T00:00:00.000Z",
-  updated_at: "2026-03-20T00:00:00.000Z",
-  ...overrides
-});
-
-const seedPack = (
-  homeDir: string,
-  db: ReturnType<typeof openDatabase>,
-  nodeRepo: NodeRepository,
-  cwd: string,
-  packId: string,
-  nodeId: string
-): void => {
-  const node = makeNode({
-    id: nodeId,
-    scope_id: resolveScope(cwd).scope_id
-  });
-  nodeRepo.upsert(node);
-
-  const registry = new ExperiencePackRegistry({
-    packsDir: join(homeDir, ".experienceengine", "packs")
-  });
-  const packRepo = new ExperiencePackRepository(db);
-  const indexSync = new ExperiencePackIndexSync(registry, packRepo);
-
-  registry.createDraft({
-    packId,
-    name: "Auth Pack",
-    description: "Auth guidance",
-    owner: "tester",
-    scopeHints: [`scope:${resolveScope(cwd).scope_id}`],
-    taskFamilies: [node.task_type],
-    hostCompatibility: ["codex"],
-    nodes: [node]
-  });
-  registry.reviewPack(packId, {
-    description: "Reviewed auth guidance",
-    evidenceSummary: "Reviewed",
-    riskLevel: "medium"
-  });
-  registry.publishPack(packId);
-  indexSync.syncPack(packId);
-  packRepo.upsertActivation({
-    scope_id: resolveScope(cwd).scope_id,
-    pack_id: packId,
-    enabled: true,
-    pinned_version: "v1",
-    created_at: nowIso(),
-    updated_at: nowIso()
-  });
-};
-
-afterEach(() => {
-  while (tempDirs.length) {
-    const dir = tempDirs.pop();
-    if (dir) {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  }
-  delete process.env.EXPERIENCE_ENGINE_HOME;
-});
 
 describe("repo summary", () => {
-  it("builds a stable summary with benchmark, packs, deployment, and recommendation", () => {
+  it("builds a stable summary with benchmark and recommendation", () => {
     const summary = buildRepoSummary({
       scope: {
         scopeId: "scope_a",
@@ -142,8 +21,6 @@ describe("repo summary", () => {
         hints: [],
         evidence: [],
         timeline: [],
-        activePacks: [],
-        matchedPacks: [],
         summary: "Fix auth test",
         createdAt: "2026-03-20T00:00:00.000Z"
       },
@@ -186,57 +63,16 @@ describe("repo summary", () => {
           unknown_outcome: 0
         },
         runtime: { records: 5, taskRuns: 5, outcomes: 5, reviews: 3 },
-        compiler: {
-          publishedPacks: 1,
-          compiledTargets: 2,
-          stalePublishedPacks: 0,
-          latestCompiledArtifact: {
-            packId: "auth-pack",
-            target: "codex",
-            version: "v1",
-            generatedAt: "2026-03-20T00:00:00.000Z",
-            outputPath: "/packs/auth-pack/CODEX.md",
-            reportPath: "/packs/auth-pack/compile-report.json",
-            renderedNodeCount: 1
-          }
-        },
         latestRecordCreatedAt: "2026-03-20T00:00:00.000Z"
-      },
-      activePacks: [
-        {
-          scopeId: "scope_a",
-          packId: "auth-pack",
-          status: "published",
-          currentVersion: "v1",
-          pinnedVersion: "v1",
-          enabled: true,
-          updatedAt: "2026-03-20T00:00:00.000Z"
-        }
-      ],
-      matchedPacks: [],
-      deployments: [
-        {
-          target: "codex",
-          status: "up_to_date",
-          destination: "/repo/CODEX.md"
-        }
-      ]
+      }
     });
 
     expect(summary.scope.scopeId).toBe("scope_a");
     expect(summary.benchmark.verdict).toBe("healthy");
-    expect(summary.packs.enabledCount).toBe(1);
-    expect(summary.packs.latestCompiledTarget).toBe("codex");
-    expect(summary.deployment).toEqual([
-      expect.objectContaining({
-        target: "codex",
-        status: "up_to_date"
-      })
-    ]);
     expect(summary.recommendedNextAction).toContain("live");
   });
 
-  it("stays conservative when there is no active pack or deploy state", () => {
+  it("stays conservative while the repo is warming up", () => {
     const summary = buildRepoSummary({
       scope: {
         scopeId: "scope_b"
@@ -279,222 +115,10 @@ describe("repo summary", () => {
           suppressed_delivery: 0,
           unknown_outcome: 0
         },
-        runtime: { records: 0, taskRuns: 0, outcomes: 0, reviews: 0 },
-        compiler: {
-          publishedPacks: 0,
-          compiledTargets: 0,
-          stalePublishedPacks: 0
-        }
-      },
-      activePacks: [],
-      matchedPacks: [],
-      deployments: []
+        runtime: { records: 0, taskRuns: 0, outcomes: 0, reviews: 0 }
+      }
     });
 
-    expect(summary.packs.enabledCount).toBe(0);
-    expect(summary.recommendedNextAction).toContain("No packs are active");
-  });
-
-  it("builds a repo summary from the interaction service for the current cwd", () => {
-    const homeDir = makeTempDir();
-    process.env.EXPERIENCE_ENGINE_HOME = join(homeDir, ".experienceengine");
-    const config = loadConfig();
-    const db = openDatabase(config);
-    bootstrapDatabase(db);
-    const nodeRepo = new NodeRepository(db);
-    seedPack(homeDir, db, nodeRepo, process.cwd(), "repo-summary-pack", "node_repo_summary_scope");
-    compilePack({
-      packsDir: join(homeDir, ".experienceengine", "packs"),
-      packId: "repo-summary-pack",
-      target: "codex",
-      generatedAt: "2026-03-20T02:00:00.000Z"
-    });
-
-    const interaction = new ExperienceInteractionService(config);
-    const summary = interaction.inspectRepoSummary(process.cwd());
-
-    expect(summary.scope.scopeId).toBe(resolveScope(process.cwd()).scope_id);
-    expect(summary.packs.enabledCount).toBe(1);
-    expect(summary.packs.active).toEqual([
-      expect.objectContaining({
-        packId: "repo-summary-pack",
-        enabled: true
-      })
-    ]);
-    expect(summary.packs.latestCompiledTarget).toBe("codex");
-    expect(summary.deployment).toEqual([
-      expect.objectContaining({
-        target: "codex",
-        status: "missing"
-      }),
-      expect.objectContaining({
-        target: "agents",
-        status: "missing"
-      }),
-      expect.objectContaining({
-        target: "claude",
-        status: "missing"
-      }),
-      expect.objectContaining({
-        target: "github",
-        status: "missing"
-      })
-    ]);
-    expect(summary.recommendedNextAction.length).toBeGreaterThan(0);
-  });
-
-  it("uses scope-local benchmark data instead of global history", () => {
-    const homeDir = makeTempDir();
-    process.env.EXPERIENCE_ENGINE_HOME = join(homeDir, ".experienceengine");
-    const config = loadConfig();
-    const db = openDatabase(config);
-    bootstrapDatabase(db);
-
-    const currentScope = resolveScope("/mnt/d/project/ExperienceEngine");
-    const currentScopeAlias = resolveScope("/mnt/d/project/experienceengine");
-    const foreignScope = resolveScope("/home/seed/.openclaw/workspace");
-
-    expect(currentScope.scope_id).toBe(currentScopeAlias.scope_id);
-
-    const inputRepo = new InputRecordRepository(db);
-    const injectionRepo = new InjectionRepository(db);
-    const outcomeRepo = new OutcomeRecordRepository(db);
-    const reviewRepo = new ReviewEventRepository(db);
-    const taskRunRepo = new TaskRunRepository(db);
-
-    taskRunRepo.upsert({
-      id: "taskrun_current",
-      host: "codex",
-      scope_id: currentScope.scope_id,
-      session_id: "session_current",
-      task_type: "test_debug",
-      task_summary: "Fix auth regression",
-      started_at: "2026-03-20T01:00:00.000Z",
-      ended_at: "2026-03-20T01:05:00.000Z",
-      final_status: "success",
-      created_at: "2026-03-20T01:00:00.000Z",
-      updated_at: "2026-03-20T01:05:00.000Z"
-    });
-    inputRepo.upsert({
-      record_id: "input_current",
-      scope_id: currentScope.scope_id,
-      session_id: "session_current",
-      task_type: "test_debug",
-      task_summary: "Fix auth regression",
-      outcome_signal: "success",
-      evidence: ["auth test passed"],
-      injected_node_ids: ["node_current"],
-      created_at: "2026-03-20T01:05:00.000Z"
-    });
-    injectionRepo.upsert({
-      injection_id: "inject_current",
-      session_id: "session_current",
-      scope_id: currentScope.scope_id,
-      task_type: "test_debug",
-      task_summary: "Fix auth regression",
-      mode: "inject",
-      delivery_mode: "live",
-      delivered: true,
-      injected_node_ids: ["node_current", "node_current_2"],
-      injection_count: 2,
-      created_at: "2026-03-20T01:01:00.000Z",
-      resolved_at: "2026-03-20T01:05:00.000Z",
-      was_successful: true,
-      harm_observed: false,
-      attribution_reason: "success_outcome"
-    });
-    reviewRepo.upsert({
-      id: "review_current_helped_a",
-      node_id: "node_current",
-      task_run_id: "taskrun_current",
-      event_type: "mark_helped",
-      source: "automatic",
-      created_at: "2026-03-20T01:05:30.000Z"
-    });
-    reviewRepo.upsert({
-      id: "review_current_helped_b",
-      node_id: "node_current_2",
-      task_run_id: "taskrun_current",
-      event_type: "mark_helped",
-      source: "automatic",
-      created_at: "2026-03-20T01:05:31.000Z"
-    });
-    outcomeRepo.upsert({
-      id: "outcome_current",
-      task_run_id: "taskrun_current",
-      outcome_signal: "success",
-      summary: "Auth regression fixed",
-      created_at: "2026-03-20T01:05:00.000Z"
-    });
-
-    for (let index = 0; index < 4; index += 1) {
-      const sessionId = `session_foreign_${index}`;
-      const taskRunId = `taskrun_foreign_${index}`;
-      taskRunRepo.upsert({
-        id: taskRunId,
-        host: "codex",
-        scope_id: foreignScope.scope_id,
-        session_id: sessionId,
-        task_type: "test_debug",
-        task_summary: `Foreign task ${index}`,
-        started_at: `2026-03-20T02:0${index}:00.000Z`,
-        ended_at: `2026-03-20T02:0${index}:30.000Z`,
-        final_status: "failure",
-        created_at: `2026-03-20T02:0${index}:00.000Z`,
-        updated_at: `2026-03-20T02:0${index}:30.000Z`
-      });
-      inputRepo.upsert({
-        record_id: `input_foreign_${index}`,
-        scope_id: foreignScope.scope_id,
-        session_id: sessionId,
-        task_type: "test_debug",
-        task_summary: `Foreign task ${index}`,
-        outcome_signal: "failure",
-        evidence: ["foreign failure"],
-        injected_node_ids: [`node_foreign_${index}`],
-        created_at: `2026-03-20T02:0${index}:30.000Z`
-      });
-      injectionRepo.upsert({
-        injection_id: `inject_foreign_${index}`,
-        session_id: sessionId,
-        scope_id: foreignScope.scope_id,
-        task_type: "test_debug",
-        task_summary: `Foreign task ${index}`,
-        mode: "inject",
-        delivery_mode: "live",
-        delivered: true,
-        injected_node_ids: [`node_foreign_${index}`],
-        injection_count: 1,
-        created_at: `2026-03-20T02:0${index}:05.000Z`,
-        resolved_at: `2026-03-20T02:0${index}:30.000Z`,
-        was_successful: false,
-        harm_observed: true,
-        attribution_reason: "relevant_failure"
-      });
-      reviewRepo.upsert({
-        id: `review_foreign_${index}`,
-        node_id: `node_foreign_${index}`,
-        task_run_id: taskRunId,
-        event_type: "mark_harmed",
-        source: "automatic",
-        created_at: `2026-03-20T02:0${index}:31.000Z`
-      });
-      outcomeRepo.upsert({
-        id: `outcome_foreign_${index}`,
-        task_run_id: taskRunId,
-        outcome_signal: "failure",
-        summary: "Foreign regression remained broken",
-        created_at: `2026-03-20T02:0${index}:30.000Z`
-      });
-    }
-
-    const interaction = new ExperienceInteractionService(config);
-    const summary = interaction.inspectRepoSummary("/mnt/d/project/experienceengine");
-
-    expect(summary.scope.scopeId).toBe(currentScope.scope_id);
-    expect(summary.benchmark.verdict).toBe("warming_up");
-    expect(summary.benchmark.helpfulRate).toBe(1);
-    expect(summary.benchmark.harmfulRate).toBe(0);
-    expect(summary.benchmark.netHelpfulRate).toBe(1);
+    expect(summary.recommendedNextAction).toContain("observation");
   });
 });

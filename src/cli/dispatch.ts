@@ -1,7 +1,6 @@
 const usageText =
   "Usage: ee <install openclaw|claude-code|codex|upgrade openclaw|claude-code|codex|repair [openclaw]|claude-hook|codex-mcp-server|doctor [openclaw|claude-code|codex]|status|stats|inspect|feedback|disable|enable|cool|retire>"
   + " | helped|harmed"
-  + " | pack <list|inspect|draft create|review|publish|compile [version] [agents|codex]|rollback>"
   + " | backup|export|import <snapshot-path>|rollback <backup-id>"
   + " | maintenance embeddings-reset|embedding-smoke|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
   + " | evaluate openclaw-baseline [--lookback-hours N] [--output-dir PATH]"
@@ -125,11 +124,6 @@ export const runCliCommand = async (command: string | undefined, args: string[])
     case "maintenance": {
       const { runMaintenanceCommand } = await import("./commands/maintenance.js");
       await runMaintenanceCommand(args[0], args.slice(1));
-      break;
-    }
-    case "pack": {
-      const { runPackCommand } = await import("./commands/pack.js");
-      runPackCommand(args);
       break;
     }
     case "disable": {

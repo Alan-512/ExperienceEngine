@@ -16,10 +16,10 @@ describe("maintenance command", () => {
         stdout: "",
         stderr: "",
         transcriptPath: "/tmp/claude-session.jsonl",
-        targetToolName: "mcp__experienceengine__experienceengine_pack_list",
+        targetToolName: "mcp__experienceengine__experienceengine_get_capabilities",
         toolSeen: true,
         toolResultSeen: true,
-        assistantText: "There is one pack.",
+        assistantText: "Capabilities loaded.",
         usedTranscriptConclusion: true
       })
     });
@@ -30,9 +30,9 @@ describe("maintenance command", () => {
         ["[ExperienceEngine] Exit code: 0"],
         ["[ExperienceEngine] Stdout empty: yes"],
         ["[ExperienceEngine] Transcript: /tmp/claude-session.jsonl"],
-        ["[ExperienceEngine] Target tool seen: yes (mcp__experienceengine__experienceengine_pack_list)"],
+        ["[ExperienceEngine] Target tool seen: yes (mcp__experienceengine__experienceengine_get_capabilities)"],
         ["[ExperienceEngine] Tool result seen: yes"],
-        ["[ExperienceEngine] Transcript conclusion: There is one pack."]
+        ["[ExperienceEngine] Transcript conclusion: Capabilities loaded."]
       ])
     );
   });
@@ -179,7 +179,6 @@ describe("maintenance command", () => {
         candidates: 1
       },
       merged: {
-        packActivations: 1,
         taskStats: 2
       }
     });
@@ -194,7 +193,7 @@ describe("maintenance command", () => {
       expect.arrayContaining([
         ["[ExperienceEngine] Merged scope scope_source into scope_target."],
         ["[ExperienceEngine] Moved: records=12 taskRuns=7 injections=0 nodes=3 candidates=1"],
-        ["[ExperienceEngine] Merged aggregates: packActivations=1 taskStats=2"]
+        ["[ExperienceEngine] Merged aggregates: taskStats=2"]
       ])
     );
   });

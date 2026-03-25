@@ -1,7 +1,4 @@
 import { loadConfig } from "../../config/load-config.js";
-import type { CompilerTarget } from "../../compiler/types.js";
-import { deployCompiledPack } from "../../compiler/deployer.js";
-import { resolveExperienceEnginePaths } from "../../config/path-resolver.js";
 import {
   ExperienceInteractionService,
   type ExperienceFirstValueReadiness
@@ -28,32 +25,6 @@ type DoctorDeps = {
   inspectOpenClawInstall?: typeof inspectOpenClawInstall;
   readRegistryHealth?: typeof readRegistryHealth;
   inspectFirstValueReadiness?: () => ExperienceFirstValueReadiness;
-  inspectScopePackStatus?: () => {
-    scopeId: string;
-    enabledCount: number;
-    activations: Array<{
-      packId: string;
-      status: string;
-      currentVersion: string;
-      pinnedVersion?: string;
-      enabled: boolean;
-    }>;
-    compiler: {
-      publishedPacks: number;
-      compiledTargets: number;
-      stalePublishedPacks: number;
-      latestCompiledArtifact?: {
-        packId: string;
-        target: string;
-        version: string;
-        renderedNodeCount: number;
-      };
-    };
-  };
-  inspectPackDeploymentStatus?: (packId: string, target: CompilerTarget, repoPath: string) => {
-    target: CompilerTarget;
-    deploymentStatus: "missing" | "up_to_date" | "drifted";
-  };
 };
 
 const logRemoteReleaseStatus = (target: string, remoteStatus: RemoteReleaseStatus): void => {
@@ -89,27 +60,6 @@ const logRegistryHealth = (health: RegistryHealth): void => {
 const inspectFirstValueReadiness = (): ExperienceFirstValueReadiness =>
   new ExperienceInteractionService(loadConfig()).inspectFirstValueReadiness();
 
-const inspectScopePackStatus = () => new ExperienceInteractionService(loadConfig()).inspectScopePackStatus();
-const inspectPackDeploymentStatus = (
-  packId: string,
-  target: CompilerTarget,
-  repoPath: string
-) => {
-  const paths = resolveExperienceEnginePaths();
-  const result = deployCompiledPack({
-    packsDir: paths.packsDir,
-    packId,
-    target,
-    repoPath,
-    statusOnly: true
-  });
-
-  return {
-    target: result.target,
-    deploymentStatus: result.deploymentStatus
-  };
-};
-
 const logEvaluationMode = (): void => {
   const config = loadConfig();
   console.log("Evaluation mode:");
@@ -124,51 +74,6 @@ const logFirstValueReadiness = (summary: ExperienceFirstValueReadiness): void =>
   console.log(`- Candidates waiting for promotion: ${summary.candidates}`);
   console.log(`- Formal experience nodes: ${summary.nodes}`);
   console.log(`Recommended next step: ${summary.nextStep}`);
-};
-
-const logScopePackStatus = (status: {
-  scopeId: string;
-  enabledCount: number;
-  activations: Array<{
-    packId: string;
-    status: string;
-    currentVersion: string;
-    pinnedVersion?: string;
-    enabled: boolean;
-  }>;
-  compiler: {
-    publishedPacks: number;
-    compiledTargets: number;
-    stalePublishedPacks: number;
-    latestCompiledArtifact?: {
-      packId: string;
-      target: string;
-      version: string;
-      renderedNodeCount: number;
-    };
-  };
-}, deploymentStatus?: { target: CompilerTarget; deploymentStatus: "missing" | "up_to_date" | "drifted" }): void => {
-  console.log("Current scope packs:");
-  console.log(`- Scope: ${status.scopeId}`);
-  console.log(`- Enabled packs: ${status.enabledCount}`);
-  for (const activation of status.activations.filter((entry) => entry.enabled)) {
-    console.log(
-      `- ${activation.packId}@${activation.pinnedVersion ?? activation.currentVersion} [${activation.status} enabled]`
-    );
-  }
-  console.log("Pack compiler:");
-  console.log(`- Published packs: ${status.compiler.publishedPacks}`);
-  console.log(`- Compiled targets: ${status.compiler.compiledTargets}`);
-  console.log(`- Stale published packs: ${status.compiler.stalePublishedPacks}`);
-  if (status.compiler.latestCompiledArtifact) {
-    const latest = status.compiler.latestCompiledArtifact;
-    console.log(
-      `- Latest compile: ${latest.packId}@${latest.version} -> ${latest.target} (${latest.renderedNodeCount} nodes)`
-    );
-  }
-  if (deploymentStatus) {
-    console.log(`- Current repo target status: ${deploymentStatus.target} ${deploymentStatus.deploymentStatus}`);
-  }
 };
 
 const logDistillationStatus = (status?: {
@@ -312,15 +217,6 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
   const resolveRemoteStatus = deps.fetchLatestGitHubReleaseStatus ?? fetchLatestGitHubReleaseStatus;
   const registryHealth = (deps.readRegistryHealth ?? readRegistryHealth)();
   const firstValueReadiness = (deps.inspectFirstValueReadiness ?? inspectFirstValueReadiness)();
-  const scopePackStatus = (deps.inspectScopePackStatus ?? inspectScopePackStatus)();
-  const resolvePackDeploymentStatus = deps.inspectPackDeploymentStatus ?? inspectPackDeploymentStatus;
-  const latestScopeDeploymentStatus = scopePackStatus.compiler.latestCompiledArtifact
-    ? resolvePackDeploymentStatus(
-        scopePackStatus.compiler.latestCompiledArtifact.packId,
-        scopePackStatus.compiler.latestCompiledArtifact.target as CompilerTarget,
-        process.cwd()
-      )
-    : undefined;
   if (!target) {
     const codexStatus = (deps.inspectCodexInstall ?? inspectCodexInstall)();
     const claudeStatus = (deps.inspectClaudeCodeInstall ?? inspectClaudeCodeInstall)();
@@ -394,7 +290,6 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     logRegistryHealth(registryHealth);
     logEvaluationMode();
     logFirstValueReadiness(firstValueReadiness);
-    logScopePackStatus(scopePackStatus, latestScopeDeploymentStatus);
     return;
   }
   if (target === "claude-code") {
@@ -431,7 +326,6 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     logRegistryHealth(registryHealth);
     logEvaluationMode();
     logFirstValueReadiness(firstValueReadiness);
-    logScopePackStatus(scopePackStatus, latestScopeDeploymentStatus);
     return;
   }
 
@@ -468,7 +362,6 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     logRegistryHealth(registryHealth);
     logEvaluationMode();
     logFirstValueReadiness(firstValueReadiness);
-    logScopePackStatus(scopePackStatus, latestScopeDeploymentStatus);
     return;
   }
 
@@ -545,5 +438,4 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
   logRegistryHealth(registryHealth);
   logEvaluationMode();
   logFirstValueReadiness(firstValueReadiness);
-  logScopePackStatus(scopePackStatus, latestScopeDeploymentStatus);
 };
