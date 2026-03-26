@@ -28,6 +28,8 @@ export type RerankResult = {
   score: number;
 };
 
+const DEFAULT_RERANK_WINDOW = 5;
+
 const TASK_FAMILY_PROXIMITY: Record<TaskType, Partial<Record<TaskType, number>>> = {
   bug_fix: {
     bug_fix: 1,
@@ -358,6 +360,57 @@ const buildFusedScores = (
   );
 };
 
+const computeDefaultRerankScores = (
+  queryText: string,
+  candidates: RerankCandidate[]
+): Map<string, number> => {
+  if (!queryText.trim() || !candidates.length) {
+    return new Map();
+  }
+
+  const rawScores = new Map<string, number>();
+  let maxScore = 0;
+
+  for (const candidate of candidates.slice(0, DEFAULT_RERANK_WINDOW)) {
+    const triggerScore = textOverlapScore(candidate.node.trigger_pattern, queryText);
+    const hintScore = textOverlapScore(candidate.node.compact_hint, queryText);
+    const goalScore = textOverlapScore(candidate.node.goal, queryText);
+    const stepScore = textOverlapScore(candidate.node.recommended_steps?.join("\n"), queryText);
+    const successSignalScore = textOverlapScore(candidate.node.success_signal, queryText);
+    const familyBonus = candidate.taskFamilyMatch ? 0.08 : 0;
+    const structuredBonus = (candidate.node.recommended_steps?.length ?? 0) > 0 || candidate.node.goal ? 0.04 : 0;
+    const maturityBonus = Math.min(
+      0.24,
+      candidate.node.helped_count * 0.015 +
+        candidate.node.support_count * 0.01 +
+        (candidate.node.validation_state === "validated_by_reuse" ? 0.06 : 0)
+    );
+    const harmPenalty = Math.min(0.08, candidate.node.harmed_count * 0.02);
+
+    const score =
+      triggerScore * 0.45 +
+      stepScore * 0.2 +
+      goalScore * 0.14 +
+      hintScore * 0.11 +
+      successSignalScore * 0.06 +
+      familyBonus +
+      structuredBonus +
+      maturityBonus -
+      harmPenalty;
+
+    rawScores.set(candidate.node.id, score);
+    maxScore = Math.max(maxScore, score);
+  }
+
+  if (maxScore <= 0) {
+    return new Map();
+  }
+
+  return new Map(
+    [...rawScores.entries()].map(([id, score]) => [id, Number((score / maxScore).toFixed(6))])
+  );
+};
+
 export const retrieveCandidates = async (
   input: ExperienceInput,
   nodes: ExperienceNode[],
@@ -448,21 +501,32 @@ export const retrieveScoredCandidates = async (
 
   const rerankCandidates = [...ranked].sort((left, right) => right.totalScore - left.totalScore);
   const rerankScoreById = new Map<string, number>();
-  if (options.reranker && rerankCandidates.length) {
-    const rerankResults = await options.reranker({
+  if (rerankCandidates.length) {
+    const rerankInput = {
       queryText: queryText || input.task_summary,
       taskType: inputTaskType,
-      candidates: rerankCandidates.map(({ node, semanticScore, lexicalScore, fusedScore, familyScore, totalScore, scopeMatch, taskFamilyMatch }) => ({
-        node,
-        semanticScore,
-        lexicalScore,
-        fusedScore,
-        familyScore,
-        totalScore,
-        scopeMatch,
-        taskFamilyMatch
-      }))
-    });
+      candidates: rerankCandidates.map(
+        ({ node, semanticScore, lexicalScore, fusedScore, familyScore, totalScore, scopeMatch, taskFamilyMatch }) => ({
+          node,
+          semanticScore,
+          lexicalScore,
+          fusedScore,
+          familyScore,
+          totalScore,
+          scopeMatch,
+          taskFamilyMatch
+        })
+      )
+    };
+    const defaultRerankScores = computeDefaultRerankScores(rerankInput.queryText, rerankInput.candidates);
+    const rerankResults = options.reranker
+      ? await options.reranker(rerankInput)
+      : rerankInput.candidates
+          .slice(0, DEFAULT_RERANK_WINDOW)
+          .map((candidate) => ({
+            id: candidate.node.id,
+            score: defaultRerankScores.get(candidate.node.id) ?? 0
+          }));
 
     const maxScore = Math.max(
       0,

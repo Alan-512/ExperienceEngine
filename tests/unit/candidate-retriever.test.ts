@@ -514,4 +514,47 @@ describe("retrieveCandidates", () => {
     });
     expect(candidates[0]!.totalScore).toBeGreaterThan(candidates[1]!.totalScore);
   });
+
+  it("applies a default product rerank stage for close hybrid candidates", async () => {
+    const candidates = await retrieveScoredCandidates(
+      input({
+        task_type: "test_debug",
+        task_summary: "Investigate the payments auth regression and inspect the fixture handshake path first"
+      }),
+      [
+        node({
+          id: "baseline-top",
+          task_type: "test_debug",
+          trigger_pattern: "Inspect the payments auth regression in the current workspace",
+          compact_hint: "Inspect the workspace and current auth regression path before editing.",
+          retrieval_text:
+            "Inspect the payments auth regression in the current workspace\nInspect the workspace and current auth regression path before editing.",
+          helped_count: 4,
+          support_count: 3
+        }),
+        node({
+          id: "product-reranked-top",
+          task_type: "test_debug",
+          trigger_pattern: "Investigate the payments auth regression and inspect the fixture handshake path first",
+          compact_hint: "Check the fixture handshake before changing the payments auth code path.",
+          goal: "Narrow the payments auth regression through the fixture handshake first.",
+          recommended_steps: [
+            "Inspect the auth fixture handshake before changing code.",
+            "Keep the investigation read-only until the regression signature is clear."
+          ],
+          retrieval_text:
+            "Investigate the payments auth regression and inspect the fixture handshake path first\nCheck the fixture handshake before changing the payments auth code path.",
+          helped_count: 2,
+          support_count: 2
+        })
+      ]
+    );
+
+    expect(candidates[0]).toMatchObject({
+      node: expect.objectContaining({ id: "product-reranked-top" }),
+      rerankScore: expect.any(Number)
+    });
+    expect(candidates[0]!.rerankScore).toBeGreaterThan(candidates[1]!.rerankScore ?? -1);
+    expect(candidates[0]!.totalScore).toBeGreaterThan(candidates[1]!.totalScore);
+  });
 });
