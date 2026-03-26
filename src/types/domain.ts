@@ -10,8 +10,10 @@ export type TaskType =
   | "general";
 export type ResolvedTaskType = TaskType | "unknown";
 
-export type ExperienceState = "candidate" | "active" | "cooling" | "retired";
+export type ExperienceState = "candidate" | "priority_candidate" | "active" | "cooling" | "retired";
 export type ExperienceNodeType = "strategy" | "warning";
+export type PromotionSignal = "normal" | "high_value";
+export type MergeAction = "ADD" | "UPDATE" | "NONE";
 export type ExperienceKind =
   | "execution_pattern"
   | "config_troubleshooting"
@@ -160,6 +162,11 @@ export type ExperienceNode = {
   distillation_mode_used?: ResolvedDistillationMode;
   distillation_source?: DistillationSource;
   redistilled_from?: DistillationSource;
+  promotion_signal?: PromotionSignal;
+  promotion_reason?: string;
+  merge_decision?: MergeAction;
+  merge_reason?: string;
+  priority_promotion_applied?: boolean;
   source_kind: "system_derived" | "user_authored_candidate_promoted";
   origin_record_ids: string[];
   helped_record_ids: string[];
@@ -234,6 +241,10 @@ export type InjectionScorecard = {
   scoreMargin?: number;
   fastPathApplied?: boolean;
   queryRewriteApplied?: boolean;
+  mergeDecision?: MergeAction;
+  mergeReason?: string;
+  promotionSignal?: PromotionSignal;
+  priorityPromotionApplied?: boolean;
   gateReason?: string;
   decisionReason?: string;
   nodes: InjectionScorecardNode[];

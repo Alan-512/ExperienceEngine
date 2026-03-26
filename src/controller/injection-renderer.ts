@@ -11,7 +11,7 @@ const shouldExpandStructuredGuidance = (
     return false;
   }
 
-  if (node.state === "candidate") {
+  if (node.state === "candidate" || node.state === "priority_candidate") {
     return false;
   }
 

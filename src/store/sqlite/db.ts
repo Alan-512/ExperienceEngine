@@ -58,6 +58,11 @@ export const bootstrapDatabase = (db: DatabaseSync): void => {
   ensureColumn(db, "experience_nodes", "distillation_mode_used", "TEXT");
   ensureColumn(db, "experience_nodes", "distillation_source", "TEXT");
   ensureColumn(db, "experience_nodes", "redistilled_from", "TEXT");
+  ensureColumn(db, "experience_nodes", "promotion_signal", "TEXT");
+  ensureColumn(db, "experience_nodes", "promotion_reason", "TEXT");
+  ensureColumn(db, "experience_nodes", "merge_decision", "TEXT");
+  ensureColumn(db, "experience_nodes", "merge_reason", "TEXT");
+  ensureColumn(db, "experience_nodes", "priority_promotion_applied", "INTEGER NOT NULL DEFAULT 0");
   ensureColumn(db, "experience_nodes", "origin_record_ids_json", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "experience_nodes", "helped_record_ids_json", "TEXT NOT NULL DEFAULT '[]'");
   ensureColumn(db, "experience_nodes", "harmed_record_ids_json", "TEXT NOT NULL DEFAULT '[]'");
@@ -82,6 +87,8 @@ export const bootstrapDatabase = (db: DatabaseSync): void => {
   ensureColumn(db, "experience_candidates", "distilled_at", "TEXT");
   ensureColumn(db, "experience_candidates", "discarded_at", "TEXT");
   ensureColumn(db, "experience_candidates", "last_failed_at", "TEXT");
+  ensureColumn(db, "experience_candidates", "promotion_signal", "TEXT");
+  ensureColumn(db, "experience_candidates", "promotion_reason", "TEXT");
   ensureColumn(db, "experience_candidates", "experience_kind", "TEXT");
   ensureColumn(db, "experience_candidates", "confidence_signal", "TEXT");
   ensureColumn(db, "experience_candidates", "validation_state", "TEXT");

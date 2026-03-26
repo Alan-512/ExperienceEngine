@@ -32,6 +32,10 @@ const deriveNodeRiskLevel = (node: ExperienceNode, nodes: ExperienceNode[]): Inj
     return hasActiveExactFamilyCoverage(nodes, node) ? "medium" : "high";
   }
 
+  if (node.state === "priority_candidate") {
+    return "medium";
+  }
+
   if (node.harmed_count > node.helped_count) {
     return "high";
   }
@@ -63,6 +67,8 @@ const buildNodeReasons = (input: ExperienceInput, node: ExperienceNode): string[
 
   if (node.state === "candidate") {
     reasons.push("This node is still in candidate state, so ExperienceEngine used conservative injection.");
+  } else if (node.state === "priority_candidate") {
+    reasons.push("This node is a priority candidate, so ExperienceEngine allowed cautious early reuse.");
   } else if (node.state === "cooling") {
     reasons.push("This node is in cooling state and should be applied more carefully.");
   } else {
@@ -136,6 +142,10 @@ export const buildInjectionScorecard = (
     scoreMargin?: number;
     fastPathApplied?: boolean;
     queryRewriteApplied?: boolean;
+    mergeDecision?: InjectionScorecard["mergeDecision"];
+    mergeReason?: InjectionScorecard["mergeReason"];
+    promotionSignal?: InjectionScorecard["promotionSignal"];
+    priorityPromotionApplied?: InjectionScorecard["priorityPromotionApplied"];
     gateReason?: string;
     decisionReason?: string;
   }
@@ -160,6 +170,10 @@ export const buildInjectionScorecard = (
     scoreMargin: diagnostics?.scoreMargin,
     fastPathApplied: diagnostics?.fastPathApplied,
     queryRewriteApplied: diagnostics?.queryRewriteApplied,
+    mergeDecision: diagnostics?.mergeDecision,
+    mergeReason: diagnostics?.mergeReason,
+    promotionSignal: diagnostics?.promotionSignal,
+    priorityPromotionApplied: diagnostics?.priorityPromotionApplied,
     gateReason: diagnostics?.gateReason,
     decisionReason: diagnostics?.decisionReason,
     nodes: scoredNodes,

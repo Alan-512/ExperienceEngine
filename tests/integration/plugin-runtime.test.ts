@@ -1106,6 +1106,206 @@ describe("OpenClaw plugin runtime", () => {
     expect(injectionRow.mode).toBe("inject");
   });
 
+  it("converges repeated same-family organic lessons into one stronger node", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const handlers = new Map<string, Handler>();
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (_input, init) => {
+      const rawBody = typeof init?.body === "string" ? init.body : "";
+      const parsedBody = rawBody
+        ? (JSON.parse(rawBody) as {
+            contents?: Array<{ parts?: Array<{ text?: string }> }>;
+            system_instruction?: { parts?: Array<{ text?: string }> };
+          })
+        : {};
+      const systemPrompt =
+        parsedBody.system_instruction?.parts?.find((part) => typeof part.text === "string")?.text ?? "";
+      const promptText = parsedBody.contents?.[0]?.parts?.find((part) => typeof part.text === "string")?.text ?? "";
+
+      if (systemPrompt.includes("merge into an existing node pool")) {
+        const mergePayload = promptText;
+        const existingNodes = mergePayload
+          ? ((JSON.parse(mergePayload) as { existing_nodes?: Array<{ id: string }> }).existing_nodes ?? [])
+          : [];
+
+        return geminiJsonResponse({
+          action: existingNodes.length ? "UPDATE" : "ADD",
+          target_node_id: existingNodes[0]?.id,
+          reason: existingNodes.length
+            ? "A same-family lesson already exists and this run strengthens it."
+            : "no existing nodes matched"
+        });
+      }
+
+      const secondPrompt =
+        rawBody.includes("authentication regression") ||
+        rawBody.includes("auth regression") ||
+        rawBody.includes("same read-only EROFS loop");
+
+      if (systemPrompt.includes("coding-experience learner")) {
+        return geminiJsonResponse({
+          worth_capturing: true,
+          experience_kind: "execution_pattern",
+          reason: secondPrompt
+            ? "A same-family EROFS regression was resolved by the same diagnostic pattern."
+            : "The read-only EROFS investigation produced a reusable first diagnostic step.",
+          candidate: {
+            node_type: "strategy",
+            task_type: secondPrompt ? "bug_fix" : "test_debug",
+            trigger_pattern: "When read-only EROFS stops a focused test run before any file edits",
+            compact_hint: "Do not keep rerunning the focused test under EROFS; switch to static inspection or a writable cache path first.",
+            success_signal: "The next diagnostic step is confirmed without repeating the same EROFS loop.",
+            evidence_summary: secondPrompt
+              ? "A second same-family regression resolved by leaving the repeated EROFS loop immediately."
+              : "A read-only regression review only progressed after switching away from the repeated EROFS test loop.",
+            experience_kind: "execution_pattern",
+            confidence_signal: "supported_by_objective_success",
+            validation_state: "pending_reuse_validation"
+          }
+        });
+      }
+
+      return geminiJsonResponse({
+        trigger_conditions: secondPrompt
+          ? "An auth regression review hits the same read-only EROFS loop before edits."
+          : "A read-only or sandboxed test run hits EROFS before any file edits.",
+        success_criteria: "The regression investigation moves forward without repeating the same EROFS loop.",
+        risk_level: "medium",
+        trigger_pattern: "When read-only EROFS stops a focused test run before any file edits",
+        compact_hint: "Do not keep rerunning the focused test under EROFS; switch to static inspection or a writable cache path first.",
+        goal: "Break out of the repeated EROFS loop before widening the investigation.",
+        recommended_steps: [
+          "Confirm the failure is EROFS in a read-only workspace.",
+          "Switch to static inspection or a writable cache path."
+        ],
+        avoid_steps: ["Do not keep rerunning the same focused test under the same read-only constraints."],
+        fallback_steps: ["If a writable cache path is unavailable, continue with static analysis only."],
+        success_signal: "The next diagnostic step is confirmed without repeating the same EROFS loop.",
+        evidence_summary: secondPrompt
+          ? "A second same-family regression resolved by leaving the repeated EROFS loop immediately."
+          : "A read-only regression review only progressed after switching away from the repeated EROFS test loop.",
+        experience_kind: "execution_pattern",
+        confidence_signal: "supported_by_objective_success",
+        validation_state: "pending_reuse_validation"
+      });
+    });
+
+    createExperiencePlugin(
+      {
+        dataDir: join(runtimeDir, "data"),
+        sqlitePath,
+        triggerThreshold: 0.6,
+        maxHints: 3,
+        distillerProvider: "gemini",
+        distillerModel: "gemini-3-flash-preview",
+        distillationAuthMode: "api_key",
+        distillationMode: "llm",
+        distillationAllowPassthrough: true,
+        distillationAutoDrain: true
+      },
+      undefined,
+      {
+        homeDir: runtimeDir,
+        env: {
+          GEMINI_API_KEY: "secret"
+        },
+        fetchImpl: fetchImpl as unknown as typeof fetch
+      }
+    ).register({
+      on(event, handler) {
+        handlers.set(event, handler);
+      }
+    });
+
+    const finalize = handlers.get("message_sent");
+    expect(finalize).toBeTypeOf("function");
+
+    await finalize?.(
+      {
+        messages: [
+          {
+            role: "user",
+            content: [{ type: "text", text: "Investigate the read-only EROFS regression before any edits and identify the first safe diagnostic step." }]
+          },
+          {
+            role: "toolResult",
+            toolCallId: "call_erofs_a",
+            toolName: "exec",
+            content: [{ type: "text", text: "Vitest failed with EROFS in the read-only workspace." }],
+            details: {
+              status: "completed",
+              exitCode: 0,
+              aggregated: "Vitest failed with EROFS in the read-only workspace."
+            },
+            isError: false
+          },
+          {
+            role: "assistant",
+            content: [{ type: "text", text: "Switching to static inspection clarified the next diagnostic step." }]
+          }
+        ]
+      },
+      {
+        sessionId: "organic-erofs-a",
+        workspaceDir: "/tmp/repo"
+      }
+    );
+
+    await finalize?.(
+      {
+        messages: [
+          {
+            role: "user",
+            content: [{ type: "text", text: "Review the authentication regression when the same read-only EROFS loop appears before edits." }]
+          },
+          {
+            role: "toolResult",
+            toolCallId: "call_erofs_b",
+            toolName: "exec",
+            content: [{ type: "text", text: "The auth regression hit the same EROFS loop until the review switched to static inspection." }],
+            details: {
+              status: "completed",
+              exitCode: 0,
+              aggregated: "The auth regression hit the same EROFS loop until the review switched to static inspection."
+            },
+            isError: false
+          },
+          {
+            role: "assistant",
+            content: [{ type: "text", text: "The regression review moved forward after leaving the EROFS loop." }]
+          }
+        ]
+      },
+      {
+        sessionId: "organic-erofs-b",
+        workspaceDir: "/tmp/repo"
+      }
+    );
+
+    const db = new DatabaseSync(sqlitePath);
+    await waitFor(() => {
+      const nodeRows = db.prepare(
+        `SELECT id, state, support_count, merge_decision
+         FROM experience_nodes
+         WHERE compact_hint LIKE '%EROFS%'
+         ORDER BY updated_at DESC`
+      ).all() as Array<{
+        id: string;
+        state: string;
+        support_count: number;
+        merge_decision: string | null;
+      }>;
+
+      expect(nodeRows).toHaveLength(1);
+      expect(nodeRows[0]).toEqual({
+        id: nodeRows[0].id,
+        state: "active",
+        support_count: 2,
+        merge_decision: "UPDATE"
+      });
+    });
+  });
+
   it("waits for background learning to finish before the finalize hook returns", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");

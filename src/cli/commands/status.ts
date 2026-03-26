@@ -41,4 +41,7 @@ export const runStatusCommand = (): void => {
   console.log(`- Recent fast-path activations: ${decisionHealth.recentFastPathActivations}`);
   console.log(`- Recent rerank participations: ${decisionHealth.recentRerankParticipations}`);
   console.log(`- Recent query rewrites: ${decisionHealth.recentQueryRewriteUsages}`);
+  console.log(`- Current priority candidates: ${decisionHealth.currentPriorityCandidates}`);
+  console.log(`- Recent converged updates: ${decisionHealth.recentConvergedUpdates}`);
+  console.log(`- Recent priority promotions: ${decisionHealth.recentPriorityPromotions}`);
 };

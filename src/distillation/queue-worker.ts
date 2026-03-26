@@ -12,11 +12,13 @@ import { buildLegacyEmbedding, embedPassageText, withEmbeddingMetadata } from ".
 import { transitionState } from "../feedback/state-transition.js";
 import { getDistillationFailureBucket } from "./errors.js";
 import { tokenize } from "../utils/text.js";
+import { areTaskFamiliesMergeCompatible, resolveExperienceFamily } from "./experience-family.js";
 
 const DISTILLATION_STALE_PROCESSING_MS = 150_000;
 const NEAR_DUPLICATE_TRIGGER_SIMILARITY = 0.72;
 const NEAR_DUPLICATE_HINT_SIMILARITY = 0.72;
 const EXPECTATION_CORRECTION_DIMENSION_SIMILARITY = 0.55;
+const STRUCTURED_LESSON_OVERLAP_SIMILARITY = 0.66;
 
 const buildRetrievalText = (candidate: ExperienceCandidateDraft): string =>
   (candidate.experience_kind === "expectation_correction"
@@ -25,6 +27,22 @@ const buildRetrievalText = (candidate: ExperienceCandidateDraft): string =>
   )
     .filter(Boolean)
     .join("\n");
+
+const hasStructuredGuidance = (candidate: ExperienceCandidateDraft): boolean =>
+  Boolean(candidate.goal?.trim()) ||
+  (candidate.recommended_steps?.length ?? 0) > 0 ||
+  (candidate.avoid_steps?.length ?? 0) > 0 ||
+  (candidate.fallback_steps?.length ?? 0) > 0;
+
+const shouldEnterPriorityCandidate = (
+  candidate: ExperienceCandidate,
+  distilled: ExperienceCandidateDraft
+): boolean =>
+  distilled.promotion_signal === "high_value" &&
+  candidate.source_outcome_signal === "success" &&
+  Boolean(distilled.success_signal?.trim()) &&
+  hasStructuredGuidance(distilled) &&
+  (distilled.experience_kind === "expectation_correction" || distilled.node_type === "warning" || Boolean(distilled.goal?.trim()));
 
 const mergeIds = (existing: string[] | undefined, next: string[]): string[] => {
   const merged = new Set([...(existing ?? []), ...next]);
@@ -43,6 +61,19 @@ const triggerSimilarity = (left: string, right: string): number => {
   const inputCoverage = overlap / lhs.size;
   const candidateCoverage = overlap / rhs.size;
   return Math.max(jaccardLike, inputCoverage, candidateCoverage);
+};
+
+const listSimilarity = (left: string[] | undefined, right: string[] | undefined): number => {
+  const lhs = (left ?? []).flatMap((entry) => tokenize(entry));
+  const rhs = (right ?? []).flatMap((entry) => tokenize(entry));
+  if (!lhs.length || !rhs.length) {
+    return 0;
+  }
+
+  const lhsSet = new Set(lhs);
+  const rhsSet = new Set(rhs);
+  const overlap = [...lhsSet].filter((token) => rhsSet.has(token)).length;
+  return overlap / Math.max(lhsSet.size, rhsSet.size);
 };
 
 const normalizeSemanticText = (value: string | undefined): string =>
@@ -68,6 +99,12 @@ const reuseSimilarity = (left: ExperienceNode, right: ExperienceCandidateDraft):
     triggerSimilarity(left.trigger_pattern, right.trigger_pattern),
     triggerSimilarity(left.compact_hint, right.compact_hint)
   );
+
+const structuredLessonOverlap = (left: ExperienceNode, right: ExperienceCandidateDraft): number =>
+  triggerSimilarity(left.trigger_pattern, right.trigger_pattern) * 0.35 +
+  triggerSimilarity(left.compact_hint, right.compact_hint) * 0.35 +
+  listSimilarity(left.recommended_steps, right.recommended_steps) * 0.15 +
+  listSimilarity(left.avoid_steps, right.avoid_steps) * 0.15;
 
 const hasAlignedExpectationCorrectionDimension = (
   node: ExperienceNode,
@@ -129,8 +166,9 @@ const distilledDraftToNode = (
   candidate: ExperienceCandidate,
   distilled: ExperienceCandidateDraft,
   existing?: ExperienceNode,
-  mergeAction: MergeAction = "ADD"
+  mergeDecision?: MergeDecision
 ): ExperienceNode => {
+  const mergeAction = mergeDecision?.action ?? "ADD";
   const timestamp = nowIso();
   const id =
     existing?.id ??
@@ -158,6 +196,7 @@ const distilledDraftToNode = (
 
   const retrievalText = buildRetrievalText(baseDraft);
   const legacyEmbedding = buildLegacyEmbedding(retrievalText);
+  const priorityPromotionApplied = !existing && shouldEnterPriorityCandidate(candidate, baseDraft);
 
   return {
     id,
@@ -178,10 +217,13 @@ const distilledDraftToNode = (
       existing.distillation_source !== distilled.distillation_source
         ? existing.distillation_source
         : existing?.redistilled_from,
+    merge_decision: mergeDecision?.action ?? existing?.merge_decision,
+    merge_reason: mergeDecision?.reason ?? existing?.merge_reason,
+    priority_promotion_applied: existing?.priority_promotion_applied ?? priorityPromotionApplied,
     origin_record_ids: mergeIds(existing?.origin_record_ids, [candidate.source_record_id]),
     helped_record_ids: existing?.helped_record_ids ?? [],
     harmed_record_ids: existing?.harmed_record_ids ?? [],
-    state: existing?.state ?? "candidate",
+    state: existing?.state ?? (priorityPromotionApplied ? "priority_candidate" : "candidate"),
     usage_count: existing?.usage_count ?? 0,
     helped_count: existing?.helped_count ?? 0,
     harmed_count: existing?.harmed_count ?? 0,
@@ -201,16 +243,23 @@ const findReusableNodes = (
 ): ExperienceNode[] =>
   nodeRepo
     .listByScope(candidate.scope_id)
-    .filter((node) => node.task_type === candidate.task_type && node.node_type === candidate.node_type)
+    .filter((node) => node.node_type === candidate.node_type)
+    .filter((node) => areTaskFamiliesMergeCompatible(node.task_type, candidate.task_type))
     .sort((left, right) => {
+      const leftTaskTypeExact = left.task_type === candidate.task_type ? 1 : 0;
+      const rightTaskTypeExact = right.task_type === candidate.task_type ? 1 : 0;
+      if (leftTaskTypeExact !== rightTaskTypeExact) {
+        return rightTaskTypeExact - leftTaskTypeExact;
+      }
+
       const leftExact = left.trigger_pattern === distilled.trigger_pattern ? 1 : 0;
       const rightExact = right.trigger_pattern === distilled.trigger_pattern ? 1 : 0;
       if (leftExact !== rightExact) {
         return rightExact - leftExact;
       }
 
-      const leftSimilarity = reuseSimilarity(left, distilled);
-      const rightSimilarity = reuseSimilarity(right, distilled);
+      const leftSimilarity = structuredLessonOverlap(left, distilled);
+      const rightSimilarity = structuredLessonOverlap(right, distilled);
       if (leftSimilarity !== rightSimilarity) {
         return rightSimilarity - leftSimilarity;
       }
@@ -234,7 +283,12 @@ const findReusableNodes = (
 
       const triggerScore = triggerSimilarity(node.trigger_pattern, distilled.trigger_pattern);
       const hintScore = triggerSimilarity(node.compact_hint, distilled.compact_hint);
-      return triggerScore >= NEAR_DUPLICATE_TRIGGER_SIMILARITY || hintScore >= NEAR_DUPLICATE_HINT_SIMILARITY;
+      const lessonScore = structuredLessonOverlap(node, distilled);
+      return (
+        triggerScore >= NEAR_DUPLICATE_TRIGGER_SIMILARITY ||
+        hintScore >= NEAR_DUPLICATE_HINT_SIMILARITY ||
+        lessonScore >= STRUCTURED_LESSON_OVERLAP_SIMILARITY
+      );
     })
     .slice(0, 3);
 
@@ -252,6 +306,17 @@ const buildFallbackMergeDecision = (existingNodes: ExperienceNode[], distilled: 
       action: "NONE",
       targetNodeId: best.id,
       reason: "existing node already covers the distilled experience",
+      source: "rule"
+    };
+  }
+
+  const familyAligned = resolveExperienceFamily(best.task_type) === resolveExperienceFamily(distilled.task_type);
+  const lessonScore = structuredLessonOverlap(best, distilled);
+  if (familyAligned && lessonScore >= STRUCTURED_LESSON_OVERLAP_SIMILARITY) {
+    return {
+      action: "UPDATE",
+      targetNodeId: best.id,
+      reason: "existing same-family node covers the same lesson and should absorb the new evidence",
       source: "rule"
     };
   }
@@ -382,12 +447,7 @@ export class DistillationQueueWorker {
         candidate.distilled_node_id ??
         stableId("node", [candidate.scope_id, candidate.task_type, candidate.node_type, distilled.compact_hint].join(":"));
       const existingNode = this.nodeRepo.getById(resolvedNodeId);
-      const node = distilledDraftToNode(
-        candidate,
-        distilled,
-        existingNode,
-        existingNode ? mergeDecision.action : "ADD"
-      );
+      const node = distilledDraftToNode(candidate, distilled, existingNode, mergeDecision);
       const semanticEmbedding = await embedPassageText(node.retrieval_text ?? `${node.trigger_pattern}\n${node.compact_hint}`, {
         config: this.config
       });

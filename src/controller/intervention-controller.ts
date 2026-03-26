@@ -24,6 +24,10 @@ export type InterventionDecision = {
     scoreMargin?: number;
     fastPathApplied: boolean;
     queryRewriteApplied?: boolean;
+    mergeDecision?: ExperienceNode["merge_decision"];
+    mergeReason?: ExperienceNode["merge_reason"];
+    promotionSignal?: ExperienceNode["promotion_signal"];
+    priorityPromotionApplied?: boolean;
     gateReason: string;
     decisionReason: string;
   };
@@ -60,7 +64,7 @@ const isStrongCandidate = (
       quality.scoreMargin >= 0.08 ||
       !runnerUpQuality ||
       (
-        runnerUpQuality.state === "candidate" &&
+        (runnerUpQuality.state === "candidate" || runnerUpQuality.state === "priority_candidate") &&
         runnerUpQuality.helpedCount === 0 &&
         runnerUpQuality.validationState !== "validated_by_reuse"
       ) ||
@@ -251,7 +255,9 @@ const decideInterventionInternal = async (
   }
 
   const mode: InjectionMode =
-    correctionAwareRanked[0]?.state === "candidate" ? "inject_conservative" : "inject";
+    correctionAwareRanked[0]?.state === "candidate" || correctionAwareRanked[0]?.state === "priority_candidate"
+      ? "inject_conservative"
+      : "inject";
   const selected = selectInjectableNodes(
     correctionAwareRanked,
     mode === "inject_conservative" ? 1 : maxHints,
@@ -267,6 +273,10 @@ const decideInterventionInternal = async (
     scoreMargin: topCandidateQuality ? Number(topCandidateQuality.scoreMargin.toFixed(4)) : undefined,
     fastPathApplied: false,
     queryRewriteApplied: retrievalQuery.rewriteApplied,
+    mergeDecision: selected[0]?.merge_decision,
+    mergeReason: selected[0]?.merge_reason,
+    promotionSignal: selected[0]?.promotion_signal,
+    priorityPromotionApplied: selected[0]?.priority_promotion_applied,
     gateReason: "candidate_quality_gate",
     decisionReason: "candidate_quality_positive"
   };

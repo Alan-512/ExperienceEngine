@@ -43,6 +43,11 @@ export type ExperienceNodeSummary = {
   distillationMode?: ExperienceNode["distillation_mode_used"];
   distillationSource?: ExperienceNode["distillation_source"];
   redistilledFrom?: ExperienceNode["redistilled_from"];
+  promotionSignal?: ExperienceNode["promotion_signal"];
+  promotionReason?: ExperienceNode["promotion_reason"];
+  mergeDecision?: ExperienceNode["merge_decision"];
+  mergeReason?: ExperienceNode["merge_reason"];
+  priorityPromotionApplied?: boolean;
   triggerPattern: string;
   evidenceSummary: string;
   originRecordIds: string[];
@@ -175,6 +180,9 @@ export type ExperienceDecisionHealth = {
   recentFastPathActivations: number;
   recentRerankParticipations: number;
   recentQueryRewriteUsages: number;
+  currentPriorityCandidates: number;
+  recentConvergedUpdates: number;
+  recentPriorityPromotions: number;
   lastDecisionMode?: "inject" | "inject_conservative" | "skip";
 };
 
@@ -201,6 +209,11 @@ const toNodeSummary = (node: ExperienceNode): ExperienceNodeSummary => ({
   distillationMode: node.distillation_mode_used,
   distillationSource: node.distillation_source,
   redistilledFrom: node.redistilled_from,
+  promotionSignal: node.promotion_signal,
+  promotionReason: node.promotion_reason,
+  mergeDecision: node.merge_decision,
+  mergeReason: node.merge_reason,
+  priorityPromotionApplied: node.priority_promotion_applied,
   triggerPattern: node.trigger_pattern,
   evidenceSummary: node.evidence_summary,
   originRecordIds: node.origin_record_ids,
@@ -609,7 +622,7 @@ export class ExperienceInteractionService {
   private buildLearningSummary(scopeId?: string): ExperienceLearningSummary {
     const candidateStates: CandidateLifecycleState[] = ["pending", "distilled", "failed", "discarded"];
     const jobStates: DistillationJobState[] = ["pending", "processing", "succeeded", "failed", "discarded"];
-    const nodeStates: ExperienceState[] = ["candidate", "active", "cooling", "retired"];
+    const nodeStates: ExperienceState[] = ["candidate", "priority_candidate", "active", "cooling", "retired"];
     const nodeSources: DistillationSource[] = ["explicit_provider", "rule", "disabled"];
     const attributionReasons: FeedbackAttributionReason[] = [
       "success_outcome",
@@ -728,6 +741,11 @@ export class ExperienceInteractionService {
     let recentFastPathActivations = 0;
     let recentRerankParticipations = 0;
     let recentQueryRewriteUsages = 0;
+    const scopedNodes = this.nodeRepo.listByScope(scope.scope_id);
+    const recentNodes = scopedNodes.slice(0, limit);
+    const currentPriorityCandidates = scopedNodes.filter((node) => node.state === "priority_candidate").length;
+    const recentConvergedUpdates = recentNodes.filter((node) => node.merge_decision === "UPDATE").length;
+    const recentPriorityPromotions = recentNodes.filter((node) => node.priority_promotion_applied).length;
     let lastDecisionMode: ExperienceDecisionHealth["lastDecisionMode"];
 
     for (const record of recentRecords) {
@@ -768,6 +786,9 @@ export class ExperienceInteractionService {
       recentFastPathActivations,
       recentRerankParticipations,
       recentQueryRewriteUsages,
+      currentPriorityCandidates,
+      recentConvergedUpdates,
+      recentPriorityPromotions,
       lastDecisionMode
     };
   }

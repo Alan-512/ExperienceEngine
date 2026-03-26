@@ -7,6 +7,7 @@ import type {
   ExperienceCandidateDraft,
   ExperienceInput,
   ExperienceKind,
+  PromotionSignal,
   ValidationState
 } from "../types/domain.js";
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
@@ -79,6 +80,7 @@ const CONFIDENCE_SIGNALS: ConfidenceSignal[] = [
   "supported_by_objective_success",
   "unconfirmed"
 ];
+const PROMOTION_SIGNALS: PromotionSignal[] = ["normal", "high_value"];
 const VALIDATION_STATES: ValidationState[] = [
   "pending_reuse_validation",
   "validated_by_reuse",
@@ -110,6 +112,8 @@ const isCorrectionScope = (value: unknown): value is CorrectionScope =>
   typeof value === "string" && CORRECTION_SCOPES.includes(value as CorrectionScope);
 const isCorrectionCategory = (value: unknown): value is CorrectionCategory =>
   typeof value === "string" && CORRECTION_CATEGORIES.includes(value as CorrectionCategory);
+const isPromotionSignal = (value: unknown): value is PromotionSignal =>
+  typeof value === "string" && PROMOTION_SIGNALS.includes(value as PromotionSignal);
 
 const withRiskLevel = (summary: string | undefined, riskLevel: string | undefined): string => {
   const trimmed = pickString(summary) ?? "";
@@ -207,6 +211,8 @@ const applyFallbacks = (
     escalation_condition: pickString(parsed.escalation_condition) ?? candidate.escalation_condition,
     evidence_summary: evidenceSummary,
     retrieval_text: candidate.retrieval_text,
+    promotion_signal: isPromotionSignal(parsed.promotion_signal) ? parsed.promotion_signal : candidate.promotion_signal,
+    promotion_reason: pickString(parsed.promotion_reason) ?? candidate.promotion_reason,
     source_kind: candidate.source_kind
   };
 };

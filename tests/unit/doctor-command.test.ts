@@ -230,6 +230,9 @@ describe("doctor command", () => {
         recentFastPathActivations: 1,
         recentRerankParticipations: 2,
         recentQueryRewriteUsages: 1,
+        currentPriorityCandidates: 2,
+        recentConvergedUpdates: 3,
+        recentPriorityPromotions: 1,
         lastDecisionMode: "inject"
       }),
       fetchLatestGitHubReleaseStatus: async () => ({
@@ -266,7 +269,10 @@ describe("doctor command", () => {
         ["- Skips: 1"],
         ["- Fast-path activations: 1"],
         ["- Rerank participations: 2"],
-        ["- Query rewrites: 1"]
+        ["- Query rewrites: 1"],
+        ["- Current priority candidates: 2"],
+        ["- Recent converged updates: 3"],
+        ["- Recent priority promotions: 1"]
       ])
     );
   });
@@ -294,6 +300,9 @@ describe("doctor command", () => {
         recentFastPathActivations: 0,
         recentRerankParticipations: 0,
         recentQueryRewriteUsages: 0,
+        currentPriorityCandidates: 0,
+        recentConvergedUpdates: 0,
+        recentPriorityPromotions: 0,
         lastDecisionMode: "skip"
       }),
       fetchLatestGitHubReleaseStatus: async () => ({

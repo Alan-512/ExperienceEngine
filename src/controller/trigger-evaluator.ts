@@ -85,7 +85,8 @@ export const evaluateTriggerRoute = (
     (
       candidateQuality.helpedCount >= 1 ||
       candidateQuality.validationState === "validated_by_reuse" ||
-      candidateQuality.state === "candidate"
+      candidateQuality.state === "candidate" ||
+      candidateQuality.state === "priority_candidate"
     );
 
   if (explicitFailure) {

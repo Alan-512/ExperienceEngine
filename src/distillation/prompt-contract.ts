@@ -14,6 +14,8 @@ Return strict JSON with keys:
 - evidence_summary
 - goal (optional)
 - applicability_notes (optional)
+- promotion_signal (optional: normal | high_value)
+- promotion_reason (optional)
 
 Rules:
 - Keep compact_hint to 1-2 sentences, action-oriented.

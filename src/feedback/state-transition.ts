@@ -5,6 +5,16 @@ export const transitionState = (node: ExperienceNode): ExperienceNode["state"] =
     return "retired";
   }
 
+  if (node.state === "priority_candidate") {
+    if (node.helped_count >= 1 || node.support_count >= 2) {
+      return "active";
+    }
+    if (node.harmed_count > 0) {
+      return "candidate";
+    }
+    return "priority_candidate";
+  }
+
   if (node.harmed_count > node.helped_count) {
     return "cooling";
   }

@@ -60,6 +60,9 @@ vi.mock("../../src/interaction/service.js", () => ({
         recentFastPathActivations: 1,
         recentRerankParticipations: 2,
         recentQueryRewriteUsages: 1,
+        currentPriorityCandidates: 2,
+        recentConvergedUpdates: 3,
+        recentPriorityPromotions: 1,
         lastDecisionMode: "inject_conservative"
       };
     }
@@ -88,7 +91,10 @@ describe("status command", () => {
         ["- Recent skips: 1"],
         ["- Recent fast-path activations: 1"],
         ["- Recent rerank participations: 2"],
-        ["- Recent query rewrites: 1"]
+        ["- Recent query rewrites: 1"],
+        ["- Current priority candidates: 2"],
+        ["- Recent converged updates: 3"],
+        ["- Recent priority promotions: 1"]
       ])
     );
   });

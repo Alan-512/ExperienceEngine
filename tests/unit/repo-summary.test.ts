@@ -27,7 +27,7 @@ describe("repo summary", () => {
       learning: {
         candidates: { pending: 0, distilled: 0, failed: 0, discarded: 0 },
         jobs: { pending: 0, processing: 0, succeeded: 0, failed: 0, discarded: 0 },
-        nodes: { candidate: 0, active: 1, cooling: 0, retired: 0 },
+        nodes: { candidate: 0, priority_candidate: 0, active: 1, cooling: 0, retired: 0 },
         nodeSources: {
           explicit_provider: 0,
           rule: 1,
@@ -80,7 +80,7 @@ describe("repo summary", () => {
       learning: {
         candidates: { pending: 0, distilled: 0, failed: 0, discarded: 0 },
         jobs: { pending: 0, processing: 0, succeeded: 0, failed: 0, discarded: 0 },
-        nodes: { candidate: 0, active: 0, cooling: 0, retired: 0 },
+        nodes: { candidate: 0, priority_candidate: 0, active: 0, cooling: 0, retired: 0 },
         nodeSources: {
           explicit_provider: 0,
           rule: 0,

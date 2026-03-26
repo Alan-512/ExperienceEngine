@@ -5,6 +5,7 @@ import type {
   CorrectionScope,
   ExperienceCandidateDraft,
   ExperienceInput,
+  PromotionSignal,
   TaskType,
   ValidationState
 } from "../types/domain.js";
@@ -122,6 +123,8 @@ candidate may also include:
 - correction_category
 - deviation_pattern
 - corrected_constraint
+- promotion_signal
+- promotion_reason
 - goal
 - applicability_notes
 - recommended_steps
@@ -210,6 +213,7 @@ const CONFIDENCE_SIGNALS: ConfidenceSignal[] = [
   "supported_by_objective_success",
   "unconfirmed"
 ];
+const PROMOTION_SIGNALS: PromotionSignal[] = ["normal", "high_value"];
 const VALIDATION_STATES: ValidationState[] = [
   "pending_reuse_validation",
   "validated_by_reuse",
@@ -239,6 +243,8 @@ const isCorrectionScope = (value: unknown): value is CorrectionScope =>
   typeof value === "string" && CORRECTION_SCOPES.includes(value as CorrectionScope);
 const isCorrectionCategory = (value: unknown): value is CorrectionCategory =>
   typeof value === "string" && CORRECTION_CATEGORIES.includes(value as CorrectionCategory);
+const isPromotionSignal = (value: unknown): value is PromotionSignal =>
+  typeof value === "string" && PROMOTION_SIGNALS.includes(value as PromotionSignal);
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
@@ -315,6 +321,8 @@ const normalizeDraft = (candidate: Record<string, unknown>, input: ExperienceInp
     escalation_condition: pickString(candidate.escalation_condition),
     evidence_summary: evidenceSummary,
     retrieval_text: undefined,
+    promotion_signal: isPromotionSignal(candidate.promotion_signal) ? candidate.promotion_signal : undefined,
+    promotion_reason: pickString(candidate.promotion_reason),
     source_kind: "system_derived"
   });
 };

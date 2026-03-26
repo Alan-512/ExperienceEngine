@@ -58,7 +58,7 @@ type CodexScopeArgs = {
   cwd?: string;
 };
 
-const NODE_STATES: ExperienceState[] = ["candidate", "active", "cooling", "retired"];
+const NODE_STATES: ExperienceState[] = ["candidate", "priority_candidate", "active", "cooling", "retired"];
 const NODE_TYPES: ExperienceNodeType[] = ["strategy", "warning"];
 const EXPERIENCE_ADAPTERS = ["openclaw", "claude-code", "codex"] as const;
 const HIGH_IMPACT_OPERATIONS = ["install", "repair", "upgrade"] as const satisfies readonly HighImpactOperation[];
@@ -1212,7 +1212,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
       outputSchema: z.object({
         status: z.enum(["updated", "not_found"]),
         nodeId: z.string(),
-        state: z.enum(["candidate", "active", "cooling", "retired"]).optional()
+        state: z.enum(["candidate", "priority_candidate", "active", "cooling", "retired"]).optional()
       })
     },
     async ({ nodeId }) => toStructuredToolResult(await interactionSurface.coolNode({ nodeId }))
@@ -1229,7 +1229,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
       outputSchema: z.object({
         status: z.enum(["updated", "not_found"]),
         nodeId: z.string(),
-        state: z.enum(["candidate", "active", "cooling", "retired"]).optional()
+        state: z.enum(["candidate", "priority_candidate", "active", "cooling", "retired"]).optional()
       })
     },
     async ({ nodeId }) => toStructuredToolResult(await interactionSurface.retireNode({ nodeId }))

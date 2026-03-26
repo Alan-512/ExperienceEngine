@@ -103,7 +103,7 @@ const TASK_FAMILY_PROXIMITY: Record<TaskType, Partial<Record<TaskType, number>>>
 };
 
 const isInjectableState = (node: ExperienceNode): boolean =>
-  node.state === "active" || node.state === "cooling" || node.state === "candidate";
+  node.state === "active" || node.state === "cooling" || node.state === "candidate" || node.state === "priority_candidate";
 
 const LEGACY_GENERIC_HINT_PATTERNS = [
   /^reproduce first, then validate the fix with /i,

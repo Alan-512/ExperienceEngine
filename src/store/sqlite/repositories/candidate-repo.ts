@@ -39,6 +39,8 @@ type CandidateRow = {
   retry_count: number;
   distilled_node_id: string | null;
   last_error: string | null;
+  promotion_signal: ExperienceCandidate["promotion_signal"] | null;
+  promotion_reason: string | null;
   created_at: string;
   updated_at: string;
   distilled_at: string | null;
@@ -88,6 +90,8 @@ export class CandidateRepository {
       retry_count: row.retry_count,
       distilled_node_id: row.distilled_node_id ?? undefined,
       last_error: row.last_error ?? undefined,
+      promotion_signal: row.promotion_signal ?? undefined,
+      promotion_reason: row.promotion_reason ?? undefined,
       created_at: row.created_at,
       updated_at: row.updated_at,
       distilled_at: row.distilled_at ?? undefined,
@@ -135,6 +139,8 @@ export class CandidateRepository {
       retry_count: candidate.retry_count,
       distilled_node_id: candidate.distilled_node_id ?? null,
       last_error: candidate.last_error ?? null,
+      promotion_signal: candidate.promotion_signal ?? null,
+      promotion_reason: candidate.promotion_reason ?? null,
       created_at: candidate.created_at,
       updated_at: candidate.updated_at,
       distilled_at: candidate.distilled_at ?? null,
@@ -148,13 +154,13 @@ export class CandidateRepository {
           (id, task_run_id, candidate_kind, source_record_id, scope_id, task_type, node_type, experience_kind, confidence_signal, validation_state, correction_scope, correction_category, deviation_pattern, corrected_constraint, trigger_pattern, applicability_notes, env_signature,
            compact_hint, goal, recommended_steps_json, avoid_steps_json, fallback_steps_json, success_signal, stop_condition,
            escalation_condition, evidence_summary, retrieval_text, source_kind, source_context_summary, source_outcome_signal, raw_summary, failure_signature,
-           source_signal_json, lifecycle_state, retry_count, distilled_node_id, last_error, created_at, updated_at, distilled_at,
+           source_signal_json, lifecycle_state, retry_count, distilled_node_id, last_error, promotion_signal, promotion_reason, created_at, updated_at, distilled_at,
            discarded_at, last_failed_at)
          VALUES
           (@id, @task_run_id, @candidate_kind, @source_record_id, @scope_id, @task_type, @node_type, @experience_kind, @confidence_signal, @validation_state, @correction_scope, @correction_category, @deviation_pattern, @corrected_constraint, @trigger_pattern, @applicability_notes, @env_signature,
            @compact_hint, @goal, @recommended_steps_json, @avoid_steps_json, @fallback_steps_json, @success_signal, @stop_condition,
            @escalation_condition, @evidence_summary, @retrieval_text, @source_kind, @source_context_summary, @source_outcome_signal, @raw_summary, @failure_signature,
-           @source_signal_json, @lifecycle_state, @retry_count, @distilled_node_id, @last_error, @created_at, @updated_at, @distilled_at,
+           @source_signal_json, @lifecycle_state, @retry_count, @distilled_node_id, @last_error, @promotion_signal, @promotion_reason, @created_at, @updated_at, @distilled_at,
            @discarded_at, @last_failed_at)
          ON CONFLICT(id) DO UPDATE SET
           task_run_id = excluded.task_run_id,
@@ -190,6 +196,8 @@ export class CandidateRepository {
            retry_count = excluded.retry_count,
            distilled_node_id = excluded.distilled_node_id,
            last_error = excluded.last_error,
+           promotion_signal = excluded.promotion_signal,
+           promotion_reason = excluded.promotion_reason,
            updated_at = excluded.updated_at,
            distilled_at = excluded.distilled_at,
            discarded_at = excluded.discarded_at,

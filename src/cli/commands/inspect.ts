@@ -3,7 +3,7 @@ import { ExperienceInteractionService } from "../../interaction/service.js";
 import { ExperienceStateArtifactService } from "../../interaction/state-artifact-service.js";
 import type { ExperienceNode } from "../../types/domain.js";
 
-const NODE_STATES: ExperienceNode["state"][] = ["candidate", "active", "cooling", "retired"];
+const NODE_STATES: ExperienceNode["state"][] = ["candidate", "priority_candidate", "active", "cooling", "retired"];
 const NODE_TYPES: ExperienceNode["node_type"][] = ["strategy", "warning"];
 
 const parseRecentArgs = (arg1?: string, arg2?: string): { injectedOnly: boolean; limit: number } | null => {
@@ -53,6 +53,21 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
       for (const node of record.injectedNodes) {
         console.log(`- ${node.id} ${node.type} ${node.state} ${node.sourceKind}`);
         console.log(`  Trigger: ${node.triggerPattern}`);
+        if (node.promotionSignal) {
+          console.log(`  Promotion signal: ${node.promotionSignal}`);
+        }
+        if (node.promotionReason) {
+          console.log(`  Promotion reason: ${node.promotionReason}`);
+        }
+        if (node.priorityPromotionApplied) {
+          console.log("  Priority promotion applied: yes");
+        }
+        if (node.mergeDecision) {
+          console.log(`  Merge decision: ${node.mergeDecision}`);
+        }
+        if (node.mergeReason) {
+          console.log(`  Merge reason: ${node.mergeReason}`);
+        }
         if (node.originRecordIds.length) {
           console.log(`  Origin records: ${node.originRecordIds.join(", ")}`);
         }
@@ -82,6 +97,18 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
       }
       if (typeof record.scorecard.queryRewriteApplied === "boolean") {
         console.log(`- Query rewrite applied: ${record.scorecard.queryRewriteApplied ? "yes" : "no"}`);
+      }
+      if (record.scorecard.promotionSignal) {
+        console.log(`- Promotion signal: ${record.scorecard.promotionSignal}`);
+      }
+      if (typeof record.scorecard.priorityPromotionApplied === "boolean") {
+        console.log(`- Priority promotion applied: ${record.scorecard.priorityPromotionApplied ? "yes" : "no"}`);
+      }
+      if (record.scorecard.mergeDecision) {
+        console.log(`- Merge decision: ${record.scorecard.mergeDecision}`);
+      }
+      if (record.scorecard.mergeReason) {
+        console.log(`- Merge reason: ${record.scorecard.mergeReason}`);
       }
       const topCandidate = record.scorecard.topCandidates?.[0];
       if (typeof topCandidate?.semanticScore === "number") {
@@ -224,7 +251,7 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
 
   if (target === "state") {
     if (!arg1 || !NODE_STATES.includes(arg1 as ExperienceNode["state"])) {
-      console.log("Usage: ee inspect state <candidate|active|cooling|retired>");
+      console.log("Usage: ee inspect state <candidate|priority_candidate|active|cooling|retired>");
       return;
     }
 

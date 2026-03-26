@@ -95,11 +95,40 @@ describe("NodeRepository", () => {
     expect(stored?.correction_category).toBe("implementation_boundary");
     expect(stored?.deviation_pattern).toBe("implementation solves the wrong layer of the problem");
     expect(stored?.corrected_constraint).toBe("Fix the provider routing layer before touching UI code.");
+    expect(stored?.promotion_signal).toBeUndefined();
+    expect(stored?.promotion_reason).toBeUndefined();
+    expect(stored?.merge_decision).toBeUndefined();
+    expect(stored?.merge_reason).toBeUndefined();
+    expect(stored?.priority_promotion_applied).toBe(false);
     expect(stored?.origin_record_ids).toEqual(["input_origin"]);
     expect(stored?.helped_record_ids).toEqual(["input_helped"]);
     expect(stored?.harmed_record_ids).toEqual(["input_harmed"]);
     expect(stored?.last_used_at).toBe("2026-03-12T02:00:00.000Z");
     expect(stored?.last_helped_at).toBe("2026-03-12T01:59:00.000Z");
     expect(stored?.last_harmed_at).toBe("2026-03-12T01:58:00.000Z");
+  });
+
+  it("round-trips priority candidate state and promotion metadata", () => {
+    const repo = makeRepo();
+
+    repo.upsert(
+      node({
+        id: "node_priority",
+        state: "priority_candidate",
+        promotion_signal: "high_value",
+        promotion_reason: "The experience captures a reusable verification loop with explicit avoidance guidance.",
+        merge_decision: "ADD",
+        merge_reason: "The lesson is new enough to deserve its own reusable node.",
+        priority_promotion_applied: true
+      })
+    );
+
+    const stored = repo.getById("node_priority");
+    expect(stored?.state).toBe("priority_candidate");
+    expect(stored?.promotion_signal).toBe("high_value");
+    expect(stored?.promotion_reason).toContain("reusable verification loop");
+    expect(stored?.merge_decision).toBe("ADD");
+    expect(stored?.merge_reason).toContain("new enough");
+    expect(stored?.priority_promotion_applied).toBe(true);
   });
 });

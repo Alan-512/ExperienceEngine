@@ -7,6 +7,7 @@ import {
   type DistillerEndpoint
 } from "./host-llm.js";
 import { resolveGoogleAdcAccessToken } from "./providers/google-adc.js";
+import { resolveExperienceFamily } from "./experience-family.js";
 
 type MergeDecisionRuntimeOptions = {
   env?: NodeJS.ProcessEnv;
@@ -86,6 +87,7 @@ const buildMergePayload = (
     {
       candidate: {
         taskType: candidate.task_type,
+        taskFamily: resolveExperienceFamily(candidate.task_type),
         nodeType: candidate.node_type,
         triggerPattern: candidate.trigger_pattern,
         sourceSignal: candidate.source_signal
@@ -97,6 +99,7 @@ const buildMergePayload = (
         deviation_pattern: distilled.deviation_pattern,
         corrected_constraint: distilled.corrected_constraint,
         task_type: distilled.task_type,
+        task_family: resolveExperienceFamily(distilled.task_type),
         node_type: distilled.node_type,
         trigger_pattern: distilled.trigger_pattern,
         compact_hint: distilled.compact_hint,
@@ -115,6 +118,7 @@ const buildMergePayload = (
         deviation_pattern: node.deviation_pattern,
         corrected_constraint: node.corrected_constraint,
         task_type: node.task_type,
+        task_family: resolveExperienceFamily(node.task_type),
         node_type: node.node_type,
         trigger_pattern: node.trigger_pattern,
         compact_hint: node.compact_hint,

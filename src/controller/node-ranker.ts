@@ -3,6 +3,7 @@ import { tokenize } from "../utils/text.js";
 
 const STATE_WEIGHT: Record<ExperienceNode["state"], number> = {
   active: 2,
+  priority_candidate: 1.6,
   cooling: 1.4,
   candidate: 1.2,
   retired: 0

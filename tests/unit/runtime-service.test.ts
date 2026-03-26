@@ -84,6 +84,165 @@ afterEach(() => {
 });
 
 describe("ExperienceRuntimeService finalize transaction", () => {
+  it("lets a high-value first-seen lesson enter priority_candidate", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const geminiJsonResponse = (payload: unknown) =>
+      new Response(
+        JSON.stringify({
+          candidates: [
+            {
+              content: {
+                parts: [{ text: JSON.stringify(payload) }]
+              }
+            }
+          ]
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json"
+          }
+        }
+      );
+    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(async (_input, init) => {
+      const rawBody = typeof init?.body === "string" ? init.body : "";
+      const parsedBody = rawBody ? (JSON.parse(rawBody) as { system_instruction?: { parts?: Array<{ text?: string }> } }) : {};
+      const systemPrompt = parsedBody.system_instruction?.parts?.find((part) => typeof part.text === "string")?.text ?? "";
+
+      if (systemPrompt.includes("merge into an existing node pool")) {
+        return geminiJsonResponse({
+          action: "ADD",
+          reason: "no existing nodes matched"
+        });
+      }
+
+      if (systemPrompt.includes("coding-experience learner")) {
+        return geminiJsonResponse({
+          worth_capturing: true,
+          experience_kind: "execution_pattern",
+          reason: "The run produced a reusable troubleshooting loop with clear verification and avoidance guidance.",
+          candidate: {
+            node_type: "strategy",
+            task_type: "test_debug",
+            trigger_pattern: "When a focused regression review should start by isolating the failing check before wider edits",
+            compact_hint: "Start with the focused failing check, then verify the first diagnostic step before broad changes.",
+            goal: "Keep the investigation inside the smallest failing loop first.",
+            recommended_steps: [
+              "Run the focused failing check first.",
+              "Inspect the first likely diagnostic step before wider edits."
+            ],
+            avoid_steps: ["Do not broaden the investigation before the focused check is isolated."],
+            success_signal: "A focused reproduction identifies the first reliable diagnostic step.",
+            evidence_summary: "The focused regression review succeeded after isolating the failing check before wider edits.",
+            experience_kind: "execution_pattern",
+            confidence_signal: "supported_by_objective_success",
+            validation_state: "pending_reuse_validation",
+            promotion_signal: "high_value",
+            promotion_reason: "The lesson includes a reusable verification loop plus explicit avoidance guidance."
+          }
+        });
+      }
+
+      return geminiJsonResponse({
+        trigger_conditions: "A regression review should stay inside the smallest failing loop before wider edits.",
+        success_criteria: "A focused reproduction identifies the first reliable diagnostic step.",
+        risk_level: "medium",
+        trigger_pattern: "When a focused regression review should start by isolating the failing check before wider edits",
+        compact_hint: "Start with the focused failing check, then verify the first diagnostic step before broad changes.",
+        goal: "Keep the investigation inside the smallest failing loop first.",
+        recommended_steps: [
+          "Run the focused failing check first.",
+          "Inspect the first likely diagnostic step before wider edits."
+        ],
+        avoid_steps: ["Do not broaden the investigation before the focused check is isolated."],
+        fallback_steps: ["If the focused check is inconclusive, widen the scope one boundary at a time."],
+        success_signal: "A focused reproduction identifies the first reliable diagnostic step.",
+        evidence_summary: "The focused regression review succeeded after isolating the failing check before wider edits.",
+        experience_kind: "execution_pattern",
+        confidence_signal: "supported_by_objective_success",
+        validation_state: "pending_reuse_validation",
+        promotion_signal: "high_value",
+        promotion_reason: "The lesson includes a reusable verification loop plus explicit avoidance guidance."
+      });
+    });
+
+    const service = new ExperienceRuntimeService(
+      loadConfig(
+        {
+          dataDir: join(runtimeDir, "data"),
+          sqlitePath,
+          captureDir: join(runtimeDir, "captures"),
+          distillerProvider: "gemini",
+          distillerModel: "gemini-3-flash-preview",
+          distillationAuthMode: "api_key",
+          distillationMode: "llm",
+          distillationAutoDrain: true,
+          distillationAllowPassthrough: true
+        },
+        { homeDir: runtimeDir }
+      ),
+      undefined,
+      {
+        homeDir: runtimeDir,
+        env: {
+          GEMINI_API_KEY: "secret"
+        },
+        fetchImpl: fetchImpl as unknown as typeof fetch
+      }
+    );
+
+    const prompt =
+      "Review the regression in read-only mode and identify the first diagnostic step by isolating the smallest failing check before wider edits.";
+
+    const lookup = await service.beforePromptBuild({
+      sessionId: "priority-candidate-a",
+      cwd: "/repo",
+      userMessage: prompt,
+      taskSummary: prompt,
+      contextSummary: "A focused regression review should isolate the smallest failing check first."
+    });
+    expect(lookup.mode).toBe("skip");
+
+    await service.persistToolResult({
+      sessionId: "priority-candidate-a",
+      toolName: "exec",
+      inputSummary: "run the focused failing check",
+      outputSummary: "The focused failing check isolated the first reliable diagnostic step.",
+      status: "success"
+    });
+    await service.finalizeTask({
+      sessionId: "priority-candidate-a",
+      cwd: "/repo",
+      userMessage: prompt,
+      taskSummary: prompt,
+      contextSummary: "The focused regression review succeeded after isolating the failing check first."
+    });
+    await service.waitForBackgroundLearning();
+
+    const db = new DatabaseSync(sqlitePath);
+    const storedNode = db.prepare(
+      `SELECT state, promotion_signal, promotion_reason, merge_decision, priority_promotion_applied
+       FROM experience_nodes
+       ORDER BY updated_at DESC
+       LIMIT 1`
+    ).get() as {
+      state: string;
+      promotion_signal: string | null;
+      promotion_reason: string | null;
+      merge_decision: string | null;
+      priority_promotion_applied: number;
+    };
+
+    expect(storedNode).toEqual({
+      state: "priority_candidate",
+      promotion_signal: "high_value",
+      promotion_reason: "The lesson includes a reusable verification loop plus explicit avoidance guidance.",
+      merge_decision: "ADD",
+      priority_promotion_applied: 1
+    });
+  });
+
   it("learns an expectation correction in one run and conservatively injects it on the next similar run", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");

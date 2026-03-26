@@ -9,6 +9,7 @@ import { resolveDistillationResolution } from "../../src/distillation/host-llm.j
 import { DistillationQueueWorker } from "../../src/distillation/queue-worker.js";
 import {
   clearEmbeddingProviderForTests,
+  clearEmbeddingRuntimeCaches,
   setEmbeddingProviderForTests
 } from "../../src/store/vector/embeddings.js";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
@@ -37,6 +38,7 @@ const makeDb = (overrides: Partial<ReturnType<typeof loadConfig>> = {}) => {
 afterEach(() => {
   clearGoogleAdcTokenCache();
   clearEmbeddingProviderForTests();
+  clearEmbeddingRuntimeCaches();
   while (tempDirs.length) {
     rmSync(tempDirs.pop()!, { recursive: true, force: true });
   }
@@ -207,6 +209,8 @@ describe("LlmDistiller", () => {
                 trigger_conditions: "When iterating on auth test fixes",
                 success_criteria: "vitest passes for the auth spec",
                 risk_level: "medium",
+                promotion_signal: "high_value",
+                promotion_reason: "The lesson encodes a tight reusable verification loop.",
                 goal: "Preserve a tight auth verification loop.",
                 recommended_steps: ["Run vitest", "Change one auth seam", "Run vitest again"],
                 evidence_summary: "Distilled from a vitest pass."
@@ -234,6 +238,8 @@ describe("LlmDistiller", () => {
     expect(payload.sourceSignal.tool_event_summary).toBeDefined();
     expect(result.compact_hint).toContain("Re-run vitest");
     expect(result.recommended_steps).toEqual(["Run vitest", "Change one auth seam", "Run vitest again"]);
+    expect(result.promotion_signal).toBe("high_value");
+    expect(result.promotion_reason).toContain("reusable verification loop");
   });
 
   it("uses the native openai provider path when openai is configured", async () => {
@@ -727,7 +733,13 @@ describe("DistillationQueueWorker", () => {
     const candidateRepo = new CandidateRepository(db);
     const jobRepo = new DistillationJobRepository(db);
     const nodeRepo = new NodeRepository(db);
-    candidateRepo.upsert(makeCandidate());
+    candidateRepo.upsert(
+      makeCandidate({
+        compact_hint: "Use a unique EROFS fallback loop to avoid cache hits in this embedding fallback test.",
+        retrieval_text:
+          "Fix the failing auth vitest\nUse a unique EROFS fallback loop to avoid cache hits in this embedding fallback test."
+      })
+    );
     jobRepo.upsert(makeJob());
 
     const worker = new DistillationQueueWorker(config, candidateRepo, jobRepo, nodeRepo, { env: {} });
@@ -1294,6 +1306,134 @@ describe("DistillationQueueWorker", () => {
     expect(nodeRepo.listAll()).toHaveLength(1);
     expect(candidateRepo.getById("candidate_distill_auth")?.distilled_node_id).toBe("node_build_active");
     expect(nodeRepo.getById("node_build_active")?.support_count).toBe(3);
+  });
+
+  it("updates an existing same-family node instead of adding a new near-duplicate", async () => {
+    setEmbeddingProviderForTests({
+      provider: "local",
+      model: "Xenova/multilingual-e5-small",
+      version: "local-e5-v1",
+      dimensions: 3,
+      async embedQuery() {
+        return [1, 0, 0];
+      },
+      async embedPassage() {
+        return [1, 0, 0];
+      }
+    });
+
+    const { db, config } = makeDb();
+    const candidateRepo = new CandidateRepository(db);
+    const jobRepo = new DistillationJobRepository(db);
+    const nodeRepo = new NodeRepository(db);
+
+    candidateRepo.upsert(
+      makeCandidate({
+        task_type: "bug_fix",
+        trigger_pattern:
+          "Vitest fails with EROFS in the current workspace after writing temporary artifacts during a payments auth regression review.",
+        compact_hint:
+          "When vitest hits EROFS in a read-only workspace, stop trying to write temp artifacts and pivot to static analysis or a directly executable target."
+      })
+    );
+    jobRepo.upsert(makeJob());
+    nodeRepo.upsert({
+      id: "node_existing_erofs_debug",
+      node_type: "strategy",
+      scope_id: "scope_1",
+      task_type: "test_debug",
+      trigger_pattern:
+        "Read-only workspace test debugging fails with EROFS because vitest needs temporary output files.",
+      compact_hint:
+        "If vitest hits EROFS in a read-only or sandboxed workspace, stop forcing the test loop and switch to static analysis or another executable diagnostic path.",
+      goal: "Avoid wasting time on unwritable test loops in sandboxed environments.",
+      recommended_steps: [
+        "Confirm the failure is an EROFS write error",
+        "Stop rerunning vitest in the same unwritable mode",
+        "Continue with static analysis or a directly executable diagnostic path"
+      ],
+      avoid_steps: ["Do not keep rerunning vitest in the same read-only environment"],
+      fallback_steps: [],
+      success_signal: "The next diagnostic step avoids the unwritable vitest loop.",
+      evidence_summary: "Repeated EROFS failures were resolved by pivoting away from the unwritable test loop.",
+      retrieval_text:
+        "Read-only workspace test debugging fails with EROFS because vitest needs temporary output files.\nIf vitest hits EROFS in a read-only or sandboxed workspace, stop forcing the test loop and switch to static analysis or another executable diagnostic path.",
+      source_kind: "system_derived",
+      distillation_mode_used: "llm",
+      distillation_source: "explicit_provider",
+      redistilled_from: undefined,
+      origin_record_ids: ["input_old"],
+      helped_record_ids: ["input_old"],
+      harmed_record_ids: [],
+      state: "active",
+      usage_count: 2,
+      helped_count: 2,
+      harmed_count: 0,
+      support_count: 2,
+      created_at: "2026-03-20T11:00:00.000Z",
+      updated_at: "2026-03-20T11:00:00.000Z"
+    });
+
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  compact_hint:
+                    "When vitest hits EROFS in a read-only workspace, stop trying to write temp artifacts and pivot to static analysis or a directly executable target.",
+                  trigger_conditions:
+                    "Vitest fails with EROFS in the current workspace after writing temporary artifacts during a payments auth regression review.",
+                  success_criteria: "The next diagnostic step avoids the unwritable vitest loop.",
+                  risk_level: "medium",
+                  goal: "Avoid wasting time on unwritable test loops in sandboxed environments.",
+                  recommended_steps: [
+                    "Confirm the failure is an EROFS write error",
+                    "Stop rerunning vitest in the same unwritable mode",
+                    "Continue with static analysis or a directly executable diagnostic path"
+                  ],
+                  avoid_steps: ["Do not keep rerunning vitest in the same read-only environment"],
+                  evidence_summary: "Repeated EROFS failures were resolved by pivoting away from the unwritable test loop."
+                })
+              }
+            }
+          ]
+        })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  action: "UPDATE",
+                  target_node_id: "node_existing_erofs_debug",
+                  reason: "The existing same-family node already captures the same EROFS lesson and should absorb the refined wording."
+                })
+              }
+            }
+          ]
+        })
+      });
+
+    const worker = new DistillationQueueWorker(config, candidateRepo, jobRepo, nodeRepo, {
+      env: {
+        EXPERIENCE_ENGINE_DISTILLER_PROVIDER: "openrouter",
+        EXPERIENCE_ENGINE_DISTILLER_MODEL: "openai/gpt-4o-mini",
+        OPENROUTER_API_KEY: "secret"
+      },
+      fetchImpl: fetchImpl as unknown as typeof fetch
+    });
+
+    await worker.drain();
+
+    expect(nodeRepo.listAll()).toHaveLength(1);
+    expect(candidateRepo.getById("candidate_distill_auth")?.distilled_node_id).toBe("node_existing_erofs_debug");
+    expect(nodeRepo.getById("node_existing_erofs_debug")?.support_count).toBe(3);
   });
 
   it("does not merge expectation-correction nodes when the correction dimension differs", async () => {
