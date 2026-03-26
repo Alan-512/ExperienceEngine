@@ -66,7 +66,7 @@
 - Create: `src/distillation/experience-family.ts`
 - Test: `tests/unit/experience-family.test.ts`
 
-- [ ] **Step 1: Write the failing family tests**
+- [x] **Step 1: Write the failing family tests**
 
 ```ts
 import { describe, expect, it } from "vitest";
@@ -84,12 +84,12 @@ describe("experience-family", () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm exec vitest run tests/unit/experience-family.test.ts`
 Expected: FAIL because `experience-family.ts` does not exist yet.
 
-- [ ] **Step 3: Implement family helpers**
+- [x] **Step 3: Implement family helpers**
 
 ```ts
 // src/distillation/experience-family.ts
@@ -111,12 +111,12 @@ export const areTaskFamiliesMergeCompatible = (left: TaskType, right: TaskType):
   resolveExperienceFamily(left) === resolveExperienceFamily(right);
 ```
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 
 Run: `pnpm exec vitest run tests/unit/experience-family.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/distillation/experience-family.ts tests/unit/experience-family.test.ts
@@ -131,7 +131,7 @@ git commit -m "test: define experience-family merge helpers"
 - Modify: `tests/unit/intervention-controller.test.ts`
 - Modify: `tests/integration/plugin-runtime.test.ts`
 
-- [ ] **Step 1: Write the failing convergence tests**
+- [x] **Step 1: Write the failing convergence tests**
 
 ```ts
 it("updates an existing same-family node instead of adding a new near-duplicate", async () => {
@@ -141,12 +141,12 @@ it("updates an existing same-family node instead of adding a new near-duplicate"
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm exec vitest run tests/integration/plugin-runtime.test.ts -t "same-family node"`
 Expected: FAIL because reusable-node search is still limited to the same `task_type`.
 
-- [ ] **Step 3: Implement family-aware reusable-node search**
+- [x] **Step 3: Implement family-aware reusable-node search**
 
 ```ts
 // src/distillation/queue-worker.ts
@@ -163,7 +163,7 @@ const overlapScore =
   stepOverlap(node.avoid_steps, distilled.avoid_steps) * 0.15;
 ```
 
-- [ ] **Step 4: Update merge fallback policy**
+- [x] **Step 4: Update merge fallback policy**
 
 ```ts
 // src/distillation/merge-decider.ts
@@ -173,12 +173,12 @@ const overlapScore =
 // - existing node is active or has stronger helped/support history
 ```
 
-- [ ] **Step 5: Run the focused tests**
+- [x] **Step 5: Run the focused tests**
 
 Run: `pnpm exec vitest run tests/integration/plugin-runtime.test.ts -t "same-family node" tests/unit/intervention-controller.test.ts`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/distillation/queue-worker.ts src/distillation/merge-decider.ts tests/integration/plugin-runtime.test.ts tests/unit/intervention-controller.test.ts
@@ -193,7 +193,7 @@ git commit -m "feat: converge same-family organic experience nodes"
 - Modify: `src/distillation/llm-distiller.ts`
 - Test: `tests/unit/node-repo.test.ts`
 
-- [ ] **Step 1: Write the failing type and parsing tests**
+- [x] **Step 1: Write the failing type and parsing tests**
 
 ```ts
 it("preserves promotion recommendation metadata on distilled candidates", () => {
@@ -201,12 +201,12 @@ it("preserves promotion recommendation metadata on distilled candidates", () => 
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm exec vitest run tests/unit/node-repo.test.ts -t "promotion recommendation"`
 Expected: FAIL because the metadata does not exist yet.
 
-- [ ] **Step 3: Add promotion metadata types**
+- [x] **Step 3: Add promotion metadata types**
 
 ```ts
 export type PromotionSignal = "normal" | "high_value";
@@ -216,7 +216,7 @@ promotion_signal?: PromotionSignal;
 promotion_reason?: string;
 ```
 
-- [ ] **Step 4: Extend LLM parse/passthrough flow**
+- [x] **Step 4: Extend LLM parse/passthrough flow**
 
 ```ts
 // llm-learning-gate.ts / llm-distiller.ts
@@ -225,12 +225,12 @@ candidate may also include:
 - promotion_reason
 ```
 
-- [ ] **Step 5: Run focused tests**
+- [x] **Step 5: Run focused tests**
 
 Run: `pnpm exec vitest run tests/unit/node-repo.test.ts tests/unit/inspect-command.test.ts -t "promotion"`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/types/domain.ts src/analyzer/llm-learning-gate.ts src/distillation/llm-distiller.ts tests/unit/node-repo.test.ts
@@ -247,7 +247,7 @@ git commit -m "feat: carry promotion recommendation metadata"
 - Modify: `tests/unit/intervention-controller.test.ts`
 - Modify: `tests/unit/node-repo.test.ts`
 
-- [ ] **Step 1: Write the failing lifecycle tests**
+- [x] **Step 1: Write the failing lifecycle tests**
 
 ```ts
 it("promotes high-value candidates into priority_candidate before active", () => {
@@ -259,12 +259,12 @@ it("allows priority candidates to inject conservatively", () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm exec vitest run tests/unit/intervention-controller.test.ts tests/unit/node-repo.test.ts -t "priority_candidate"`
 Expected: FAIL because the state does not exist.
 
-- [ ] **Step 3: Implement new lifecycle state**
+- [x] **Step 3: Implement new lifecycle state**
 
 ```ts
 // state-transition.ts
@@ -276,7 +276,7 @@ if (node.state === "priority_candidate" && (node.helped_count >= 1 || node.suppo
 }
 ```
 
-- [ ] **Step 4: Allow conservative injection from priority candidates**
+- [x] **Step 4: Allow conservative injection from priority candidates**
 
 ```ts
 // intervention-controller.ts
@@ -284,12 +284,12 @@ const selectedMode =
   topNode.state === "priority_candidate" ? "inject_conservative" : existingMode;
 ```
 
-- [ ] **Step 5: Run focused tests**
+- [x] **Step 5: Run focused tests**
 
 Run: `pnpm exec vitest run tests/unit/intervention-controller.test.ts tests/unit/node-repo.test.ts`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/types/domain.ts src/feedback/state-transition.ts src/controller/intervention-controller.ts src/store/sqlite/repositories/node-repo.ts tests/unit/intervention-controller.test.ts tests/unit/node-repo.test.ts
@@ -308,7 +308,7 @@ git commit -m "feat: add priority candidate promotion path"
 - Modify: `tests/unit/status-command.test.ts`
 - Modify: `tests/unit/doctor-command.test.ts`
 
-- [ ] **Step 1: Write the failing diagnostics tests**
+- [x] **Step 1: Write the failing diagnostics tests**
 
 ```ts
 it("shows merge decision and promotion signal in inspect output", () => {
@@ -320,12 +320,12 @@ it("shows priority candidate counts in status output", () => {
 });
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm exec vitest run tests/unit/inspect-command.test.ts tests/unit/status-command.test.ts tests/unit/doctor-command.test.ts`
 Expected: FAIL because the new diagnostics are not rendered yet.
 
-- [ ] **Step 3: Extend scorecards and summaries**
+- [x] **Step 3: Extend scorecards and summaries**
 
 ```ts
 // scorecard fields
@@ -335,7 +335,7 @@ promotionSignal?: "normal" | "high_value";
 priorityPromotionApplied?: boolean;
 ```
 
-- [ ] **Step 4: Render the new diagnostics**
+- [x] **Step 4: Render the new diagnostics**
 
 ```ts
 // inspect.ts / status.ts / doctor.ts
@@ -346,12 +346,12 @@ priorityPromotionApplied?: boolean;
 // - merge decision
 ```
 
-- [ ] **Step 5: Run focused tests**
+- [x] **Step 5: Run focused tests**
 
 Run: `pnpm exec vitest run tests/unit/inspect-command.test.ts tests/unit/status-command.test.ts tests/unit/doctor-command.test.ts`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/controller/injection-scorecard.ts src/cli/commands/inspect.ts src/cli/commands/status.ts src/cli/commands/doctor.ts src/interaction/service.ts tests/unit/inspect-command.test.ts tests/unit/status-command.test.ts tests/unit/doctor-command.test.ts
@@ -364,7 +364,7 @@ git commit -m "feat: report convergence and priority promotion diagnostics"
 - Modify: `tests/integration/plugin-runtime.test.ts`
 - Modify: `tests/unit/runtime-service.test.ts`
 
-- [ ] **Step 1: Write the failing end-to-end tests**
+- [x] **Step 1: Write the failing end-to-end tests**
 
 ```ts
 it("converges repeated same-family organic lessons into one stronger node", async () => {
@@ -378,29 +378,29 @@ it("lets a high-value first-seen lesson enter priority_candidate", async () => {
 });
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run: `pnpm exec vitest run tests/integration/plugin-runtime.test.ts -t "organic lesson"`
 Expected: FAIL because current convergence and promotion logic still fragment or leave nodes in plain candidate.
 
-- [ ] **Step 3: Implement minimal fixes required by the red tests**
+- [x] **Step 3: Implement minimal fixes required by the red tests**
 
 ```ts
 // wire the queue-worker + state transitions + runtime summaries together
 // do not add extra product-facing features beyond the spec
 ```
 
-- [ ] **Step 4: Run full validation**
+- [x] **Step 4: Run full validation**
 
 Run: `pnpm exec vitest run tests/unit/experience-family.test.ts tests/unit/lexical-retriever.test.ts tests/unit/candidate-retriever.test.ts tests/unit/intervention-controller.test.ts tests/unit/node-repo.test.ts tests/unit/inspect-command.test.ts tests/unit/status-command.test.ts tests/unit/doctor-command.test.ts tests/unit/runtime-service.test.ts tests/integration/plugin-runtime.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: Run typecheck and build**
+- [x] **Step 5: Run typecheck and build**
 
 Run: `pnpm exec tsc -p tsconfig.json --noEmit && pnpm build`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tests/integration/plugin-runtime.test.ts tests/unit/runtime-service.test.ts
