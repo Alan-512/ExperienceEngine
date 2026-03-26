@@ -36,4 +36,13 @@ describe("resolveOutcome", () => {
 
     expect(outcome).toBe("failure");
   });
+
+  it("does not treat investigation prompts containing regression as failure without terminal evidence", () => {
+    const outcome = resolveOutcome(
+      [],
+      "Investigate the payments auth test regression in this workspace, starting from the auth fixture handshake."
+    );
+
+    expect(outcome).toBe("unknown");
+  });
 });

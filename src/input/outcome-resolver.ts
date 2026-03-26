@@ -2,7 +2,7 @@ import type { OutcomeSignal, ToolEvent } from "../types/domain.js";
 
 const EXPLORATORY_TOOL_PATTERN = /\b(rg|grep|find|ls|pwd|cat|sed|head|tail|stat|glob|read)\b/i;
 const STRONG_SUCCESS_PATTERN = /\b(fixed|resolved|working|passed|completed|done|success)\b/i;
-const STRONG_FAILURE_PATTERN = /\b(failed|unable|cannot|blocked|broken|regression|error persists)\b/i;
+const STRONG_FAILURE_PATTERN = /\b(failed|unable|cannot|blocked|broken|error persists)\b/i;
 
 const isExploratoryTool = (event: ToolEvent): boolean => EXPLORATORY_TOOL_PATTERN.test(event.tool_name);
 

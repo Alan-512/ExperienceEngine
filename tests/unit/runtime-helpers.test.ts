@@ -221,4 +221,19 @@ describe("runtime helpers", () => {
     expect(input.task_summary).toBe("Fix the failing sqlite migration in the current workspace.");
     expect(input.task_type).toBe("integration_fix");
   });
+
+  it("keeps investigation-style regression prompts in unknown outcome until real failures occur", () => {
+    const input = buildExperienceInput({
+      sessionId: "sess_investigate_regression",
+      cwd: "/repo/runtime",
+      userMessage:
+        "Investigate the payments auth test regression in this workspace, starting from the auth fixture handshake. Read-only analysis only; do not modify files."
+    });
+
+    expect(input.task_summary).toBe(
+      "Investigate the payments auth test regression in this workspace, starting from the auth fixture handshake. Read-only analysis only; do not modify files."
+    );
+    expect(input.task_type).toBe("test_debug");
+    expect(input.outcome_signal).toBe("unknown");
+  });
 });
