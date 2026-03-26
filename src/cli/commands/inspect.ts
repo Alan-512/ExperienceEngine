@@ -90,6 +90,9 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
       if (typeof topCandidate?.fusedScore === "number") {
         console.log(`- Top candidate fused score: ${topCandidate.fusedScore}`);
       }
+      if (typeof topCandidate?.rerankScore === "number") {
+        console.log(`- Top candidate rerank score: ${topCandidate.rerankScore}`);
+      }
       if (record.scorecard.gateReason) {
         console.log(`- Gate reason: ${record.scorecard.gateReason}`);
       }

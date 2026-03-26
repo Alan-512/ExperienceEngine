@@ -215,6 +215,7 @@ export type InjectionScorecardCandidate = {
   semanticScore?: number;
   lexicalScore?: number;
   fusedScore?: number;
+  rerankScore?: number;
   taskFamilyMatch: boolean;
 };
 

@@ -96,6 +96,7 @@ const toScorecardCandidate = (candidate: RetrievedCandidate): InjectionScorecard
   semanticScore: Number(candidate.semanticScore.toFixed(4)),
   lexicalScore: Number(candidate.lexicalScore.toFixed(4)),
   fusedScore: Number(candidate.fusedScore.toFixed(4)),
+  rerankScore: typeof candidate.rerankScore === "number" ? Number(candidate.rerankScore.toFixed(4)) : undefined,
   taskFamilyMatch: candidate.taskFamilyMatch
 });
 

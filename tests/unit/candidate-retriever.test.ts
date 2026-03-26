@@ -466,4 +466,52 @@ describe("retrieveCandidates", () => {
     });
     expect(candidates[0]!.fusedScore).toBeGreaterThan(candidates[1]!.fusedScore);
   });
+
+  it("allows an optional reranker to reorder otherwise-close candidates", async () => {
+    const candidates = await retrieveScoredCandidates(
+      input({
+        task_type: "test_debug",
+        task_summary: "Investigate the payments auth regression and inspect the fixture handshake path first"
+      }),
+      [
+        node({
+          id: "baseline-top",
+          task_type: "test_debug",
+          trigger_pattern: "Inspect the payments auth regression in the current workspace",
+          compact_hint: "Inspect the workspace and current auth regression path before editing.",
+          retrieval_text:
+            "Inspect the payments auth regression in the current workspace\nInspect the workspace and current auth regression path before editing.",
+          helped_count: 2,
+          support_count: 2
+        }),
+        node({
+          id: "reranked-top",
+          task_type: "test_debug",
+          trigger_pattern: "Investigate the payments auth regression and inspect the fixture handshake path first",
+          compact_hint: "Check the fixture handshake before changing the payments auth code path.",
+          retrieval_text:
+            "Investigate the payments auth regression and inspect the fixture handshake path first\nCheck the fixture handshake before changing the payments auth code path.",
+          helped_count: 2,
+          support_count: 2
+        })
+      ],
+      {
+        reranker: async ({ candidates: rerankCandidates }) =>
+          rerankCandidates.map((candidate) => ({
+            id: candidate.node.id,
+            score: candidate.node.id === "reranked-top" ? 1 : 0.2
+          }))
+      }
+    );
+
+    expect(candidates[0]).toMatchObject({
+      node: expect.objectContaining({ id: "reranked-top" }),
+      rerankScore: 1
+    });
+    expect(candidates[1]).toMatchObject({
+      node: expect.objectContaining({ id: "baseline-top" }),
+      rerankScore: 0.2
+    });
+    expect(candidates[0]!.totalScore).toBeGreaterThan(candidates[1]!.totalScore);
+  });
 });

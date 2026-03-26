@@ -14,11 +14,18 @@ export type RetrievedCandidate = {
   semanticScore: number;
   lexicalScore: number;
   fusedScore: number;
+  rerankScore?: number;
   familyScore: number;
   totalScore: number;
   scopeMatch: boolean;
   taskFamilyMatch: boolean;
   scoreMargin: number;
+};
+
+export type RerankCandidate = Omit<RetrievedCandidate, "scoreMargin" | "rerankScore">;
+export type RerankResult = {
+  id: string;
+  score: number;
 };
 
 const TASK_FAMILY_PROXIMITY: Record<TaskType, Partial<Record<TaskType, number>>> = {
@@ -224,6 +231,7 @@ type RetrieveOptions = {
   config?: Pick<ExperienceEngineConfig, "embeddingProvider" | "embeddingModel" | "embeddingDtype" | "embeddingCacheDir">;
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
+  reranker?: (input: { queryText: string; taskType: TaskType; candidates: RerankCandidate[] }) => Promise<RerankResult[]>;
 };
 
 type LexicalDocument = {
@@ -438,8 +446,48 @@ export const retrieveScoredCandidates = async (
     .sort((left, right) => right.totalScore - left.totalScore)
     .slice(0, 8);
 
-  return ranked.map((entry, index) => ({
+  const rerankCandidates = [...ranked].sort((left, right) => right.totalScore - left.totalScore);
+  const rerankScoreById = new Map<string, number>();
+  if (options.reranker && rerankCandidates.length) {
+    const rerankResults = await options.reranker({
+      queryText: queryText || input.task_summary,
+      taskType: inputTaskType,
+      candidates: rerankCandidates.map(({ node, semanticScore, lexicalScore, fusedScore, familyScore, totalScore, scopeMatch, taskFamilyMatch }) => ({
+        node,
+        semanticScore,
+        lexicalScore,
+        fusedScore,
+        familyScore,
+        totalScore,
+        scopeMatch,
+        taskFamilyMatch
+      }))
+    });
+
+    const maxScore = Math.max(
+      0,
+      ...rerankResults.map((result) => (Number.isFinite(result.score) ? result.score : 0))
+    );
+    for (const result of rerankResults) {
+      const normalized = maxScore > 0 ? Math.max(0, result.score) / maxScore : 0;
+      rerankScoreById.set(result.id, Number(normalized.toFixed(6)));
+    }
+  }
+
+  const reranked = rerankCandidates
+    .map((entry) => {
+      const rerankScore = rerankScoreById.get(entry.node.id);
+      const rerankBoost = typeof rerankScore === "number" ? rerankScore * 0.12 : 0;
+      return {
+        ...entry,
+        rerankScore,
+        totalScore: entry.totalScore + rerankBoost
+      };
+    })
+    .sort((left, right) => right.totalScore - left.totalScore);
+
+  return reranked.map((entry, index) => ({
     ...entry,
-    scoreMargin: Math.max(0, entry.totalScore - (ranked[index + 1]?.totalScore ?? 0))
+    scoreMargin: Math.max(0, entry.totalScore - (reranked[index + 1]?.totalScore ?? 0))
   }));
 };

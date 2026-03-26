@@ -329,6 +329,7 @@ describe("inspect command", () => {
             semanticScore: 0.74,
             lexicalScore: 0.66,
             fusedScore: 0.82,
+            rerankScore: 0.91,
             taskFamilyMatch: true
           }
         ],
@@ -364,6 +365,7 @@ describe("inspect command", () => {
         ["- Top candidate semantic score: 0.74"],
         ["- Top candidate lexical score: 0.66"],
         ["- Top candidate fused score: 0.82"],
+        ["- Top candidate rerank score: 0.91"],
         ["- Gate reason: strong_candidate_fast_path"],
         ["- Decision reason: mature_validated_candidate"]
       ])
