@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateTrigger } from "../../src/controller/trigger-evaluator.js";
+import { evaluateTrigger, evaluateTriggerRoute } from "../../src/controller/trigger-evaluator.js";
 import type { ExperienceInput, ScopeTaskStats } from "../../src/types/domain.js";
 
 const baseInput: ExperienceInput = {
@@ -126,5 +126,28 @@ describe("evaluateTrigger", () => {
         }
       })
     ).toBe(true);
+  });
+
+  it("routes close same-family active candidates through conservative injection instead of skipping", () => {
+    expect(
+      evaluateTriggerRoute(baseInput, lowFailureStats, {
+        knownRiskSummary: "Fix the failing payments auth test in ExperienceEngine",
+        candidateQuality: {
+          semanticScore: 0.62,
+          totalScore: 0.72,
+          familyScore: 1,
+          scopeMatch: true,
+          taskFamilyMatch: true,
+          state: "active",
+          helpedCount: 1,
+          harmedCount: 0,
+          validationState: "pending_reuse_validation",
+          scoreMargin: 0.03
+        }
+      })
+    ).toEqual({
+      decision: "inject_conservative",
+      reason: "ambiguous_same_family_candidate"
+    });
   });
 });

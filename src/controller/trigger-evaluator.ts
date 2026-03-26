@@ -19,6 +19,11 @@ export type TriggerEvaluationContext = {
   candidateQuality?: TriggerCandidateQuality;
 };
 
+export type TriggerRouteDecision = {
+  decision: "allow" | "inject_conservative" | "skip";
+  reason: string;
+};
+
 const overlapScore = (left: string, right?: string): number => {
   const lhs = new Set(tokenize(left));
   const rhs = new Set(tokenize(right ?? ""));
@@ -32,14 +37,14 @@ const overlapScore = (left: string, right?: string): number => {
   return Math.max(jaccardLike, inputCoverage);
 };
 
-export const evaluateTrigger = (
+export const evaluateTriggerRoute = (
   input: ExperienceInput,
   stats?: ScopeTaskStats,
   knownRiskSummaryOrContext?: string | TriggerEvaluationContext,
   threshold = 0.6
-): boolean => {
+): TriggerRouteDecision => {
   if (input.task_type === "unknown") {
-    return false;
+    return { decision: "skip", reason: "unknown_task_type" };
   }
 
   const failureRate =
@@ -69,6 +74,49 @@ export const evaluateTrigger = (
     candidateQuality.scoreMargin >= 0.08 &&
     (candidateQuality.helpedCount > candidateQuality.harmedCount || candidateQuality.validationState === "validated_by_reuse") &&
     (candidateQuality.helpedCount >= 2 || candidateQuality.validationState === "validated_by_reuse");
+  const ambiguousSameFamilyCandidate =
+    candidateQuality &&
+    candidateQuality.scopeMatch &&
+    candidateQuality.taskFamilyMatch &&
+    candidateQuality.familyScore >= 0.85 &&
+    candidateQuality.totalScore >= 0.6 &&
+    candidateQuality.scoreMargin < 0.07 &&
+    candidateQuality.helpedCount >= candidateQuality.harmedCount &&
+    (
+      candidateQuality.helpedCount >= 1 ||
+      candidateQuality.validationState === "validated_by_reuse" ||
+      candidateQuality.state === "candidate"
+    );
 
-  return explicitFailure || failureRate >= threshold || Boolean(strongCandidate) || triggerRisk >= candidateRiskThreshold;
+  if (explicitFailure) {
+    return { decision: "allow", reason: "explicit_failure_signal" };
+  }
+
+  if (failureRate >= threshold) {
+    return { decision: "allow", reason: "scope_failure_rate_high" };
+  }
+
+  if (strongCandidate) {
+    return { decision: "allow", reason: "strong_candidate_quality" };
+  }
+
+  if (ambiguousSameFamilyCandidate) {
+    return { decision: "inject_conservative", reason: "ambiguous_same_family_candidate" };
+  }
+
+  if (triggerRisk >= candidateRiskThreshold) {
+    return { decision: "allow", reason: "known_pattern_overlap" };
+  }
+
+  return { decision: "skip", reason: "candidate_quality_rejected" };
+};
+
+export const evaluateTrigger = (
+  input: ExperienceInput,
+  stats?: ScopeTaskStats,
+  knownRiskSummaryOrContext?: string | TriggerEvaluationContext,
+  threshold = 0.6
+): boolean => {
+  const route = evaluateTriggerRoute(input, stats, knownRiskSummaryOrContext, threshold);
+  return route.decision !== "skip";
 };

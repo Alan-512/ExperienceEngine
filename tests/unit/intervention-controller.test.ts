@@ -513,6 +513,52 @@ describe("decideIntervention", () => {
     expect(decision.selected.map((entry) => entry.id)).toEqual(["payments-mature-top"]);
   });
 
+  it("downgrades close same-family active matches to conservative injection when confidence is still ambiguous", async () => {
+    const decision = await decideIntervention(
+      {
+        ...input,
+        task_summary:
+          "Review the payments authentication regression in ExperienceEngine, starting from fixture handshake behavior. Keep this read-only."
+      },
+      [
+        node({
+          id: "payments-close-top",
+          task_type: "test_debug",
+          state: "active",
+          trigger_pattern: "Inspect the payments auth fixture handshake in ExperienceEngine before changing code",
+          compact_hint: "Check the auth fixture handshake before changing the payments auth code path.",
+          retrieval_text:
+            "Inspect the payments auth fixture handshake in ExperienceEngine before changing code\nCheck the auth fixture handshake before changing the payments auth code path.",
+          helped_count: 1,
+          harmed_count: 0,
+          support_count: 2,
+          validation_state: "pending_reuse_validation"
+        }),
+        node({
+          id: "payments-close-runner-up",
+          task_type: "test_debug",
+          state: "active",
+          trigger_pattern: "Review the payments authentication handshake before editing the test flow",
+          compact_hint: "Inspect the auth fixture handshake before editing the payments auth flow.",
+          retrieval_text:
+            "Review the payments authentication handshake before editing the test flow\nInspect the auth fixture handshake before editing the payments auth flow.",
+          helped_count: 1,
+          harmed_count: 0,
+          support_count: 2,
+          validation_state: "pending_reuse_validation"
+        })
+      ],
+      stats,
+      0.6,
+      3
+    );
+
+    expect(decision.mode).toBe("inject_conservative");
+    expect(decision.selected.map((entry) => entry.id)).toEqual(["payments-close-top"]);
+    expect(decision.diagnostics?.gateReason).toBe("uncertainty_aware_routing");
+    expect(decision.diagnostics?.decisionReason).toBe("ambiguous_same_family_candidate");
+  });
+
   it("does not append related-family strategies when an exact-family strategy already matches", async () => {
     const decision = await decideIntervention(
       {

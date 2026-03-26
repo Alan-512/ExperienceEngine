@@ -11,7 +11,7 @@ import { retrieveCandidates, retrieveScoredCandidates, type RetrievedCandidate }
 import { renderInjection } from "./injection-renderer.js";
 import { rankNodes } from "./node-ranker.js";
 import { buildRetrievalQuery } from "./query-rewrite.js";
-import { evaluateTrigger, type TriggerCandidateQuality } from "./trigger-evaluator.js";
+import { evaluateTriggerRoute, type TriggerCandidateQuality } from "./trigger-evaluator.js";
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
 
 export type InterventionDecision = {
@@ -291,24 +291,50 @@ const decideInterventionInternal = async (
     };
   }
 
-  if (
-    !evaluateTrigger(
-      input,
-      stats,
-      {
-        knownRiskSummary: candidateRiskSummary,
-        candidateQuality: topCandidateQuality
-      },
-      triggerThreshold
-    )
-  ) {
+  const route = evaluateTriggerRoute(
+    input,
+    stats,
+    {
+      knownRiskSummary: candidateRiskSummary,
+      candidateQuality: topCandidateQuality
+    },
+    triggerThreshold
+  );
+
+  if (route.decision === "skip") {
     return {
       mode: "skip",
       selected: [],
       diagnostics: {
         ...diagnostics,
-        gateReason: "candidate_quality_gate",
-        decisionReason: "candidate_quality_rejected"
+        gateReason: "uncertainty_aware_routing",
+        decisionReason: route.reason
+      }
+    };
+  }
+
+  if (route.decision === "inject_conservative") {
+    const conservativeSelection = selectInjectableNodes(correctionAwareRanked, 1, input.task_type);
+    if (!conservativeSelection.length) {
+      return {
+        mode: "skip",
+        selected: [],
+        diagnostics: {
+          ...diagnostics,
+          gateReason: "no_selected_nodes",
+          decisionReason: "selection_empty"
+        }
+      };
+    }
+
+    return {
+      mode: "inject_conservative",
+      selected: conservativeSelection,
+      text: renderInjection("inject_conservative", conservativeSelection, 1),
+      diagnostics: {
+        ...diagnostics,
+        gateReason: "uncertainty_aware_routing",
+        decisionReason: route.reason
       }
     };
   }
