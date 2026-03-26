@@ -80,6 +80,9 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
       if (typeof record.scorecard.fastPathApplied === "boolean") {
         console.log(`- Fast path applied: ${record.scorecard.fastPathApplied ? "yes" : "no"}`);
       }
+      if (typeof record.scorecard.queryRewriteApplied === "boolean") {
+        console.log(`- Query rewrite applied: ${record.scorecard.queryRewriteApplied ? "yes" : "no"}`);
+      }
       const topCandidate = record.scorecard.topCandidates?.[0];
       if (typeof topCandidate?.semanticScore === "number") {
         console.log(`- Top candidate semantic score: ${topCandidate.semanticScore}`);

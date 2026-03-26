@@ -135,6 +135,7 @@ export const buildInjectionScorecard = (
     topCandidateScore?: number;
     scoreMargin?: number;
     fastPathApplied?: boolean;
+    queryRewriteApplied?: boolean;
     gateReason?: string;
     decisionReason?: string;
   }
@@ -158,6 +159,7 @@ export const buildInjectionScorecard = (
     topCandidateScore: diagnostics?.topCandidateScore,
     scoreMargin: diagnostics?.scoreMargin,
     fastPathApplied: diagnostics?.fastPathApplied,
+    queryRewriteApplied: diagnostics?.queryRewriteApplied,
     gateReason: diagnostics?.gateReason,
     decisionReason: diagnostics?.decisionReason,
     nodes: scoredNodes,

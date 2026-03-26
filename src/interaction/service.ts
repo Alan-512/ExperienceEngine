@@ -173,6 +173,8 @@ export type ExperienceDecisionHealth = {
   recentConservativeInjects: number;
   recentSkips: number;
   recentFastPathActivations: number;
+  recentRerankParticipations: number;
+  recentQueryRewriteUsages: number;
   lastDecisionMode?: "inject" | "inject_conservative" | "skip";
 };
 
@@ -621,6 +623,8 @@ export class ExperienceInteractionService {
     let recentConservativeInjects = 0;
     let recentSkips = 0;
     let recentFastPathActivations = 0;
+    let recentRerankParticipations = 0;
+    let recentQueryRewriteUsages = 0;
     let lastDecisionMode: ExperienceDecisionHealth["lastDecisionMode"];
 
     for (const record of recentRecords) {
@@ -644,6 +648,12 @@ export class ExperienceInteractionService {
       if (injectionEvent?.scorecard?.fastPathApplied) {
         recentFastPathActivations += 1;
       }
+      if (injectionEvent?.scorecard?.topCandidates?.some((candidate) => typeof candidate.rerankScore === "number")) {
+        recentRerankParticipations += 1;
+      }
+      if (injectionEvent?.scorecard?.queryRewriteApplied) {
+        recentQueryRewriteUsages += 1;
+      }
     }
 
     return {
@@ -653,6 +663,8 @@ export class ExperienceInteractionService {
       recentConservativeInjects,
       recentSkips,
       recentFastPathActivations,
+      recentRerankParticipations,
+      recentQueryRewriteUsages,
       lastDecisionMode
     };
   }

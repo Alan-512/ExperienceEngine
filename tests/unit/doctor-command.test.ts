@@ -228,6 +228,8 @@ describe("doctor command", () => {
         recentConservativeInjects: 1,
         recentSkips: 1,
         recentFastPathActivations: 1,
+        recentRerankParticipations: 2,
+        recentQueryRewriteUsages: 1,
         lastDecisionMode: "inject"
       }),
       fetchLatestGitHubReleaseStatus: async () => ({
@@ -262,7 +264,9 @@ describe("doctor command", () => {
         ["- Injects: 2"],
         ["- Conservative injects: 1"],
         ["- Skips: 1"],
-        ["- Fast-path activations: 1"]
+        ["- Fast-path activations: 1"],
+        ["- Rerank participations: 2"],
+        ["- Query rewrites: 1"]
       ])
     );
   });
@@ -288,6 +292,8 @@ describe("doctor command", () => {
         recentConservativeInjects: 0,
         recentSkips: 3,
         recentFastPathActivations: 0,
+        recentRerankParticipations: 0,
+        recentQueryRewriteUsages: 0,
         lastDecisionMode: "skip"
       }),
       fetchLatestGitHubReleaseStatus: async () => ({

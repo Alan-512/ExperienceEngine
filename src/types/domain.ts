@@ -232,6 +232,7 @@ export type InjectionScorecard = {
   topCandidateScore?: number;
   scoreMargin?: number;
   fastPathApplied?: boolean;
+  queryRewriteApplied?: boolean;
   gateReason?: string;
   decisionReason?: string;
   nodes: InjectionScorecardNode[];

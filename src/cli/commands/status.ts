@@ -39,4 +39,6 @@ export const runStatusCommand = (): void => {
   console.log(`- Recent conservative injects: ${decisionHealth.recentConservativeInjects}`);
   console.log(`- Recent skips: ${decisionHealth.recentSkips}`);
   console.log(`- Recent fast-path activations: ${decisionHealth.recentFastPathActivations}`);
+  console.log(`- Recent rerank participations: ${decisionHealth.recentRerankParticipations}`);
+  console.log(`- Recent query rewrites: ${decisionHealth.recentQueryRewriteUsages}`);
 };

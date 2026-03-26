@@ -262,6 +262,8 @@ const logDecisionHealth = (summary?: ExperienceDecisionHealth): void => {
   console.log(`- Conservative injects: ${summary.recentConservativeInjects}`);
   console.log(`- Skips: ${summary.recentSkips}`);
   console.log(`- Fast-path activations: ${summary.recentFastPathActivations}`);
+  console.log(`- Rerank participations: ${summary.recentRerankParticipations}`);
+  console.log(`- Query rewrites: ${summary.recentQueryRewriteUsages}`);
 };
 
 export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): Promise<void> => {

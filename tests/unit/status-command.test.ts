@@ -58,6 +58,8 @@ vi.mock("../../src/interaction/service.js", () => ({
         recentConservativeInjects: 1,
         recentSkips: 1,
         recentFastPathActivations: 1,
+        recentRerankParticipations: 2,
+        recentQueryRewriteUsages: 1,
         lastDecisionMode: "inject_conservative"
       };
     }
@@ -84,7 +86,9 @@ describe("status command", () => {
         ["- Recent injects: 1"],
         ["- Recent conservative injects: 1"],
         ["- Recent skips: 1"],
-        ["- Recent fast-path activations: 1"]
+        ["- Recent fast-path activations: 1"],
+        ["- Recent rerank participations: 2"],
+        ["- Recent query rewrites: 1"]
       ])
     );
   });

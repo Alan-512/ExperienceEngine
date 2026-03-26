@@ -10,6 +10,7 @@ import type {
 import { retrieveCandidates, retrieveScoredCandidates, type RetrievedCandidate } from "./candidate-retriever.js";
 import { renderInjection } from "./injection-renderer.js";
 import { rankNodes } from "./node-ranker.js";
+import { buildRetrievalQuery } from "./query-rewrite.js";
 import { evaluateTrigger, type TriggerCandidateQuality } from "./trigger-evaluator.js";
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
 
@@ -22,6 +23,7 @@ export type InterventionDecision = {
     topCandidateScore?: number;
     scoreMargin?: number;
     fastPathApplied: boolean;
+    queryRewriteApplied?: boolean;
     gateReason: string;
     decisionReason: string;
   };
@@ -173,6 +175,7 @@ const decideInterventionInternal = async (
   config?: Pick<ExperienceEngineConfig, "embeddingProvider" | "embeddingModel" | "embeddingDtype" | "embeddingCacheDir">
 ): Promise<InterventionDecision> => {
   const scoredCandidates = await retrieveScoredCandidates(input, nodes, { config });
+  const retrievalQuery = buildRetrievalQuery(input.task_summary, input.context_summary);
   const rankingSummary = [input.task_summary, input.context_summary].filter(Boolean).join("\n");
   const rankTieBreakOrder = new Map(
     rankNodes(
@@ -229,6 +232,7 @@ const decideInterventionInternal = async (
     topCandidateScore: topCandidateQuality ? Number(topCandidateQuality.totalScore.toFixed(4)) : undefined,
     scoreMargin: topCandidateQuality ? Number(topCandidateQuality.scoreMargin.toFixed(4)) : undefined,
     fastPathApplied: false,
+    queryRewriteApplied: retrievalQuery.rewriteApplied,
     gateReason: "candidate_quality_gate",
     decisionReason: "candidate_quality_positive"
   };
