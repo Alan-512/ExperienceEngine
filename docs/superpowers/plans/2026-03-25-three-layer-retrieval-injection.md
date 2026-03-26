@@ -1,5 +1,9 @@
 # Three-Layer Retrieval And Injection Implementation Plan
 
+> Superseded by [2026-03-26-best-practice-retrieval-architecture.md](./2026-03-26-best-practice-retrieval-architecture.md) for the current best-practice target.
+>
+> This plan remains useful as the historical execution record for the earlier three-layer rollout, but it should no longer be treated as the active end-state implementation plan.
+
 > **For agentic workers:** REQUIRED: Use superpowers:subagent-driven-development (if subagents available) or superpowers:executing-plans to implement this plan. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Move ExperienceEngine toward a three-layer retrieval and injection architecture, beginning with a lighter selective gate and a strong-candidate fast path so obviously relevant experience stops being skipped in real Codex usage.

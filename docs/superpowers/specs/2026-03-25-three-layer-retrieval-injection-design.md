@@ -2,6 +2,10 @@
 
 Date: 2026-03-25
 
+> Superseded by [2026-03-26-best-practice-retrieval-architecture-design.md](./2026-03-26-best-practice-retrieval-architecture-design.md) for the current target architecture.
+>
+> This document remains useful as the historical phase-1/phase-2 transition design, but it should no longer be treated as the authoritative statement of the final retrieval architecture.
+
 ## Summary
 
 ExperienceEngine's current retrieval pipeline can already find relevant mature nodes, but the final trigger gate is too lexical and too strict. In real Codex runs, `retrieveCandidates()` returns the expected `payments auth test` nodes, yet `evaluateTrigger()` still returns `skip` because long task prompts have low token overlap with short `trigger_pattern` strings.
