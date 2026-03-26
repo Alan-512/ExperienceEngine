@@ -92,7 +92,9 @@ ExperienceEngine 现在采用**宿主原生安装**。
   - 一步安装：
     - `openclaw plugins install @alan512/experienceengine`
 - `Codex`
-  - 一步接入：
+  - 首次接入推荐：
+    - `ee install codex`
+  - 手工 MCP fallback：
     - `codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y @alan512/experienceengine codex-mcp-server`
 - `Claude Code`
   - 先添加 GitHub marketplace：
@@ -146,7 +148,7 @@ ExperienceEngine 现在把“安装”和“运维”明确分开：
 
 这意味着：
 
-- `Codex` 走 Codex 原生 MCP 接入
+- `Codex` 走共享 ExperienceEngine MCP 服务，首次接入优先使用 `ee install codex`
 - `Claude Code` 走 Claude 原生插件资产与 marketplace 分发
 - `OpenClaw` 走 plugin/runtime 集成
 

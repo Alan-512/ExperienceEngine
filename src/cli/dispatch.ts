@@ -11,6 +11,13 @@ const usageText =
   + " | config <get|set|unset> notices.inline|distillation.provider|distillation.auth_mode|distillation.model|embedding.provider|embedding.api_provider|embedding.model|embedding.dtype|secret.<ENV_KEY> [value]";
 
 export const printCliUsage = (): void => {
+  console.log("ExperienceEngine CLI");
+  console.log("Common first steps:");
+  console.log("- Codex: ee install codex");
+  console.log("- Initialize shared state: ee init");
+  console.log("- Verify current host wiring: ee doctor codex");
+  console.log("- Check current state: ee status");
+  console.log("Advanced usage:");
   console.log(usageText);
 };
 

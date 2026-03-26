@@ -177,6 +177,14 @@ Before installing ExperienceEngine into any host, make sure the host CLI itself 
 
 ExperienceEngine wires itself into an existing host environment. It does not install the host CLI for you.
 
+If you are installing ExperienceEngine into a repo for the first time, prefer:
+
+```bash
+ee install codex
+```
+
+That command wires the shared MCP server and writes the local `AGENTS.md` instruction block for the current repo.
+
 If you are operating or debugging the product directly, the explicit fallback commands still exist:
 
 ```bash

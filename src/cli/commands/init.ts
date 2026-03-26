@@ -39,6 +39,14 @@ const EMBEDDING_USAGE =
   "Usage: ee init embedding --mode <api|local|legacy> [--api-provider auto|openai|gemini|jina] [--model <modelId>] [--dtype q8|fp32]";
 const SECRET_USAGE = "Usage: ee init secret <ENV_KEY> <value>";
 const SHOW_USAGE = "Usage: ee init show";
+const EXPAND_ALL_PROVIDERS_VALUE = "__all_providers__";
+const RECOMMENDED_PROVIDER_VALUES: DistillerProvider[] = [
+  "openai",
+  "anthropic",
+  "gemini",
+  "openrouter",
+  "openai_compatible"
+];
 
 const parseFlag = (args: string[], flag: string): string | undefined => {
   const index = args.indexOf(flag);
@@ -207,16 +215,7 @@ const runInitWizard = async (ui: InitWizardUI, deps: InitCommandDeps): Promise<v
 
   ui.log("ExperienceEngine initialization");
 
-  const providerOptions = DISTILLER_PROVIDERS.map((provider) => ({
-    label: provider,
-    value: provider,
-    detail: provider === currentSettings.distillation?.provider ? "current" : undefined
-  }));
-  const provider = await ui.choose({
-    title: "Step 1: Distillation provider",
-    message: `Current: ${currentSettings.distillation?.provider ?? "<unset>"}`,
-    options: providerOptions
-  });
+  const provider = await chooseDistillationProvider(ui, currentSettings.distillation?.provider);
   if (!provider) {
     ui.log("Initialization cancelled.");
     return;
@@ -332,6 +331,58 @@ const runInitWizard = async (ui: InitWizardUI, deps: InitCommandDeps): Promise<v
     ui.log(`- Shared secret ${secretKey}: ${finalSecrets[secretKey] ? "<set>" : "<unset>"}`);
   }
   ui.log("- Next step: run `ee doctor <host>` to verify your installed host reuses this shared state.");
+};
+
+const buildProviderChoice = (
+  provider: DistillerProvider,
+  currentProvider?: string
+): InitWizardChoice => ({
+  label: provider,
+  value: provider,
+  detail: provider === currentProvider ? "current" : undefined
+});
+
+const chooseDistillationProvider = async (
+  ui: InitWizardUI,
+  currentProvider?: string
+): Promise<DistillerProvider | undefined> => {
+  const recommendedOptions = RECOMMENDED_PROVIDER_VALUES.map((provider) =>
+    buildProviderChoice(provider, currentProvider)
+  );
+  const shortlist = [...recommendedOptions];
+
+  if (currentProvider && !RECOMMENDED_PROVIDER_VALUES.includes(currentProvider as DistillerProvider)) {
+    shortlist.unshift(buildProviderChoice(currentProvider as DistillerProvider, currentProvider));
+  }
+
+  const firstSelection = await ui.choose({
+    title: "Step 1: Distillation provider",
+    message: `Current: ${currentProvider ?? "<unset>"}`,
+    options: [
+      ...shortlist,
+      {
+        label: "More providers",
+        value: EXPAND_ALL_PROVIDERS_VALUE,
+        detail: "Show the full provider catalog"
+      }
+    ]
+  });
+
+  if (!firstSelection) {
+    return undefined;
+  }
+
+  if (firstSelection !== EXPAND_ALL_PROVIDERS_VALUE) {
+    return firstSelection as DistillerProvider;
+  }
+
+  const fullSelection = await ui.choose({
+    title: "Step 1: Distillation provider",
+    message: "All providers",
+    options: DISTILLER_PROVIDERS.map((provider) => buildProviderChoice(provider, currentProvider))
+  });
+
+  return fullSelection as DistillerProvider | undefined;
 };
 
 const pickSuggestedModels = (

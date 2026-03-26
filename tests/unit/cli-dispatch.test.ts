@@ -25,8 +25,13 @@ describe("CLI dispatch", () => {
     const { printCliUsage } = await import("../../src/cli/dispatch.js");
     printCliUsage();
 
-    expect(consoleLog).toHaveBeenCalledTimes(1);
-    expect(String(consoleLog.mock.calls[0]?.[0] ?? "")).not.toContain("pack <");
+    const output = consoleLog.mock.calls.map((call) => String(call[0] ?? "")).join("\n");
+    expect(output).not.toContain("pack <");
+    expect(output).toContain("Common first steps:");
+    expect(output).toContain("ee install codex");
+    expect(output).toContain("ee init");
+    expect(output).toContain("ee doctor codex");
+    expect(output).toContain("Advanced usage:");
 
     consoleLog.mockRestore();
   });

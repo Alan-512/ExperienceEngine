@@ -241,9 +241,62 @@ describe("init command", () => {
     expect(choose).toHaveBeenCalledTimes(4);
     expect(input).toHaveBeenCalledTimes(1);
     expect(choose.mock.calls[0]?.[0]).toMatchObject({ title: "Step 1: Distillation provider" });
+    expect(choose.mock.calls[0]?.[0]?.options).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ value: "openai" }),
+        expect.objectContaining({ value: "anthropic" }),
+        expect.objectContaining({ value: "gemini" }),
+        expect.objectContaining({ value: "openrouter" }),
+        expect.objectContaining({ value: "openai_compatible" }),
+        expect.objectContaining({ value: "__all_providers__" })
+      ])
+    );
+    expect(choose.mock.calls[0]?.[0]?.options).toHaveLength(6);
     expect(choose.mock.calls[1]?.[0]).toMatchObject({ title: "Step 2: Distillation auth mode" });
     expect(choose.mock.calls[2]?.[0]).toMatchObject({ title: "Step 3: Distillation model" });
     expect(choose.mock.calls[3]?.[0]).toMatchObject({ title: "Step 4: Embedding mode" });
     expect(input.mock.calls[0]?.[0]).toMatchObject({ title: "- GEMINI_API_KEY" });
+  });
+
+  it("expands to the full provider catalog only when the user asks for more providers", async () => {
+    const home = makeTempDir();
+    const productHome = join(home, ".experienceengine");
+    process.env.EXPERIENCE_ENGINE_HOME = productHome;
+
+    const choose = vi
+      .fn()
+      .mockResolvedValueOnce("__all_providers__")
+      .mockResolvedValueOnce("deepseek")
+      .mockResolvedValueOnce("deepseek-chat")
+      .mockResolvedValueOnce("api:auto");
+    const input = vi.fn();
+
+    await runInitCommand(undefined, [], {
+      resolveModelCatalog: async () => ({
+        provider: "deepseek",
+        source: "static",
+        models: [
+          {
+            id: "deepseek-chat",
+            name: "DeepSeek Chat"
+          }
+        ]
+      }),
+      ui: {
+        isInteractive: () => true,
+        choose,
+        input,
+        log: console.log
+      }
+    });
+
+    expect(choose).toHaveBeenCalledTimes(4);
+    expect(choose.mock.calls[1]?.[0]).toMatchObject({ title: "Step 1: Distillation provider" });
+    expect(choose.mock.calls[1]?.[0]?.options).toEqual(
+      expect.arrayContaining([expect.objectContaining({ value: "deepseek" })])
+    );
+    expect(choose.mock.calls[1]?.[0]?.options).not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ value: "__all_providers__" })])
+    );
   });
 });
