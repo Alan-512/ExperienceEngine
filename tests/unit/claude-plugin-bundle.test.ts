@@ -38,13 +38,13 @@ describe("Claude plugin bundle", () => {
 
     expect(mcp.mcpServers.experienceengine.command).toBe("node");
     expect(mcp.mcpServers.experienceengine.args).toEqual([
-      "${CLAUDE_PLUGIN_DATA}/node_modules/@alan512/experienceengine/dist/cli/index.js",
+      "${CLAUDE_PLUGIN_ROOT}/node_modules/@alan512/experienceengine/dist/cli/index.js",
       "mcp-server"
     ]);
     expect(mcp.mcpServers.experienceengine.env).toEqual(
       expect.objectContaining({
-        NODE_PATH: "${CLAUDE_PLUGIN_DATA}/node_modules",
-        EXPERIENCE_ENGINE_HOME: "${CLAUDE_PLUGIN_DATA}/experienceengine-home"
+        NODE_PATH: "${CLAUDE_PLUGIN_ROOT}/node_modules",
+        EXPERIENCE_ENGINE_HOME: "${CLAUDE_PLUGIN_ROOT}/experienceengine-home"
       })
     );
   });

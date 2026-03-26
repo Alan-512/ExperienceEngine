@@ -31,6 +31,26 @@ describe("Claude plugin assets", () => {
     expect(hooks.hooks.SessionEnd?.[0]?.hooks[0]?.command).toContain("claude-hook.sh");
   });
 
+  it("ships hook scripts that can fall back to CLAUDE_PLUGIN_ROOT when CLAUDE_PLUGIN_DATA is absent", () => {
+    const installScript = readFileSync(
+      join(repoRoot, "plugins", "claude-code-experienceengine", "scripts", "install-deps.sh"),
+      "utf8"
+    );
+    const hookScript = readFileSync(
+      join(repoRoot, "plugins", "claude-code-experienceengine", "scripts", "claude-hook.sh"),
+      "utf8"
+    );
+
+    expect(installScript).toContain("CLAUDE_PLUGIN_ROOT");
+    expect(hookScript).toContain("CLAUDE_PLUGIN_ROOT");
+    expect(installScript).not.toContain("CLAUDE_PLUGIN_DATA is required");
+    expect(hookScript).not.toContain("CLAUDE_PLUGIN_DATA is required");
+    expect(installScript).toContain("@alan512/experienceengine@${PACKAGE_VERSION}");
+    expect(installScript).not.toContain("EXPERIENCE_ENGINE_PLUGIN_GIT_URL");
+    expect(installScript).toContain('[[ -f "${PACKAGE_ENTRY}" ]]');
+    expect(installScript).toContain("--ignore-scripts");
+  });
+
   it("defines an MCP server that uses the installed product launcher and shared EE home", () => {
     const mcp = JSON.parse(readFileSync(join(repoRoot, ".mcp.json"), "utf8")) as {
       mcpServers: Record<
