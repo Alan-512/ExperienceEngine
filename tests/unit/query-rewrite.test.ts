@@ -27,4 +27,17 @@ describe("buildRetrievalQuery", () => {
     expect(query.removedClauses).toEqual([]);
     expect(query.rewriteApplied).toBe(false);
   });
+
+  it("normalizes authentication investigation prompts and strips read-only mode noise", () => {
+    const query = buildRetrievalQuery(
+      "Review payments authentication regression starting from fixture handshake behavior in read-only mode; identify likely first diagnostic step."
+    );
+
+    expect(query.retrievalQueryText).toContain("payments auth regression");
+    expect(query.retrievalQueryText).toContain("fixture handshake");
+    expect(query.retrievalQueryText).not.toContain("authentication");
+    expect(query.retrievalQueryText).not.toContain("read-only mode");
+    expect(query.addedContextTerms).toContain("failing test");
+    expect(query.rewriteApplied).toBe(true);
+  });
 });

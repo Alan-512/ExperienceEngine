@@ -49,4 +49,12 @@ describe("resolveTaskType", () => {
       )
     ).toBe("test_debug");
   });
+
+  it("classifies authentication regression investigations with fixture handshake language as test_debug", () => {
+    expect(
+      resolveTaskType(
+        "Review payments authentication regression starting from fixture handshake behavior in read-only mode; identify likely first diagnostic step."
+      )
+    ).toBe("test_debug");
+  });
 });
