@@ -557,4 +557,47 @@ describe("retrieveCandidates", () => {
     expect(candidates[0]!.rerankScore).toBeGreaterThan(candidates[1]!.rerankScore ?? -1);
     expect(candidates[0]!.totalScore).toBeGreaterThan(candidates[1]!.totalScore);
   });
+
+  it("rewrites long read-only investigation prompts before semantic retrieval", async () => {
+    const embedQuerySpy = vi.fn(async () => [1, 0, 0]);
+    setEmbeddingProviderForTests({
+      provider: "local",
+      model: "Xenova/multilingual-e5-small",
+      version: "local-e5-v1",
+      dimensions: 3,
+      embedQuery: embedQuerySpy,
+      async embedPassage() {
+        return [1, 0, 0];
+      }
+    });
+
+    const candidates = await retrieveScoredCandidates(
+      input({
+        task_type: "test_debug",
+        task_summary:
+          "Investigate the payments auth test regression in this workspace by checking the auth fixture handshake first. Read-only analysis only; do not modify files."
+      }),
+      [
+        node({
+          id: "payments-mature-top",
+          task_type: "test_debug",
+          trigger_pattern: "Fix the failing payments auth test in ExperienceEngine",
+          compact_hint: "Check the auth fixture handshake before changing the payments auth code path.",
+          retrieval_text:
+            "Fix the failing payments auth test in ExperienceEngine\nCheck the auth fixture handshake before changing the payments auth code path.",
+          helped_count: 9,
+          support_count: 7,
+          validation_state: "validated_by_reuse"
+        })
+      ]
+    );
+
+    expect(embedQuerySpy).toHaveBeenCalledWith(
+      expect.stringContaining("Investigate the payments auth test regression by checking the auth fixture handshake first")
+    );
+    expect(embedQuerySpy).toHaveBeenCalledWith(expect.not.stringContaining("Read-only analysis only"));
+    expect(embedQuerySpy).toHaveBeenCalledWith(expect.not.stringContaining("do not modify files"));
+    expect(embedQuerySpy).toHaveBeenCalledWith(expect.stringContaining("failing test"));
+    expect(candidates[0]?.node.id).toBe("payments-mature-top");
+  });
 });

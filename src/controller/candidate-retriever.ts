@@ -8,6 +8,7 @@ import {
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import { openVectorStore } from "../store/vector/lancedb.js";
 import { tokenize } from "../utils/text.js";
+import { buildRetrievalQuery } from "./query-rewrite.js";
 
 export type RetrievedCandidate = {
   node: ExperienceNode;
@@ -430,7 +431,8 @@ export const retrieveScoredCandidates = async (
   }
 
   const inputTaskType = input.task_type;
-  const queryText = [input.task_summary, input.context_summary].filter(Boolean).join("\n");
+  const retrievalQuery = buildRetrievalQuery(input.task_summary, input.context_summary);
+  const queryText = retrievalQuery.retrievalQueryText;
   const shouldUseSemanticRetrieval = !shouldSkipSemanticRetrieval(input, queryText || input.task_summary);
   const localQuery = shouldUseSemanticRetrieval
     ? await embedQueryText(queryText || input.task_summary, options)
