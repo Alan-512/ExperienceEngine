@@ -9,6 +9,7 @@ import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import { openVectorStore } from "../store/vector/lancedb.js";
 import { tokenize } from "../utils/text.js";
 import { buildRetrievalQuery } from "./query-rewrite.js";
+import { computeLexicalRetrievalScores } from "./lexical-retriever.js";
 
 export type RetrievedCandidate = {
   node: ExperienceNode;
@@ -237,81 +238,6 @@ type RetrieveOptions = {
   reranker?: (input: { queryText: string; taskType: TaskType; candidates: RerankCandidate[] }) => Promise<RerankResult[]>;
 };
 
-type LexicalDocument = {
-  node: ExperienceNode;
-  length: number;
-  frequencies: Map<string, number>;
-};
-
-const buildLexicalDocument = (node: ExperienceNode): LexicalDocument => {
-  const text = node.retrieval_text ?? `${node.trigger_pattern}\n${node.compact_hint}`;
-  const tokens = tokenize(text);
-  const frequencies = new Map<string, number>();
-
-  for (const token of tokens) {
-    frequencies.set(token, (frequencies.get(token) ?? 0) + 1);
-  }
-
-  return {
-    node,
-    length: tokens.length,
-    frequencies
-  };
-};
-
-const computeBm25Scores = (queryText: string, nodes: ExperienceNode[]): Map<string, number> => {
-  const queryTokens = [...new Set(tokenize(queryText))];
-  if (!queryTokens.length || !nodes.length) {
-    return new Map();
-  }
-
-  const documents = nodes.map(buildLexicalDocument);
-  const averageLength =
-    documents.reduce((sum, document) => sum + Math.max(1, document.length), 0) / Math.max(1, documents.length);
-  const documentFrequency = new Map<string, number>();
-  for (const token of queryTokens) {
-    let count = 0;
-    for (const document of documents) {
-      if (document.frequencies.has(token)) {
-        count += 1;
-      }
-    }
-    documentFrequency.set(token, count);
-  }
-
-  const k1 = 1.4;
-  const b = 0.75;
-  const rawScores = new Map<string, number>();
-  let maxScore = 0;
-
-  for (const document of documents) {
-    let score = 0;
-
-    for (const token of queryTokens) {
-      const termFrequency = document.frequencies.get(token) ?? 0;
-      if (!termFrequency) {
-        continue;
-      }
-
-      const df = documentFrequency.get(token) ?? 0;
-      const idf = Math.log(1 + (documents.length - df + 0.5) / (df + 0.5));
-      const denominator = termFrequency + k1 * (1 - b + b * (document.length / averageLength));
-      score += idf * ((termFrequency * (k1 + 1)) / denominator);
-    }
-
-    rawScores.set(document.node.id, score);
-    maxScore = Math.max(maxScore, score);
-  }
-
-  if (maxScore <= 0) {
-    return new Map();
-  }
-
-  return new Map(
-    [...rawScores.entries()].map(([id, score]) => [id, Number((score / maxScore).toFixed(6))])
-  );
-};
-
 const buildRankMap = (entries: Array<{ id: string; score: number }>): Map<string, number> =>
   new Map(
     [...entries]
@@ -464,7 +390,11 @@ export const retrieveScoredCandidates = async (
   for (const match of vectorStore.query(legacyRecords, legacyQuery.embedding, 16)) {
     scoreById.set(match.id, Math.max(scoreById.get(match.id) ?? 0, localQuery ? match.score * 0.78 : match.score));
   }
-  const lexicalScoreById = computeBm25Scores(queryText || input.task_summary, scopeLocalNodes);
+  const lexicalScoreById = new Map(
+    [...computeLexicalRetrievalScores(queryText || input.task_summary, scopeLocalNodes).entries()].map(
+      ([id, score]) => [id, score.score]
+    )
+  );
   const fusedScoreById = buildFusedScores(
     scoreById,
     lexicalScoreById,

@@ -139,6 +139,11 @@ const resolveTriggerThreshold = (selected: ExperienceNode | undefined, threshold
   return threshold;
 };
 
+const isMatureReusableNode = (node: ExperienceNode): boolean =>
+  node.state === "active" &&
+  (node.helped_count >= 2 || node.validation_state === "validated_by_reuse") &&
+  node.helped_count >= node.harmed_count;
+
 export const selectInjectableNodes = (
   ranked: ExperienceNode[],
   maxHints = 3,
@@ -149,7 +154,13 @@ export const selectInjectableNodes = (
     preferredTaskType && preferredTaskType !== "unknown"
       ? strategyNodes.filter((node) => node.task_type === preferredTaskType)
       : [];
-  const familyScopedStrategies = exactFamilyStrategies.length >= 1 ? exactFamilyStrategies : strategyNodes;
+  const matureExactFamilyStrategies = exactFamilyStrategies.filter(isMatureReusableNode);
+  const familyScopedStrategies =
+    exactFamilyStrategies.length >= 2 && matureExactFamilyStrategies.length >= 2
+      ? matureExactFamilyStrategies
+      : exactFamilyStrategies.length >= 1
+        ? exactFamilyStrategies
+        : strategyNodes;
   const fallback = familyScopedStrategies.length
     ? familyScopedStrategies
     : ranked.filter((node) => node.node_type === "warning");
