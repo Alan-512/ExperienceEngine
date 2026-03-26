@@ -356,6 +356,20 @@ const buildLatestTimeline = (input: {
   return entries.sort((left, right) => left.createdAt.localeCompare(right.createdAt));
 };
 
+const compareIsoDesc = (left?: string, right?: string): number => {
+  if (!left && !right) {
+    return 0;
+  }
+  if (!left) {
+    return 1;
+  }
+  if (!right) {
+    return -1;
+  }
+
+  return right.localeCompare(left);
+};
+
 export class ExperienceInteractionService {
   private readonly inputRepo;
   private readonly injectionRepo;
@@ -463,8 +477,97 @@ export class ExperienceInteractionService {
     };
   }
 
-  inspectLast(): ExperienceLastInspection | undefined {
-    return this.inspectRecord(this.inputRepo.getLatest());
+  private inspectInjectionEvent(event: InjectionEvent | undefined): ExperienceLastInspection | undefined {
+    if (!event) {
+      return undefined;
+    }
+
+    const taskRun = event.session_id ? this.taskRunRepo.getLatestBySessionId(event.session_id) : undefined;
+    const latestRecord = event.session_id ? this.inputRepo.getLatestBySessionId(event.session_id) : undefined;
+    if (latestRecord) {
+      return this.inspectRecord(latestRecord);
+    }
+
+    const injectedNodes = this.nodeRepo.listByIds(event.injected_node_ids);
+    const reviewEvents = taskRun?.id ? this.reviewEventRepo.listByTaskRunId(taskRun.id) : [];
+    const autoFeedback = summarizeAutomaticFeedback(reviewEvents);
+    const latestAutomaticFeedback = reviewEvents.find((reviewEvent) => reviewEvent.source === "automatic");
+    const intervention: ExperienceLastInspection["intervention"] = !event.delivered
+      ? event.delivery_mode === "holdout"
+        ? "holdout"
+        : "shadow"
+      : "inject";
+    const outcomeRecord = taskRun?.id ? this.outcomeRepo.listByTaskRunId(taskRun.id)[0] : undefined;
+    const outcome =
+      outcomeRecord?.outcome_signal ??
+      (taskRun?.final_status === "success" ? "success" : taskRun?.final_status === "failure" ? "failure" : "unknown");
+    const summary = event.task_summary ?? taskRun?.task_summary ?? "Latest injection event";
+
+    return {
+      sessionId: event.session_id,
+      scopeId: event.scope_id,
+      taskType: event.task_type,
+      intervention,
+      deliveryMode: event.delivery_mode,
+      delivered: event.delivered,
+      autoFeedback,
+      autoFeedbackReason: inferAutoFeedbackReason({
+        explicitReason: event.attribution_reason,
+        autoFeedback,
+        intervention,
+        outcome
+      }),
+      outcome,
+      injectedNodes: injectedNodes.map(toNodeSummary),
+      hints: injectedNodes.map((node) => node.compact_hint),
+      evidence: [],
+      scorecard: event.scorecard,
+      timeline: buildLatestTimeline({
+        record: {
+          record_id: `injection:${event.injection_id}`,
+          scope_id: event.scope_id,
+          session_id: event.session_id,
+          task_type: event.task_type,
+          task_summary: summary,
+          outcome_signal: outcome,
+          context_summary: taskRun?.context_summary,
+          evidence: [],
+          injected_node_ids: event.injected_node_ids,
+          created_at: event.created_at
+        },
+        taskRunCreatedAt: taskRun?.created_at,
+        outcomeCreatedAt: outcomeRecord?.created_at,
+        outcomeSummary: outcomeRecord?.summary,
+        injectionCreatedAt: event.created_at,
+        intervention,
+        delivered: event.delivered,
+        injectedCount: injectedNodes.length,
+        autoFeedback,
+        autoFeedbackCreatedAt: latestAutomaticFeedback?.created_at
+      }),
+      summary,
+      createdAt: event.created_at
+    };
+  }
+
+  inspectLast(cwd: string = process.cwd()): ExperienceLastInspection | undefined {
+    const scope = resolveScope(cwd);
+    const latestRecordInScope = this.inputRepo.getLatestByScope(scope.scope_id);
+    const latestInjectionInScope = this.injectionRepo.getLatestByScope(scope.scope_id);
+    const latestScopedInspection =
+      compareIsoDesc(latestInjectionInScope?.created_at, latestRecordInScope?.created_at) < 0
+        ? this.inspectInjectionEvent(latestInjectionInScope)
+        : this.inspectRecord(latestRecordInScope);
+
+    if (latestScopedInspection) {
+      return latestScopedInspection;
+    }
+
+    const latestRecord = this.inputRepo.getLatest();
+    const latestInjection = this.injectionRepo.getLatest();
+    return compareIsoDesc(latestInjection?.created_at, latestRecord?.created_at) < 0
+      ? this.inspectInjectionEvent(latestInjection)
+      : this.inspectRecord(latestRecord);
   }
 
   inspectRecent(options: { injectedOnly?: boolean; limit?: number } = {}): ExperienceRecentInspection[] {

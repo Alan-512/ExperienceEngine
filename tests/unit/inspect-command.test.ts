@@ -20,6 +20,7 @@ import type {
   DistillationJob,
   ExperienceCandidate,
   ExperienceInputRecord,
+  InjectionEvent,
   ExperienceNode,
   OutcomeRecord,
   ReviewEvent,
@@ -159,6 +160,53 @@ const makeReviewEvent = (overrides: Partial<ReviewEvent> = {}): ReviewEvent => (
   ...overrides
 });
 
+const makeInjectionEvent = (overrides: Partial<InjectionEvent> = {}): InjectionEvent => ({
+  injection_id: "inject_inspect",
+  session_id: "session_inject_only",
+  scope_id: resolveScope(process.cwd()).scope_id,
+  task_type: "test_debug",
+  task_summary: "Investigate the payments auth test regression",
+  mode: "inject",
+  delivery_mode: "live",
+  delivered: true,
+  injected_node_ids: ["node_inspect"],
+  injection_count: 1,
+  scorecard: {
+    scopeId: resolveScope(process.cwd()).scope_id,
+    sessionId: "session_inject_only",
+    taskType: "test_debug",
+    taskSummary: "Investigate the payments auth test regression",
+    mode: "inject",
+    riskLevel: "medium",
+    recommendation: "Apply these hints normally, then mark helped or harmed after the task.",
+    reasons: ["A mature same-family candidate matched strongly."],
+    topCandidates: [
+      {
+        id: "node_inspect",
+        semanticScore: 0.42,
+        lexicalScore: 0.99,
+        fusedScore: 0.88,
+        rerankScore: 1,
+        taskFamilyMatch: true
+      }
+    ],
+    topCandidateScore: 0.88,
+    scoreMargin: 0.02,
+    fastPathApplied: true,
+    queryRewriteApplied: true,
+    gateReason: "strong_candidate_fast_path",
+    decisionReason: "mature_validated_candidate",
+    createdAt: "2026-03-14T01:00:00.000Z",
+    nodes: []
+  },
+  was_successful: null,
+  harm_observed: null,
+  attribution_reason: undefined,
+  created_at: "2026-03-14T01:00:00.000Z",
+  resolved_at: undefined,
+  ...overrides
+});
+
 const makeJob = (overrides: Partial<DistillationJob> = {}): DistillationJob => ({
   id: "job_inspect",
   candidate_id: "candidate_inspect",
@@ -235,6 +283,49 @@ describe("inspect command", () => {
         ["Evidence:"],
         ["- Bash: success: auth test now passes"],
         ["Outcome: success"]
+      ])
+    );
+  });
+
+  it("prefers the latest injection event in the current scope before finalize writes an input record", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+
+    const nodeRepo = new NodeRepository(db);
+    const inputRepo = new InputRecordRepository(db);
+    const injectionRepo = new InjectionRepository(db);
+    const scopeId = resolveScope(process.cwd()).scope_id;
+
+    nodeRepo.upsert(makeNode({ scope_id: scopeId }));
+    inputRepo.upsert(
+      makeRecord({
+        scope_id: scopeId,
+        session_id: "session_older",
+        task_summary: "Older finalized auth task",
+        created_at: "2026-03-13T01:00:00.000Z"
+      })
+    );
+    injectionRepo.upsert(makeInjectionEvent({ scope_id: scopeId }));
+
+    runInspectCommand("--last");
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Session: session_inject_only"],
+        [`Scope: ${scopeId}`],
+        ["Task type: test_debug"],
+        ["Intervention: inject"],
+        ["Automatic feedback: none"],
+        ["Scorecard:"],
+        ["- Query rewrite applied: yes"],
+        ["- Top candidate rerank score: 1"],
+        ["- Gate reason: strong_candidate_fast_path"],
+        ["- Decision reason: mature_validated_candidate"],
+        ["Hints:"],
+        ["- Run the failing auth test before editing and verify after the fix."],
+        ["Outcome: unknown"]
       ])
     );
   });

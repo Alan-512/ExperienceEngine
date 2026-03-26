@@ -97,6 +97,21 @@ export class InjectionRepository {
     return row ? this.mapEvent(row) : undefined;
   }
 
+  getLatestByScope(scopeId: string): InjectionEvent | undefined {
+    const row = this.db
+      .prepare(
+        `SELECT injection_id, session_id, scope_id, task_type, task_summary, mode, delivery_mode, delivered, injected_node_ids_json,
+                injection_count, scorecard_json, was_successful, harm_observed, attribution_reason, created_at, resolved_at
+         FROM injection_events
+         WHERE scope_id = ?
+         ORDER BY created_at DESC
+         LIMIT 1`
+      )
+      .get(scopeId) as Parameters<typeof this.mapEvent>[0] | undefined;
+
+    return row ? this.mapEvent(row) : undefined;
+  }
+
   getLatestBySessionId(sessionId: string): InjectionEvent | undefined {
     const row = this.db
       .prepare(
