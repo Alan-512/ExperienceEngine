@@ -187,6 +187,7 @@ const makeInjectionEvent = (overrides: Partial<InjectionEvent> = {}): InjectionE
         lexicalScore: 0.99,
         fusedScore: 0.88,
         rerankScore: 1,
+        rerankSource: "model",
         taskFamilyMatch: true
       }
     ],
@@ -321,6 +322,7 @@ describe("inspect command", () => {
         ["Scorecard:"],
         ["- Query rewrite applied: yes"],
         ["- Top candidate rerank score: 1"],
+        ["- Top candidate rerank source: model"],
         ["- Gate reason: strong_candidate_fast_path"],
         ["- Decision reason: mature_validated_candidate"],
         ["Hints:"],

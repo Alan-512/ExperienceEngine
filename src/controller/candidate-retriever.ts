@@ -10,6 +10,8 @@ import { openVectorStore } from "../store/vector/lancedb.js";
 import { tokenize } from "../utils/text.js";
 import { buildRetrievalQuery } from "./query-rewrite.js";
 import { computeLexicalRetrievalScores } from "./lexical-retriever.js";
+import { rerankCandidatesWithModel } from "./model-reranker.js";
+import type { DistillerEndpoint } from "../distillation/providers/types.js";
 
 export type RetrievedCandidate = {
   node: ExperienceNode;
@@ -17,6 +19,7 @@ export type RetrievedCandidate = {
   lexicalScore: number;
   fusedScore: number;
   rerankScore?: number;
+  rerankSource?: "heuristic" | "model";
   familyScore: number;
   totalScore: number;
   scopeMatch: boolean;
@@ -232,10 +235,29 @@ const getExpectationCorrectionAdjustment = (input: ExperienceInput, node: Experi
 };
 
 type RetrieveOptions = {
-  config?: Pick<ExperienceEngineConfig, "embeddingProvider" | "embeddingModel" | "embeddingDtype" | "embeddingCacheDir">;
+  config?: Pick<
+    ExperienceEngineConfig,
+    | "embeddingProvider"
+    | "embeddingModel"
+    | "embeddingDtype"
+    | "embeddingCacheDir"
+    | "distillerProvider"
+    | "distillationAuthMode"
+    | "distillerModel"
+    | "retrievalRerankerMode"
+    | "retrievalRerankerModel"
+  >;
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
   reranker?: (input: { queryText: string; taskType: TaskType; candidates: RerankCandidate[] }) => Promise<RerankResult[]>;
+  fetchImpl?: typeof fetch;
+  resolveRerankerEndpoint?: (options?: {
+    env?: NodeJS.ProcessEnv;
+    homeDir?: string;
+    configProvider?: ExperienceEngineConfig["distillerProvider"];
+    configAuthMode?: string;
+    configModel?: string;
+  }) => DistillerEndpoint | null;
 };
 
 const buildRankMap = (entries: Array<{ id: string; score: number }>): Map<string, number> =>
@@ -433,6 +455,7 @@ export const retrieveScoredCandidates = async (
 
   const rerankCandidates = [...ranked].sort((left, right) => right.totalScore - left.totalScore);
   const rerankScoreById = new Map<string, number>();
+  const rerankSourceById = new Map<string, "heuristic" | "model">();
   if (rerankCandidates.length) {
     const rerankInput = {
       queryText: queryText || input.task_summary,
@@ -451,14 +474,27 @@ export const retrieveScoredCandidates = async (
       )
     };
     const defaultRerankScores = computeDefaultRerankScores(rerankInput.queryText, rerankInput.candidates);
+    const modelRerankResults =
+      !options.reranker && options.config
+        ? await rerankCandidatesWithModel(rerankInput.queryText, rerankInput.candidates, {
+            config: options.config,
+            env: options.env,
+            homeDir: options.homeDir,
+            fetchImpl: options.fetchImpl,
+            resolveEndpoint: options.resolveRerankerEndpoint
+          })
+        : null;
     const rerankResults = options.reranker
       ? await options.reranker(rerankInput)
-      : rerankInput.candidates
+      : modelRerankResults ??
+        rerankInput.candidates
           .slice(0, DEFAULT_RERANK_WINDOW)
           .map((candidate) => ({
             id: candidate.node.id,
             score: defaultRerankScores.get(candidate.node.id) ?? 0
           }));
+    const rerankSource: "heuristic" | "model" =
+      options.reranker || !modelRerankResults?.length ? "heuristic" : "model";
 
     const maxScore = Math.max(
       0,
@@ -467,6 +503,7 @@ export const retrieveScoredCandidates = async (
     for (const result of rerankResults) {
       const normalized = maxScore > 0 ? Math.max(0, result.score) / maxScore : 0;
       rerankScoreById.set(result.id, Number(normalized.toFixed(6)));
+      rerankSourceById.set(result.id, rerankSource);
     }
   }
 
@@ -477,6 +514,7 @@ export const retrieveScoredCandidates = async (
       return {
         ...entry,
         rerankScore,
+        rerankSource: rerankSourceById.get(entry.node.id),
         totalScore: entry.totalScore + rerankBoost
       };
     })

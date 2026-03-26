@@ -558,6 +558,96 @@ describe("retrieveCandidates", () => {
     expect(candidates[0]!.totalScore).toBeGreaterThan(candidates[1]!.totalScore);
   });
 
+  it("can promote a model-backed reranker above the heuristic rerank stage when configured", async () => {
+    const modelRerankFetch = vi.fn(async () =>
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  scores: [
+                    { id: "model-reranked-top", score: 1 },
+                    { id: "heuristic-top", score: 0.2 }
+                  ]
+                })
+              }
+            }
+          ]
+        }),
+        {
+          status: 200,
+          headers: { "content-type": "application/json" }
+        }
+      )
+    );
+
+    const candidates = await retrieveScoredCandidates(
+      input({
+        task_type: "test_debug",
+        task_summary: "Investigate the payments auth regression and inspect the fixture handshake path first"
+      }),
+      [
+        node({
+          id: "heuristic-top",
+          task_type: "test_debug",
+          trigger_pattern: "Inspect the payments auth regression in the current workspace",
+          compact_hint: "Inspect the workspace and current auth regression path before editing.",
+          retrieval_text:
+            "Inspect the payments auth regression in the current workspace\nInspect the workspace and current auth regression path before editing.",
+          helped_count: 4,
+          support_count: 3
+        }),
+        node({
+          id: "model-reranked-top",
+          task_type: "test_debug",
+          trigger_pattern: "Investigate the payments auth regression and inspect the fixture handshake path first",
+          compact_hint: "Check the fixture handshake before changing the payments auth code path.",
+          goal: "Narrow the payments auth regression through the fixture handshake first.",
+          recommended_steps: [
+            "Inspect the auth fixture handshake before changing code.",
+            "Keep the investigation read-only until the regression signature is clear."
+          ],
+          retrieval_text:
+            "Investigate the payments auth regression and inspect the fixture handshake path first\nCheck the fixture handshake before changing the payments auth code path.",
+          helped_count: 2,
+          support_count: 2
+        })
+      ],
+      {
+        config: {
+          embeddingProvider: "local",
+          embeddingModel: "Xenova/multilingual-e5-small",
+          embeddingDtype: "q8",
+          embeddingCacheDir: ".tmp/embeddings",
+          distillerProvider: "openai_compatible",
+          distillationAuthMode: "api_key",
+          distillerModel: "gpt-reranker-mini",
+          retrievalRerankerMode: "model",
+          retrievalRerankerModel: "gpt-reranker-mini"
+        },
+        fetchImpl: modelRerankFetch,
+        resolveRerankerEndpoint: () => ({
+          kind: "openai",
+          provider: "openai_compatible",
+          model: "gpt-reranker-mini",
+          baseUrl: "https://example.test/v1",
+          headers: { Authorization: "Bearer test" },
+          source: "explicit"
+        })
+      }
+    );
+
+    expect(modelRerankFetch).toHaveBeenCalledTimes(1);
+    expect(candidates[0]).toMatchObject({
+      node: expect.objectContaining({ id: "model-reranked-top" }),
+      rerankScore: 1,
+      rerankSource: "model"
+    });
+    expect(candidates[1]?.rerankSource).toBe("model");
+    expect(candidates[0]!.totalScore).toBeGreaterThan(candidates[1]!.totalScore);
+  });
+
   it("rewrites long read-only investigation prompts before semantic retrieval", async () => {
     const embedQuerySpy = vi.fn(async () => [1, 0, 0]);
     setEmbeddingProviderForTests({

@@ -17,6 +17,8 @@ export const configSchema = z.object({
   embeddingModel: z.string().default("Xenova/multilingual-e5-small"),
   embeddingDtype: z.enum(["q8", "fp32"]).default("q8"),
   embeddingCacheDir: z.string().default("./data/models/embeddings"),
+  retrievalRerankerMode: z.enum(["auto", "heuristic", "model", "disabled"]).default("auto"),
+  retrievalRerankerModel: z.string().default(""),
   distillerProvider: z.enum(DISTILLER_PROVIDERS).default("openai_compatible"),
   distillerModel: z.string().default(""),
   distillationAuthMode: z.enum(["api_key", "google_adc"]).default("api_key"),
@@ -105,6 +107,17 @@ export const pluginConfigJsonSchema = {
     embeddingCacheDir: {
       type: "string",
       description: "Directory used to cache managed embedding model files."
+    },
+    retrievalRerankerMode: {
+      type: "string",
+      enum: ["auto", "heuristic", "model", "disabled"],
+      description:
+        "Retrieval reranker mode. `auto` prefers a model reranker when a distiller endpoint is available, otherwise falls back to the heuristic rerank stage."
+    },
+    retrievalRerankerModel: {
+      type: "string",
+      description:
+        "Optional override model identifier for retrieval reranking. When empty, ExperienceEngine reuses the configured distillation model."
     },
     distillerProvider: {
       type: "string",
@@ -202,6 +215,12 @@ export const pluginUiHints = {
   embeddingCacheDir: {
     label: "Embedding Cache Directory",
     placeholder: "./data/models/embeddings"
+  },
+  retrievalRerankerMode: {
+    label: "Retrieval Reranker Mode"
+  },
+  retrievalRerankerModel: {
+    label: "Retrieval Reranker Model"
   },
   distillerProvider: {
     label: "Distiller Provider"

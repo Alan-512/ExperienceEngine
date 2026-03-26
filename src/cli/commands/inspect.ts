@@ -96,6 +96,9 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
       if (typeof topCandidate?.rerankScore === "number") {
         console.log(`- Top candidate rerank score: ${topCandidate.rerankScore}`);
       }
+      if (topCandidate?.rerankSource) {
+        console.log(`- Top candidate rerank source: ${topCandidate.rerankSource}`);
+      }
       if (record.scorecard.gateReason) {
         console.log(`- Gate reason: ${record.scorecard.gateReason}`);
       }

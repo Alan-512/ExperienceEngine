@@ -216,6 +216,7 @@ export type InjectionScorecardCandidate = {
   lexicalScore?: number;
   fusedScore?: number;
   rerankScore?: number;
+  rerankSource?: "heuristic" | "model";
   taskFamilyMatch: boolean;
 };
 

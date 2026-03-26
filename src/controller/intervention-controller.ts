@@ -99,6 +99,7 @@ const toScorecardCandidate = (candidate: RetrievedCandidate): InjectionScorecard
   lexicalScore: Number(candidate.lexicalScore.toFixed(4)),
   fusedScore: Number(candidate.fusedScore.toFixed(4)),
   rerankScore: typeof candidate.rerankScore === "number" ? Number(candidate.rerankScore.toFixed(4)) : undefined,
+  rerankSource: candidate.rerankSource,
   taskFamilyMatch: candidate.taskFamilyMatch
 });
 
@@ -174,7 +175,18 @@ export const decideIntervention = (
   stats?: ScopeTaskStats,
   threshold = 0.6,
   maxHints = 3,
-  config?: Pick<ExperienceEngineConfig, "embeddingProvider" | "embeddingModel" | "embeddingDtype" | "embeddingCacheDir">
+  config?: Pick<
+    ExperienceEngineConfig,
+    | "embeddingProvider"
+    | "embeddingModel"
+    | "embeddingDtype"
+    | "embeddingCacheDir"
+    | "distillerProvider"
+    | "distillationAuthMode"
+    | "distillerModel"
+    | "retrievalRerankerMode"
+    | "retrievalRerankerModel"
+  >
 ): Promise<InterventionDecision> => decideInterventionInternal(input, nodes, stats, threshold, maxHints, config);
 
 const decideInterventionInternal = async (
@@ -183,7 +195,18 @@ const decideInterventionInternal = async (
   stats?: ScopeTaskStats,
   threshold = 0.6,
   maxHints = 3,
-  config?: Pick<ExperienceEngineConfig, "embeddingProvider" | "embeddingModel" | "embeddingDtype" | "embeddingCacheDir">
+  config?: Pick<
+    ExperienceEngineConfig,
+    | "embeddingProvider"
+    | "embeddingModel"
+    | "embeddingDtype"
+    | "embeddingCacheDir"
+    | "distillerProvider"
+    | "distillationAuthMode"
+    | "distillerModel"
+    | "retrievalRerankerMode"
+    | "retrievalRerankerModel"
+  >
 ): Promise<InterventionDecision> => {
   const scoredCandidates = await retrieveScoredCandidates(input, nodes, { config });
   const retrievalQuery = buildRetrievalQuery(input.task_summary, input.context_summary);

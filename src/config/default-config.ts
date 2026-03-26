@@ -16,6 +16,8 @@ export const defaultConfig: ExperienceEngineConfig = {
   embeddingModel: "Xenova/multilingual-e5-small",
   embeddingDtype: "q8",
   embeddingCacheDir: "./data/models/embeddings",
+  retrievalRerankerMode: "auto",
+  retrievalRerankerModel: "",
   distillerProvider: "openai_compatible",
   distillationAuthMode: "api_key",
   distillerModel: "",

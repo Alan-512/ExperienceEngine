@@ -74,6 +74,14 @@ export const loadConfig = (
       env.EXPERIENCE_ENGINE_EMBEDDING_CACHE_DIR ??
       overrides.embeddingCacheDir ??
       join(paths.productHome, "models", "embeddings"),
+    retrievalRerankerMode:
+      (env.EXPERIENCE_ENGINE_RETRIEVAL_RERANKER_MODE as ExperienceEngineConfig["retrievalRerankerMode"] | undefined) ??
+      overrides.retrievalRerankerMode ??
+      defaultConfig.retrievalRerankerMode,
+    retrievalRerankerModel:
+      env.EXPERIENCE_ENGINE_RETRIEVAL_RERANKER_MODEL ??
+      overrides.retrievalRerankerModel ??
+      defaultConfig.retrievalRerankerModel,
     distillerProvider:
       (env.EXPERIENCE_ENGINE_DISTILLER_PROVIDER as ExperienceEngineConfig["distillerProvider"] | undefined) ??
       overrides.distillerProvider ??
