@@ -538,12 +538,14 @@ describe("ExperienceRuntimeService finalize transaction", () => {
 
     const db = new DatabaseSync(sqlitePath);
     const taskRunRow = db.prepare(
-      "SELECT session_id, task_type, final_status, failure_signature FROM task_runs LIMIT 1"
+      "SELECT session_id, task_type, final_status, failure_signature, learning_status, learning_reason FROM task_runs LIMIT 1"
     ).get() as {
       session_id: string | null;
       task_type: string;
       final_status: string;
       failure_signature: string | null;
+      learning_status: string | null;
+      learning_reason: string | null;
     };
     const outcomeRow = db.prepare(
       "SELECT outcome_signal, failure_signature, summary FROM outcome_records LIMIT 1"
@@ -592,6 +594,8 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     expect(taskRunRow.task_type).toBe("test_debug");
     expect(taskRunRow.final_status).toBe("success");
     expect(taskRunRow.failure_signature).toBeTruthy();
+    expect(taskRunRow.learning_status).toBe("captured");
+    expect(taskRunRow.learning_reason).toBeTruthy();
     expect(outcomeRow.outcome_signal).toBe("success");
     expect(outcomeRow.failure_signature).toBeTruthy();
     expect(outcomeRow.summary).toContain("Fix the failing vitest auth test");
@@ -657,6 +661,57 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     expect(distilledCandidate.distilled_node_id).toBeTruthy();
     expect(completedJob.status).toBe("succeeded");
     expect(nodeCountAfterDrain.count).toBeLessThanOrEqual(1);
+  });
+
+  it("marks expression-layer-only tasks as rejected for learning", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const service = new ExperienceRuntimeService(
+      loadConfig(
+        {
+          dataDir: join(runtimeDir, "data"),
+          sqlitePath,
+          captureDir: join(runtimeDir, "captures"),
+          distillationMode: "llm"
+        },
+        { homeDir: runtimeDir }
+      ),
+      undefined,
+      {
+        homeDir: runtimeDir,
+        env: {}
+      }
+    );
+
+    await service.persistToolResult({
+      sessionId: "wording-session",
+      toolName: "user-feedback",
+      outputSummary: "The inline notice wording is too heavy and should be lighter.",
+      status: "success"
+    });
+
+    await service.finalizeTask({
+      sessionId: "wording-session",
+      cwd: "/repo",
+      userMessage: "Refine the inline notice wording so it feels lighter.",
+      taskSummary: "Refine the inline notice wording so it feels lighter.",
+      contextSummary: "This is a wording-only pass for the inline notice copy."
+    });
+
+    await service.waitForBackgroundLearning();
+
+    const db = new DatabaseSync(sqlitePath);
+    const taskRunRow = db.prepare(
+      "SELECT learning_status, learning_reason FROM task_runs WHERE session_id = 'wording-session' LIMIT 1"
+    ).get() as {
+      learning_status: string | null;
+      learning_reason: string | null;
+    };
+    const candidateCount = db.prepare("SELECT COUNT(*) AS count FROM experience_candidates").get() as { count: number };
+
+    expect(taskRunRow.learning_status).toBe("rejected");
+    expect(taskRunRow.learning_reason).toContain("expression-layer refinement");
+    expect(candidateCount.count).toBe(0);
   });
 
   it("suppresses delivery in shadow mode but persists the evaluated intervention", async () => {

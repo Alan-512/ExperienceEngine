@@ -26,6 +26,7 @@ Rules:
 - Keep recommendations specific to the candidate evidence.
 - Use sourceSignal (failure_signature, retry_count, correction_signals, tool_event_summary) to ground the hindsight.
 - Do not invent tools or outcomes not present in the candidate.
+- For expectation_correction, keep only real solution-direction corrections; do not reframe wording-only, copy-only, or presentation-only refinements as reusable experience.
 - recommended_steps / avoid_steps / fallback_steps must be arrays of short strings.`;
 
 export const buildCandidatePayload = (candidate: ExperienceCandidate): string =>

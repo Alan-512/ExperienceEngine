@@ -13,6 +13,7 @@ import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import { analyzeExperience } from "./experience-analyzer.js";
 import { dedupeCandidates } from "./node-deduper.js";
 import { normalizeCandidate } from "./node-normalizer.js";
+import { isSubstantiveToolEvent } from "../input/tool-event-significance.js";
 import {
   resolveDistillationResolution,
   type DistillationResolution,
@@ -88,11 +89,13 @@ Do not capture:
 - routine success with no reusable signal
 - repo-specific noise that would not help a later similar task
 - generic advice with no concrete trigger or verification signal
+- expression-layer edits that only refine wording, copy, labels, formatting, presentation, or inline notice phrasing
 
 Use experience_kind = expectation_correction when:
 - the first attempt technically worked or partially worked
 - but the user corrected the direction, layer, behavior, quality bar, or verification order
 - and the later direction produced a better or objectively supported result
+- do not use expectation_correction for copy-only, wording-only, style-only, or presentation-only refinements
 
 For expectation_correction candidates:
 - you must include confidence_signal, correction_scope, correction_category, deviation_pattern, and corrected_constraint
@@ -247,6 +250,37 @@ const isPromotionSignal = (value: unknown): value is PromotionSignal =>
   typeof value === "string" && PROMOTION_SIGNALS.includes(value as PromotionSignal);
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
+
+const hasSubstantiveLearningEvidence = (input: ExperienceInput): boolean =>
+  input.tool_events.some((event) => isSubstantiveToolEvent(event));
+
+const EXPRESSION_LAYER_PATTERN =
+  /\b(wording|phrasing|copy|label|labels|notice|message|messages|tooltip|readme|documentation|docs|format|formatting|presentation|tone|style|styling|inline notice)\b/i;
+const OBJECTIVE_VERIFICATION_PATTERN =
+  /\b(test|probe|verify|verification|build|compile|lint|typecheck|doctor|assert|request|response|endpoint|routing|fixture|mock|integration)\b/i;
+
+const looksLikeExpressionLayerOnlyTask = (input: ExperienceInput): boolean => {
+  const text = [input.task_summary, input.context_summary, ...input.tool_events.map((event) => event.output_summary ?? "")]
+    .filter(Boolean)
+    .join("\n");
+  if (!EXPRESSION_LAYER_PATTERN.test(text)) {
+    return false;
+  }
+
+  return !OBJECTIVE_VERIFICATION_PATTERN.test(text);
+};
+
+const resolveEligibilityRejectionReason = (input: ExperienceInput): string | undefined => {
+  if (!hasSubstantiveLearningEvidence(input)) {
+    return "insufficient substantive evidence: only edit or exploratory events were observed";
+  }
+
+  if (looksLikeExpressionLayerOnlyTask(input)) {
+    return "task stayed in expression-layer refinement: wording, copy, or presentation changes are recorded but not learned";
+  }
+
+  return undefined;
+};
 
 const isTransientProviderFailure = (error: unknown): boolean => {
   const message = error instanceof Error ? error.message : String(error);
@@ -742,6 +776,16 @@ export class LlmLearningGate {
       return {
         worthCapturing: false,
         reason: "task type is unknown",
+        drafts: [],
+        source: "disabled"
+      };
+    }
+
+    const ineligibleReason = resolveEligibilityRejectionReason(input);
+    if (ineligibleReason) {
+      return {
+        worthCapturing: false,
+        reason: ineligibleReason,
         drafts: [],
         source: "disabled"
       };

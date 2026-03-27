@@ -110,6 +110,8 @@ export const bootstrapDatabase = (db: DatabaseSync): void => {
   ensureColumn(db, "injection_events", "delivered", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "injection_events", "scorecard_json", "TEXT");
   ensureColumn(db, "injection_events", "attribution_reason", "TEXT");
+  ensureColumn(db, "task_runs", "learning_status", "TEXT");
+  ensureColumn(db, "task_runs", "learning_reason", "TEXT");
 };
 
 const isBusyLockError = (error: unknown): boolean => {

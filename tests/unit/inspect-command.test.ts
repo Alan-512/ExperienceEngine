@@ -140,6 +140,8 @@ const makeTaskRun = (overrides: Partial<TaskRun> = {}): TaskRun => ({
   ended_at: "2026-03-13T01:05:00.000Z",
   final_status: "success",
   failure_signature: "Auth test assertion failed",
+  learning_status: undefined,
+  learning_reason: undefined,
   created_at: "2026-03-13T01:00:00.000Z",
   updated_at: "2026-03-13T01:05:00.000Z",
   ...overrides
@@ -298,6 +300,42 @@ describe("inspect command", () => {
         ["Evidence:"],
         ["- Bash: success: auth test now passes"],
         ["Outcome: success"]
+      ])
+    );
+  });
+
+  it("prints learning status and rejection reason for recorded-only tasks", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+
+    const inputRepo = new InputRecordRepository(db);
+    const taskRunRepo = new TaskRunRepository(db);
+
+    inputRepo.upsert(
+      makeRecord({
+        injected_node_ids: [],
+        task_summary: "Refine the inline notice wording"
+      })
+    );
+    taskRunRepo.upsert(
+      makeTaskRun({
+        task_summary: "Refine the inline notice wording",
+        learning_status: "rejected",
+        learning_reason:
+          "task stayed in expression-layer refinement: wording, copy, or presentation changes are recorded but not learned"
+      })
+    );
+
+    runInspectCommand("--last");
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Learning status: rejected"],
+        [
+          "Learning reason: task stayed in expression-layer refinement: wording, copy, or presentation changes are recorded but not learned"
+        ]
       ])
     );
   });

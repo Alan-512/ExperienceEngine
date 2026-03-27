@@ -94,11 +94,173 @@ describe("LlmLearningGate", () => {
       }
     );
 
-    const result = await gate.generateCandidateDrafts(makeInput({ outcome_signal: "success", tool_events: [] }));
+    const result = await gate.generateCandidateDrafts(
+      makeInput({
+        outcome_signal: "success",
+        tool_events: [
+          {
+            event_id: "evt_probe",
+            tool_name: "targeted-probe",
+            status: "success",
+            output_summary: "The targeted provider probe succeeded, but no reusable lesson emerged.",
+            started_at: "2026-03-20T10:05:00.000Z"
+          }
+        ]
+      })
+    );
 
     expect(result.source).toBe("llm");
     expect(result.worthCapturing).toBe(false);
     expect(result.drafts).toEqual([]);
+  });
+
+  it("rejects edit-only wording tasks even when the llm tries to capture them", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                worth_capturing: true,
+                experience_kind: "expectation_correction",
+                reason: "The wording correction produced a cleaner interaction pattern.",
+                candidate: {
+                  node_type: "strategy",
+                  task_type: "general",
+                  trigger_pattern: "When refining an inline wording notice in the proposal",
+                  compact_hint:
+                    "Use a two-layer output pattern: keep the inline wording brief and move detailed explanation into inspect surfaces.",
+                  success_signal: "The final wording is lighter and clearer.",
+                  evidence_summary: "The proposal became clearer after trimming the inline wording.",
+                  experience_kind: "expectation_correction",
+                  confidence_signal: "supported_by_objective_success",
+                  validation_state: "pending_reuse_validation",
+                  correction_scope: "task_local",
+                  correction_category: "goal_interpretation",
+                  deviation_pattern: "the inline explanation was too verbose for the main conversation",
+                  corrected_constraint: "Keep inline notices lightweight and move detailed reasoning to inspect surfaces."
+                }
+              })
+            }
+          }
+        ]
+      })
+    });
+
+    const gate = new LlmLearningGate(
+      loadConfig({
+        distillerProvider: "openai",
+        distillerModel: "gpt-5.4-nano",
+        distillationMode: "llm"
+      }),
+      {
+        env: {
+          EXPERIENCE_ENGINE_DISTILLER_PROVIDER: "openai",
+          EXPERIENCE_ENGINE_DISTILLER_MODEL: "gpt-5.4-nano",
+          OPENAI_API_KEY: "secret"
+        },
+        fetchImpl: fetchImpl as unknown as typeof fetch
+      }
+    );
+
+    const result = await gate.generateCandidateDrafts(
+      makeInput({
+        task_type: "general",
+        task_summary:
+          "Refine the inline notice wording in the proposal so the explanation stays lightweight in the main agent window.",
+        context_summary:
+          "Adjusted the wording so the inline notice stays brief and the detailed reasoning moves into inspect surfaces.",
+        tool_events: [
+          {
+            event_id: "evt_patch",
+            tool_name: "apply_patch",
+            status: "success",
+            output_summary: "Updated the proposal wording.",
+            started_at: "2026-03-27T12:26:50.000Z"
+          }
+        ],
+        outcome_signal: "success"
+      })
+    );
+
+    expect(result.source).toBe("disabled");
+    expect(result.worthCapturing).toBe(false);
+    expect(result.drafts).toEqual([]);
+    expect(result.reason).toContain("insufficient substantive evidence");
+  });
+
+  it("rejects expression-layer expectation corrections without objective verification", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                worth_capturing: true,
+                experience_kind: "expectation_correction",
+                reason: "The user corrected the inline notice style.",
+                candidate: {
+                  node_type: "strategy",
+                  task_type: "general",
+                  trigger_pattern: "When refining inline notice phrasing",
+                  compact_hint: "Keep inline notices brief.",
+                  success_signal: "The wording reads better.",
+                  evidence_summary: "The inline notice became shorter after the rewrite.",
+                  experience_kind: "expectation_correction",
+                  confidence_signal: "unconfirmed",
+                  validation_state: "pending_reuse_validation",
+                  correction_scope: "task_local",
+                  correction_category: "style_constraint",
+                  deviation_pattern: "the inline notice sounded too heavy",
+                  corrected_constraint: "Prefer lighter inline notice wording."
+                }
+              })
+            }
+          }
+        ]
+      })
+    });
+
+    const gate = new LlmLearningGate(
+      loadConfig({
+        distillerProvider: "openai",
+        distillerModel: "gpt-5.4-nano",
+        distillationMode: "llm"
+      }),
+      {
+        env: {
+          EXPERIENCE_ENGINE_DISTILLER_PROVIDER: "openai",
+          EXPERIENCE_ENGINE_DISTILLER_MODEL: "gpt-5.4-nano",
+          OPENAI_API_KEY: "secret"
+        },
+        fetchImpl: fetchImpl as unknown as typeof fetch
+      }
+    );
+
+    const result = await gate.generateCandidateDrafts(
+      makeInput({
+        task_type: "general",
+        task_summary: "Rewrite the inline notice wording so it sounds lighter.",
+        context_summary: "The user asked for lighter copy in the inline notice.",
+        tool_events: [
+          {
+            event_id: "evt_feedback",
+            tool_name: "user-feedback",
+            status: "success",
+            output_summary: "The user said the inline message is too heavy and should be lighter.",
+            started_at: "2026-03-27T12:27:00.000Z"
+          }
+        ],
+        outcome_signal: "success"
+      })
+    );
+
+    expect(result.source).toBe("disabled");
+    expect(result.worthCapturing).toBe(false);
+    expect(result.drafts).toEqual([]);
+    expect(result.reason).toContain("expression-layer refinement");
   });
 
   it("builds a normalized candidate draft from llm output", async () => {

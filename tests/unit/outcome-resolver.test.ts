@@ -37,6 +37,14 @@ describe("resolveOutcome", () => {
     expect(outcome).toBe("failure");
   });
 
+  it("does not treat edit-only success as a terminal task success", () => {
+    const outcome = resolveOutcome([
+      toolEvent({ tool_name: "apply_patch", status: "success", output_summary: "Updated the proposal wording." })
+    ]);
+
+    expect(outcome).toBe("unknown");
+  });
+
   it("does not treat investigation prompts containing regression as failure without terminal evidence", () => {
     const outcome = resolveOutcome(
       [],

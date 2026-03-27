@@ -14,6 +14,8 @@ type TaskRunRow = {
   ended_at: string | null;
   final_status: TaskRun["final_status"];
   failure_signature: string | null;
+  learning_status: TaskRun["learning_status"] | null;
+  learning_reason: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -35,6 +37,8 @@ export class TaskRunRepository {
       ended_at: row.ended_at ?? undefined,
       final_status: row.final_status,
       failure_signature: row.failure_signature ?? undefined,
+      learning_status: row.learning_status ?? undefined,
+      learning_reason: row.learning_reason ?? undefined,
       created_at: row.created_at,
       updated_at: row.updated_at
     };
@@ -45,14 +49,16 @@ export class TaskRunRepository {
       .prepare(
         `INSERT INTO task_runs
           (id, host, scope_id, session_id, task_type, task_summary, prompt_excerpt, context_summary,
-           started_at, ended_at, final_status, failure_signature, created_at, updated_at)
+           started_at, ended_at, final_status, failure_signature, learning_status, learning_reason, created_at, updated_at)
          VALUES
           (@id, @host, @scope_id, @session_id, @task_type, @task_summary, @prompt_excerpt, @context_summary,
-           @started_at, @ended_at, @final_status, @failure_signature, @created_at, @updated_at)
+           @started_at, @ended_at, @final_status, @failure_signature, @learning_status, @learning_reason, @created_at, @updated_at)
          ON CONFLICT(id) DO UPDATE SET
           ended_at = excluded.ended_at,
           final_status = excluded.final_status,
           failure_signature = excluded.failure_signature,
+          learning_status = excluded.learning_status,
+          learning_reason = excluded.learning_reason,
           prompt_excerpt = excluded.prompt_excerpt,
           context_summary = excluded.context_summary,
           updated_at = excluded.updated_at`
@@ -70,6 +76,8 @@ export class TaskRunRepository {
         ended_at: taskRun.ended_at ?? null,
         final_status: taskRun.final_status,
         failure_signature: taskRun.failure_signature ?? null,
+        learning_status: taskRun.learning_status ?? null,
+        learning_reason: taskRun.learning_reason ?? null,
         created_at: taskRun.created_at,
         updated_at: taskRun.updated_at
       });

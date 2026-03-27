@@ -94,6 +94,8 @@ const toTaskRun = (input: ExperienceInput, sessionId: string, context: HostPromp
     final_status:
       input.outcome_signal === "success" ? "success" : input.outcome_signal === "failure" ? "failure" : "unknown",
     failure_signature: signals.failure_signature,
+    learning_status: undefined,
+    learning_reason: undefined,
     created_at: timestamp,
     updated_at: timestamp
   };
@@ -418,6 +420,21 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     sessionId?: string
   ): Promise<void> {
     const result = await this.learningGate.generateCandidateDrafts(input);
+    if (taskRunId) {
+      const taskRun = this.taskRunRepo.getById(taskRunId);
+      if (taskRun) {
+        this.taskRunRepo.upsert({
+          ...taskRun,
+          learning_status: result.drafts.length
+            ? "captured"
+            : result.source === "disabled" && result.reason === "distillation disabled"
+              ? "not_applicable"
+              : "rejected",
+          learning_reason: result.reason,
+          updated_at: nowIso()
+        });
+      }
+    }
     if (!result.drafts.length) {
       this.logger.debug?.("experienceengine.learning_skipped", {
         sessionId,

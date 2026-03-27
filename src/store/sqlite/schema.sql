@@ -34,6 +34,8 @@ CREATE TABLE IF NOT EXISTS task_runs (
   ended_at TEXT,
   final_status TEXT NOT NULL,
   failure_signature TEXT,
+  learning_status TEXT,
+  learning_reason TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

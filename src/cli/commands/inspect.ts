@@ -154,6 +154,13 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
       }
     }
 
+    if (record.learningStatus) {
+      console.log(`Learning status: ${record.learningStatus}`);
+    }
+    if (record.learningReason) {
+      console.log(`Learning reason: ${record.learningReason}`);
+    }
+
     console.log(`Outcome: ${record.outcome}`);
     return;
   }

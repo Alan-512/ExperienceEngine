@@ -107,6 +107,8 @@ export type TaskRun = {
   ended_at?: string;
   final_status: "success" | "failure" | "cancelled" | "unknown";
   failure_signature?: string;
+  learning_status?: "captured" | "rejected" | "not_applicable";
+  learning_reason?: string;
   created_at: string;
   updated_at: string;
 };

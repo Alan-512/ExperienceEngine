@@ -63,4 +63,21 @@ describe("TaskRunRepository", () => {
     });
     expect(repo.getLatestBySessionId("session_auth")?.id).toBe("taskrun_auth_fix");
   });
+
+  it("persists learning capture status and reason", () => {
+    const db = makeDb();
+    const repo = new TaskRunRepository(db);
+
+    repo.upsert(
+      taskRun({
+        learning_status: "rejected",
+        learning_reason: "task stayed in expression-layer refinement"
+      })
+    );
+
+    expect(repo.getById("taskrun_auth_fix")).toMatchObject({
+      learning_status: "rejected",
+      learning_reason: "task stayed in expression-layer refinement"
+    });
+  });
 });

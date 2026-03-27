@@ -91,6 +91,8 @@ export type ExperienceLastInspection = {
   evidence: string[];
   scorecard?: InjectionScorecard;
   timeline: ExperienceTimelineEntry[];
+  learningStatus?: TaskRun["learning_status"];
+  learningReason?: string;
   summary: string;
   createdAt: string;
 };
@@ -485,6 +487,8 @@ export class ExperienceInteractionService {
         autoFeedback,
         autoFeedbackCreatedAt: latestAutomaticFeedback?.created_at
       }),
+      learningStatus: taskRun?.learning_status,
+      learningReason: taskRun?.learning_reason,
       summary: record.task_summary,
       createdAt: record.created_at
     };
@@ -558,6 +562,8 @@ export class ExperienceInteractionService {
         autoFeedback,
         autoFeedbackCreatedAt: latestAutomaticFeedback?.created_at
       }),
+      learningStatus: taskRun?.learning_status,
+      learningReason: taskRun?.learning_reason,
       summary,
       createdAt: event.created_at
     };
