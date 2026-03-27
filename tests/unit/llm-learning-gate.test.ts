@@ -1,7 +1,24 @@
-import { describe, expect, it, vi } from "vitest";
+import { mkdtempSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadConfig } from "../../src/config/load-config.js";
 import { LlmLearningGate } from "../../src/analyzer/llm-learning-gate.js";
 import type { ExperienceInput } from "../../src/types/domain.js";
+
+const tempDirs: string[] = [];
+
+const makeTempDir = (): string => {
+  const dir = mkdtempSync(join(tmpdir(), "experienceengine-llm-gate-"));
+  tempDirs.push(dir);
+  return dir;
+};
+
+afterEach(() => {
+  while (tempDirs.length) {
+    rmSync(tempDirs.pop()!, { recursive: true, force: true });
+  }
+});
 
 const makeInput = (overrides: Partial<ExperienceInput> = {}): ExperienceInput => ({
   scope_id: "scope_1",
@@ -25,12 +42,13 @@ const makeInput = (overrides: Partial<ExperienceInput> = {}): ExperienceInput =>
 
 describe("LlmLearningGate", () => {
   it("falls back to rule analysis when no explicit provider is configured", async () => {
+    const homeDir = makeTempDir();
     const gate = new LlmLearningGate(
       loadConfig({
         distillationMode: "auto",
         distillationAllowPassthrough: true
-      }),
-      { env: {} }
+      }, { homeDir, env: {} }),
+      { env: {}, homeDir }
     );
 
     const result = await gate.generateCandidateDrafts(makeInput());

@@ -72,7 +72,9 @@ Install ExperienceEngine through the host-specific flow for:
   - one-step command:
     - `openclaw plugins install @alan512/experienceengine`
 - `Codex`
-  - one-step command:
+  - recommended first-time command:
+    - `ee install codex`
+  - manual MCP fallback:
     - `codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y @alan512/experienceengine codex-mcp-server`
 - `Claude Code`
   - add the bundled marketplace from GitHub:

@@ -171,6 +171,7 @@ export const buildOpenClawPackagedDependencies = (rawPackageJson: Record<string,
       : {};
 
   return {
+    "@huggingface/transformers": dependencies["@huggingface/transformers"],
     zod: dependencies.zod
   };
 };

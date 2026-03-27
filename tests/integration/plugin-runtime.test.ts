@@ -213,6 +213,159 @@ describe("OpenClaw plugin runtime", () => {
     });
   });
 
+  it("finalizes a session only once even when multiple end hooks fire", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const handlers = new Map<string, Handler>();
+
+    plugin.register({
+      pluginConfig: {
+        dataDir: join(runtimeDir, "data"),
+        sqlitePath,
+        triggerThreshold: 0.6,
+        maxHints: 3
+      },
+      on(event, handler) {
+        handlers.set(event, handler);
+      }
+    });
+
+    await handlers.get("before_prompt_build")?.({
+      session: { key: "dedupe-finalize" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Fix the failing vitest auth test" }
+    });
+
+    await handlers.get("message_sent")?.({
+      session: { key: "dedupe-finalize" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Fix the failing vitest auth test" }
+    });
+    await handlers.get("session_end")?.({
+      session: { key: "dedupe-finalize" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Fix the failing vitest auth test" }
+    });
+
+    const db = new DatabaseSync(sqlitePath);
+    const inputCount = db.prepare("SELECT COUNT(*) AS count FROM experience_input_records").get() as { count: number };
+    const taskCount = db.prepare("SELECT COUNT(*) AS count FROM task_runs").get() as { count: number };
+
+    expect(inputCount.count).toBe(1);
+    expect(taskCount.count).toBe(1);
+  });
+
+  it("deduplicates finalize hooks even when later hooks omit tool results from the payload", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const handlers = new Map<string, Handler>();
+
+    plugin.register({
+      pluginConfig: {
+        dataDir: join(runtimeDir, "data"),
+        sqlitePath,
+        triggerThreshold: 0.6,
+        maxHints: 3
+      },
+      on(event, handler) {
+        handlers.set(event, handler);
+      }
+    });
+
+    await handlers.get("before_prompt_build")?.({
+      session: { key: "dedupe-finalize-payload-drift" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Fix the failing vitest auth test" }
+    });
+
+    await handlers.get("message_sent")?.({
+      session: { key: "dedupe-finalize-payload-drift" },
+      workspace: { cwd: "/tmp/repo" },
+      messages: [
+        {
+          role: "user",
+          content: [{ type: "text", text: "Fix the failing vitest auth test" }]
+        },
+        {
+          role: "toolResult",
+          toolCallId: "call_auth_test",
+          toolName: "exec",
+          content: [{ type: "text", text: "vitest auth test now passes" }],
+          details: {
+            status: "completed",
+            exitCode: 0,
+            aggregated: "vitest auth test now passes"
+          },
+          isError: false
+        },
+        {
+          role: "assistant",
+          content: [{ type: "text", text: "The auth test passes after the narrow fix." }]
+        }
+      ]
+    });
+
+    await handlers.get("session_end")?.({
+      session: { key: "dedupe-finalize-payload-drift" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Fix the failing vitest auth test" }
+    });
+
+    const db = new DatabaseSync(sqlitePath);
+    const inputCount = db.prepare("SELECT COUNT(*) AS count FROM experience_input_records").get() as { count: number };
+    const taskCount = db.prepare("SELECT COUNT(*) AS count FROM task_runs").get() as { count: number };
+
+    expect(inputCount.count).toBe(1);
+    expect(taskCount.count).toBe(1);
+  });
+
+  it("allows a later turn in the same session to finalize again after a new prompt starts", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const handlers = new Map<string, Handler>();
+
+    plugin.register({
+      pluginConfig: {
+        dataDir: join(runtimeDir, "data"),
+        sqlitePath,
+        triggerThreshold: 0.6,
+        maxHints: 3
+      },
+      on(event, handler) {
+        handlers.set(event, handler);
+      }
+    });
+
+    await handlers.get("before_prompt_build")?.({
+      session: { key: "dedupe-finalize-repeat-turn" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Fix the failing vitest auth test" }
+    });
+    await handlers.get("message_sent")?.({
+      session: { key: "dedupe-finalize-repeat-turn" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Fix the failing vitest auth test" }
+    });
+
+    await handlers.get("before_prompt_build")?.({
+      session: { key: "dedupe-finalize-repeat-turn" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Fix the failing vitest auth test" }
+    });
+    await handlers.get("message_sent")?.({
+      session: { key: "dedupe-finalize-repeat-turn" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Fix the failing vitest auth test" }
+    });
+
+    const db = new DatabaseSync(sqlitePath);
+    const inputCount = db.prepare("SELECT COUNT(*) AS count FROM experience_input_records").get() as { count: number };
+    const taskCount = db.prepare("SELECT COUNT(*) AS count FROM task_runs").get() as { count: number };
+
+    expect(inputCount.count).toBe(2);
+    expect(taskCount.count).toBe(2);
+  });
+
   it("bootstraps from module-relative schema paths even when cwd differs", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
@@ -974,6 +1127,16 @@ describe("OpenClaw plugin runtime", () => {
       }
     );
 
+    const db = new DatabaseSync(sqlitePath);
+    await waitFor(() => {
+      const nodeRow = db
+        .prepare(
+          "SELECT experience_kind FROM experience_nodes WHERE experience_kind = 'expectation_correction' ORDER BY updated_at DESC LIMIT 1"
+        )
+        .get() as { experience_kind: string } | undefined;
+      expect(nodeRow?.experience_kind).toBe("expectation_correction");
+    });
+
     const followUp = (await beforePromptBuild?.(
       {
         prompt:
@@ -1059,8 +1222,6 @@ describe("OpenClaw plugin runtime", () => {
         workspaceDir: "/tmp/repo"
       }
     );
-
-    const db = new DatabaseSync(sqlitePath);
     await waitFor(() => {
       const nodeRow = db
         .prepare(
@@ -1306,62 +1467,30 @@ describe("OpenClaw plugin runtime", () => {
     });
   });
 
-  it("waits for background learning to finish before the finalize hook returns", async () => {
+  it("does not wait for background learning before the finalize hook returns", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
     const handlers = new Map<string, Handler>();
-    const fetchImpl = vi.fn<typeof fetch>().mockImplementation(
-      async () =>
-        new Promise<Response>((resolve) => {
-          setTimeout(() => {
-            resolve(
-              geminiJsonResponse({
-                worth_capturing: true,
-                experience_kind: "expectation_correction",
-                reason: "The corrected direction is reusable.",
-                candidate: {
-                  node_type: "strategy",
-                  task_type: "config_debug",
-                  trigger_pattern: "provider routing correction after a wrong UI-layer fix",
-                  compact_hint: "Validate provider routing before continuing in the UI layer.",
-                  success_signal: "A targeted provider probe succeeds.",
-                  evidence_summary: "The provider probe succeeded after the user corrected the implementation boundary.",
-                  experience_kind: "expectation_correction",
-                  confidence_signal: "supported_by_objective_success",
-                  validation_state: "pending_reuse_validation",
-                  correction_scope: "host_local",
-                  correction_category: "implementation_boundary",
-                  deviation_pattern: "implementation solves the wrong layer of the problem",
-                  corrected_constraint: "Move the fix into provider routing instead of persisting in the UI layer."
-                }
-              })
-            );
-          }, 50);
-        })
-    );
-
-    createExperiencePlugin(
+    const pluginInstance = createExperiencePlugin(
       {
         dataDir: join(runtimeDir, "data"),
         sqlitePath,
         triggerThreshold: 0.6,
         maxHints: 3,
-        distillerProvider: "gemini",
-        distillerModel: "gemini-3-flash-preview",
-        distillationAuthMode: "api_key",
-        distillationMode: "llm",
-        distillationAllowPassthrough: true,
         distillationAutoDrain: false
-      },
-      undefined,
-      {
-        homeDir: runtimeDir,
-        env: {
-          GEMINI_API_KEY: "secret"
-        },
-        fetchImpl: fetchImpl as unknown as typeof fetch
       }
-    ).register({
+    );
+    let releaseWait: (() => void) | undefined;
+    const waitForBackgroundLearning = new Promise<void>((resolve) => {
+      releaseWait = resolve;
+    });
+    (pluginInstance as unknown as {
+      runtime: {
+        waitForBackgroundLearning: () => Promise<void>;
+      };
+    }).runtime.waitForBackgroundLearning = vi.fn(async () => waitForBackgroundLearning);
+
+    pluginInstance.register({
       on(event, handler) {
         handlers.set(event, handler);
       }
@@ -1370,7 +1499,8 @@ describe("OpenClaw plugin runtime", () => {
     const finalize = handlers.get("message_sent");
     expect(finalize).toBeTypeOf("function");
 
-    await finalize?.(
+    let resolved = false;
+    const finalizeResult = finalize?.(
       {
         messages: [
           {
@@ -1400,13 +1530,15 @@ describe("OpenClaw plugin runtime", () => {
         workspaceDir: "/tmp/repo"
       }
     );
+    const finalizePromise = Promise.resolve(finalizeResult).then(() => {
+      resolved = true;
+    });
 
-    const db = new DatabaseSync(sqlitePath);
-    const candidateCount = db.prepare("SELECT COUNT(*) AS count FROM experience_candidates").get() as { count: number };
-    const jobCount = db.prepare("SELECT COUNT(*) AS count FROM distillation_jobs").get() as { count: number };
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    expect(resolved).toBe(true);
 
-    expect(candidateCount.count).toBe(1);
-    expect(jobCount.count).toBe(1);
+    releaseWait?.();
+    await finalizePromise;
   });
 
   it("persists feedback timestamps when injected turns succeed or fail", async () => {

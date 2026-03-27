@@ -22,6 +22,20 @@ import {
   extractSessionKey,
   mergeHookPayload
 } from "./runtime-helpers.js";
+
+const buildFinalizeDedupKey = (source: unknown, context: HostPromptContext): string | null => {
+  if (!context.sessionId) {
+    return null;
+  }
+
+  return JSON.stringify({
+    sessionId: context.sessionId,
+    cwd: context.cwd,
+    userMessage: context.userMessage,
+    taskSummary: context.taskSummary
+  });
+};
+
 class OpenClawExperiencePlugin implements ExperiencePlugin {
   constructor(private readonly runtime: ExperienceRuntimeService) {}
 
@@ -44,6 +58,30 @@ class OpenClawExperiencePlugin implements ExperiencePlugin {
   }
 
   register(api: OpenClawPluginApi): void {
+    const completedFinalizations = new Map<string, number>();
+    const inFlightFinalizations = new Map<string, Promise<void>>();
+    const FINALIZE_CACHE_LIMIT = 256;
+    const clearSessionFinalizeState = (sessionId?: string): void => {
+      if (!sessionId) {
+        return;
+      }
+
+      for (const key of completedFinalizations.keys()) {
+        if (key.includes(`"sessionId":"${sessionId}"`)) {
+          completedFinalizations.delete(key);
+        }
+      }
+    };
+    const trimCompletedFinalizations = (): void => {
+      while (completedFinalizations.size > FINALIZE_CACHE_LIMIT) {
+        const oldestKey = completedFinalizations.keys().next().value;
+        if (!oldestKey) {
+          break;
+        }
+        completedFinalizations.delete(oldestKey);
+      }
+    };
+
     this.runtime.captureWriter.capture("plugin_register", "global", {
       hasOn: typeof api.on === "function",
       captureRawPayloads: this.runtime.config.captureRawPayloads,
@@ -55,6 +93,7 @@ class OpenClawExperiencePlugin implements ExperiencePlugin {
       const source = mergeHookPayload(payload, hookContext);
       this.runtime.captureWriter.capture("before_prompt_build", extractSessionKey(source), { payload, context: hookContext });
       const context = normalizePromptPayload(source);
+      clearSessionFinalizeState(context.sessionId);
       const result = await this.beforePromptBuild(context);
       if (result.notice) {
         (api.logger ?? api.log)?.info?.("experienceengine.notice", {
@@ -96,12 +135,41 @@ class OpenClawExperiencePlugin implements ExperiencePlugin {
         return payload;
       }
 
-      if (context.sessionId) {
-        this.runtime.recoverToolEvents(context.sessionId, source);
+      const dedupKey = buildFinalizeDedupKey(source, context);
+      if (dedupKey && completedFinalizations.has(dedupKey)) {
+        return payload;
       }
 
-      await this.finalizeTask(context);
-      await this.runtime.waitForBackgroundLearning();
+      if (dedupKey) {
+        const inFlight = inFlightFinalizations.get(dedupKey);
+        if (inFlight) {
+          await inFlight;
+          return payload;
+        }
+      }
+
+      const runFinalization = (async () => {
+        const sessionId = context.sessionId;
+        if (sessionId) {
+          this.runtime.recoverToolEvents(sessionId, source);
+        }
+        await this.finalizeTask(context);
+      })();
+
+      if (dedupKey) {
+        inFlightFinalizations.set(dedupKey, runFinalization);
+      }
+
+      try {
+        await runFinalization;
+      } finally {
+        if (dedupKey) {
+          inFlightFinalizations.delete(dedupKey);
+          completedFinalizations.set(dedupKey, Date.now());
+          trimCompletedFinalizations();
+        }
+      }
+
       return payload;
     };
 

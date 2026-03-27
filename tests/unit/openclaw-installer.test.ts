@@ -103,7 +103,7 @@ describe("OpenClaw installer", () => {
     expect(payload.hostWiring.wired).toBe(true);
   });
 
-  it("packages a minimal OpenClaw manifest for plugin install", () => {
+  it("packages the runtime dependencies required by the OpenClaw plugin install", () => {
     const homeDir = makeTempDir();
     const paths = resolveExperienceEnginePaths({ homeDir });
     mkdirSync(join(paths.productHome, "adapters", "openclaw"), { recursive: true });
@@ -114,6 +114,7 @@ describe("OpenClaw installer", () => {
     };
 
     expect(packagedManifest.dependencies).toEqual({
+      "@huggingface/transformers": "^3.8.1",
       zod: "^3.25.76"
     });
   });
