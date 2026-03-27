@@ -60,10 +60,29 @@ For more mature nodes, ExperienceEngine can expand the injected guidance with st
 
 That expansion is intentionally gated. The system does not dump every stored field into every prompt.
 
+## The Capture And Learning Split
+
+ExperienceEngine now treats task history and reusable experience as two different layers:
+
+```text
+task record
+  -> learning candidate
+  -> active
+  -> cooling
+  -> retired
+```
+
+- every meaningful task can still be recorded as runtime history
+- only tasks with transferable decision value should become learning candidates
+- wording-only, copy-only, or presentation-only cleanups can remain recorded without being promoted into reusable experience
+
+This split matters because "the task finished successfully" is not the same thing as "the system learned something worth injecting next time."
+
 ## The Core Lifecycle
 
 ```text
 task signals
+  -> task record
   -> candidate
   -> active
   -> cooling
@@ -72,6 +91,7 @@ task signals
 
 At a high level:
 
+- broad runtime history is recorded first
 - repeated or meaningful signals produce a candidate
 - successful reuse or corroboration promotes it into active use
 - harmful outcomes reduce confidence
@@ -88,6 +108,11 @@ ExperienceEngine is best at:
 - execution order guidance
 - expectation correction
   - when a technically valid result is still corrected by the user because the agent solved the wrong problem
+
+Expectation correction is intentionally narrower than a generic rewrite or cleanup:
+
+- it should reflect a changed solution direction, execution order, boundary, or quality bar
+- it should not be used for expression-layer refinements like lighter wording, better labels, or cleaner presentation copy
 
 It is not designed to be the primary system for:
 

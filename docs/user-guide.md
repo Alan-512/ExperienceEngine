@@ -11,6 +11,15 @@ In practice, this means:
 - noisy or harmful prior patterns can be cooled or retired
 - the system gradually learns which guidance is actually useful
 
+It also means ExperienceEngine separates:
+
+- `task history`
+  - broad runtime records of what happened
+- `reusable experience`
+  - only the subset of tasks that produced transferable decision guidance
+
+So a task can be recorded without being promoted into learning.
+
 For a focused explanation of what ExperienceEngine stores and how an experience node is governed, see:
 
 - [docs/development/experience-model.md](development/experience-model.md)
@@ -51,6 +60,22 @@ When it injects guidance, you will usually see a lightweight notice like:
 ```
 
 If there is no intervention, it stays silent.
+
+When you inspect the latest turn, you may also see a learning decision such as:
+
+```text
+Learning status: captured
+Learning reason: provider routing debugging exposed a reusable configuration pattern
+```
+
+or:
+
+```text
+Learning status: rejected
+Learning reason: task stayed in expression-layer refinement: wording, copy, or presentation changes are recorded but not learned
+```
+
+This is intentional. ExperienceEngine now records broad task history, but it only promotes tasks with transferable decision value into the reusable experience pool.
 
 When the host surfaces task-finalization metadata, ExperienceEngine can also show a lightweight feedback reminder after an injected turn so the user can quickly mark whether the hint helped or harmed.
 
@@ -120,6 +145,17 @@ Use `ee` for:
 - runtime status checks
 - learning and intervention inspection
 - quick helped / harmed feedback
+
+The most useful inspection command during product debugging is still:
+
+```bash
+ee inspect --last
+```
+
+That output now tells you both:
+
+- what was injected
+- whether the finalized task was learned, rejected from learning, or only kept as runtime history
 
 ## How MCP Interaction Works
 
