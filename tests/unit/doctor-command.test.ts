@@ -115,8 +115,9 @@ describe("doctor command", () => {
         ["- OpenClaw install: ready"],
         ["  1. openclaw plugins install @alan512/experienceengine"],
         ["- Codex install: ready"],
+        ["  1. ee install codex"],
         [
-          "  1. codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y @alan512/experienceengine codex-mcp-server"
+          "  2. codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y @alan512/experienceengine codex-mcp-server"
         ],
         ["- Claude Code install: ready"],
         ["  1. /plugin marketplace add https://github.com/Alan-512/ExperienceEngine.git"],

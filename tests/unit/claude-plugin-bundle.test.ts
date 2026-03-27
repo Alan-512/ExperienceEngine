@@ -44,7 +44,8 @@ describe("Claude plugin bundle", () => {
     expect(mcp.mcpServers.experienceengine.env).toEqual(
       expect.objectContaining({
         NODE_PATH: "${CLAUDE_PLUGIN_ROOT}/node_modules",
-        EXPERIENCE_ENGINE_HOME: "${CLAUDE_PLUGIN_ROOT}/experienceengine-home"
+        EXPERIENCE_ENGINE_HOME: "${CLAUDE_PLUGIN_ROOT}/experienceengine-home",
+        EXPERIENCE_ENGINE_CLAUDE_HOOK_SOURCE: "marketplace"
       })
     );
   });

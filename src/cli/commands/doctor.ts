@@ -186,18 +186,40 @@ const logClaudeRuntimeStatus = (status?: {
     hook?: string;
     mcpServer?: string;
   };
+  marketplaceState?: {
+    install_mode?: string;
+    written_at?: string;
+    last_hook_seen_at?: string;
+    last_mcp_seen_at?: string;
+  } | null;
 }): void => {
-  if (!status?.runtimeTarget) {
+  if (!status?.runtimeTarget && !status?.marketplaceState) {
     return;
   }
 
-  console.log("Claude runtime target:");
-  console.log(`- Target: ${status.runtimeTarget}`);
-  if (status.launcherPaths?.hook) {
-    console.log(`- Hook launcher: ${status.launcherPaths.hook}`);
+  if (status.runtimeTarget) {
+    console.log("Claude runtime target:");
+    console.log(`- Target: ${status.runtimeTarget}`);
+    if (status.launcherPaths?.hook) {
+      console.log(`- Hook launcher: ${status.launcherPaths.hook}`);
+    }
+    if (status.launcherPaths?.mcpServer) {
+      console.log(`- MCP launcher: ${status.launcherPaths.mcpServer}`);
+    }
   }
-  if (status.launcherPaths?.mcpServer) {
-    console.log(`- MCP launcher: ${status.launcherPaths.mcpServer}`);
+
+  if (status.marketplaceState) {
+    console.log("Claude marketplace state:");
+    console.log(`- Install mode: ${status.marketplaceState.install_mode ?? "unknown"}`);
+    if (status.marketplaceState.written_at) {
+      console.log(`- Marker written at: ${status.marketplaceState.written_at}`);
+    }
+    if (status.marketplaceState.last_hook_seen_at) {
+      console.log(`- Last hook heartbeat: ${status.marketplaceState.last_hook_seen_at}`);
+    }
+    if (status.marketplaceState.last_mcp_seen_at) {
+      console.log(`- Last MCP heartbeat: ${status.marketplaceState.last_mcp_seen_at}`);
+    }
   }
 };
 
@@ -269,6 +291,17 @@ const logDecisionHealth = (summary?: ExperienceDecisionHealth): void => {
   console.log(`- Recent priority promotions: ${summary.recentPriorityPromotions}`);
 };
 
+const isClaudeInteractionReady = (status: {
+  interactionReady?: boolean;
+  hostWiring: { wired: boolean };
+  hooksPresent: {
+    userPromptSubmit: boolean;
+    sessionEnd: boolean;
+  };
+}): boolean =>
+  status.interactionReady ??
+  (status.hostWiring.wired && status.hooksPresent.userPromptSubmit && status.hooksPresent.sessionEnd);
+
 export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): Promise<void> => {
   const resolveRemoteStatus = deps.fetchLatestGitHubReleaseStatus ?? fetchLatestGitHubReleaseStatus;
   const registryHealth = (deps.readRegistryHealth ?? readRegistryHealth)();
@@ -292,10 +325,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
         host: "claude-code",
         installed: claudeStatus.installed,
         wired: claudeStatus.hostWiring.wired,
-        enabled:
-          claudeStatus.hostWiring.wired &&
-          claudeStatus.hooksPresent.userPromptSubmit &&
-          claudeStatus.hooksPresent.sessionEnd
+        enabled: isClaudeInteractionReady(claudeStatus)
       },
       {
         host: "openclaw",
@@ -322,10 +352,18 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
       if (installGuidance.codex.command) {
         console.log(`  1. ${installGuidance.codex.command}`);
       }
+      if (installGuidance.codex.commands) {
+        console.log(`  1. ${installGuidance.codex.commands[0]}`);
+        console.log(`  2. ${installGuidance.codex.commands[1]}`);
+      }
     } else {
       console.log(`- Codex install: ${installGuidance.codex.reason}`);
       if (installGuidance.codex.command) {
         console.log(`  1. ${installGuidance.codex.command}`);
+      }
+      if (installGuidance.codex.commands) {
+        console.log(`  1. ${installGuidance.codex.commands[0]}`);
+        console.log(`  2. ${installGuidance.codex.commands[1]}`);
       }
     }
     if (installGuidance["claude-code"].ready) {
@@ -375,6 +413,8 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
         pre_tool_hook: status.hooksPresent.preToolUse,
         post_tool_hook: status.hooksPresent.postToolUse,
         session_end_hook: status.hooksPresent.sessionEnd,
+        hook_source: status.hookSource,
+        interaction_ready: status.interactionReady,
         capture_dir: status.captureDir
       }
     ]);

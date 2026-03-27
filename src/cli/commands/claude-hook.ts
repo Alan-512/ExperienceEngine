@@ -74,6 +74,7 @@ const extractTranscriptPrompt = (transcriptPath: string): { cwd?: string; prompt
       .split("\n")
       .map((line) => line.trim())
       .filter(Boolean);
+    let latestPrompt: { cwd?: string; promptText?: string } | null = null;
 
     for (const line of lines) {
       const record = asRecord(JSON.parse(line));
@@ -103,12 +104,14 @@ const extractTranscriptPrompt = (transcriptPath: string): { cwd?: string; prompt
             : undefined;
 
       if (role === "user" && promptText) {
-        return {
+        latestPrompt = {
           cwd: typeof record.cwd === "string" ? record.cwd : undefined,
           promptText
         };
       }
     }
+
+    return latestPrompt;
   } catch {
     return null;
   }

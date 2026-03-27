@@ -451,6 +451,78 @@ describe("Claude hook capture", () => {
     expect(row?.evidence_json).toContain("Bash: success: /tmp/example-claude-project");
   });
 
+  it("uses the latest user prompt when transcript fallback reconstructs a multi-turn session", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+    const transcriptDir = join(homeDir, ".claude", "projects", "example-project");
+    const transcriptPath = join(transcriptDir, "session-multi-turn.jsonl");
+    rmSync(transcriptDir, { recursive: true, force: true });
+    mkdirSync(transcriptDir, { recursive: true });
+    writeFileSync(
+      transcriptPath,
+      [
+        JSON.stringify({
+          type: "user",
+          cwd: "/tmp/example-claude-project",
+          sessionId: "session-transcript-latest",
+          message: {
+            role: "user",
+            content: "First task prompt."
+          }
+        }),
+        JSON.stringify({
+          type: "assistant",
+          message: {
+            role: "assistant",
+            content: "Interim response."
+          }
+        }),
+        JSON.stringify({
+          type: "user",
+          cwd: "/tmp/example-claude-project",
+          sessionId: "session-transcript-latest",
+          message: {
+            role: "user",
+            content: "Second task prompt."
+          }
+        })
+      ].join("\n") + "\n",
+      "utf8"
+    );
+
+    await processClaudeHookPayload(
+      JSON.stringify({
+        hook_event_name: "PostToolUse",
+        session_id: "session-transcript-latest",
+        cwd: "/tmp/example-claude-project",
+        tool_name: "Bash",
+        payload: {
+          tool_input: { command: "pwd" },
+          tool_response: { stdout: "/tmp/example-claude-project" }
+        },
+        status: "success"
+      }),
+      { homeDir, env }
+    );
+
+    await processClaudeHookPayload(
+      JSON.stringify({
+        hook_event_name: "SessionEnd",
+        session_id: "session-transcript-latest",
+        cwd: "/tmp/example-claude-project",
+        transcript_path: transcriptPath
+      }),
+      { homeDir, env }
+    );
+
+    const db = openDatabase(loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME }));
+    const row = db
+      .prepare("SELECT task_summary FROM experience_input_records WHERE session_id = ?")
+      .get("session-transcript-latest") as { task_summary: string } | undefined;
+
+    expect(row?.task_summary).toBe("Second task prompt.");
+  });
+
   it("does not import the runtime module for PreToolUse-only hook processing", async () => {
     const homeDir = makeTempDir();
 

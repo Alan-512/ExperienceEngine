@@ -29,7 +29,7 @@ vi.mock("../../src/install/codex-installer.js", () => ({
 
 vi.mock("../../src/install/claude-code-doctor.js", () => ({
   inspectClaudeCodeInstall: () => ({
-    installed: false
+    installed: true
   })
 }));
 
@@ -77,7 +77,7 @@ describe("status command", () => {
       expect.arrayContaining([
         ["ExperienceEngine status:"],
         ["- Available host CLIs: codex, openclaw"],
-        ["- Installed hosts: codex, openclaw"],
+        ["- Installed hosts: codex, claude-code, openclaw"],
         ["- Distillation provider: gemini"],
         ["- Distillation model: gemini-3.1-flash-lite-preview"],
         ["- Embedding provider mode: api"],

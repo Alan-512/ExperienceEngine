@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildClaudeMarketplaceAddCommand,
   buildClaudePluginInstallCommand,
+  buildCodexManualFallbackCommand,
   buildCodexPublicInstallCommand,
   buildHostNativeInstallGuidance,
   buildOpenClawPublicInstallCommand
@@ -23,8 +24,10 @@ describe("public install guidance", () => {
       },
       codex: {
         ready: true,
-        command:
+        commands: [
+          "ee install codex",
           "codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y @alan512/experienceengine codex-mcp-server"
+        ]
       },
       "claude-code": {
         ready: true,
@@ -34,5 +37,12 @@ describe("public install guidance", () => {
         ]
       }
     });
+  });
+
+  it("keeps the raw Codex MCP command as a manual fallback", () => {
+    expect(buildCodexPublicInstallCommand()).toBe("ee install codex");
+    expect(buildCodexManualFallbackCommand()).toBe(
+      "codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y @alan512/experienceengine codex-mcp-server"
+    );
   });
 });

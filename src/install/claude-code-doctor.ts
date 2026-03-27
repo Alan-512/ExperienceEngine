@@ -8,8 +8,14 @@ import {
   buildClaudeGetCommand,
   parseClaudeMcpServerInfo,
   runClaudeCommand,
+  type ClaudeMcpServerInfo,
   type ClaudeCommandRunner
 } from "./claude-cli.js";
+import {
+  extractClaudeHostEnvValue,
+  readClaudeMarketplaceRuntimeState,
+  type ClaudeMarketplaceRuntimeState
+} from "./claude-marketplace-state.js";
 import { resolveDistillationResolution } from "../distillation/host-llm.js";
 import {
   buildClaudeHookCommandForTarget,
@@ -53,6 +59,9 @@ type ClaudeInstallState = {
   };
 };
 
+type ClaudeHookSource = "project-local" | "marketplace" | "missing";
+const CLAUDE_MARKETPLACE_HOOK_SOURCE = "EXPERIENCE_ENGINE_CLAUDE_HOOK_SOURCE=marketplace";
+
 const hasHookCommand = (
   settings: ClaudeSettings | null,
   eventName: string,
@@ -76,6 +85,15 @@ const inspectClaudeHost = (
   } catch {
     return null;
   }
+};
+
+const isMarketplaceManagedClaudeHost = (hostInfo: ClaudeMcpServerInfo | null): boolean => {
+  if (hostInfo?.env?.includes(CLAUDE_MARKETPLACE_HOOK_SOURCE)) {
+    return true;
+  }
+
+  const commandDisplay = hostInfo?.commandDisplay?.replace(/\\/g, "/") ?? "";
+  return commandDisplay.includes("/node_modules/@alan512/experienceengine/dist/cli/index.js mcp-server");
 };
 
 export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
@@ -106,6 +124,30 @@ export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
   };
   const expectedCommand = buildClaudeHookCommandForTarget(runtimeTarget, launcherPaths);
   const hostInfo = inspectClaudeHost(runner, options.cliEnv);
+  const marketplaceHome = extractClaudeHostEnvValue(hostInfo?.env, "EXPERIENCE_ENGINE_HOME");
+  const marketplaceState = readClaudeMarketplaceRuntimeState(marketplaceHome);
+  const hooksPresent = {
+    userPromptSubmit: hasHookCommand(settings, "UserPromptSubmit", undefined, expectedCommand),
+    preToolUse: hasHookCommand(settings, "PreToolUse", "*", expectedCommand),
+    postToolUse: hasHookCommand(settings, "PostToolUse", "*", expectedCommand),
+    postToolUseFailure: hasHookCommand(settings, "PostToolUseFailure", "*", expectedCommand),
+    sessionEnd: hasHookCommand(settings, "SessionEnd", undefined, expectedCommand)
+  };
+  const hasLocalManagedHooks =
+    hooksPresent.userPromptSubmit &&
+    hooksPresent.preToolUse &&
+    hooksPresent.postToolUse &&
+    hooksPresent.postToolUseFailure &&
+    hooksPresent.sessionEnd;
+  const hookSource: ClaudeHookSource = hasLocalManagedHooks
+    ? "project-local"
+    : marketplaceState?.install_mode === "marketplace" || isMarketplaceManagedClaudeHost(hostInfo)
+      ? "marketplace"
+      : "missing";
+  const interactionReady =
+    hasLocalManagedHooks ||
+    Boolean(marketplaceState?.last_hook_seen_at || marketplaceState?.last_mcp_seen_at) ||
+    (Boolean(hostInfo?.commandDisplay) && hookSource !== "missing");
   const config = loadConfig({}, { env: options.env ?? process.env, homeDir: options.homeDir });
   const resolutionEnv: NodeJS.ProcessEnv = {
     ...(options.env ?? process.env),
@@ -123,8 +165,8 @@ export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
 
   return {
     adapter: "claude-code" as const,
-    installed: paths.usedInstallState,
-    versionStatus: buildVersionStatus(paths.usedInstallState, installState?.installedVersion),
+    installed: paths.usedInstallState || interactionReady,
+    versionStatus: buildVersionStatus(paths.usedInstallState || interactionReady, installState?.installedVersion),
     packageRoot,
     projectDir,
     settingsPath,
@@ -132,13 +174,10 @@ export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
     serverName: installState?.serverName ?? "experienceengine",
     runtimeTarget,
     launcherPaths: resolvedLauncherPaths,
-    hooksPresent: {
-      userPromptSubmit: hasHookCommand(settings, "UserPromptSubmit", undefined, expectedCommand),
-      preToolUse: hasHookCommand(settings, "PreToolUse", "*", expectedCommand),
-      postToolUse: hasHookCommand(settings, "PostToolUse", "*", expectedCommand),
-      postToolUseFailure: hasHookCommand(settings, "PostToolUseFailure", "*", expectedCommand),
-      sessionEnd: hasHookCommand(settings, "SessionEnd", undefined, expectedCommand)
-    },
+    hooksPresent,
+    hookSource,
+    interactionReady,
+    marketplaceState: marketplaceState as ClaudeMarketplaceRuntimeState | null,
     hostWiring: {
       wired: Boolean(hostInfo?.commandDisplay),
       command: hostInfo?.commandDisplay ?? installState?.hostWiring?.command,

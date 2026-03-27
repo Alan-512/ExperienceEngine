@@ -15,6 +15,11 @@ export const buildOpenClawPublicInstallCommand = (packageSpec = "@alan512/experi
   `openclaw plugins install ${packageSpec}`;
 
 export const buildCodexPublicInstallCommand = (
+  _packageSpec = "@alan512/experienceengine",
+  _productHome = "$HOME/.experienceengine"
+): string => "ee install codex";
+
+export const buildCodexManualFallbackCommand = (
   packageSpec = "@alan512/experienceengine",
   productHome = "$HOME/.experienceengine"
 ): string =>
@@ -43,7 +48,7 @@ export const buildHostNativeInstallGuidance = (
   },
   codex: {
     ready: true,
-    command: buildCodexPublicInstallCommand(packageSpec)
+    commands: [buildCodexPublicInstallCommand(packageSpec), buildCodexManualFallbackCommand(packageSpec)]
   },
   "claude-code": {
     ready: true,

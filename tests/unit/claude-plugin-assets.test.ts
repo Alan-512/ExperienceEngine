@@ -49,6 +49,9 @@ describe("Claude plugin assets", () => {
     expect(installScript).not.toContain("EXPERIENCE_ENGINE_PLUGIN_GIT_URL");
     expect(installScript).toContain('[[ -f "${PACKAGE_ENTRY}" ]]');
     expect(installScript).toContain("--ignore-scripts");
+    expect(installScript).toContain("claude-marketplace-state.json");
+    expect(hookScript).toContain("last_hook_seen_at");
+    expect(hookScript).toContain("claude-marketplace-state.json");
   });
 
   it("defines an MCP server that uses the installed product launcher and shared EE home", () => {
