@@ -154,7 +154,7 @@ describe("Codex MCP behavior loop", () => {
       "[ExperienceEngine] Injected 1 strategy hint for this task (risk: high). Run ee inspect --last to review why it matched."
     );
     expect(result.injectedNodeIds).toEqual(["node_codex_prompt_injection"]);
-    expect(result.scorecard).toMatchObject({
+    expect(result.summary).toMatchObject({
       riskLevel: "high",
       nodes: [
         expect.objectContaining({
@@ -190,7 +190,7 @@ describe("Codex MCP behavior loop", () => {
     expect(result.injectedNodeIds).toEqual([]);
     expect(result.deliveryMode).toBe("shadow");
     expect(result.delivered).toBe(false);
-    expect(result.scorecard).toMatchObject({
+    expect(result.summary).toMatchObject({
       mode: "inject",
       riskLevel: "low",
       nodes: [
@@ -226,17 +226,22 @@ describe("Codex MCP behavior loop", () => {
       outputSummary: "auth test now passes",
       status: "success"
     });
-    expect(toolResult.status).toBe("success");
+    expect(toolResult).toMatchObject({
+      status: "recorded",
+      toolName: "Bash",
+      eventStatus: "success",
+      hasErrorSignature: false
+    });
 
     const finalized = await loop.finalizeTask({
       sessionId: "codex-helped-session",
-      cwd: "/repo",
-      prompt: "Fix the failing auth test"
+      cwd: "/repo"
     });
 
+    expect(finalized.status).toBe("finalized");
     expect(finalized.outcomeSignal).toBe("success");
     expect(finalized.injectedNodeIds).toEqual(["node_codex_helped"]);
-    expect(finalized.evidence).toContain("Bash: success: auth test now passes");
+    expect(finalized.recordedToolEvents).toBe(1);
 
     const node = nodeRepo.getById("node_codex_helped");
     const taskRun = taskRunRepo.getLatestBySessionId("codex-helped-session");
@@ -271,17 +276,23 @@ describe("Codex MCP behavior loop", () => {
       outputSummary: "1 failed",
       status: "failure"
     });
-    expect(toolResult.status).toBe("failure");
+    expect(toolResult).toMatchObject({
+      status: "recorded",
+      toolName: "Bash",
+      eventStatus: "failure",
+      hasErrorSignature: true,
+      exitCode: undefined
+    });
 
     const finalized = await loop.finalizeTask({
       sessionId: "codex-harmed-session",
-      cwd: "/repo",
-      prompt: "Fix the failing auth test"
+      cwd: "/repo"
     });
 
+    expect(finalized.status).toBe("finalized");
     expect(finalized.outcomeSignal).toBe("failure");
     expect(finalized.injectedNodeIds).toEqual(["node_codex_harmed"]);
-    expect(finalized.evidence).toContain("Bash: failure: 1 failed");
+    expect(finalized.recordedToolEvents).toBe(1);
 
     const node = nodeRepo.getById("node_codex_harmed");
     expect(node?.usage_count).toBe(1);

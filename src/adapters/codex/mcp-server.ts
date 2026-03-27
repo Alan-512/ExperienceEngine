@@ -40,7 +40,7 @@ type CodexToolResultArgs = {
 type CodexFinalizeArgs = {
   sessionId: string;
   cwd?: string;
-  prompt: string;
+  prompt?: string;
   contextSummary?: string;
 };
 
@@ -240,6 +240,30 @@ const createJsonResourceLink = (uri: string, name: string, description: string) 
   description
 });
 
+const summarizeScorecard = (
+  scorecard: {
+    mode?: string;
+    riskLevel?: string;
+    recommendation?: string;
+    reasons?: string[];
+    nodes?: Array<{ id: string; state?: string; riskLevel?: string }>;
+  } | undefined
+) =>
+  scorecard
+    ? {
+        mode: scorecard.mode,
+        riskLevel: scorecard.riskLevel,
+        recommendation: scorecard.recommendation,
+        reasons: scorecard.reasons?.slice(0, 2),
+        nodes:
+          scorecard.nodes?.slice(0, 3).map((node) => ({
+            id: node.id,
+            state: node.state,
+            riskLevel: node.riskLevel
+          })) ?? []
+      }
+    : undefined;
+
 export const createCodexBehaviorLoop = (options: CodexServerOptions = {}) => {
   const runtime = createCodexRuntime(options);
 
@@ -258,7 +282,7 @@ export const createCodexBehaviorLoop = (options: CodexServerOptions = {}) => {
         text: result.text,
         notice: result.notice,
         injectedNodeIds: result.input.injected_node_ids,
-        scorecard: result.scorecard,
+        summary: summarizeScorecard(result.scorecard),
         deliveryMode: result.deliveryMode,
         delivered: result.delivered
       };
@@ -276,11 +300,10 @@ export const createCodexBehaviorLoop = (options: CodexServerOptions = {}) => {
       });
 
       return {
+        status: "recorded",
         toolName: event.tool_name,
-        status: event.status,
-        inputSummary: event.input_summary,
-        outputSummary: event.output_summary,
-        errorSignature: event.error_signature,
+        eventStatus: event.status,
+        hasErrorSignature: Boolean(event.error_signature),
         exitCode: event.exit_code
       };
     },
@@ -290,25 +313,21 @@ export const createCodexBehaviorLoop = (options: CodexServerOptions = {}) => {
         host: "codex",
         sessionId: args.sessionId,
         cwd: args.cwd,
-        userMessage: args.prompt,
+        userMessage: args.prompt ?? "",
         taskSummary: args.prompt,
         contextSummary: args.contextSummary
       });
 
       return {
+        status: "finalized",
         taskType: input.task_type,
-        taskSummary: input.task_summary,
         outcomeSignal: input.outcome_signal,
         injectedNodeIds: input.injected_node_ids,
+        recordedToolEvents: input.tool_events.length,
         feedbackHint:
           input.injected_node_ids.length > 0
             ? "If the injected guidance helped or harmed this task, call experienceengine_quick_feedback."
-            : undefined,
-        evidence: input.tool_events.map((event) =>
-          [event.tool_name, event.status, event.error_signature ?? event.output_summary]
-            .filter(Boolean)
-            .join(": ")
-        )
+            : undefined
       };
     }
   };
@@ -1092,11 +1111,11 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
     {
       title: "ExperienceEngine Finalize Task",
       description:
-        "Call at task end after hint lookup and any important tool-result recording to persist the learning loop outcome.",
+        "Call at task end after hint lookup and any important tool-result recording to persist the learning loop outcome. Omit prompt when the task is unchanged from the earlier lookup in the same session.",
       inputSchema: z.object({
         sessionId: z.string().min(1),
         cwd: z.string().optional(),
-        prompt: z.string().min(1),
+        prompt: z.string().min(1).optional(),
         contextSummary: z.string().optional()
       })
     },

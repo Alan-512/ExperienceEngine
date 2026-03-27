@@ -13,6 +13,8 @@ describe("Codex instruction template", () => {
     expect(text).toContain("experienceengine_record_tool_result");
     expect(text).toContain("experienceengine_finalize_task");
     expect(text).toContain("experienceengine_quick_feedback");
+    expect(text).toContain("keep tool summaries concise");
+    expect(text).toContain("omit `prompt`");
     expect(text).not.toMatch(/pack|compiler|AGENTS\.md|CLAUDE\.md|CODEX\.md/i);
   });
 });
