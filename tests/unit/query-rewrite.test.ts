@@ -40,4 +40,17 @@ describe("buildRetrievalQuery", () => {
     expect(query.addedContextTerms).toContain("failing test");
     expect(query.rewriteApplied).toBe(true);
   });
+
+  it("preserves investigation and broken-state intent for synonym-heavy prompts", () => {
+    const query = buildRetrievalQuery(
+      "Audit the auth regression path and inspect the first likely fixture issue before changing code. Analysis only; no code changes."
+    );
+
+    expect(query.retrievalQueryText).toContain("Audit");
+    expect(query.retrievalQueryText).toContain("auth regression path");
+    expect(query.retrievalQueryText).toContain("fixture issue");
+    expect(query.retrievalQueryText).not.toContain("Analysis only");
+    expect(query.retrievalQueryText).not.toContain("no code changes");
+    expect(query.addedContextTerms).toContain("broken flow");
+  });
 });

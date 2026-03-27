@@ -7,6 +7,19 @@ const shouldExpandStructuredGuidance = (
   mode: Exclude<InjectionMode, "skip">,
   node: ExperienceNode
 ): boolean => {
+  if (mode === "inject_conservative") {
+    return (
+      node.state === "active" &&
+      ((node.recommended_steps?.length ?? 0) > 0 || (node.avoid_steps?.length ?? 0) > 0 || Boolean(node.goal?.trim())) &&
+      (
+        node.validation_state === "validated_by_reuse" ||
+        node.helped_count >= 2 ||
+        node.experience_kind === "expectation_correction"
+      ) &&
+      node.harmed_count <= node.helped_count
+    );
+  }
+
   if (mode !== "inject") {
     return false;
   }

@@ -88,6 +88,17 @@ export const evaluateTriggerRoute = (
       candidateQuality.state === "candidate" ||
       candidateQuality.state === "priority_candidate"
     );
+  const promisingCandidate =
+    candidateQuality &&
+    candidateQuality.scopeMatch &&
+    candidateQuality.taskFamilyMatch &&
+    candidateQuality.state === "active" &&
+    candidateQuality.totalScore >= 0.8 &&
+    candidateQuality.helpedCount >= candidateQuality.harmedCount &&
+    (
+      candidateQuality.helpedCount >= 1 ||
+      candidateQuality.validationState === "validated_by_reuse"
+    );
 
   if (explicitFailure) {
     return { decision: "allow", reason: "explicit_failure_signal" };
@@ -107,6 +118,10 @@ export const evaluateTriggerRoute = (
 
   if (triggerRisk >= candidateRiskThreshold) {
     return { decision: "allow", reason: "known_pattern_overlap" };
+  }
+
+  if (promisingCandidate) {
+    return { decision: "inject_conservative", reason: "promising_candidate_quality" };
   }
 
   return { decision: "skip", reason: "candidate_quality_rejected" };

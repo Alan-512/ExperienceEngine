@@ -34,6 +34,10 @@ export type RerankResult = {
 };
 
 const DEFAULT_RERANK_WINDOW = 5;
+const STRONG_GENERAL_ADJACENT_FAMILY_THRESHOLD = 0.7;
+const STRONG_GENERAL_ADJACENT_SIGNAL_THRESHOLD = 0.45;
+const GENERAL_DEBUG_LIKE_QUERY_PATTERN =
+  /\b(fail|failed|failing|failure|regression|bug|broken|debug|diagnose|investigate|audit|inspect|fixture|handshake|routing|config|timeout|migration|schema)\b/i;
 
 const TASK_FAMILY_PROXIMITY: Record<TaskType, Partial<Record<TaskType, number>>> = {
   bug_fix: {
@@ -423,8 +427,6 @@ export const retrieveScoredCandidates = async (
     scopeLocalNodes.map((node) => node.id)
   );
 
-  const minimumFamilyScore = inputTaskType === "general" ? 0.75 : 0.65;
-
   const ranked = scopeLocalNodes
     .map((node) => {
       const semanticScore = scoreById.get(node.id) ?? 0;
@@ -446,10 +448,32 @@ export const retrieveScoredCandidates = async (
         taskFamilyMatch: node.task_type === input.task_type
       };
     })
-    .filter(
-      ({ semanticScore, lexicalScore, fusedScore, familyScore }) =>
-        Math.max(semanticScore, lexicalScore, fusedScore) >= 0.12 && familyScore >= minimumFamilyScore
-    )
+    .filter(({ node, semanticScore, lexicalScore, fusedScore, familyScore }) => {
+      const strongestSignal = Math.max(semanticScore, lexicalScore, fusedScore);
+      if (strongestSignal < 0.12) {
+        return false;
+      }
+
+      if (inputTaskType !== "general") {
+        return familyScore >= 0.65;
+      }
+
+      if (familyScore >= 0.75) {
+        return true;
+      }
+
+      const hasMaturitySignal =
+        node.helped_count >= 2 ||
+        node.validation_state === "validated_by_reuse" ||
+        (node.recommended_steps?.length ?? 0) > 0 ||
+        Boolean(node.goal?.trim());
+
+      return GENERAL_DEBUG_LIKE_QUERY_PATTERN.test(queryText || input.task_summary) && (
+        familyScore >= STRONG_GENERAL_ADJACENT_FAMILY_THRESHOLD &&
+        strongestSignal >= STRONG_GENERAL_ADJACENT_SIGNAL_THRESHOLD &&
+        hasMaturitySignal
+      );
+    })
     .sort((left, right) => right.totalScore - left.totalScore)
     .slice(0, 8);
 
@@ -495,6 +519,7 @@ export const retrieveScoredCandidates = async (
           }));
     const rerankSource: "heuristic" | "model" =
       options.reranker || !modelRerankResults?.length ? "heuristic" : "model";
+    const hasExternalReranker = Boolean(options.reranker || modelRerankResults?.length);
 
     const maxScore = Math.max(
       0,
@@ -505,12 +530,19 @@ export const retrieveScoredCandidates = async (
       rerankScoreById.set(result.id, Number(normalized.toFixed(6)));
       rerankSourceById.set(result.id, rerankSource);
     }
+    rerankSourceById.set("__external__", hasExternalReranker ? "model" : "heuristic");
   }
 
   const reranked = rerankCandidates
     .map((entry) => {
       const rerankScore = rerankScoreById.get(entry.node.id);
-      const rerankBoost = typeof rerankScore === "number" ? rerankScore * 0.12 : 0;
+      const hasExternalReranker = rerankSourceById.get("__external__") === "model";
+      const rerankBoost =
+        typeof rerankScore === "number"
+          ? hasExternalReranker
+            ? rerankScore * 0.3 + (rerankScore >= 0.9 ? 0.18 : rerankScore >= 0.75 ? 0.08 : 0)
+            : rerankScore * 0.12 + (rerankScore >= 0.9 ? 0.04 : 0)
+          : 0;
       return {
         ...entry,
         rerankScore,

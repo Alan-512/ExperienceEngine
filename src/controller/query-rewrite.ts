@@ -21,9 +21,11 @@ const PROCEDURAL_ONLY_PATTERNS = [
 ];
 const FAILURE_CONTEXT_PATTERN = /\b(fail|failed|failing|failure)\b/i;
 const REGRESSION_PATTERN = /\bregression\b/i;
+const BROKEN_PATTERN = /\b(broken|break)\b/i;
 const TEST_PATTERN = /\btest\b/i;
 const AUTH_PATTERN = /\b(auth|authentication)\b/i;
 const HANDSHAKE_PATTERN = /\b(fixture handshake|handshake behavior)\b/i;
+const INVESTIGATION_PATTERN = /\b(investigate|diagnose|audit|inspect|review)\b/i;
 
 const normalizeTerms = (text: string): string =>
   text
@@ -67,6 +69,15 @@ export const buildRetrievalQuery = (taskSummary: string, contextSummary?: string
     !FAILURE_CONTEXT_PATTERN.test(rawQueryText)
   ) {
     addedContextTerms.push("failing test");
+  }
+
+  if (
+    REGRESSION_PATTERN.test(rawQueryText) &&
+    INVESTIGATION_PATTERN.test(rawQueryText) &&
+    !FAILURE_CONTEXT_PATTERN.test(rawQueryText) &&
+    !BROKEN_PATTERN.test(rawQueryText)
+  ) {
+    addedContextTerms.push("broken flow");
   }
 
   const retrievalQueryText = [baseQueryText, ...addedContextTerms].filter(Boolean).join("\n").trim();

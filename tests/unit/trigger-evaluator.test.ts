@@ -150,4 +150,35 @@ describe("evaluateTrigger", () => {
       reason: "ambiguous_same_family_candidate"
     });
   });
+
+  it("does not skip a promising same-family candidate only because overlap wording is weak", () => {
+    expect(
+      evaluateTriggerRoute(
+        {
+          ...baseInput,
+          task_type: "bug_fix",
+          task_summary: "Audit the migration path and inspect the first likely schema-order issue"
+        },
+        lowFailureStats,
+        {
+          knownRiskSummary: "Repair the broken sqlite ledger migration in ExperienceEngine",
+          candidateQuality: {
+            semanticScore: 0.79,
+            totalScore: 0.84,
+            familyScore: 1,
+            scopeMatch: true,
+            taskFamilyMatch: true,
+            state: "active",
+            helpedCount: 1,
+            harmedCount: 0,
+            validationState: "pending_reuse_validation",
+            scoreMargin: 0.11
+          }
+        }
+      )
+    ).toEqual({
+      decision: "inject_conservative",
+      reason: "promising_candidate_quality"
+    });
+  });
 });

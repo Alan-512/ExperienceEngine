@@ -185,7 +185,7 @@ describe("decideIntervention", () => {
       3
     );
 
-    expect(decision.mode).toBe("inject");
+    expect(decision.mode).toBe("inject_conservative");
     expect(decision.selected[0]?.id).toBe("specific-distilled");
   });
 
@@ -725,4 +725,5 @@ describe("decideIntervention", () => {
     expect(decision.mode).toBe("inject");
     expect(decision.selected[0]?.id).toBe("semantic-local-node");
   });
+
 });

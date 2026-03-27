@@ -392,6 +392,33 @@ describe("retrieveCandidates", () => {
     expect(candidates[0]!.totalScore).toBeGreaterThan(candidates[1]!.totalScore);
   });
 
+  it("keeps a strong adjacent-family config candidate available for general investigation tasks", async () => {
+    const candidates = await retrieveScoredCandidates(
+      input({
+        task_type: "general",
+        task_summary: "Audit the auth regression path and inspect the first likely fixture issue before changing code"
+      }),
+      [
+        node({
+          id: "adjacent-config-node",
+          task_type: "config_debug",
+          trigger_pattern: "Diagnose the auth regression by checking fixture and routing configuration first",
+          compact_hint: "Inspect fixture and routing configuration before changing the auth code path.",
+          goal: "Narrow the auth regression into fixture or routing configuration.",
+          recommended_steps: [
+            "Check the fixture configuration first.",
+            "Inspect routing precedence next.",
+            "Only then touch the auth code path."
+          ],
+          helped_count: 5,
+          support_count: 4
+        })
+      ]
+    );
+
+    expect(candidates.map((entry) => entry.node.id)).toContain("adjacent-config-node");
+  });
+
   it("recovers a same-family node from strong lexical overlap even when semantic similarity is weak", async () => {
     const candidates = await retrieveScoredCandidates(
       input({
@@ -513,6 +540,89 @@ describe("retrieveCandidates", () => {
       rerankScore: 0.2
     });
     expect(candidates[0]!.totalScore).toBeGreaterThan(candidates[1]!.totalScore);
+  });
+
+  it("lets a confident reranker overturn a larger pre-rerank gap when the semantic match is clearly better", async () => {
+    const candidates = await retrieveScoredCandidates(
+      input({
+        task_type: "test_debug",
+        task_summary: "Investigate the payments auth regression and inspect the fixture handshake path first"
+      }),
+      [
+        node({
+          id: "high-fused-baseline",
+          task_type: "test_debug",
+          trigger_pattern: "Inspect the payments auth regression in the current workspace",
+          compact_hint: "Inspect the workspace and current auth regression path before editing.",
+          retrieval_text:
+            "Inspect the payments auth regression in the current workspace\nInspect the workspace and current auth regression path before editing.",
+          helped_count: 4,
+          support_count: 3
+        }),
+        node({
+          id: "strong-rerank-match",
+          task_type: "test_debug",
+          trigger_pattern: "Investigate the payments auth regression and inspect the fixture handshake path first",
+          compact_hint: "Check the fixture handshake before changing the payments auth code path.",
+          retrieval_text:
+            "Investigate the payments auth regression and inspect the fixture handshake path first\nCheck the fixture handshake before changing the payments auth code path.",
+          helped_count: 1,
+          support_count: 1
+        })
+      ],
+      {
+        reranker: async ({ candidates: rerankCandidates }) =>
+          rerankCandidates.map((candidate) => ({
+            id: candidate.node.id,
+            score: candidate.node.id === "strong-rerank-match" ? 1 : 0
+          }))
+      }
+    );
+
+    expect(candidates[0]).toMatchObject({
+      node: expect.objectContaining({ id: "strong-rerank-match" }),
+      rerankScore: 1
+    });
+  });
+
+  it("does not let a high-confidence reranker get drowned out by legacy score advantages", async () => {
+    const candidates = await retrieveScoredCandidates(
+      input({
+        task_type: "test_debug",
+        task_summary: "Investigate the payments auth regression and inspect the fixture handshake path first"
+      }),
+      [
+        node({
+          id: "legacy-score-heavy",
+          task_type: "test_debug",
+          trigger_pattern: "Investigate the payments auth regression and inspect the fixture handshake path first",
+          compact_hint: "Inspect the workspace and current auth regression path before editing.",
+          retrieval_text:
+            "Investigate the payments auth regression and inspect the fixture handshake path first\nInspect the workspace and current auth regression path before editing.",
+          helped_count: 10,
+          support_count: 10
+        }),
+        node({
+          id: "rerank-authoritative",
+          task_type: "test_debug",
+          trigger_pattern: "Check the auth fixture handshake before changing the payments auth code path",
+          compact_hint: "Check the fixture handshake before changing the payments auth code path.",
+          retrieval_text:
+            "Check the auth fixture handshake before changing the payments auth code path\nInvestigate the payments auth regression through the fixture handshake first.",
+          helped_count: 1,
+          support_count: 1
+        })
+      ],
+      {
+        reranker: async ({ candidates: rerankCandidates }) =>
+          rerankCandidates.map((candidate) => ({
+            id: candidate.node.id,
+            score: candidate.node.id === "rerank-authoritative" ? 1 : 0
+          }))
+      }
+    );
+
+    expect(candidates[0]?.node.id).toBe("rerank-authoritative");
   });
 
   it("applies a default product rerank stage for close hybrid candidates", async () => {

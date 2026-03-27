@@ -81,4 +81,29 @@ describe("renderInjection", () => {
     expect(output).not.toContain("Goal:");
     expect(output).not.toContain("  1.");
   });
+
+  it("expands mature conservative guidance when the node is validated and low risk", () => {
+    const output = renderInjection(
+      "inject_conservative",
+      [
+        node({
+          node_type: "strategy",
+          helped_count: 4,
+          validation_state: "validated_by_reuse",
+          goal: "Narrow the migration issue before touching unrelated files.",
+          recommended_steps: [
+            "Run the focused migration once to reproduce the failure.",
+            "Inspect the ordering mismatch in the migration under test.",
+            "Change only the migration under test and rerun it."
+          ],
+          avoid_steps: ["Do not edit unrelated migration files before reproduction."]
+        })
+      ]
+    );
+
+    expect(output).toContain("Conservative execution hints:");
+    expect(output).toContain("Goal:");
+    expect(output).toContain("Steps:");
+    expect(output).toContain("Avoid:");
+  });
 });
