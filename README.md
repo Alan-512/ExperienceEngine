@@ -83,24 +83,29 @@ For a more detailed explanation of what ExperienceEngine records and how an expe
 
 ExperienceEngine no longer treats the `ee` CLI as the first-install entrypoint.
 
-Install ExperienceEngine through the host-native command for the host you want to use:
+Install ExperienceEngine through the host setup flow for the host you want to use:
 
 - `OpenClaw`
-  - one-step command:
+  - host-native plugin install:
     - `openclaw plugins install @alan512/experienceengine`
+  - after installing, restart the OpenClaw gateway before the first real task:
+    - `openclaw gateway restart`
 - `Codex`
-  - recommended first-time command:
+  - EE-managed Codex setup:
     - `ee install codex`
-  - manual MCP fallback:
+  - native/manual fallback:
     - `codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y @alan512/experienceengine codex-mcp-server`
+  - after either path, start a new Codex session in the repo so the MCP wiring and `AGENTS.md` instruction block are picked up
 - `Claude Code`
-  - add the bundled marketplace from GitHub:
+  - host-native marketplace install:
+    - add the bundled marketplace from GitHub:
     - `/plugin marketplace add https://github.com/Alan-512/ExperienceEngine.git`
   - install the bundled plugin:
     - `/plugin install experienceengine@experienceengine`
   - `ee install claude-code` remains the operator fallback when you need direct hooks + MCP wiring outside the marketplace flow
+  - after installation, start a new Claude Code session so the plugin hooks and bundled MCP config are loaded
 
-After the host-native installation completes, the normal user path is to keep working through the host agent itself.
+After the host setup completes, the normal user path is to keep working through the host agent itself.
 
 Ask the host agent naturally for ExperienceEngine state or feedback actions, for example:
 
@@ -217,3 +222,8 @@ See the full user guide here:
 - [ExperienceEngine User Guide](./docs/user-guide.md)
 
 The user guide covers installation, host-specific notes, first-run validation, troubleshooting, and maintenance operations.
+
+## License
+
+This project is licensed under the MIT License.
+See [LICENSE](./LICENSE).

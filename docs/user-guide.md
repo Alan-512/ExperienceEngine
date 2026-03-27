@@ -62,26 +62,31 @@ ee config set notices.inline false
 
 ## Install And First Run
 
-ExperienceEngine installation is now host-native.
+ExperienceEngine installation now starts from the host you want to use.
 
 That means the first installation step belongs to the host you want to use, not to the `ee` CLI.
 
-Install ExperienceEngine through the host-specific flow for:
+Install ExperienceEngine through the host setup flow for:
 
 - `OpenClaw`
-  - one-step command:
+  - host-native plugin install:
     - `openclaw plugins install @alan512/experienceengine`
+  - after installing, restart the gateway before the first real task:
+    - `openclaw gateway restart`
 - `Codex`
-  - recommended first-time command:
+  - EE-managed Codex setup:
     - `ee install codex`
-  - manual MCP fallback:
+  - native/manual fallback:
     - `codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y @alan512/experienceengine codex-mcp-server`
+  - after either path, start a new Codex session in this repo so the MCP wiring and `AGENTS.md` instruction block are picked up
 - `Claude Code`
-  - add the bundled marketplace from GitHub:
+  - host-native marketplace install:
+    - add the bundled marketplace from GitHub:
     - `/plugin marketplace add https://github.com/Alan-512/ExperienceEngine.git`
   - install the bundled plugin:
     - `/plugin install experienceengine@experienceengine`
   - `ee install claude-code` remains the explicit operator fallback when you need direct hooks + MCP wiring outside the marketplace flow
+  - after installation, start a new Claude Code session so the plugin hooks and bundled MCP config are loaded
 
 Then continue using your host agent normally.
 
@@ -105,11 +110,11 @@ You do **not** need to clone the repository or run `pnpm build` for normal user 
 
 ### Operational CLI
 
-After a host-native installation succeeds, the host agent remains the primary interaction surface.
+After the host setup succeeds, the host agent remains the primary interaction surface.
 
 Use `ee` for:
 
-- one-time shared initialization after the first host-native install
+- one-time shared initialization after the first host setup
 - installation validation
 - repair guidance
 - runtime status checks
@@ -630,7 +635,7 @@ What is already mature enough to use:
 What is still intentionally simpler:
 - OpenClaw does not yet have the same MCP-native user interaction layer as Claude/Codex
 - user-facing docs are lighter than a full product site
-- CLI fallback is still more complete than some host-native surfaces
+- CLI fallback is still more complete than some host-side surfaces
 
 ## If Something Feels Wrong
 

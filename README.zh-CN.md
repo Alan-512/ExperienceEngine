@@ -84,25 +84,30 @@ ExperienceEngine 工作在 context 层，不会去修改宿主模型权重。
 
 ## 快速开始
 
-ExperienceEngine 现在采用**宿主原生安装**。
+ExperienceEngine 现在采用**宿主侧安装优先**。
 
 也就是说，第一步安装命令属于你要使用的宿主，而不是 `ee` CLI。
 
 - `OpenClaw`
-  - 一步安装：
+  - 宿主原生插件安装：
     - `openclaw plugins install @alan512/experienceengine`
+  - 安装后先重启 OpenClaw gateway，再开始真实任务：
+    - `openclaw gateway restart`
 - `Codex`
-  - 首次接入推荐：
+  - EE 托管安装：
     - `ee install codex`
-  - 手工 MCP fallback：
+  - 原生 / 手工 fallback：
     - `codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y @alan512/experienceengine codex-mcp-server`
+  - 无论走哪条路径，首次接入后都建议在仓库里开启一个新的 Codex 会话，让 MCP 配置和 `AGENTS.md` 指令块生效
 - `Claude Code`
-  - 先添加 GitHub marketplace：
+  - 宿主原生 marketplace 安装：
+    - 先添加 GitHub marketplace：
     - `/plugin marketplace add https://github.com/Alan-512/ExperienceEngine.git`
   - 再安装插件：
     - `/plugin install experienceengine@experienceengine`
   - 如果你需要显式 hooks + MCP wiring，仍可用：
     - `ee install claude-code`
+  - 安装后建议开启一个新的 Claude Code 会话，让插件 hooks 和 bundled MCP 配置生效
 
 宿主安装完成后，普通用户应继续直接和宿主 agent 交互。
 
@@ -219,3 +224,8 @@ ee install codex
 - [ExperienceEngine 用户手册](./docs/user-guide.md)
 
 用户手册里包含安装、宿主差异、首次验证、维护命令和故障排查说明。
+
+## 许可证
+
+本项目采用 MIT License。
+详见 [LICENSE](./LICENSE)。

@@ -3,6 +3,7 @@
   "version": "0.1.2",
   "type": "module",
   "description": "ExperienceEngine v2 MVP scaffold for OpenClaw companion-layer experience intervention.",
+  "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/Alan-512/ExperienceEngine.git"

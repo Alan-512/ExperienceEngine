@@ -111,15 +111,15 @@ describe("doctor command", () => {
     expect(consoleLogSpy.mock.calls).toEqual(
       expect.arrayContaining([
         ["CLI summary:"],
-        ["- Install entrypoint: use the host-specific installation command for each host."],
-        ["- OpenClaw install: ready"],
+        ["- Install entrypoint: use the host setup path that matches each host."],
+        ["- OpenClaw install (host-native plugin): ready"],
         ["  1. openclaw plugins install @alan512/experienceengine"],
-        ["- Codex install: ready"],
+        ["- Codex install (EE-managed setup): ready"],
         ["  1. ee install codex"],
         [
           "  2. codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y @alan512/experienceengine codex-mcp-server"
         ],
-        ["- Claude Code install: ready"],
+        ["- Claude Code install (host-native marketplace): ready"],
         ["  1. /plugin marketplace add https://github.com/Alan-512/ExperienceEngine.git"],
         ["  2. /plugin install experienceengine@experienceengine"],
         ["- Codex learning loop: instruction_installed"],
