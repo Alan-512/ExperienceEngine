@@ -4,7 +4,7 @@ import {
   buildClaudePluginInstallCommand,
   buildCodexManualFallbackCommand,
   buildCodexPublicInstallCommand,
-  buildHostNativeInstallGuidance,
+  buildHostInstallGuidance,
   buildOpenClawPublicInstallCommand
 } from "../../src/install/public-install.js";
 
@@ -16,8 +16,8 @@ describe("public install guidance", () => {
     expect(buildClaudePluginInstallCommand()).toBe("/plugin install experienceengine@experienceengine");
   });
 
-  it("summarizes current host-native readiness by host", () => {
-    expect(buildHostNativeInstallGuidance()).toEqual({
+  it("summarizes current host setup readiness by host", () => {
+    expect(buildHostInstallGuidance()).toEqual({
       openclaw: {
         ready: true,
         command: "openclaw plugins install @alan512/experienceengine"

@@ -11,7 +11,7 @@ import {
   getOpenClawRepairHint,
   inspectOpenClawInstall
 } from "../../install/openclaw-installer.js";
-import { buildHostNativeInstallGuidance } from "../../install/public-install.js";
+import { buildHostInstallGuidance } from "../../install/public-install.js";
 import {
   buildRegistryRecommendationCommands,
   readRegistryHealth,
@@ -312,7 +312,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     const claudeStatus = (deps.inspectClaudeCodeInstall ?? inspectClaudeCodeInstall)();
     const openclawStatus = (deps.inspectOpenClawInstall ?? inspectOpenClawInstall)();
     const config = loadConfig();
-    const installGuidance = buildHostNativeInstallGuidance();
+    const installGuidance = buildHostInstallGuidance();
 
     console.table([
       {
@@ -335,9 +335,9 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
       }
     ]);
     console.log("CLI summary:");
-    console.log("- Install entrypoint: use the host-specific installation command for each host.");
+    console.log("- Install entrypoint: use the host setup path that matches each host.");
     if (installGuidance.openclaw.ready) {
-      console.log("- OpenClaw install: ready");
+      console.log("- OpenClaw install (host-native plugin): ready");
       if (installGuidance.openclaw.command) {
         console.log(`  1. ${installGuidance.openclaw.command}`);
       }
@@ -348,7 +348,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
       }
     }
     if (installGuidance.codex.ready) {
-      console.log("- Codex install: ready");
+      console.log("- Codex install (EE-managed setup): ready");
       if (installGuidance.codex.command) {
         console.log(`  1. ${installGuidance.codex.command}`);
       }
@@ -367,7 +367,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
       }
     }
     if (installGuidance["claude-code"].ready) {
-      console.log("- Claude Code install: ready");
+      console.log("- Claude Code install (host-native marketplace): ready");
     } else {
       console.log(`- Claude Code install: ${installGuidance["claude-code"].reason}`);
     }

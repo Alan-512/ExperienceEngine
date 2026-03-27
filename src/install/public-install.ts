@@ -35,7 +35,7 @@ export const buildClaudePluginInstallCommand = (
   marketplaceName = "experienceengine"
 ): string => `/plugin install ${pluginName}@${marketplaceName}`;
 
-export const buildHostNativeInstallGuidance = (
+export const buildHostInstallGuidance = (
   packageSpec = "@alan512/experienceengine"
 ): {
   openclaw: PendingInstallGuidance | ReadyInstallGuidance;
