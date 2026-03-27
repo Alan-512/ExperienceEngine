@@ -60,6 +60,12 @@ For more mature nodes, ExperienceEngine can expand the injected guidance with st
 
 That expansion is intentionally gated. The system does not dump every stored field into every prompt.
 
+The routing policy is also intentionally asymmetric:
+
+- strong or well-supported candidates should not be skipped just because the current prompt uses different wording
+- uncertain but promising same-family matches should prefer conservative injection over a hard skip
+- mature low-risk nodes can expand bounded `Goal / Steps / Avoid` guidance even during conservative injection
+
 ## The Capture And Learning Split
 
 ExperienceEngine now treats task history and reusable experience as two different layers:
@@ -132,6 +138,7 @@ ExperienceEngine answers:
 
 - when should prior experience intervene
 - what short execution guidance should be injected
+- when a conservative injection is still worth surfacing instead of skipping
 - whether that intervention actually helped
 - whether the node should stay active, cool down, or retire
 

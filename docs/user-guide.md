@@ -61,6 +61,8 @@ When it injects guidance, you will usually see a lightweight notice like:
 
 If there is no intervention, it stays silent.
 
+When ExperienceEngine is less certain but still sees a credible same-family match, it may choose a conservative injection instead of skipping entirely. In that case the injected block stays smaller by default, but mature low-risk nodes can still include a short `Goal / Steps / Avoid` structure when that makes the guidance more actionable.
+
 When you inspect the latest turn, you may also see a learning decision such as:
 
 ```text
@@ -156,6 +158,7 @@ That output now tells you both:
 
 - what was injected
 - whether the finalized task was learned, rejected from learning, or only kept as runtime history
+- whether the intervention was a normal injection or a conservative one
 
 ## How MCP Interaction Works
 
@@ -241,6 +244,12 @@ These are operator-facing controls, not the preferred public onboarding path.
 ## Embedding Retrieval
 
 ExperienceEngine now supports a multi-provider embedding stack for semantic retrieval.
+
+Retrieval is now hybrid by default:
+
+- semantic retrieval remains the main recall path
+- lexical retrieval and query normalization help preserve engineering intent when the prompt wording shifts
+- reranking can promote a better-matching candidate above older score advantages, especially when an external reranker is configured
 
 Default behavior (`embeddingProvider = "api"`):
 
