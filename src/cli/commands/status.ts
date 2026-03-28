@@ -17,7 +17,7 @@ const summarizeRetrievalPattern = (decisionHealth: ExperienceDecisionHealth): st
   }
 
   if (decisionHealth.recentConservativeInjects > 0 || decisionHealth.recentSkips > 0) {
-    return "ExperienceEngine is finding matches in this repo, but some tasks still need conservative routing or skip review.";
+    return "ExperienceEngine is finding matches in this repo, but some tasks still need smaller hints or no hint yet.";
   }
 
   if (decisionHealth.recentInjects > 0) {
@@ -66,15 +66,15 @@ export const runStatusCommand = (): void => {
     console.log(`- Codex task runs in current repo: ${codex.learningLoop.recentTaskRuns}`);
   }
   console.log(`- Recent retrieval decisions in current repo: ${decisionHealth.recentDecisions}`);
-  console.log(`- Recent injects: ${decisionHealth.recentInjects}`);
-  console.log(`- Recent conservative injects: ${decisionHealth.recentConservativeInjects}`);
-  console.log(`- Recent skips: ${decisionHealth.recentSkips}`);
-  console.log(`- Recent fast-path activations: ${decisionHealth.recentFastPathActivations}`);
-  console.log(`- Recent rerank participations: ${decisionHealth.recentRerankParticipations}`);
-  console.log(`- Recent query rewrites: ${decisionHealth.recentQueryRewriteUsages}`);
-  console.log(`- Current priority candidates: ${decisionHealth.currentPriorityCandidates}`);
-  console.log(`- Recent converged updates: ${decisionHealth.recentConvergedUpdates}`);
-  console.log(`- Recent priority promotions: ${decisionHealth.recentPriorityPromotions}`);
+  console.log(`- Recent standard hints: ${decisionHealth.recentInjects}`);
+  console.log(`- Recent cautious hints: ${decisionHealth.recentConservativeInjects}`);
+  console.log(`- Recent no-hint decisions: ${decisionHealth.recentSkips}`);
+  console.log(`- Recent fast matches: ${decisionHealth.recentFastPathActivations}`);
+  console.log(`- Recent rerank reviews: ${decisionHealth.recentRerankParticipations}`);
+  console.log(`- Recent query normalizations: ${decisionHealth.recentQueryRewriteUsages}`);
+  console.log(`- Current rising patterns: ${decisionHealth.currentPriorityCandidates}`);
+  console.log(`- Recent merged refinements: ${decisionHealth.recentConvergedUpdates}`);
+  console.log(`- Recent newly promoted hints: ${decisionHealth.recentPriorityPromotions}`);
   const retrievalPattern = summarizeRetrievalPattern(decisionHealth);
   if (retrievalPattern) {
     console.log(`- Retrieval pattern: ${retrievalPattern}`);

@@ -313,15 +313,15 @@ const logDecisionHealth = (summary?: ExperienceDecisionHealth): void => {
 
   console.log("Recent retrieval activity:");
   console.log(`- Decisions in current repo: ${summary.recentDecisions}`);
-  console.log(`- Injects: ${summary.recentInjects}`);
-  console.log(`- Conservative injects: ${summary.recentConservativeInjects}`);
-  console.log(`- Skips: ${summary.recentSkips}`);
-  console.log(`- Fast-path activations: ${summary.recentFastPathActivations}`);
-  console.log(`- Rerank participations: ${summary.recentRerankParticipations}`);
-  console.log(`- Query rewrites: ${summary.recentQueryRewriteUsages}`);
-  console.log(`- Current priority candidates: ${summary.currentPriorityCandidates}`);
-  console.log(`- Recent converged updates: ${summary.recentConvergedUpdates}`);
-  console.log(`- Recent priority promotions: ${summary.recentPriorityPromotions}`);
+  console.log(`- Standard hints: ${summary.recentInjects}`);
+  console.log(`- Cautious hints: ${summary.recentConservativeInjects}`);
+  console.log(`- No-hint decisions: ${summary.recentSkips}`);
+  console.log(`- Fast matches: ${summary.recentFastPathActivations}`);
+  console.log(`- Rerank reviews: ${summary.recentRerankParticipations}`);
+  console.log(`- Query normalizations: ${summary.recentQueryRewriteUsages}`);
+  console.log(`- Rising patterns: ${summary.currentPriorityCandidates}`);
+  console.log(`- Merged refinements: ${summary.recentConvergedUpdates}`);
+  console.log(`- Newly promoted hints: ${summary.recentPriorityPromotions}`);
 };
 
 const getCodexSkipHeavyHint = (summary: ExperienceDecisionHealth): string | undefined => {

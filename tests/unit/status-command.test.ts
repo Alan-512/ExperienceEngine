@@ -97,16 +97,16 @@ describe("status command", () => {
         ["- Codex instruction block: present"],
         ["- Codex task runs in current repo: 0"],
         ["- Recent retrieval decisions in current repo: 3"],
-        ["- Recent injects: 1"],
-        ["- Recent conservative injects: 1"],
-        ["- Recent skips: 1"],
-        ["- Recent fast-path activations: 1"],
-        ["- Recent rerank participations: 2"],
-        ["- Recent query rewrites: 1"],
-        ["- Current priority candidates: 2"],
-        ["- Recent converged updates: 3"],
-        ["- Recent priority promotions: 1"],
-        ["- Retrieval pattern: ExperienceEngine is finding matches in this repo, but some tasks still need conservative routing or skip review."]
+        ["- Recent standard hints: 1"],
+        ["- Recent cautious hints: 1"],
+        ["- Recent no-hint decisions: 1"],
+        ["- Recent fast matches: 1"],
+        ["- Recent rerank reviews: 2"],
+        ["- Recent query normalizations: 1"],
+        ["- Current rising patterns: 2"],
+        ["- Recent merged refinements: 3"],
+        ["- Recent newly promoted hints: 1"],
+        ["- Retrieval pattern: ExperienceEngine is finding matches in this repo, but some tasks still need smaller hints or no hint yet."]
       ])
     );
   });

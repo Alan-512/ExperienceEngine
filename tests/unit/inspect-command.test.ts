@@ -275,7 +275,7 @@ describe("inspect command", () => {
         [`Scope: ${resolveScope("/repo").scope_id}`],
         ["Task type: test_debug"],
         ["Intervention: inject"],
-        ["Route mode: inject"],
+        ["Delivery style: normal hint delivery"],
         ["Injected nodes:"],
         ["- node_inspect strategy active system_derived"],
         ["  Trigger: Fix the failing auth test"],
@@ -578,7 +578,7 @@ describe("inspect command", () => {
       expect.arrayContaining([
         ["Session: session_shadow"],
         ["Intervention: shadow"],
-        ["Route mode: inject_conservative"],
+        ["Delivery style: cautious hint delivery"],
         ["Automatic feedback: none"],
         ["Automatic feedback reason: suppressed_delivery"],
         ["Injected nodes:"],

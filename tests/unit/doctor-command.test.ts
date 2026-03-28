@@ -265,15 +265,15 @@ describe("doctor command", () => {
         ["- Codex task runs in current repo: 2"],
         ["Recent retrieval activity:"],
         ["- Decisions in current repo: 4"],
-        ["- Injects: 2"],
-        ["- Conservative injects: 1"],
-        ["- Skips: 1"],
-        ["- Fast-path activations: 1"],
-        ["- Rerank participations: 2"],
-        ["- Query rewrites: 1"],
-        ["- Current priority candidates: 2"],
-        ["- Recent converged updates: 3"],
-        ["- Recent priority promotions: 1"]
+        ["- Standard hints: 2"],
+        ["- Cautious hints: 1"],
+        ["- No-hint decisions: 1"],
+        ["- Fast matches: 1"],
+        ["- Rerank reviews: 2"],
+        ["- Query normalizations: 1"],
+        ["- Rising patterns: 2"],
+        ["- Merged refinements: 3"],
+        ["- Newly promoted hints: 1"]
       ])
     );
   });

@@ -131,6 +131,22 @@ const parseRecentArgs = (arg1?: string, arg2?: string): { injectedOnly: boolean;
 const isVerboseInspect = (arg1?: string, arg2?: string): boolean =>
   arg1 === "--verbose" || arg2 === "--verbose";
 
+const describeDeliveryStyle = (mode?: string): string | undefined => {
+  if (mode === "inject") {
+    return "normal hint delivery";
+  }
+
+  if (mode === "inject_conservative") {
+    return "cautious hint delivery";
+  }
+
+  if (mode === "skip") {
+    return "no hint delivered";
+  }
+
+  return mode;
+};
+
 export const runInspectCommand = (target?: string, arg1?: string, arg2?: string): void => {
   const interaction = new ExperienceInteractionService(loadConfig());
 
@@ -147,7 +163,7 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
     console.log(`Task type: ${record.taskType}`);
     console.log(`Intervention: ${record.intervention}`);
     if (record.scorecard?.mode) {
-      console.log(`Route mode: ${record.scorecard.mode}`);
+      console.log(`Delivery style: ${describeDeliveryStyle(record.scorecard.mode)}`);
     }
     console.log(`Automatic feedback: ${record.autoFeedback}`);
     if (record.autoFeedbackReason) {
