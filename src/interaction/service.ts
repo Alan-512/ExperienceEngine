@@ -90,6 +90,9 @@ export type ExperienceLastInspection = {
   hints: string[];
   evidence: string[];
   scorecard?: InjectionScorecard;
+  decisionExplanation?: string;
+  trustSummary?: string;
+  retrievalNotes: string[];
   timeline: ExperienceTimelineEntry[];
   learningStatus?: TaskRun["learning_status"];
   learningReason?: string;
@@ -385,6 +388,85 @@ const compareIsoDesc = (left?: string, right?: string): number => {
   return right.localeCompare(left);
 };
 
+const buildDecisionExplanation = (input: {
+  intervention: ExperienceLastInspection["intervention"];
+  scorecard?: InjectionScorecard;
+}): string | undefined => {
+  const scorecard = input.scorecard;
+  if (!scorecard) {
+    return undefined;
+  }
+
+  if (scorecard.mode === "inject_conservative") {
+    if (scorecard.decisionReason === "ambiguous_same_family_candidate") {
+      return "ExperienceEngine found a promising same-family match and chose conservative injection instead of skipping.";
+    }
+
+    if (scorecard.decisionReason === "promising_candidate_quality") {
+      return "ExperienceEngine found a credible candidate, but kept the injection conservative until it has stronger runtime proof.";
+    }
+
+    return "ExperienceEngine chose conservative injection because the best match still needs more runtime evidence.";
+  }
+
+  if (scorecard.decisionReason === "mature_validated_candidate") {
+    return "A mature validated candidate cleared the fast path, so ExperienceEngine injected it normally.";
+  }
+
+  if (scorecard.decisionReason === "candidate_quality_positive") {
+    return "Candidate quality was strong enough to justify intervention for this task.";
+  }
+
+  if (scorecard.mode === "inject") {
+    return "ExperienceEngine injected the best available reusable guidance for this task.";
+  }
+
+  if (input.intervention === "shadow") {
+    return "ExperienceEngine found a usable match, but delivery was suppressed because this run was in shadow mode.";
+  }
+
+  if (input.intervention === "holdout") {
+    return "ExperienceEngine found a usable match, but delivery was withheld for evaluation.";
+  }
+
+  return undefined;
+};
+
+const buildTrustSummary = (input: {
+  scorecard?: InjectionScorecard;
+  injectedNodes: ExperienceNodeSummary[];
+}): string | undefined => {
+  const scorecard = input.scorecard;
+  const primaryNode = input.injectedNodes[0];
+  if (!scorecard || !primaryNode) {
+    return undefined;
+  }
+
+  return `${scorecard.riskLevel}-risk ${primaryNode.state} guidance with ${primaryNode.helped} helped and ${primaryNode.harmed} harmed signal(s).`;
+};
+
+const buildRetrievalNotes = (scorecard?: InjectionScorecard): string[] => {
+  if (!scorecard) {
+    return [];
+  }
+
+  const notes: string[] = [];
+  if (scorecard.queryRewriteApplied) {
+    notes.push("Query rewrite preserved retrieval intent for this task.");
+  }
+
+  const rerankSource = scorecard.topCandidates?.[0]?.rerankSource;
+  if (rerankSource === "model" || rerankSource === "custom") {
+    notes.push(`${rerankSource === "model" ? "Model" : "External"} reranking participated in the final ordering.`);
+  }
+
+  if (scorecard.fastPathApplied) {
+    notes.push("A strong candidate fast path was used.");
+  }
+
+  return notes;
+};
+
 export class ExperienceInteractionService {
   private readonly inputRepo;
   private readonly injectionRepo;
@@ -461,6 +543,7 @@ export class ExperienceInteractionService {
       intervention,
       outcome: record.outcome_signal
     });
+    const decisionExplanation = buildDecisionExplanation({ intervention, scorecard });
     return {
       sessionId: record.session_id,
       scopeId: record.scope_id,
@@ -475,6 +558,9 @@ export class ExperienceInteractionService {
       hints: injectedNodes.map((node) => node.compact_hint),
       evidence: record.evidence,
       scorecard,
+      decisionExplanation,
+      trustSummary: buildTrustSummary({ scorecard, injectedNodes: injectedNodes.map(toNodeSummary) }),
+      retrievalNotes: buildRetrievalNotes(scorecard),
       timeline: buildLatestTimeline({
         record,
         taskRunCreatedAt: taskRun?.created_at,
@@ -519,6 +605,7 @@ export class ExperienceInteractionService {
       outcomeRecord?.outcome_signal ??
       (taskRun?.final_status === "success" ? "success" : taskRun?.final_status === "failure" ? "failure" : "unknown");
     const summary = event.task_summary ?? taskRun?.task_summary ?? "Latest injection event";
+    const decisionExplanation = buildDecisionExplanation({ intervention, scorecard: event.scorecard });
 
     return {
       sessionId: event.session_id,
@@ -539,6 +626,9 @@ export class ExperienceInteractionService {
       hints: injectedNodes.map((node) => node.compact_hint),
       evidence: [],
       scorecard: event.scorecard,
+      decisionExplanation,
+      trustSummary: buildTrustSummary({ scorecard: event.scorecard, injectedNodes: injectedNodes.map(toNodeSummary) }),
+      retrievalNotes: buildRetrievalNotes(event.scorecard),
       timeline: buildLatestTimeline({
         record: {
           record_id: `injection:${event.injection_id}`,

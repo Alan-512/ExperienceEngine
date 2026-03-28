@@ -370,6 +370,8 @@ describe("Codex MCP behavior loop", () => {
     expect(last?.intervention).toBe("inject");
     expect(last?.autoFeedback).toBe("helped");
     expect(last?.autoFeedbackReason).toBe("success_outcome");
+    expect(last?.decisionExplanation).toBe("Candidate quality was strong enough to justify intervention for this task.");
+    expect(last?.trustSummary).toBe("low-risk active guidance with 1 helped and 0 harmed signal(s).");
     expect(last?.timeline).toEqual([
       expect.objectContaining({
         kind: "decision",
@@ -463,6 +465,8 @@ describe("Codex MCP behavior loop", () => {
       intervention: "inject",
       autoFeedback: "helped",
       autoFeedbackReason: "success_outcome",
+      decisionExplanation: "Candidate quality was strong enough to justify intervention for this task.",
+      trustSummary: "low-risk active guidance with 1 helped and 0 harmed signal(s).",
       timeline: [
         expect.objectContaining({
           kind: "decision",
