@@ -988,8 +988,11 @@ export class ExperienceInteractionService {
     };
   }
 
-  feedbackLast(feedback: FeedbackValue): FeedbackResult {
-    const record = this.inputRepo.getLatestInjected();
+  feedbackLast(feedback: FeedbackValue, cwd?: string): FeedbackResult {
+    const scope = cwd ? resolveScope(cwd) : undefined;
+    const record = scope
+      ? this.inputRepo.getLatestInjectedByScope(scope.scope_id) ?? this.inputRepo.getLatestInjected()
+      : this.inputRepo.getLatestInjected();
     if (!record) {
       return {
         status: "not_found",

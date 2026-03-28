@@ -158,17 +158,14 @@ export const buildOpenClawRoutineInteractionContext = (
   const interaction = new ExperienceInteractionService(config);
 
   if (intent === "feedback_helped") {
-    return buildFeedbackContext("helped", interaction.feedbackLast("helped"));
+    return buildFeedbackContext("helped", interaction.feedbackLast("helped", cwd));
   }
 
   if (intent === "feedback_harmed") {
-    return buildFeedbackContext("harmed", interaction.feedbackLast("harmed"));
+    return buildFeedbackContext("harmed", interaction.feedbackLast("harmed", cwd));
   }
 
-  const inspection =
-    intent === "inspect_last" || intent === "explain_last_match"
-      ? interaction.inspectLatestInjected(cwd)
-      : interaction.inspectLast(cwd);
+  const inspection = interaction.inspectLast(cwd);
   if (!inspection || inspection.injectedNodes.length === 0) {
     return buildMissingInspectionContext(intent);
   }

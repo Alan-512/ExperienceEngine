@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { resolveScope } from "../../src/input/scope-resolver.js";
 import plugin, { createExperiencePlugin } from "../../src/plugin/openclaw-plugin.js";
 import { installOpenClawAdapter } from "../../src/install/openclaw-installer.js";
 import { clearEmbeddingProviderForTests, setEmbeddingProviderForTests } from "../../src/store/vector/embeddings.js";
@@ -170,7 +171,7 @@ const seedInjectedOpenClawTurn = async (
       (record_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary, evidence_json, injected_node_ids_json, created_at)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
-    "seed_injected_record",
+    `seed_injected_record:${nodeRow.scope_id}`,
     nodeRow.scope_id,
     "seed_injected",
     nodeRow.task_type,
@@ -179,7 +180,7 @@ const seedInjectedOpenClawTurn = async (
     "Fix the failing vitest auth test",
     "[]",
     JSON.stringify([nodeRow.id]),
-    "2026-03-28T11:30:00.000Z"
+    "2099-03-28T11:30:00.000Z"
   );
 };
 
@@ -599,6 +600,42 @@ describe("OpenClaw plugin runtime", () => {
     expect(countsAfter.count).toBe(countsBefore.count);
   });
 
+  it("treats a latest skip turn as the current OpenClaw interaction instead of falling back to an older injected turn", async () => {
+    const runtimeDir = makeTempDir();
+    const { sqlitePath, handlers } = registerPluginRuntime(runtimeDir);
+    await seedInjectedOpenClawTurn(handlers, sqlitePath);
+
+    const beforePromptBuild = handlers.get("before_prompt_build");
+    const db = new DatabaseSync(sqlitePath);
+    const scopeId = resolveScope("/tmp/repo").scope_id;
+    db.prepare(
+      `INSERT INTO experience_input_records
+        (record_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary, evidence_json, injected_node_ids_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      "seed_skip_record:/tmp/repo",
+      scopeId,
+      "skip_turn",
+      "general",
+      "Inspect the current repo files",
+      "success",
+      "Inspect the current repo files",
+      "[]",
+      "[]",
+      "2099-03-28T11:31:00.000Z"
+    );
+
+    const reviewTurn = (await beforePromptBuild?.({
+      session: { key: "review_after_skip" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "What did ExperienceEngine just inject?" }
+    })) as Record<string, unknown>;
+
+    expect(String(reviewTurn.prependContext)).toContain("ExperienceEngine routine interaction:");
+    expect(String(reviewTurn.prependContext)).toContain("There is no recent injected ExperienceEngine intervention to review.");
+    expect(String(reviewTurn.prependContext)).not.toContain("The user is asking what ExperienceEngine just injected.");
+  });
+
   it("answers why the last hint matched inside OpenClaw without persisting a new task run", async () => {
     const runtimeDir = makeTempDir();
     const { sqlitePath, handlers } = registerPluginRuntime(runtimeDir);
@@ -665,6 +702,41 @@ describe("OpenClaw plugin runtime", () => {
     expect(nodeAfter.helped_count).toBe(nodeBefore.helped_count);
     expect(nodeAfter.harmed_count).toBe(nodeBefore.harmed_count + 1);
     expect(taskRunsAfter.count).toBe(taskRunsBefore.count);
+  });
+
+  it("records OpenClaw routine feedback against the latest injected turn in the current scope", async () => {
+    const runtimeDir = makeTempDir();
+    const { sqlitePath, handlers } = registerPluginRuntime(runtimeDir);
+    await seedInjectedOpenClawTurn(handlers, sqlitePath, "/tmp/repo-a");
+    await seedInjectedOpenClawTurn(handlers, sqlitePath, "/tmp/repo-b");
+    const repoAScopeId = resolveScope("/tmp/repo-a").scope_id;
+    const repoBScopeId = resolveScope("/tmp/repo-b").scope_id;
+
+    const db = new DatabaseSync(sqlitePath);
+    const nodeRowsBefore = db
+      .prepare("SELECT scope_id, helped_count, harmed_count FROM experience_nodes ORDER BY scope_id ASC")
+      .all() as Array<{ scope_id: string; helped_count: number; harmed_count: number }>;
+    const beforePromptBuild = handlers.get("before_prompt_build");
+
+    const feedbackTurn = (await beforePromptBuild?.({
+      session: { key: "feedback_scope_a" },
+      workspace: { cwd: "/tmp/repo-a" },
+      message: { content: "Mark the last ExperienceEngine intervention as harmful." }
+    })) as Record<string, unknown>;
+
+    expect(String(feedbackTurn.prependContext)).toContain("Feedback recorded: harmed.");
+
+    const nodeRowsAfter = db
+      .prepare("SELECT scope_id, helped_count, harmed_count FROM experience_nodes ORDER BY scope_id ASC")
+      .all() as Array<{ scope_id: string; helped_count: number; harmed_count: number }>;
+
+    const scopeAAfter = nodeRowsAfter.find((row) => row.scope_id === repoAScopeId);
+    const scopeABefore = nodeRowsBefore.find((row) => row.scope_id === repoAScopeId);
+    const scopeBAfter = nodeRowsAfter.find((row) => row.scope_id === repoBScopeId);
+    const scopeBBefore = nodeRowsBefore.find((row) => row.scope_id === repoBScopeId);
+
+    expect(scopeAAfter?.harmed_count).toBe((scopeABefore?.harmed_count ?? 0) + 1);
+    expect(scopeBAfter?.harmed_count).toBe(scopeBBefore?.harmed_count ?? 0);
   });
 
   it("injects on a later similar turn even when the host payload lacks context summary", async () => {
