@@ -159,6 +159,8 @@ That output now tells you both:
 - what was injected
 - whether the finalized task was learned, rejected from learning, or only kept as runtime history
 - whether the intervention was a normal injection or a conservative one
+- why ExperienceEngine acted that way in plain language instead of only raw gate fields
+- how trustworthy the selected guidance currently is
 
 ## How MCP Interaction Works
 

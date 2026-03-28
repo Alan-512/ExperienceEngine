@@ -274,6 +274,7 @@ describe("inspect command", () => {
         [`Scope: ${resolveScope("/repo").scope_id}`],
         ["Task type: test_debug"],
         ["Intervention: inject"],
+        ["Route mode: inject"],
         ["Injected nodes:"],
         ["- node_inspect strategy active system_derived"],
         ["  Trigger: Fix the failing auth test"],
@@ -287,6 +288,8 @@ describe("inspect command", () => {
         ["Scorecard:"],
         ["- Risk: low"],
         ["- Recommendation: Apply these hints normally, then mark helped or harmed after the task."],
+        ["- Why ExperienceEngine acted: ExperienceEngine injected the best available reusable guidance for this task."],
+        ["- Trust summary: low-risk active guidance with 1 helped and 0 harmed signal(s)."],
         ["- Why it matched:"],
         ["  - Exact task-family match was found in historical experience."],
         ["Automatic feedback: helped"],
@@ -468,7 +471,7 @@ describe("inspect command", () => {
         scopeId: resolveScope("/repo").scope_id,
         taskType: "test_debug",
         taskSummary: "Fix the failing auth test",
-        mode: "inject",
+        mode: "inject_conservative",
         riskLevel: "low",
         recommendation: "Apply these hints normally, then mark helped or harmed after the task.",
         reasons: ["Exact task-family match was found in historical experience."],
@@ -485,8 +488,8 @@ describe("inspect command", () => {
         topCandidateScore: 0.93,
         scoreMargin: 0.28,
         fastPathApplied: true,
-        gateReason: "strong_candidate_fast_path",
-        decisionReason: "mature_validated_candidate",
+        gateReason: "uncertainty_aware_routing",
+        decisionReason: "ambiguous_same_family_candidate",
         nodes: [],
         createdAt: "2026-03-13T01:00:00.000Z"
       },
@@ -502,6 +505,7 @@ describe("inspect command", () => {
       expect.arrayContaining([
         ["Session: session_shadow"],
         ["Intervention: shadow"],
+        ["Route mode: inject_conservative"],
         ["Automatic feedback: none"],
         ["Automatic feedback reason: suppressed_delivery"],
         ["Injected nodes:"],
@@ -515,8 +519,9 @@ describe("inspect command", () => {
         ["- Top candidate lexical score: 0.66"],
         ["- Top candidate fused score: 0.82"],
         ["- Top candidate rerank score: 0.91"],
-        ["- Gate reason: strong_candidate_fast_path"],
-        ["- Decision reason: mature_validated_candidate"]
+        ["- Why ExperienceEngine acted: ExperienceEngine found a promising same-family match and chose conservative injection instead of skipping."],
+        ["- Gate reason: uncertainty_aware_routing"],
+        ["- Decision reason: ambiguous_same_family_candidate"]
       ])
     );
   });
@@ -666,6 +671,7 @@ describe("inspect command", () => {
         ["Helped: 1"],
         ["Harmed: 0"],
         ["Used: 2"],
+        ["Current assessment: trusted for normal reuse in similar tasks."],
         ["Hint: Run the failing auth test before editing and verify after the fix."],
         ["Goal: Stabilize the auth test"],
         ["Applicability: Stay in the same repo scope"],

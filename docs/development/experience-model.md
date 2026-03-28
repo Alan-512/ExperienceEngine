@@ -66,6 +66,12 @@ The routing policy is also intentionally asymmetric:
 - uncertain but promising same-family matches should prefer conservative injection over a hard skip
 - mature low-risk nodes can expand bounded `Goal / Steps / Avoid` guidance even during conservative injection
 
+That same routing now needs to stay explainable in inspection surfaces:
+
+- `ee inspect --last` should say whether the route was normal or conservative
+- it should explain why ExperienceEngine acted, not only expose raw gate codes
+- it should show a concise trust signal so users can decide whether to lean on the hint
+
 ## The Capture And Learning Split
 
 ExperienceEngine now treats task history and reusable experience as two different layers:
