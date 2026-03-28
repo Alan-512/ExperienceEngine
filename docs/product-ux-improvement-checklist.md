@@ -183,6 +183,12 @@ Problem:
 
 - Codex and Claude Code should feel host-native in normal use, but some user guidance still leans too quickly toward CLI fallback
 
+Scope note:
+
+- this P0 item is intentionally scoped to `Codex` and `Claude Code`
+- `OpenClaw` should keep the same product language where possible, but its routine-interaction UX should be planned as a separate later alignment pass
+- do not silently widen this item into a three-host implementation without an explicit follow-up decision
+
 Improvement:
 
 Prefer host-native follow-ups for normal actions:
@@ -284,6 +290,28 @@ Suggested implementation:
 
 - default output: user-facing explanation
 - verbose or expert mode: raw system terms and field names
+
+### 11. Align OpenClaw Routine Interaction In A Dedicated Follow-Up Pass
+
+Problem:
+
+- `OpenClaw` already has mature runtime integration, but it does not yet expose the same MCP-native routine interaction shape as `Claude Code` and `Codex`
+- if this work is not explicitly staged, it is easy to either forget it entirely or silently widen `P0.4` into a three-host effort
+
+Improvement:
+
+Treat `OpenClaw` routine-interaction UX as a dedicated follow-up after the `Codex + Claude Code` host-native pass lands.
+
+That follow-up should focus on:
+
+- preserving the same product language where possible
+- deciding which routine actions can become host-native on OpenClaw
+- keeping CLI fallback explicit where OpenClaw still needs it
+
+Acceptance criteria:
+
+- OpenClaw has an explicit later implementation slot, not just an implied future promise
+- future work can align OpenClaw interaction UX without re-opening `P0.4` scope
 
 ## Deferred
 
