@@ -318,14 +318,18 @@ const getCodexSkipHeavyHint = (summary: ExperienceDecisionHealth): string | unde
 
 const isClaudeInteractionReady = (status: {
   interactionReady?: boolean;
-  hostWiring: { wired: boolean };
+  hostWiring?: { wired: boolean };
   hooksPresent: {
     userPromptSubmit: boolean;
     sessionEnd: boolean;
   };
 }): boolean =>
-  status.interactionReady ??
-  (status.hostWiring.wired && status.hooksPresent.userPromptSubmit && status.hooksPresent.sessionEnd);
+  Boolean(
+    (status.interactionReady ?? true)
+    && status.hostWiring?.wired
+    && status.hooksPresent.userPromptSubmit
+    && status.hooksPresent.sessionEnd
+  );
 
 export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): Promise<void> => {
   const resolveRemoteStatus = deps.fetchLatestGitHubReleaseStatus ?? fetchLatestGitHubReleaseStatus;
@@ -464,7 +468,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
       deriveSetupState({
         sharedInitialized: sharedSetup.initialized,
         installed: status.installed,
-        interactionReady: Boolean(status.interactionReady || status.hostWiring?.wired)
+        interactionReady: isClaudeInteractionReady(status)
       })
     );
     return;

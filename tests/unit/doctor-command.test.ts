@@ -542,6 +542,70 @@ describe("doctor command", () => {
     expect(consoleLogSpy).toHaveBeenCalledWith("- Value state: Warming up");
   });
 
+  it("does not report Claude Code as Ready when MCP wiring exists but required hooks are incomplete", async () => {
+    await runDoctorCommand("claude-code", {
+      inspectClaudeCodeInstall: () =>
+        ({
+          adapter: "claude-code",
+          installed: true,
+          versionStatus: {
+            recordedVersion: "0.1.0",
+            currentVersion: "0.1.0",
+            state: "current",
+            updateAvailable: false
+          },
+          hooksPresent: {
+            userPromptSubmit: true,
+            preToolUse: true,
+            postToolUse: true,
+            postToolUseFailure: true,
+            sessionEnd: false
+          },
+          hostWiring: {
+            wired: true
+          },
+          interactionReady: true,
+          distillationStatus: {
+            distillationMode: "rule",
+            distillationSource: "rule",
+            provider: "openai_compatible",
+            reason:
+              "No explicit distiller provider is configured. Configure an official or compatible LLM API to enable llm distillation.",
+            diagnostics: {
+              configured: false,
+              provider: "openai_compatible",
+              baseUrl: "https://api.openai.com/v1/chat/completions",
+              missingEnv: ["EXPERIENCE_ENGINE_DISTILLER_MODEL", "EXPERIENCE_ENGINE_DISTILLER_API_KEY"]
+            }
+          },
+          projectDir: "/repo",
+          settingsPath: "/repo/.claude/settings.local.json",
+          hookSource: "project-local",
+          captureDir: "/tmp/.experienceengine/adapters/claude-code/captures"
+        }) as never,
+      inspectSharedSetupState: () => ({ initialized: true }),
+      inspectFirstValueReadiness: () => ({
+        rawRecords: 0,
+        taskRuns: 0,
+        candidates: 0,
+        nodes: 0,
+        nextStep: "Start a new Claude Code session after the required hooks are fully wired."
+      }),
+      fetchLatestGitHubReleaseStatus: async () => ({
+        source: "github-releases",
+        repository: "Alan-512/ExperienceEngine",
+        latestVersion: "0.1.0",
+        releaseUrl: null,
+        publishedAt: "2026-03-12T12:00:00Z",
+        state: "current",
+        updateAvailable: false
+      })
+    });
+
+    expect(consoleLogSpy).toHaveBeenCalledWith("- Setup state: Initialized");
+    expect(consoleLogSpy).not.toHaveBeenCalledWith("- Setup state: Ready");
+  });
+
   it("prints distillation mode and explicit-provider diagnostics", async () => {
     await runDoctorCommand("codex", {
       inspectCodexInstall: () =>
