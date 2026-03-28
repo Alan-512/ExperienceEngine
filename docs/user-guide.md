@@ -148,6 +148,8 @@ Use `ee` for:
 - learning and intervention inspection
 - quick helped / harmed feedback
 
+`ee status` and `ee doctor` now also summarize recent retrieval health in product language. They still show the raw counters, but they additionally explain whether ExperienceEngine is mostly injecting, mostly staying conservative, or still skipping too many close-match tasks in the current repo.
+
 The most useful inspection command during product debugging is still:
 
 ```bash

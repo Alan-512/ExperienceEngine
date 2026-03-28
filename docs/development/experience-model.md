@@ -71,6 +71,7 @@ That same routing now needs to stay explainable in inspection surfaces:
 - `ee inspect --last` should say whether the route was normal or conservative
 - it should explain why ExperienceEngine acted, not only expose raw gate codes
 - it should show a concise trust signal so users can decide whether to lean on the hint
+- `ee status` and `ee doctor` should translate recent retrieval health into plain-language operator guidance, not just raw counters
 
 ## The Capture And Learning Split
 
