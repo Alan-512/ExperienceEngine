@@ -240,13 +240,82 @@ const createJsonResourceLink = (uri: string, name: string, description: string) 
   description
 });
 
+const summarizeActionReason = (scorecard: {
+  mode?: string;
+  decisionReason?: string;
+}): string | undefined => {
+  if (scorecard.mode === "inject_conservative") {
+    if (scorecard.decisionReason === "ambiguous_same_family_candidate") {
+      return "ExperienceEngine found a promising same-family match and chose conservative injection instead of skipping.";
+    }
+
+    if (scorecard.decisionReason === "promising_candidate_quality") {
+      return "ExperienceEngine found a credible candidate, but kept the injection conservative until it has stronger runtime proof.";
+    }
+
+    return "ExperienceEngine chose conservative injection because the best match still needs more runtime evidence.";
+  }
+
+  if (scorecard.decisionReason === "mature_validated_candidate") {
+    return "A mature validated candidate cleared the fast path, so ExperienceEngine injected it normally.";
+  }
+
+  if (scorecard.decisionReason === "candidate_quality_positive") {
+    return "Candidate quality was strong enough to justify intervention for this task.";
+  }
+
+  if (scorecard.mode === "inject") {
+    return "ExperienceEngine injected the best available reusable guidance for this task.";
+  }
+
+  return undefined;
+};
+
+const summarizeTrust = (scorecard: {
+  riskLevel?: string;
+  nodes?: Array<{ state?: string; helped?: number; harmed?: number }>;
+}): string | undefined => {
+  const primaryNode = scorecard.nodes?.[0];
+  if (!scorecard.riskLevel || !primaryNode?.state) {
+    return undefined;
+  }
+
+  return `${scorecard.riskLevel}-risk ${primaryNode.state} guidance with ${primaryNode.helped ?? 0} helped and ${primaryNode.harmed ?? 0} harmed signal(s).`;
+};
+
+const summarizeRetrievalNotes = (scorecard: {
+  queryRewriteApplied?: boolean;
+  fastPathApplied?: boolean;
+  topCandidates?: Array<{ rerankSource?: string }>;
+}): string[] => {
+  const notes: string[] = [];
+  if (scorecard.queryRewriteApplied) {
+    notes.push("Query rewrite preserved retrieval intent for this task.");
+  }
+
+  const rerankSource = scorecard.topCandidates?.[0]?.rerankSource;
+  if (rerankSource === "model" || rerankSource === "custom") {
+    notes.push(`${rerankSource === "model" ? "Model" : "External"} reranking participated in the final ordering.`);
+  }
+
+  if (scorecard.fastPathApplied) {
+    notes.push("A strong candidate fast path was used.");
+  }
+
+  return notes;
+};
+
 const summarizeScorecard = (
   scorecard: {
     mode?: string;
     riskLevel?: string;
     recommendation?: string;
     reasons?: string[];
-    nodes?: Array<{ id: string; state?: string; riskLevel?: string }>;
+    decisionReason?: string;
+    queryRewriteApplied?: boolean;
+    fastPathApplied?: boolean;
+    topCandidates?: Array<{ rerankSource?: string }>;
+    nodes?: Array<{ id: string; state?: string; riskLevel?: string; helped?: number; harmed?: number }>;
   } | undefined
 ) =>
   scorecard
@@ -254,12 +323,17 @@ const summarizeScorecard = (
         mode: scorecard.mode,
         riskLevel: scorecard.riskLevel,
         recommendation: scorecard.recommendation,
+        actionReason: summarizeActionReason(scorecard),
+        trustSummary: summarizeTrust(scorecard),
+        retrievalNotes: summarizeRetrievalNotes(scorecard),
         reasons: scorecard.reasons?.slice(0, 2),
         nodes:
           scorecard.nodes?.slice(0, 3).map((node) => ({
             id: node.id,
             state: node.state,
-            riskLevel: node.riskLevel
+            riskLevel: node.riskLevel,
+            helped: node.helped,
+            harmed: node.harmed
           })) ?? []
       }
     : undefined;
