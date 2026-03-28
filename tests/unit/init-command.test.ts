@@ -171,8 +171,10 @@ describe("init command", () => {
         ["Step 3. Store any shared provider secrets once for all hosts."],
         ["- Shared secrets: none"],
         ["- Next command: ee init secret <ENV_KEY> <value>"],
-        ["Step 4. Validate the installed hosts against the shared EE state."],
-        ["- Validation commands: ee doctor openclaw | ee doctor claude-code | ee doctor codex"]
+        ["Step 4. Move shared ExperienceEngine state to Initialized, then verify each host can become Ready."],
+        ["- Validation commands: ee doctor openclaw | ee doctor claude-code | ee doctor codex"],
+        ["- Product language: Installed -> Initialized -> Ready"],
+        ["- Next step after initialization: use `ee status` for day-to-day progress and `ee doctor <host>` for explicit validation."]
       ])
     );
   });

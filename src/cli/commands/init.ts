@@ -202,8 +202,10 @@ const logInitGuide = (): void => {
     console.log(`- Shared secrets already configured: ${secretKeys.join(", ")}`);
   }
 
-  console.log("Step 4. Validate the installed hosts against the shared EE state.");
+  console.log("Step 4. Move shared ExperienceEngine state to Initialized, then verify each host can become Ready.");
   console.log("- Validation commands: ee doctor openclaw | ee doctor claude-code | ee doctor codex");
+  console.log("- Product language: Installed -> Initialized -> Ready");
+  console.log("- Next step after initialization: use `ee status` for day-to-day progress and `ee doctor <host>` for explicit validation.");
   if (distillationReady && secretKeys.length > 0) {
     console.log("- Next step: install another host if needed, then run `ee doctor <host>` to verify it reuses this shared state.");
   }
