@@ -17,6 +17,9 @@ export const printCliUsage = (): void => {
   console.log("- Initialize shared state: ee init");
   console.log("- Verify current host wiring: ee doctor codex");
   console.log("- Check current state: ee status");
+  console.log("Routine follow-up in Codex/Claude Code:");
+  console.log("- Ask the host what ExperienceEngine just injected, why it matched, or mark helped/harmed.");
+  console.log("- CLI fallback/operator path: ee inspect --last | ee helped | ee harmed");
   console.log("Advanced usage:");
   console.log(usageText);
 };

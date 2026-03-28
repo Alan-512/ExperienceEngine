@@ -122,8 +122,11 @@ These are not one linear ladder. A repo can already be `Ready` while still `Warm
 Ask the host agent naturally for ExperienceEngine state or feedback actions, for example:
 
 - "What did ExperienceEngine just inject?"
-- "Show the last ExperienceEngine intervention."
+- "Why did that ExperienceEngine hint match?"
 - "Mark the last ExperienceEngine intervention as helpful."
+
+For `Codex` and `Claude Code`, these routine follow-ups should stay in the host session first.
+Use CLI fallback only when the host-side path is unavailable or you need explicit operator control.
 
 Use the `ee` CLI only when you need explicit operator validation or troubleshooting:
 

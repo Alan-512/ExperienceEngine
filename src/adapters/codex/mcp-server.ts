@@ -713,7 +713,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
           content: {
             type: "text",
             text:
-              "First read the experienceengine://capabilities resource. Then summarize which ExperienceEngine operations are direct low-risk tools, which require confirmation, and which CLI fallbacks remain outside the normal host-agent flow."
+              "First read the experienceengine://capabilities resource. Then summarize which ExperienceEngine operations are direct low-risk tools that stay in the normal host-agent path for Codex, which require confirmation, and which CLI fallback or operator paths remain outside routine in-session use."
           }
         }
       ]
@@ -799,7 +799,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
           content: {
             type: "text",
             text:
-              "Review the latest ExperienceEngine interaction. Summarize whether guidance was injected, which nodes were involved, and what outcome was recorded."
+              "Review the latest ExperienceEngine interaction in this Codex session first. Summarize whether guidance was injected, which nodes were involved, and what outcome was recorded. Use CLI fallback only if the host-side surface is unavailable."
           }
         },
         {
@@ -937,7 +937,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
           content: {
             type: "text",
             text:
-              "Mark the last injected ExperienceEngine guidance as helpful. Confirm with the user if needed, then call the experienceengine_feedback_last tool with feedback=helped and summarize which nodes were updated."
+              "Mark the last injected ExperienceEngine guidance as helpful in this Codex session. Confirm with the user if needed, then call the experienceengine_feedback_last tool with feedback=helped and summarize which nodes were updated. Use CLI fallback only when the host-side path is unavailable."
           }
         }
       ]
@@ -957,7 +957,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
           content: {
             type: "text",
             text:
-              "Mark the last injected ExperienceEngine guidance as harmful. Confirm with the user if needed, then call the experienceengine_feedback_last tool with feedback=harmed and summarize which nodes were updated."
+              "Mark the last injected ExperienceEngine guidance as harmful in this Codex session. Confirm with the user if needed, then call the experienceengine_feedback_last tool with feedback=harmed and summarize which nodes were updated. Use CLI fallback only when the host-side path is unavailable."
           }
         }
       ]
@@ -1201,7 +1201,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
     {
       title: "ExperienceEngine Quick Feedback",
       description:
-        "Use after injected guidance when it clearly helped or harmed the completed task, using the shortest possible feedback path.",
+        "Use after injected guidance when it clearly helped or harmed the completed task, using the shortest in-session feedback path before falling back to CLI.",
       inputSchema: z.object({
         feedback: z.enum(["helped", "harmed"])
       }),

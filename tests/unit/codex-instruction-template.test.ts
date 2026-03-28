@@ -13,6 +13,10 @@ describe("Codex instruction template", () => {
     expect(text).toContain("experienceengine_record_tool_result");
     expect(text).toContain("experienceengine_finalize_task");
     expect(text).toContain("experienceengine_quick_feedback");
+    expect(text).toContain("ask what ExperienceEngine just injected");
+    expect(text).toContain("ask why it matched");
+    expect(text).toContain("mark the guidance as helped or harmed in-session");
+    expect(text).toContain("CLI fallback");
     expect(text).toContain("keep tool summaries concise");
     expect(text).toContain("omit `prompt`");
     expect(text).not.toMatch(/pack|compiler|AGENTS\.md|CLAUDE\.md|CODEX\.md/i);

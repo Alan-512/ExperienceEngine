@@ -638,6 +638,29 @@ describe("Codex MCP behavior loop", () => {
     expect(feedbackTool.description).toContain("helped or harmed");
   });
 
+  it("describes routine follow-up as host-first with CLI fallback", async () => {
+    const server = createCodexMcpServer();
+    const showLastPrompt = getRegisteredPrompt(server, "experienceengine_show_last_intervention");
+    const helpfulPrompt = getRegisteredPrompt(server, "experienceengine_mark_last_experience_helpful");
+    const reviewCapabilitiesPrompt = getRegisteredPrompt(server, "experienceengine_review_capabilities");
+    const showLast = (await showLastPrompt.callback({})) as {
+      messages: Array<{ role: string; content: { type: string; text?: string; uri?: string } }>;
+    };
+    const helpful = (await helpfulPrompt.callback({})) as {
+      messages: Array<{ role: string; content: { type: string; text?: string } }>;
+    };
+    const reviewCapabilities = (await reviewCapabilitiesPrompt.callback({})) as {
+      messages: Array<{ role: string; content: { type: string; text?: string } }>;
+    };
+
+    expect(showLast.messages[0].content.text).toContain("in this Codex session first");
+    expect(showLast.messages[0].content.text).toContain("CLI fallback");
+    expect(helpful.messages[0].content.text).toContain("in this Codex session");
+    expect(helpful.messages[0].content.text).toContain("CLI fallback");
+    expect(reviewCapabilities.messages[0].content.text).toContain("normal host-agent path");
+    expect(reviewCapabilities.messages[0].content.text).toContain("CLI fallback");
+  });
+
   it("registers MCP prompts for review and control workflows", async () => {
     const server = createCodexMcpServer();
     const reviewCapabilitiesPrompt = getRegisteredPrompt(server, "experienceengine_review_capabilities");

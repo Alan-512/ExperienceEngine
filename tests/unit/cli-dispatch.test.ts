@@ -31,6 +31,9 @@ describe("CLI dispatch", () => {
     expect(output).toContain("ee install codex");
     expect(output).toContain("ee init");
     expect(output).toContain("ee doctor codex");
+    expect(output).toContain("Routine follow-up in Codex/Claude Code:");
+    expect(output).toContain("Ask the host what ExperienceEngine just injected");
+    expect(output).toContain("CLI fallback/operator path:");
     expect(output).toContain("Advanced usage:");
 
     consoleLog.mockRestore();

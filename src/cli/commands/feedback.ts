@@ -2,6 +2,8 @@ import { loadConfig } from "../../config/load-config.js";
 import { ExperienceInteractionService } from "../../interaction/service.js";
 
 const USAGE = "Usage: ee feedback --last helped|harmed | ee feedback node <id> helped|harmed";
+const FALLBACK_NOTE =
+  "[ExperienceEngine] For Codex and Claude Code, prefer in-session feedback first. Use this CLI as a fallback or operator path.";
 
 const recordLastFeedback = (feedbackValue: "helped" | "harmed"): void => {
   const interaction = new ExperienceInteractionService(loadConfig());
@@ -19,6 +21,7 @@ const recordLastFeedback = (feedbackValue: "helped" | "harmed"): void => {
 export const runFeedbackCommand = (target?: string, reference?: string, feedback?: string): void => {
   if (target !== "--last" && target !== "node") {
     console.log(USAGE);
+    console.log(FALLBACK_NOTE);
     return;
   }
 
@@ -27,6 +30,7 @@ export const runFeedbackCommand = (target?: string, reference?: string, feedback
 
   if (feedbackValue !== "helped" && feedbackValue !== "harmed") {
     console.log(USAGE);
+    console.log(FALLBACK_NOTE);
     return;
   }
 
@@ -38,6 +42,7 @@ export const runFeedbackCommand = (target?: string, reference?: string, feedback
   const nodeId = reference;
   if (!nodeId) {
     console.log(USAGE);
+    console.log(FALLBACK_NOTE);
     return;
   }
 

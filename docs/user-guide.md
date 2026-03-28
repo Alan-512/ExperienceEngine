@@ -493,6 +493,11 @@ Even though MCP is the main user interaction model for Claude/Codex, the `ee` CL
 
 Use MCP first for normal day-to-day interaction inside Claude/Codex.
 
+For the common routine loop, keep these actions in the host session first:
+- ask what ExperienceEngine just injected
+- ask why it matched
+- mark the last intervention as helped or harmed
+
 Use `ee` directly when:
 - the host session cannot currently access MCP
 - you are scripting or automating locally

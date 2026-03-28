@@ -88,6 +88,17 @@ afterEach(() => {
 });
 
 describe("feedback command", () => {
+  it("describes feedback CLI as a fallback path for supported hosts", () => {
+    runFeedbackCommand();
+
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      "Usage: ee feedback --last helped|harmed | ee feedback node <id> helped|harmed"
+    );
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      "[ExperienceEngine] For Codex and Claude Code, prefer in-session feedback first. Use this CLI as a fallback or operator path."
+    );
+  });
+
   it("records helped feedback through the quick CLI alias entrypoint", () => {
     const home = makeTempDir();
     process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
