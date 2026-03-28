@@ -126,6 +126,8 @@ Why this matters:
 
 ### 4. Unify The First Successful Onboarding Path
 
+Status: completed
+
 Problem:
 
 - the current setup path still spans host install, shared init, validation, session restart, and first real task
@@ -152,7 +154,18 @@ Acceptance criteria:
 - a new user can reach a verified setup in about 10 minutes without reading multiple scattered docs
 - the user always knows the next required step
 
+Implemented:
+
+- setup and value are now modeled separately:
+  - `Setup state`: `Installed`, `Initialized`, `Ready`
+  - `Value state`: `Warming up`, `First value reached`
+- `ee install`, `ee init`, `ee status`, and `ee doctor` now use the same onboarding language
+- `README` and `user-guide` now present one shared product journey with host-specific entry steps
+- targeted setup-state fixes now keep `doctor` aligned with the onboarding model
+
 ### 5. Productize The Time-To-First-Value Period
+
+Status: completed for the intended lightweight phase
 
 Problem:
 
@@ -177,7 +190,15 @@ Acceptance criteria:
 - a user without reusable hints still understands that the system is functioning
 - the product gives a concrete next step during warm-up
 
+Implemented:
+
+- `ee status` and `ee doctor` now show first-value readiness in product language
+- `First value reached` is now tied to visible output from real task runs, not just formal nodes
+- warm-up guidance now gives a next step without pretending static onboarding text is value
+
 ### 6. Keep Routine Interaction Inside The Host Agent
+
+Status: completed for the intended `Codex + Claude Code` scope
 
 Problem:
 
@@ -209,9 +230,17 @@ Acceptance criteria:
 - common review and feedback flows can stay in the host session
 - CLI feels like fallback, not default routine interaction
 
+Implemented:
+
+- `Codex` and `Claude Code` routine follow-ups now consistently prefer the host session first
+- CLI help and user docs now frame `ee` as fallback/operator path for routine review and feedback
+- `OpenClaw` keeps the same product language, but its more visible CLI/operator fallback is now documented explicitly instead of being implied
+
 ## P1: Important Usability Improvements
 
 ### 7. Redesign The CLI Help Information Architecture
+
+Status: completed for the current lightweight phase
 
 Problem:
 
@@ -232,7 +261,18 @@ Suggested implementation:
 - move lower-level commands into advanced help
 - add example commands by goal
 
+Implemented:
+
+- top-level help is now grouped by user goals:
+  - get started
+  - see what ExperienceEngine is doing
+  - fix a problem
+  - advanced operator commands
+- help examples now use host-neutral placeholders instead of implying a Codex-only default
+
 ### 8. Tighten `inspect --last` Default Vs Verbose Layering
+
+Status: completed
 
 Problem:
 
@@ -250,7 +290,15 @@ Suggested implementation:
 - keep current default concise
 - add an explicit deep or verbose mode instead of pushing more fields into default output
 
+Implemented:
+
+- default `ee inspect --last` now stays on explanation and trust
+- `--verbose` carries the deeper scorecard and retrieval diagnostics
+- `inspect node` and `inspect repo` remained stable while the last-turn surface was simplified
+
 ### 9. Strengthen The Cross-Host Mental Model
+
+Status: completed for the intended docs-and-language pass
 
 Problem:
 
@@ -270,7 +318,15 @@ Suggested implementation:
 - define one shared vocabulary for common user actions
 - reduce host-specific detail in the main path unless it changes actual user behavior
 
+Implemented:
+
+- `README`, `user-guide`, and `experience-model` now describe one shared product journey with host-specific entry steps
+- common routine actions now use the same vocabulary across the main docs
+- host-specific differences stay in the places where they actually change user behavior
+
 ### 10. Reduce Visible Terminology Density
+
+Status: completed for default high-frequency surfaces
 
 Problem:
 
@@ -290,6 +346,12 @@ Suggested implementation:
 
 - default output: user-facing explanation
 - verbose or expert mode: raw system terms and field names
+
+Implemented:
+
+- default `status`, `doctor`, and `inspect --last` now lead with product-language explanations
+- verbose inspection still preserves raw system route terms where operator precision matters
+- retrieval-health summaries now keep human-readable labels without dropping the underlying system meaning entirely
 
 ### 11. Align OpenClaw Routine Interaction In A Dedicated Follow-Up Pass
 
@@ -332,12 +394,9 @@ Reason for deferral:
 
 ## Recommended Delivery Order
 
-1. unify onboarding into one fastest successful path
-2. productize time-to-first-value guidance
-3. prefer host-native follow-up guidance over CLI fallback in routine paths
-4. redesign CLI help around user goals
-5. split `inspect --last` into default and deep inspection layers
-6. align cross-host docs and vocabulary
+1. keep the completed onboarding / first-value / routine-interaction work stable
+2. handle `OpenClaw` routine-interaction alignment as its own later pass
+3. only pull deferred heavier surfaces forward if the lighter product path stops being sufficient
 
 ## Acceptance Bar For This Improvement Track
 
@@ -351,14 +410,14 @@ This UX improvement track should be considered successful when:
 
 ## Short Version
 
-The biggest remaining opportunity is not adding more capability.
-
-The next product win is reducing friction in:
+The biggest completed win in this phase was reducing friction in:
 
 - onboarding
 - first value
 - routine host-native use
 
-The explanation and lightweight quality-expression layer is now largely done.
+The remaining near-term UX work should stay narrow:
 
-The next UX phase should make the product easier to start, easier to understand during warm-up, and easier to use without leaving the host session.
+- protect the current lightweight path from regressing
+- finish the dedicated `OpenClaw` routine-interaction follow-up when that phase starts
+- avoid pulling heavier new surfaces forward before they are needed
