@@ -27,14 +27,18 @@ describe("CLI dispatch", () => {
 
     const output = consoleLog.mock.calls.map((call) => String(call[0] ?? "")).join("\n");
     expect(output).not.toContain("pack <");
-    expect(output).toContain("Common first steps:");
+    expect(output).toContain("Get started:");
     expect(output).toContain("ee install codex");
     expect(output).toContain("ee init");
     expect(output).toContain("ee doctor codex");
-    expect(output).toContain("Routine follow-up in Codex/Claude Code:");
-    expect(output).toContain("Ask the host what ExperienceEngine just injected");
-    expect(output).toContain("CLI fallback/operator path:");
-    expect(output).toContain("Advanced usage:");
+    expect(output).toContain("See what ExperienceEngine is doing:");
+    expect(output).toContain("ee status");
+    expect(output).toContain("ee inspect --last");
+    expect(output).toContain("Fix a problem:");
+    expect(output).toContain("ee upgrade codex");
+    expect(output).toContain("Routine review/feedback in Codex and Claude Code stays in the host first.");
+    expect(output).toContain("Advanced operator commands:");
+    expect(output).toContain("Usage: ee <");
 
     consoleLog.mockRestore();
   });
