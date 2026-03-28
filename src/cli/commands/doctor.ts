@@ -291,6 +291,19 @@ const logDecisionHealth = (summary?: ExperienceDecisionHealth): void => {
   console.log(`- Recent priority promotions: ${summary.recentPriorityPromotions}`);
 };
 
+const getCodexSkipHeavyHint = (summary: ExperienceDecisionHealth): string | undefined => {
+  if (
+    summary.recentDecisions > 0 &&
+    summary.recentInjects === 0 &&
+    summary.recentConservativeInjects === 0 &&
+    summary.recentSkips > 0
+  ) {
+    return "ExperienceEngine is seeing nearby tasks in this repo but still skipping most of them. Run `ee inspect --last` after the next close-match task to review the route and trust summary.";
+  }
+
+  return undefined;
+};
+
 const isClaudeInteractionReady = (status: {
   interactionReady?: boolean;
   hostWiring: { wired: boolean };
@@ -464,15 +477,9 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     logCodexRuntimeStatus(status);
     logCodexLearningLoopStatus(status);
     logDecisionHealth(decisionHealth);
-    if (
-      decisionHealth.recentDecisions > 0 &&
-      decisionHealth.recentInjects === 0 &&
-      decisionHealth.recentConservativeInjects === 0 &&
-      decisionHealth.recentSkips > 0
-    ) {
-      console.log(
-        "- Recommended next step: recent Codex retrievals are still mostly skipping in this repo. Run `ee inspect --last` after a close-match task to inspect gate reasons."
-      );
+    const skipHeavyHint = getCodexSkipHeavyHint(decisionHealth);
+    if (skipHeavyHint) {
+      console.log(`- Recommended next step: ${skipHeavyHint}`);
     }
     logRegistryHealth(registryHealth);
     logEvaluationMode();

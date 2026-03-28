@@ -321,7 +321,7 @@ describe("doctor command", () => {
       "- Recommended next step: use Codex on a real coding task so ExperienceEngine can persist codex task runs."
     );
     expect(consoleLogSpy).toHaveBeenCalledWith(
-      "- Recommended next step: recent Codex retrievals are still mostly skipping in this repo. Run `ee inspect --last` after a close-match task to inspect gate reasons."
+      "- Recommended next step: ExperienceEngine is seeing nearby tasks in this repo but still skipping most of them. Run `ee inspect --last` after the next close-match task to review the route and trust summary."
     );
   });
 

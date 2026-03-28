@@ -4,6 +4,27 @@ import { inspectCodexInstall } from "../../install/codex-installer.js";
 import { inspectOpenClawInstall } from "../../install/openclaw-installer.js";
 import { loadConfig } from "../../config/load-config.js";
 import { detectAvailableHosts } from "../../install/host-detection.js";
+import type { ExperienceDecisionHealth } from "../../interaction/service.js";
+
+const summarizeRetrievalPattern = (decisionHealth: ExperienceDecisionHealth): string | undefined => {
+  if (decisionHealth.recentDecisions === 0) {
+    return undefined;
+  }
+
+  if (decisionHealth.recentInjects === 0 && decisionHealth.recentConservativeInjects === 0 && decisionHealth.recentSkips > 0) {
+    return "ExperienceEngine is seeing nearby work in this repo, but it is still skipping most tasks.";
+  }
+
+  if (decisionHealth.recentConservativeInjects > 0 || decisionHealth.recentSkips > 0) {
+    return "ExperienceEngine is finding matches in this repo, but some tasks still need conservative routing or skip review.";
+  }
+
+  if (decisionHealth.recentInjects > 0) {
+    return "ExperienceEngine is finding reusable matches and injecting them normally in this repo.";
+  }
+
+  return undefined;
+};
 
 export const runStatusCommand = (): void => {
   const config = loadConfig();
@@ -44,4 +65,8 @@ export const runStatusCommand = (): void => {
   console.log(`- Current priority candidates: ${decisionHealth.currentPriorityCandidates}`);
   console.log(`- Recent converged updates: ${decisionHealth.recentConvergedUpdates}`);
   console.log(`- Recent priority promotions: ${decisionHealth.recentPriorityPromotions}`);
+  const retrievalPattern = summarizeRetrievalPattern(decisionHealth);
+  if (retrievalPattern) {
+    console.log(`- Retrieval pattern: ${retrievalPattern}`);
+  }
 };

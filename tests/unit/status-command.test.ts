@@ -94,7 +94,8 @@ describe("status command", () => {
         ["- Recent query rewrites: 1"],
         ["- Current priority candidates: 2"],
         ["- Recent converged updates: 3"],
-        ["- Recent priority promotions: 1"]
+        ["- Recent priority promotions: 1"],
+        ["- Retrieval pattern: ExperienceEngine is finding matches in this repo, but some tasks still need conservative routing or skip review."]
       ])
     );
   });
