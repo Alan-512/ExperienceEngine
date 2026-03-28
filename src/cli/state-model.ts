@@ -1,4 +1,3 @@
-import { readExperienceEngineSecrets } from "../config/secrets-store.js";
 import { readExperienceEngineSettings } from "../config/settings-store.js";
 import type { ExperienceFirstValueReadiness } from "../interaction/service.js";
 
@@ -11,10 +10,10 @@ export type SharedSetupState = {
 
 export const inspectSharedSetupState = (): SharedSetupState => {
   const settings = readExperienceEngineSettings();
-  const secrets = readExperienceEngineSecrets();
+  const hasConfiguredDistillation = Boolean(settings.distillation?.provider && settings.distillation?.model);
 
   return {
-    initialized: Object.keys(settings).length > 0 || Object.keys(secrets).length > 0
+    initialized: hasConfiguredDistillation
   };
 };
 
