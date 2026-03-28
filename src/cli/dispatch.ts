@@ -13,15 +13,15 @@ const usageText =
 export const printCliUsage = (): void => {
   console.log("ExperienceEngine CLI");
   console.log("Get started:");
-  console.log("- Install your host integration: ee install codex");
+  console.log("- Install your host integration: ee install <openclaw|claude-code|codex>");
   console.log("- Initialize shared state: ee init");
-  console.log("- Verify current host wiring: ee doctor codex");
+  console.log("- Verify current host wiring: ee doctor <openclaw|claude-code|codex>");
   console.log("See what ExperienceEngine is doing:");
   console.log("- Check current state: ee status");
   console.log("- Inspect the latest persisted intervention: ee inspect --last");
   console.log("Fix a problem:");
   console.log("- Validate the current host: ee doctor <openclaw|claude-code|codex>");
-  console.log("- Refresh host wiring when needed: ee upgrade codex");
+  console.log("- Refresh host wiring when needed: ee upgrade <openclaw|claude-code|codex>");
   console.log("- Routine review/feedback in Codex and Claude Code stays in the host first.");
   console.log("- OpenClaw uses the same product language, but CLI/operator fallback is still more visible today.");
   console.log("- CLI fallback/operator path: ee inspect --last | ee helped | ee harmed");
