@@ -55,6 +55,15 @@ export type ExperienceNodeSummary = {
   harmed: number;
   lastUsedAt?: string;
   hint: string;
+  qualityBand: "strong" | "building" | "risky";
+  qualityDrivers: string[];
+  applicabilityProfile: {
+    bestFit: string;
+    scopeValidity: string;
+    confidence: "high" | "medium" | "low";
+    risk: "low" | "medium" | "high";
+    avoidWhen?: string;
+  };
 };
 
 export type ExperienceNodeDetail = ExperienceNodeSummary & {
@@ -205,6 +214,82 @@ const toReviewEvent = (
   created_at: nowIso()
 });
 
+const deriveNodeRisk = (node: ExperienceNode): "low" | "medium" | "high" => {
+  if (node.state === "candidate") {
+    return "high";
+  }
+
+  if (node.state === "priority_candidate") {
+    return "medium";
+  }
+
+  if (node.state === "cooling" || node.harmed_count > 0 || node.node_type === "warning") {
+    return node.harmed_count > node.helped_count ? "high" : "medium";
+  }
+
+  return "low";
+};
+
+const deriveQualityBand = (node: ExperienceNode): "strong" | "building" | "risky" => {
+  if (node.state === "retired" || node.harmed_count > node.helped_count || deriveNodeRisk(node) === "high") {
+    return "risky";
+  }
+
+  if (
+    node.state === "active" &&
+    node.validation_state === "validated_by_reuse" &&
+    node.harmed_count === 0
+  ) {
+    return "strong";
+  }
+
+  return "building";
+};
+
+const buildQualityDrivers = (node: ExperienceNode): string[] => {
+  const drivers: string[] = [];
+  if (node.validation_state === "validated_by_reuse") {
+    drivers.push("This node has already been validated by successful reuse.");
+  }
+
+  if (node.helped_count > node.harmed_count) {
+    drivers.push("Helpful outcomes still outweigh harmful ones for this node.");
+  } else if (node.harmed_count > node.helped_count) {
+    drivers.push("Harmful outcomes currently outweigh helpful ones for this node.");
+  }
+
+  if (node.state === "candidate" || node.state === "priority_candidate") {
+    drivers.push("This node is still early in its lifecycle and needs more runtime evidence.");
+  } else if (node.state === "cooling") {
+    drivers.push("This node is in cooling state because recent runtime evidence weakened confidence.");
+  }
+
+  return drivers.slice(0, 3);
+};
+
+const deriveConfidence = (node: ExperienceNode): "high" | "medium" | "low" => {
+  if (node.validation_state === "validated_by_reuse" && node.state === "active" && node.harmed_count === 0) {
+    return "high";
+  }
+
+  if (node.state === "candidate" || node.harmed_count > node.helped_count) {
+    return "low";
+  }
+
+  return "medium";
+};
+
+const formatTaskFamily = (taskType: ExperienceNode["task_type"]): string =>
+  taskType === "general" ? "general tasks" : `${taskType} tasks`;
+
+const buildApplicabilityProfile = (node: ExperienceNode) => ({
+  bestFit: `${formatTaskFamily(node.task_type)} in this repo scope`,
+  scopeValidity: node.applicability_notes ?? "Use within the same repo scope unless fresh evidence says otherwise.",
+  confidence: deriveConfidence(node),
+  risk: deriveNodeRisk(node),
+  avoidWhen: node.stop_condition ?? node.escalation_condition ?? node.avoid_steps?.[0]
+});
+
 const toNodeSummary = (node: ExperienceNode): ExperienceNodeSummary => ({
   id: node.id,
   type: node.node_type,
@@ -225,7 +310,10 @@ const toNodeSummary = (node: ExperienceNode): ExperienceNodeSummary => ({
   helped: node.helped_count,
   harmed: node.harmed_count,
   lastUsedAt: node.last_used_at,
-  hint: node.compact_hint
+  hint: node.compact_hint,
+  qualityBand: deriveQualityBand(node),
+  qualityDrivers: buildQualityDrivers(node),
+  applicabilityProfile: buildApplicabilityProfile(node)
 });
 
 const toNodeDetail = (node: ExperienceNode): ExperienceNodeDetail => ({

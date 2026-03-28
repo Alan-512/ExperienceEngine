@@ -155,6 +155,8 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
       for (const node of record.injectedNodes) {
         console.log(`- ${node.id} ${node.type} ${node.state} ${node.sourceKind}`);
         console.log(`  Trigger: ${node.triggerPattern}`);
+        console.log(`  Quality: ${node.qualityBand}`);
+        console.log(`  Best fit: ${node.applicabilityProfile.bestFit}`);
         if (node.promotionSignal) {
           console.log(`  Promotion signal: ${node.promotionSignal}`);
         }
@@ -462,12 +464,27 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
     console.log(`Harmed: ${node.harmed}`);
     console.log(`Used: ${node.used}`);
     console.log(`Current assessment: ${describeNodeAssessment(node)}`);
+    console.log(`Quality band: ${node.qualityBand}`);
+    if (node.qualityDrivers.length) {
+      console.log("Quality drivers:");
+      for (const driver of node.qualityDrivers) {
+        console.log(`- ${driver}`);
+      }
+    }
     console.log(`Hint: ${node.hint}`);
     if (node.goal) {
       console.log(`Goal: ${node.goal}`);
     }
     if (node.applicability) {
       console.log(`Applicability: ${node.applicability}`);
+    }
+    console.log("Applicability profile:");
+    console.log(`- Best fit: ${node.applicabilityProfile.bestFit}`);
+    console.log(`- Scope validity: ${node.applicabilityProfile.scopeValidity}`);
+    console.log(`- Confidence: ${node.applicabilityProfile.confidence}`);
+    console.log(`- Risk: ${node.applicabilityProfile.risk}`);
+    if (node.applicabilityProfile.avoidWhen) {
+      console.log(`- Avoid when: ${node.applicabilityProfile.avoidWhen}`);
     }
     console.log(`Success signal: ${node.successSignal}`);
     console.log(`Evidence: ${node.evidence}`);

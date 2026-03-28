@@ -398,6 +398,8 @@ describe("Codex MCP behavior loop", () => {
     expect(recent).toHaveLength(1);
     expect(activeNodes.map((entry) => entry.id)).toContain("node_codex_surface_view");
     expect(node?.id).toBe("node_codex_surface_view");
+    expect(node?.qualityBand).toBe("building");
+    expect(node?.applicabilityProfile.bestFit).toBe("test_debug tasks in this repo scope");
     expect(node?.recommendedSteps).toEqual([
       "Run the failing test",
       "Apply the minimal fix",
@@ -513,7 +515,11 @@ describe("Codex MCP behavior loop", () => {
       id: "node_codex_resource_view",
       type: "strategy",
       sourceKind: "system_derived",
-      originRecordIds: ["input_origin"]
+      originRecordIds: ["input_origin"],
+      qualityBand: "building",
+      applicabilityProfile: expect.objectContaining({
+        bestFit: "test_debug tasks in this repo scope"
+      })
     });
   });
 

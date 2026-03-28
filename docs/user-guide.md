@@ -164,6 +164,12 @@ That output now tells you both:
 - why ExperienceEngine acted that way in plain language instead of only raw gate fields
 - how trustworthy the selected guidance currently is
 
+When you inspect a specific node, ExperienceEngine now also shows a lightweight quality judgment layer:
+
+- a `quality band` (`strong`, `building`, or `risky`)
+- the short drivers behind that judgment
+- a compact applicability profile covering best fit, scope validity, confidence, risk, and when to avoid reuse
+
 ## How MCP Interaction Works
 
 For `Codex` and `Claude Code`, ExperienceEngine is designed to work mainly through MCP.

@@ -72,6 +72,7 @@ That same routing now needs to stay explainable in inspection surfaces:
 - it should explain why ExperienceEngine acted, not only expose raw gate codes
 - it should show a concise trust signal so users can decide whether to lean on the hint
 - `ee status` and `ee doctor` should translate recent retrieval health into plain-language operator guidance, not just raw counters
+- `ee inspect node:<id>` should expose a lightweight quality band and applicability profile derived from existing runtime truth
 
 ## The Capture And Learning Split
 
