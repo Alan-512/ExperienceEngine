@@ -137,8 +137,7 @@ For most users, ExperienceEngine should stay in the background and be inspected 
 - "Why did that ExperienceEngine hint match?"
 - "Mark the last ExperienceEngine intervention as helpful or harmful."
 
-For `Codex` and `Claude Code`, these routine follow-ups should stay in the host session first.
-For `OpenClaw`, the product language stays the same, but CLI/operator fallback remains more visible for now.
+For `OpenClaw`, `Codex`, and `Claude Code`, these routine follow-ups should stay in the host session first.
 
 Use the `ee` CLI only when you need explicit validation, repair, or operator-style troubleshooting:
 
@@ -157,7 +156,8 @@ In practical terms, the routine loop currently looks like this:
 - `Claude Code`
   - ask the host agent first for recent injections, matching reasons, and helped / harmed feedback
 - `OpenClaw`
-  - keep the same user concepts, but expect CLI/operator fallback to remain more visible for those routine actions today
+  - ask the host agent first for recent injections, matching reasons, and helped / harmed feedback
+  - keep CLI/operator fallback for deeper inspection, repair, and advanced management
 
 For onboarding and first value, ExperienceEngine now uses a two-layer product model:
 
@@ -306,8 +306,9 @@ A dedicated standalone review UI is still deferred. The current product shape is
 
 That does not mean every host surface is identical today:
 
-- `Codex` and `Claude Code` already lean harder on host-native MCP interaction for routine use
-- `OpenClaw` shares the same product language and setup/value states, but operator-style CLI fallback is still more visible in daily use
+- `Codex` and `Claude Code` use MCP-native host interaction for routine use
+- `OpenClaw` now supports the same three routine interaction families in-session through the plugin path
+- advanced operator actions still remain more explicit in CLI across all hosts
 
 ## Host-Specific Setup
 
@@ -776,10 +777,11 @@ What is already mature enough to use:
 - real runtime integration on Claude Code
 - real runtime integration on Codex
 - MCP-native inspect/control workflows on Claude/Codex
+- in-session routine review and feedback workflows on OpenClaw
 - managed state backup and restore over MCP `plan + confirm`
 
 What is still intentionally simpler:
-- OpenClaw does not yet have the same MCP-native user interaction layer as Claude/Codex
+- OpenClaw does not use the same MCP-native interaction shape as Claude/Codex
 - user-facing docs are lighter than a full product site
 - CLI fallback is still more complete than some host-side surfaces
 

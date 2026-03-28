@@ -22,6 +22,10 @@ import {
   extractSessionKey,
   mergeHookPayload
 } from "./runtime-helpers.js";
+import {
+  buildOpenClawRoutineInteractionContext,
+  detectOpenClawRoutineIntent
+} from "./openclaw-routine-interaction.js";
 
 const buildFinalizeDedupKey = (source: unknown, context: HostPromptContext): string | null => {
   if (!context.sessionId) {
@@ -94,6 +98,17 @@ class OpenClawExperiencePlugin implements ExperiencePlugin {
       this.runtime.captureWriter.capture("before_prompt_build", extractSessionKey(source), { payload, context: hookContext });
       const context = normalizePromptPayload(source);
       clearSessionFinalizeState(context.sessionId);
+      const routineIntent = detectOpenClawRoutineIntent(context.userMessage);
+      if (routineIntent) {
+        this.runtime.captureWriter.capture("openclaw_routine_interaction", extractSessionKey(source), {
+          intent: routineIntent,
+          cwd: context.cwd
+        });
+        return applyInjectionToPayload(
+          payload,
+          buildOpenClawRoutineInteractionContext(this.runtime.config, routineIntent, context.cwd)
+        );
+      }
       const result = await this.beforePromptBuild(context);
       if (result.notice) {
         (api.logger ?? api.log)?.info?.("experienceengine.notice", {
@@ -131,6 +146,9 @@ class OpenClawExperiencePlugin implements ExperiencePlugin {
       const source = mergeHookPayload(payload, hookContext);
       this.runtime.captureWriter.capture("finalize", extractSessionKey(source), { payload, context: hookContext });
       const context = normalizePromptPayload(source);
+      if (detectOpenClawRoutineIntent(context.userMessage)) {
+        return payload;
+      }
       if (!context.userMessage && !context.taskSummary) {
         return payload;
       }

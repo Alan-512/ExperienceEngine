@@ -99,6 +99,90 @@ const waitFor = async (assertion: () => void, attempts = 25, delayMs = 20): Prom
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 };
 
+const registerPluginRuntime = (runtimeDir: string): {
+  sqlitePath: string;
+  handlers: Map<string, Handler>;
+} => {
+  const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+  const handlers = new Map<string, Handler>();
+
+  plugin.register({
+    pluginConfig: {
+      dataDir: join(runtimeDir, "data"),
+      sqlitePath,
+      triggerThreshold: 0.6,
+      maxHints: 3
+    },
+    on(event, handler) {
+      handlers.set(event, handler);
+    }
+  });
+
+  return { sqlitePath, handlers };
+};
+
+const seedInjectedOpenClawTurn = async (
+  handlers: Map<string, Handler>,
+  sqlitePath: string,
+  cwd = "/tmp/repo"
+): Promise<void> => {
+  const beforePromptBuild = handlers.get("before_prompt_build");
+  const persistToolResult = handlers.get("tool_result_persist");
+  const finalize = handlers.get("message_sent");
+
+  await beforePromptBuild?.({
+    session: { key: "seed" },
+    workspace: { cwd },
+    message: { content: "Fix the failing vitest auth test" },
+    context: { summary: "Fix the failing vitest auth test" }
+  });
+  await persistToolResult?.({
+    sessionKey: "seed",
+    tool: { name: "pnpm test" },
+    result: { exitCode: 1, output: "auth tests failed" },
+    success: false
+  });
+  await persistToolResult?.({
+    sessionKey: "seed",
+    tool: { name: "pnpm test" },
+    result: { exitCode: 0, output: "auth tests passed" },
+    success: true
+  });
+  await finalize?.({
+    session: { key: "seed" },
+    workspace: { cwd },
+    message: { content: "Fix the failing vitest auth test" }
+  });
+
+  const db = new DatabaseSync(sqlitePath);
+  await waitFor(() => {
+    const nodeRow = db
+      .prepare("SELECT id, scope_id, task_type FROM experience_nodes ORDER BY updated_at DESC LIMIT 1")
+      .get() as { id: string; scope_id: string; task_type: string } | undefined;
+    expect(nodeRow?.id).toBeTruthy();
+  });
+
+  const nodeRow = db
+    .prepare("SELECT id, scope_id, task_type FROM experience_nodes ORDER BY updated_at DESC LIMIT 1")
+    .get() as { id: string; scope_id: string; task_type: string };
+  db.prepare(
+    `INSERT INTO experience_input_records
+      (record_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary, evidence_json, injected_node_ids_json, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    "seed_injected_record",
+    nodeRow.scope_id,
+    "seed_injected",
+    nodeRow.task_type,
+    "Fix the failing vitest auth test",
+    "success",
+    "Fix the failing vitest auth test",
+    "[]",
+    JSON.stringify([nodeRow.id]),
+    "2026-03-28T11:30:00.000Z"
+  );
+};
+
 const geminiJsonResponse = (payload: unknown): Response =>
   new Response(
     JSON.stringify({
@@ -130,20 +214,7 @@ afterEach(() => {
 describe("OpenClaw plugin runtime", () => {
   it("replays a minimal task cycle and persists records, stats, and nodes", async () => {
     const runtimeDir = makeTempDir();
-    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
-    const handlers = new Map<string, Handler>();
-
-    plugin.register({
-      pluginConfig: {
-        dataDir: join(runtimeDir, "data"),
-        sqlitePath,
-        triggerThreshold: 0.6,
-        maxHints: 3
-      },
-      on(event, handler) {
-        handlers.set(event, handler);
-      }
-    });
+    const { sqlitePath, handlers } = registerPluginRuntime(runtimeDir);
 
     const beforePromptBuild = handlers.get("before_prompt_build");
     const persistToolResult = handlers.get("tool_result_persist");
@@ -450,20 +521,7 @@ describe("OpenClaw plugin runtime", () => {
 
   it("injects conservative hints on a later similar turn once a node exists", async () => {
     const runtimeDir = makeTempDir();
-    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
-    const handlers = new Map<string, Handler>();
-
-    plugin.register({
-      pluginConfig: {
-        dataDir: join(runtimeDir, "data"),
-        sqlitePath,
-        triggerThreshold: 0.6,
-        maxHints: 3
-      },
-      on(event, handler) {
-        handlers.set(event, handler);
-      }
-    });
+    const { sqlitePath, handlers } = registerPluginRuntime(runtimeDir);
 
     const beforePromptBuild = handlers.get("before_prompt_build");
     const persistToolResult = handlers.get("tool_result_persist");
@@ -509,6 +567,104 @@ describe("OpenClaw plugin runtime", () => {
     expect(typeof secondTurn.prependContext).toBe("string");
     expect(String(secondTurn.prependContext).toLowerCase()).toContain("execution hints");
     expect(secondTurn.prependContext).toContain("make the smallest code change");
+  });
+
+  it("answers last-intervention review inside OpenClaw without persisting a new task run", async () => {
+    const runtimeDir = makeTempDir();
+    const { sqlitePath, handlers } = registerPluginRuntime(runtimeDir);
+    await seedInjectedOpenClawTurn(handlers, sqlitePath);
+
+    const db = new DatabaseSync(sqlitePath);
+    const countsBefore = db.prepare("SELECT COUNT(*) AS count FROM task_runs").get() as { count: number };
+    const beforePromptBuild = handlers.get("before_prompt_build");
+    const finalize = handlers.get("message_sent");
+
+    const reviewTurn = (await beforePromptBuild?.({
+      session: { key: "review_last" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "What did ExperienceEngine just inject?" }
+    })) as Record<string, unknown>;
+
+    expect(String(reviewTurn.prependContext)).toContain("ExperienceEngine routine interaction:");
+    expect(String(reviewTurn.prependContext)).toContain("The user is asking what ExperienceEngine just injected.");
+    expect(String(reviewTurn.prependContext)).toContain("Injected nodes:");
+
+    await finalize?.({
+      session: { key: "review_last" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "What did ExperienceEngine just inject?" }
+    });
+
+    const countsAfter = db.prepare("SELECT COUNT(*) AS count FROM task_runs").get() as { count: number };
+    expect(countsAfter.count).toBe(countsBefore.count);
+  });
+
+  it("answers why the last hint matched inside OpenClaw without persisting a new task run", async () => {
+    const runtimeDir = makeTempDir();
+    const { sqlitePath, handlers } = registerPluginRuntime(runtimeDir);
+    await seedInjectedOpenClawTurn(handlers, sqlitePath);
+
+    const db = new DatabaseSync(sqlitePath);
+    const countsBefore = db.prepare("SELECT COUNT(*) AS count FROM task_runs").get() as { count: number };
+    const beforePromptBuild = handlers.get("before_prompt_build");
+    const finalize = handlers.get("message_sent");
+
+    const explainTurn = (await beforePromptBuild?.({
+      session: { key: "explain_last" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Why did that ExperienceEngine hint match?" }
+    })) as Record<string, unknown>;
+
+    expect(String(explainTurn.prependContext)).toContain("ExperienceEngine routine interaction:");
+    expect(String(explainTurn.prependContext)).toContain("The user is asking why the last ExperienceEngine hint matched.");
+    expect(String(explainTurn.prependContext)).toContain("Why it matched:");
+
+    await finalize?.({
+      session: { key: "explain_last" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Why did that ExperienceEngine hint match?" }
+    });
+
+    const countsAfter = db.prepare("SELECT COUNT(*) AS count FROM task_runs").get() as { count: number };
+    expect(countsAfter.count).toBe(countsBefore.count);
+  });
+
+  it("records harmful feedback inside OpenClaw without persisting a new task run", async () => {
+    const runtimeDir = makeTempDir();
+    const { sqlitePath, handlers } = registerPluginRuntime(runtimeDir);
+    await seedInjectedOpenClawTurn(handlers, sqlitePath);
+
+    const db = new DatabaseSync(sqlitePath);
+    const nodeBefore = db
+      .prepare("SELECT helped_count, harmed_count FROM experience_nodes ORDER BY updated_at DESC LIMIT 1")
+      .get() as { helped_count: number; harmed_count: number };
+    const taskRunsBefore = db.prepare("SELECT COUNT(*) AS count FROM task_runs").get() as { count: number };
+    const beforePromptBuild = handlers.get("before_prompt_build");
+    const finalize = handlers.get("message_sent");
+
+    const feedbackTurn = (await beforePromptBuild?.({
+      session: { key: "feedback_harmed" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Mark the last ExperienceEngine intervention as harmful." }
+    })) as Record<string, unknown>;
+
+    expect(String(feedbackTurn.prependContext)).toContain("ExperienceEngine routine interaction:");
+    expect(String(feedbackTurn.prependContext)).toContain("Feedback recorded: harmed.");
+
+    await finalize?.({
+      session: { key: "feedback_harmed" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Mark the last ExperienceEngine intervention as harmful." }
+    });
+
+    const nodeAfter = db
+      .prepare("SELECT helped_count, harmed_count FROM experience_nodes ORDER BY updated_at DESC LIMIT 1")
+      .get() as { helped_count: number; harmed_count: number };
+    const taskRunsAfter = db.prepare("SELECT COUNT(*) AS count FROM task_runs").get() as { count: number };
+
+    expect(nodeAfter.helped_count).toBe(nodeBefore.helped_count);
+    expect(nodeAfter.harmed_count).toBe(nodeBefore.harmed_count + 1);
+    expect(taskRunsAfter.count).toBe(taskRunsBefore.count);
   });
 
   it("injects on a later similar turn even when the host payload lacks context summary", async () => {

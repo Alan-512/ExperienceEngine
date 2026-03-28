@@ -355,25 +355,29 @@ Implemented:
 
 ### 11. Align OpenClaw Routine Interaction In A Dedicated Follow-Up Pass
 
+Status: completed for the intended first full pass
+
 Problem:
 
-- `OpenClaw` already has mature runtime integration, but it does not yet expose the same MCP-native routine interaction shape as `Claude Code` and `Codex`
-- if this work is not explicitly staged, it is easy to either forget it entirely or silently widen `P0.4` into a three-host effort
+- `OpenClaw` already had mature runtime integration, but it still lacked a real in-host routine loop for the most common ExperienceEngine follow-up actions
 
 Improvement:
 
-Treat `OpenClaw` routine-interaction UX as a dedicated follow-up after the `Codex + Claude Code` host-native pass lands.
+Implement the first full `OpenClaw` routine-interaction follow-up as its own scoped pass.
 
-That follow-up should focus on:
+Implemented:
 
-- preserving the same product language where possible
-- deciding which routine actions can become host-native on OpenClaw
-- keeping CLI fallback explicit where OpenClaw still needs it
+- the OpenClaw plugin now handles three routine action families in-session:
+  - what ExperienceEngine just injected
+  - why the last hint matched
+  - helped / harmed feedback for the last intervention
+- these host-side control turns bypass normal ExperienceEngine finalization so they do not pollute task history or reusable learning
+- CLI/operator fallback remains explicit for deeper inspection, repair, and advanced management
 
 Acceptance criteria:
 
-- OpenClaw has an explicit later implementation slot, not just an implied future promise
-- future work can align OpenClaw interaction UX without re-opening `P0.4` scope
+- OpenClaw now has a real routine-interaction implementation rather than a placeholder follow-up slot
+- routine review and feedback no longer require default CLI fallback in OpenClaw
 
 ## Deferred
 

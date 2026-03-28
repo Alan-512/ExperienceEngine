@@ -137,8 +137,7 @@ For routine use, ask the host agent naturally for ExperienceEngine state or feed
 - "Why did that ExperienceEngine hint match?"
 - "Mark the last ExperienceEngine intervention as helpful or harmful."
 
-For `Codex` and `Claude Code`, these routine follow-ups should stay in the host session first.
-For `OpenClaw`, the product language stays the same, but CLI/operator fallback remains more visible for now.
+For `OpenClaw`, `Codex`, and `Claude Code`, these routine follow-ups should stay in the host session first.
 Use CLI fallback whenever the host-side path is unavailable or you need explicit operator control.
 
 Use the `ee` CLI only when you need explicit operator validation or troubleshooting:

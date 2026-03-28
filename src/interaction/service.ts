@@ -767,6 +767,17 @@ export class ExperienceInteractionService {
       : this.inspectRecord(latestRecord);
   }
 
+  inspectLatestInjected(cwd: string = process.cwd()): ExperienceLastInspection | undefined {
+    const scope = resolveScope(cwd);
+    const latestScopedInjected = this.inputRepo.getLatestInjectedByScope(scope.scope_id);
+    if (latestScopedInjected) {
+      return this.inspectRecord(latestScopedInjected);
+    }
+
+    const latestInjected = this.inputRepo.getLatestInjected();
+    return latestInjected ? this.inspectRecord(latestInjected) : undefined;
+  }
+
   inspectRecent(options: { injectedOnly?: boolean; limit?: number } = {}): ExperienceRecentInspection[] {
     return this.inputRepo.listRecent(options).map((record) => ({
       sessionId: record.session_id,
