@@ -308,6 +308,62 @@ describe("inspect command", () => {
         ["Outcome: success"]
       ])
     );
+    expect(consoleLogSpy.mock.calls).not.toEqual(
+      expect.arrayContaining([
+        ["- Top candidate score: 0.88"],
+        ["- Score margin: 0.02"],
+        ["- Fast path applied: yes"],
+        ["- Query rewrite applied: yes"],
+        ["- Gate reason: strong_candidate_fast_path"],
+        ["- Decision reason: mature_validated_candidate"]
+      ])
+    );
+  });
+
+  it("prints full scorecard diagnostics when --verbose is requested", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+
+    const nodeRepo = new NodeRepository(db);
+    const inputRepo = new InputRecordRepository(db);
+    const injectionRepo = new InjectionRepository(db);
+    const scopeId = resolveScope(process.cwd()).scope_id;
+    nodeRepo.upsert(makeNode({ scope_id: scopeId }));
+    inputRepo.upsert(
+      makeRecord({
+        scope_id: scopeId,
+        session_id: "session_verbose",
+        task_summary: "Investigate the payments auth test regression",
+        created_at: "2026-03-13T01:00:00.000Z"
+      })
+    );
+    injectionRepo.upsert(
+      makeInjectionEvent({
+        session_id: "session_verbose",
+        scope_id: scopeId
+      })
+    );
+
+    runInspectCommand("--last", "--verbose");
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["- Top candidate score: 0.88"],
+        ["- Score margin: 0.02"],
+        ["- Fast path applied: yes"],
+        ["- Query rewrite applied: yes"],
+        ["- Promotion signal: high_value"],
+        ["- Priority promotion applied: yes"],
+        ["- Merge decision: UPDATE"],
+        ["- Merge reason: A same-family auth-test lesson already existed and this run strengthened it."],
+        ["- Top candidate rerank score: 1"],
+        ["- Top candidate rerank source: model"],
+        ["- Gate reason: strong_candidate_fast_path"],
+        ["- Decision reason: mature_validated_candidate"]
+      ])
+    );
   });
 
   it("prints learning status and rejection reason for recorded-only tasks", () => {
@@ -378,6 +434,13 @@ describe("inspect command", () => {
         ["Intervention: inject"],
         ["Automatic feedback: none"],
         ["Scorecard:"],
+        ["Hints:"],
+        ["- Run the failing auth test before editing and verify after the fix."],
+        ["Outcome: unknown"]
+      ])
+    );
+    expect(consoleLogSpy.mock.calls).not.toEqual(
+      expect.arrayContaining([
         ["- Query rewrite applied: yes"],
         ["- Promotion signal: high_value"],
         ["- Priority promotion applied: yes"],
@@ -386,10 +449,7 @@ describe("inspect command", () => {
         ["- Top candidate rerank score: 1"],
         ["- Top candidate rerank source: model"],
         ["- Gate reason: strong_candidate_fast_path"],
-        ["- Decision reason: mature_validated_candidate"],
-        ["Hints:"],
-        ["- Run the failing auth test before editing and verify after the fix."],
-        ["Outcome: unknown"]
+        ["- Decision reason: mature_validated_candidate"]
       ])
     );
   });
@@ -525,6 +585,12 @@ describe("inspect command", () => {
         ["- node_shadow strategy active system_derived"],
         ["Hints:"],
         ["- Run the failing auth test before editing and verify after the fix."],
+        ["- Why ExperienceEngine acted: ExperienceEngine found a promising same-family match and chose conservative injection instead of skipping."],
+        ["- Trust summary: low-risk active guidance with 1 helped and 0 harmed signal(s)."]
+      ])
+    );
+    expect(consoleLogSpy.mock.calls).not.toEqual(
+      expect.arrayContaining([
         ["- Top candidate score: 0.93"],
         ["- Score margin: 0.28"],
         ["- Fast path applied: yes"],
@@ -532,7 +598,6 @@ describe("inspect command", () => {
         ["- Top candidate lexical score: 0.66"],
         ["- Top candidate fused score: 0.82"],
         ["- Top candidate rerank score: 0.91"],
-        ["- Why ExperienceEngine acted: ExperienceEngine found a promising same-family match and chose conservative injection instead of skipping."],
         ["- Gate reason: uncertainty_aware_routing"],
         ["- Decision reason: ambiguous_same_family_candidate"]
       ])

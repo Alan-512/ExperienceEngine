@@ -128,10 +128,14 @@ const parseRecentArgs = (arg1?: string, arg2?: string): { injectedOnly: boolean;
   return { injectedOnly, limit };
 };
 
+const isVerboseInspect = (arg1?: string, arg2?: string): boolean =>
+  arg1 === "--verbose" || arg2 === "--verbose";
+
 export const runInspectCommand = (target?: string, arg1?: string, arg2?: string): void => {
   const interaction = new ExperienceInteractionService(loadConfig());
 
   if (target === "--last") {
+    const verbose = isVerboseInspect(arg1, arg2);
     const record = interaction.inspectLast();
     if (!record) {
       console.log("No experience input records recorded yet.");
@@ -198,57 +202,59 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
       if (trustSummary) {
         console.log(`- Trust summary: ${trustSummary}`);
       }
-      if (typeof record.scorecard.topCandidateScore === "number") {
-        console.log(`- Top candidate score: ${record.scorecard.topCandidateScore}`);
-      }
-      if (typeof record.scorecard.scoreMargin === "number") {
-        console.log(`- Score margin: ${record.scorecard.scoreMargin}`);
-      }
-      if (typeof record.scorecard.fastPathApplied === "boolean") {
-        console.log(`- Fast path applied: ${record.scorecard.fastPathApplied ? "yes" : "no"}`);
-      }
-      if (typeof record.scorecard.queryRewriteApplied === "boolean") {
-        console.log(`- Query rewrite applied: ${record.scorecard.queryRewriteApplied ? "yes" : "no"}`);
-      }
-      if (record.scorecard.promotionSignal) {
-        console.log(`- Promotion signal: ${record.scorecard.promotionSignal}`);
-      }
-      if (typeof record.scorecard.priorityPromotionApplied === "boolean") {
-        console.log(`- Priority promotion applied: ${record.scorecard.priorityPromotionApplied ? "yes" : "no"}`);
-      }
-      if (record.scorecard.mergeDecision) {
-        console.log(`- Merge decision: ${record.scorecard.mergeDecision}`);
-      }
-      if (record.scorecard.mergeReason) {
-        console.log(`- Merge reason: ${record.scorecard.mergeReason}`);
-      }
-      const topCandidate = record.scorecard.topCandidates?.[0];
-      if (typeof topCandidate?.semanticScore === "number") {
-        console.log(`- Top candidate semantic score: ${topCandidate.semanticScore}`);
-      }
-      if (typeof topCandidate?.lexicalScore === "number") {
-        console.log(`- Top candidate lexical score: ${topCandidate.lexicalScore}`);
-      }
-      if (typeof topCandidate?.fusedScore === "number") {
-        console.log(`- Top candidate fused score: ${topCandidate.fusedScore}`);
-      }
-      if (typeof topCandidate?.rerankScore === "number") {
-        console.log(`- Top candidate rerank score: ${topCandidate.rerankScore}`);
-      }
-      if (topCandidate?.rerankSource) {
-        console.log(`- Top candidate rerank source: ${topCandidate.rerankSource}`);
-      }
-      if (record.scorecard.gateReason) {
-        console.log(`- Gate reason: ${record.scorecard.gateReason}`);
-      }
-      if (record.scorecard.decisionReason) {
-        console.log(`- Decision reason: ${record.scorecard.decisionReason}`);
-      }
-      const retrievalNotes = buildRetrievalNotes(record);
-      if (retrievalNotes.length) {
-        console.log("- Retrieval notes:");
-        for (const note of retrievalNotes) {
-          console.log(`  - ${note}`);
+      if (verbose) {
+        if (typeof record.scorecard.topCandidateScore === "number") {
+          console.log(`- Top candidate score: ${record.scorecard.topCandidateScore}`);
+        }
+        if (typeof record.scorecard.scoreMargin === "number") {
+          console.log(`- Score margin: ${record.scorecard.scoreMargin}`);
+        }
+        if (typeof record.scorecard.fastPathApplied === "boolean") {
+          console.log(`- Fast path applied: ${record.scorecard.fastPathApplied ? "yes" : "no"}`);
+        }
+        if (typeof record.scorecard.queryRewriteApplied === "boolean") {
+          console.log(`- Query rewrite applied: ${record.scorecard.queryRewriteApplied ? "yes" : "no"}`);
+        }
+        if (record.scorecard.promotionSignal) {
+          console.log(`- Promotion signal: ${record.scorecard.promotionSignal}`);
+        }
+        if (typeof record.scorecard.priorityPromotionApplied === "boolean") {
+          console.log(`- Priority promotion applied: ${record.scorecard.priorityPromotionApplied ? "yes" : "no"}`);
+        }
+        if (record.scorecard.mergeDecision) {
+          console.log(`- Merge decision: ${record.scorecard.mergeDecision}`);
+        }
+        if (record.scorecard.mergeReason) {
+          console.log(`- Merge reason: ${record.scorecard.mergeReason}`);
+        }
+        const topCandidate = record.scorecard.topCandidates?.[0];
+        if (typeof topCandidate?.semanticScore === "number") {
+          console.log(`- Top candidate semantic score: ${topCandidate.semanticScore}`);
+        }
+        if (typeof topCandidate?.lexicalScore === "number") {
+          console.log(`- Top candidate lexical score: ${topCandidate.lexicalScore}`);
+        }
+        if (typeof topCandidate?.fusedScore === "number") {
+          console.log(`- Top candidate fused score: ${topCandidate.fusedScore}`);
+        }
+        if (typeof topCandidate?.rerankScore === "number") {
+          console.log(`- Top candidate rerank score: ${topCandidate.rerankScore}`);
+        }
+        if (topCandidate?.rerankSource) {
+          console.log(`- Top candidate rerank source: ${topCandidate.rerankSource}`);
+        }
+        if (record.scorecard.gateReason) {
+          console.log(`- Gate reason: ${record.scorecard.gateReason}`);
+        }
+        if (record.scorecard.decisionReason) {
+          console.log(`- Decision reason: ${record.scorecard.decisionReason}`);
+        }
+        const retrievalNotes = buildRetrievalNotes(record);
+        if (retrievalNotes.length) {
+          console.log("- Retrieval notes:");
+          for (const note of retrievalNotes) {
+            console.log(`  - ${note}`);
+          }
         }
       }
       if (record.scorecard.reasons.length) {
