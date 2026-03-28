@@ -37,6 +37,7 @@ describe("CLI dispatch", () => {
     expect(output).toContain("Fix a problem:");
     expect(output).toContain("ee upgrade codex");
     expect(output).toContain("Routine review/feedback in Codex and Claude Code stays in the host first.");
+    expect(output).toContain("OpenClaw uses the same product language, but CLI/operator fallback is still more visible today.");
     expect(output).toContain("Advanced operator commands:");
     expect(output).toContain("Usage: ee <");
 

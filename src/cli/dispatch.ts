@@ -23,6 +23,7 @@ export const printCliUsage = (): void => {
   console.log("- Validate the current host: ee doctor <openclaw|claude-code|codex>");
   console.log("- Refresh host wiring when needed: ee upgrade codex");
   console.log("- Routine review/feedback in Codex and Claude Code stays in the host first.");
+  console.log("- OpenClaw uses the same product language, but CLI/operator fallback is still more visible today.");
   console.log("- CLI fallback/operator path: ee inspect --last | ee helped | ee harmed");
   console.log("Advanced operator commands:");
   console.log(usageText);

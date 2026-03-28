@@ -150,6 +150,15 @@ ee status
 
 Use `ee init` once to initialize ExperienceEngine's shared distillation, embedding, and secret state. New host installations should reuse that same shared EE state instead of asking you to re-enter the same API key per host window.
 
+In practical terms, the routine loop currently looks like this:
+
+- `Codex`
+  - ask the host agent first for recent injections, matching reasons, and helped / harmed feedback
+- `Claude Code`
+  - ask the host agent first for recent injections, matching reasons, and helped / harmed feedback
+- `OpenClaw`
+  - keep the same user concepts, but expect CLI/operator fallback to remain more visible for those routine actions today
+
 For onboarding and first value, ExperienceEngine now uses a two-layer product model:
 
 - `Setup state`
