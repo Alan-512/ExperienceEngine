@@ -505,6 +505,23 @@ const readInstallState = (installStatePath: string): PersistedInstallState | nul
   return JSON.parse(raw) as PersistedInstallState;
 };
 
+export const inspectRecordedOpenClawInstallState = (options: InstallerOptions = {}) => {
+  const paths = resolveExperienceEnginePaths({
+    adapter: "openclaw",
+    env: options.env,
+    homeDir: options.homeDir
+  });
+  const state = readInstallState(paths.installStatePath);
+
+  return {
+    installed: paths.usedInstallState,
+    hostWiring: {
+      wired: state?.hostWiring?.wired ?? false,
+      restartRecommended: state?.hostWiring?.restartRecommended ?? false
+    }
+  };
+};
+
 export const inspectOpenClawInstall = (options: InstallerOptions = {}) => {
   const paths = resolveExperienceEnginePaths({
     adapter: "openclaw",

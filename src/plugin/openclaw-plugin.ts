@@ -106,7 +106,9 @@ class OpenClawExperiencePlugin implements ExperiencePlugin {
         });
         return applyInjectionToPayload(
           payload,
-          buildOpenClawRoutineInteractionContext(this.runtime.config, routineIntent, context.cwd)
+          buildOpenClawRoutineInteractionContext(this.runtime.config, routineIntent, context.cwd, {
+            runtimeActive: true
+          })
         );
       }
       const result = await this.beforePromptBuild(context);

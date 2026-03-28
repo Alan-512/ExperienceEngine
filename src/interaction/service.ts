@@ -901,8 +901,9 @@ export class ExperienceInteractionService {
     });
   }
 
-  inspectFirstValueReadiness(): ExperienceFirstValueReadiness {
-    const summary = this.inspectLearningSummary();
+  inspectFirstValueReadiness(cwd: string = process.cwd()): ExperienceFirstValueReadiness {
+    const scope = resolveScope(cwd);
+    const summary = this.buildLearningSummary(scope.scope_id);
     const rawRecords = summary.runtime.records;
     const taskRuns = summary.runtime.taskRuns;
     const candidates = summary.candidates.pending;

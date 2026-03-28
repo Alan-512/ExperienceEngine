@@ -137,7 +137,14 @@ For routine use, ask the host agent naturally for ExperienceEngine state or feed
 - "Why did that ExperienceEngine hint match?"
 - "Mark the last ExperienceEngine intervention as helpful or harmful."
 
-For `OpenClaw`, `Codex`, and `Claude Code`, these routine follow-ups should stay in the host session first.
+OpenClaw now also supports these additional phase-2 routine questions in-session:
+
+- "Is ExperienceEngine ready here?"
+- "Is ExperienceEngine still warming up in this repo?"
+- "Why didn't ExperienceEngine inject anything just now?"
+
+For `OpenClaw`, `Codex`, and `Claude Code`, the common review-and-feedback follow-ups should stay in the host session first.
+For the extra readiness, warm-up, and recent-silence questions above, only `OpenClaw` supports the in-session phase-2 path today.
 Use CLI fallback whenever the host-side path is unavailable or you need explicit operator control.
 
 Use the `ee` CLI only when you need explicit operator validation or troubleshooting:
