@@ -5,6 +5,7 @@ import { inspectOpenClawInstall } from "../../install/openclaw-installer.js";
 import { loadConfig } from "../../config/load-config.js";
 import { detectAvailableHosts } from "../../install/host-detection.js";
 import type { ExperienceDecisionHealth } from "../../interaction/service.js";
+import type { ExperienceFirstValueReadiness } from "../../interaction/service.js";
 
 const summarizeRetrievalPattern = (decisionHealth: ExperienceDecisionHealth): string | undefined => {
   if (decisionHealth.recentDecisions === 0) {
@@ -26,30 +27,39 @@ const summarizeRetrievalPattern = (decisionHealth: ExperienceDecisionHealth): st
   return undefined;
 };
 
+const deriveSetupState = (installedHosts: string[]): "Ready" | "Initialized" | "Installed" =>
+  installedHosts.length > 0 ? "Ready" : "Installed";
+
+const deriveValueState = (readiness: ExperienceFirstValueReadiness): "Warming up" | "First value reached" =>
+  readiness.nodes > 0 ? "First value reached" : "Warming up";
+
 export const runStatusCommand = (): void => {
   const config = loadConfig();
   const interaction = new ExperienceInteractionService(config);
   const decisionHealth = interaction.inspectDecisionHealth();
+  const firstValueReadiness = interaction.inspectFirstValueReadiness();
   const availableHosts = detectAvailableHosts().map((host) => host.id);
   const codex = inspectCodexInstall();
   const claude = inspectClaudeCodeInstall();
   const openclaw = inspectOpenClawInstall();
+  const installedHosts = [
+    codex.installed ? "codex" : null,
+    claude.installed ? "claude-code" : null,
+    openclaw.installed ? "openclaw" : null
+  ].filter(Boolean) as string[];
 
   console.log("ExperienceEngine status:");
   console.log(`- Available host CLIs: ${availableHosts.join(", ") || "none"}`);
   console.log(
-    `- Installed hosts: ${[
-      codex.installed ? "codex" : null,
-      claude.installed ? "claude-code" : null,
-      openclaw.installed ? "openclaw" : null
-    ]
-      .filter(Boolean)
-      .join(", ") || "none"}`
+    `- Installed hosts: ${installedHosts.join(", ") || "none"}`
   );
   console.log(`- Distillation provider: ${config.distillerProvider}`);
   console.log(`- Distillation model: ${config.distillerModel}`);
   console.log(`- Embedding provider mode: ${config.embeddingProvider}`);
   console.log(`- Embedding API provider override: ${config.embeddingApiProvider}`);
+  console.log(`- Setup state: ${deriveSetupState(installedHosts)}`);
+  console.log(`- Value state: ${deriveValueState(firstValueReadiness)}`);
+  console.log(`- Next step: ${firstValueReadiness.nextStep}`);
   if (codex.learningLoop) {
     console.log(`- Codex learning loop: ${codex.learningLoop.state}`);
     console.log(`- Codex instruction block: ${codex.learningLoop.instructionState}`);

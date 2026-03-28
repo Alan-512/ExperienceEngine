@@ -11,6 +11,11 @@ type PendingInstallGuidance = {
   commands?: [string, string];
 };
 
+type PostInstallOrientation = {
+  setupState: "Installed";
+  nextStep: string;
+};
+
 export const buildOpenClawPublicInstallCommand = (packageSpec = "@alan512/experienceengine"): string =>
   `openclaw plugins install ${packageSpec}`;
 
@@ -53,5 +58,27 @@ export const buildHostInstallGuidance = (
   "claude-code": {
     ready: true,
     commands: [buildClaudeMarketplaceAddCommand(), buildClaudePluginInstallCommand()]
+  }
+});
+
+export const buildHostPostInstallOrientation = (): {
+  openclaw: PostInstallOrientation;
+  codex: PostInstallOrientation;
+  "claude-code": PostInstallOrientation;
+} => ({
+  openclaw: {
+    setupState: "Installed",
+    nextStep:
+      "Restart the OpenClaw gateway. If shared ExperienceEngine state is not initialized yet, run `ee init` before your first real task."
+  },
+  codex: {
+    setupState: "Installed",
+    nextStep:
+      "Start a new Codex session in this repo. If shared ExperienceEngine state is not initialized yet, run `ee init` before your first real task."
+  },
+  "claude-code": {
+    setupState: "Installed",
+    nextStep:
+      "Start a new Claude Code session. If shared ExperienceEngine state is not initialized yet, run `ee init` before your first real task."
   }
 });

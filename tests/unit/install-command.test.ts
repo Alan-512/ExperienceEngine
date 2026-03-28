@@ -28,6 +28,10 @@ describe("install command", () => {
 
     expect(consoleLogSpy.mock.calls).toEqual(
       expect.arrayContaining([
+        ["[ExperienceEngine] Setup state: Installed."],
+        [
+          "[ExperienceEngine] Next step: Start a new Codex session in this repo. If shared ExperienceEngine state is not initialized yet, run `ee init` before your first real task."
+        ],
         ["[ExperienceEngine] Capture is now active for this host."],
         [
           "[ExperienceEngine] First value usually appears after a few similar tasks in the same repo, once repeated evidence is strong enough to promote a formal hint."

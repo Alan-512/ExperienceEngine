@@ -133,6 +133,42 @@ ee status
 
 Use `ee init` once to initialize ExperienceEngine's shared distillation, embedding, and secret state. New host installations should reuse that same shared EE state instead of asking you to re-enter the same API key per host window.
 
+For onboarding and first value, ExperienceEngine now uses a two-layer product model:
+
+- `Setup state`
+  - `Installed`
+  - `Initialized`
+  - `Ready`
+- `Value state`
+  - `Warming up`
+  - `First value reached`
+
+These are not one linear state machine.
+
+Examples:
+
+- a repo can already be `Ready` while still `Warming up`
+- a repo can be `Ready` and already have reached first value
+
+In practice:
+
+- installation into a host gets you to `Installed`
+- `ee init` moves the shared product state toward `Initialized`
+- a restart or new host session usually completes `Ready`
+- real task activity moves the value layer from `Warming up` toward `First value reached`
+
+`First value reached` must be tied to visible output from real work, such as:
+
+- a visible real task record
+- a visible learning decision
+- a visible intervention
+
+These do **not** count by themselves:
+
+- a static onboarding message
+- a generic warm-up explanation
+- a recommendation not tied to a real observed task run
+
 You do **not** need to clone the repository or run `pnpm build` for normal user installation.
 
 ### Operational CLI
@@ -149,6 +185,17 @@ Use `ee` for:
 - quick helped / harmed feedback
 
 `ee status` and `ee doctor` now also summarize recent retrieval health in product language. They still show the raw counters, but they additionally explain whether ExperienceEngine is mostly injecting, mostly staying conservative, or still skipping too many close-match tasks in the current repo.
+
+Their roles are intentionally different:
+
+- `ee status`
+  - daily progress view
+  - current setup/value state
+  - next practical step
+- `ee doctor <host>`
+  - explicit validation and troubleshooting
+  - install and wiring verification
+  - repair-oriented next steps
 
 The most useful inspection command during product debugging is still:
 

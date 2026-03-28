@@ -468,6 +468,8 @@ describe("doctor command", () => {
     expect(consoleLogSpy.mock.calls).toEqual(
       expect.arrayContaining([
         ["First-value readiness:"],
+        ["- Setup state: Ready"],
+        ["- Value state: Warming up"],
         ["- Raw task records: 2"],
         ["- Task runs: 2"],
         ["- Candidates waiting for promotion: 1"],
@@ -477,6 +479,31 @@ describe("doctor command", () => {
         ]
       ])
     );
+  });
+
+  it("does not claim first value reached when only static guidance exists without real task output", async () => {
+    await runDoctorCommand("codex", {
+      inspectCodexInstall: () => codexStatus(),
+      fetchLatestGitHubReleaseStatus: async () => ({
+        source: "github-releases",
+        repository: "Alan-512/ExperienceEngine",
+        latestVersion: "0.1.0",
+        releaseUrl: null,
+        publishedAt: "2026-03-12T12:00:00Z",
+        state: "current",
+        updateAvailable: false
+      }),
+      inspectFirstValueReadiness: () => ({
+        rawRecords: 0,
+        taskRuns: 0,
+        candidates: 0,
+        nodes: 0,
+        nextStep: "Run a few real coding tasks in this repo so ExperienceEngine can start capturing task signals."
+      })
+    });
+
+    expect(consoleLogSpy).toHaveBeenCalledWith("- Value state: Warming up");
+    expect(consoleLogSpy).not.toHaveBeenCalledWith("- Value state: First value reached");
   });
 
   it("prints distillation mode and explicit-provider diagnostics", async () => {

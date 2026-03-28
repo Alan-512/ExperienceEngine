@@ -65,6 +65,34 @@ const inspectFirstValueReadiness = (): ExperienceFirstValueReadiness =>
 const inspectDecisionHealth = (): ExperienceDecisionHealth =>
   new ExperienceInteractionService(loadConfig()).inspectDecisionHealth();
 
+const deriveValueState = (summary: ExperienceFirstValueReadiness): "Warming up" | "First value reached" =>
+  summary.nodes > 0 ? "First value reached" : "Warming up";
+
+const deriveSetupState = (status: {
+  installed?: boolean;
+  hostWiring?: {
+    wired?: boolean;
+    enabled?: boolean;
+  };
+  interactionReady?: boolean;
+  hostState?: {
+    enabled?: boolean | null;
+  };
+}): "Ready" | "Initialized" | "Installed" => {
+  const interactionReady =
+    status.hostWiring?.enabled ?? status.interactionReady ?? status.hostState?.enabled ?? false;
+
+  if (interactionReady || status.hostWiring?.wired) {
+    return "Ready";
+  }
+
+  if (status.installed) {
+    return "Initialized";
+  }
+
+  return "Installed";
+};
+
 const logEvaluationMode = (): void => {
   const config = loadConfig();
   console.log("Evaluation mode:");
@@ -72,8 +100,13 @@ const logEvaluationMode = (): void => {
   console.log(`- Holdout rate: ${config.holdoutRate}`);
 };
 
-const logFirstValueReadiness = (summary: ExperienceFirstValueReadiness): void => {
+const logFirstValueReadiness = (
+  summary: ExperienceFirstValueReadiness,
+  setupState: "Ready" | "Initialized" | "Installed"
+): void => {
   console.log("First-value readiness:");
+  console.log(`- Setup state: ${setupState}`);
+  console.log(`- Value state: ${deriveValueState(summary)}`);
   console.log(`- Raw task records: ${summary.rawRecords}`);
   console.log(`- Task runs: ${summary.taskRuns}`);
   console.log(`- Candidates waiting for promotion: ${summary.candidates}`);
@@ -401,7 +434,13 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     console.log(`- API provider override: ${config.embeddingApiProvider}`);
     logRegistryHealth(registryHealth);
     logEvaluationMode();
-    logFirstValueReadiness(firstValueReadiness);
+    const aggregateSetupState =
+      codexStatus.hostWiring.enabled || isClaudeInteractionReady(claudeStatus) || (openclawStatus.hostState.enabled ?? false)
+        ? "Ready"
+        : codexStatus.installed || claudeStatus.installed || openclawStatus.installed
+          ? "Initialized"
+          : "Installed";
+    logFirstValueReadiness(firstValueReadiness, aggregateSetupState);
     return;
   }
   if (target === "claude-code") {
@@ -439,7 +478,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     logRemoteReleaseStatus("claude-code", remoteStatus);
     logRegistryHealth(registryHealth);
     logEvaluationMode();
-    logFirstValueReadiness(firstValueReadiness);
+    logFirstValueReadiness(firstValueReadiness, deriveSetupState(status));
     return;
   }
 
@@ -483,7 +522,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     }
     logRegistryHealth(registryHealth);
     logEvaluationMode();
-    logFirstValueReadiness(firstValueReadiness);
+    logFirstValueReadiness(firstValueReadiness, deriveSetupState(status));
     return;
   }
 
@@ -559,5 +598,5 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
   logRemoteReleaseStatus("openclaw", remoteStatus);
   logRegistryHealth(registryHealth);
   logEvaluationMode();
-  logFirstValueReadiness(firstValueReadiness);
+  logFirstValueReadiness(firstValueReadiness, deriveSetupState(status));
 };

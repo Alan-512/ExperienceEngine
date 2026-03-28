@@ -66,6 +66,17 @@ vi.mock("../../src/interaction/service.js", () => ({
         lastDecisionMode: "inject_conservative"
       };
     }
+
+    inspectFirstValueReadiness() {
+      return {
+        rawRecords: 2,
+        taskRuns: 2,
+        candidates: 1,
+        nodes: 0,
+        nextStep:
+          "Keep working in the same repo on a few similar tasks. ExperienceEngine will promote formal hints once it sees enough repeated evidence."
+      };
+    }
   }
 }));
 
@@ -96,6 +107,20 @@ describe("status command", () => {
         ["- Recent converged updates: 3"],
         ["- Recent priority promotions: 1"],
         ["- Retrieval pattern: ExperienceEngine is finding matches in this repo, but some tasks still need conservative routing or skip review."]
+      ])
+    );
+  });
+
+  it("prints setup state, value state, and a product next step", () => {
+    runStatusCommand();
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["- Setup state: Ready"],
+        ["- Value state: Warming up"],
+        [
+          "- Next step: Keep working in the same repo on a few similar tasks. ExperienceEngine will promote formal hints once it sees enough repeated evidence."
+        ]
       ])
     );
   });

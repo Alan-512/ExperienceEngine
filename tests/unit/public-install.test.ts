@@ -3,6 +3,7 @@ import {
   buildClaudeMarketplaceAddCommand,
   buildClaudePluginInstallCommand,
   buildCodexManualFallbackCommand,
+  buildHostPostInstallOrientation,
   buildCodexPublicInstallCommand,
   buildHostInstallGuidance,
   buildOpenClawPublicInstallCommand
@@ -44,5 +45,25 @@ describe("public install guidance", () => {
     expect(buildCodexManualFallbackCommand()).toBe(
       "codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y @alan512/experienceengine codex-mcp-server"
     );
+  });
+
+  it("builds post-install orientation without changing host-native install priority", () => {
+    expect(buildHostPostInstallOrientation()).toEqual({
+      openclaw: {
+        setupState: "Installed",
+        nextStep:
+          "Restart the OpenClaw gateway. If shared ExperienceEngine state is not initialized yet, run `ee init` before your first real task."
+      },
+      codex: {
+        setupState: "Installed",
+        nextStep:
+          "Start a new Codex session in this repo. If shared ExperienceEngine state is not initialized yet, run `ee init` before your first real task."
+      },
+      "claude-code": {
+        setupState: "Installed",
+        nextStep:
+          "Start a new Claude Code session. If shared ExperienceEngine state is not initialized yet, run `ee init` before your first real task."
+      }
+    });
   });
 });

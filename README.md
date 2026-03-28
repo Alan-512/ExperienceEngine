@@ -107,6 +107,18 @@ Install ExperienceEngine through the host setup flow for the host you want to us
 
 After the host setup completes, the normal user path is to keep working through the host agent itself.
 
+ExperienceEngine now treats onboarding and value as two separate layers:
+
+- `Setup state`
+  - `Installed`
+  - `Initialized`
+  - `Ready`
+- `Value state`
+  - `Warming up`
+  - `First value reached`
+
+These are not one linear ladder. A repo can already be `Ready` while still `Warming up`.
+
 Ask the host agent naturally for ExperienceEngine state or feedback actions, for example:
 
 - "What did ExperienceEngine just inject?"
@@ -129,6 +141,14 @@ ee maintenance embedding-smoke
   - embedding mode/provider
   - any shared provider secrets
 - Later host installations reuse the same ExperienceEngine home, settings, and shared secrets.
+
+After installation, ExperienceEngine should orient the user toward the next setup step:
+
+- if host wiring is in place, the product is at least `Installed`
+- after shared state is configured with `ee init`, the product is `Initialized`
+- once the host or repo has reloaded correctly for real work, the product is `Ready`
+
+`First value reached` should only be claimed after visible output from a real task run. A generic warm-up message or static onboarding text does not count as first value.
 
 ## Prerequisites
 
@@ -162,6 +182,9 @@ Once installation is complete, the host agent remains the primary interaction su
 - repair guidance
 - status inspection
 - learning and intervention feedback
+
+`ee status` is the daily product-progress view.
+`ee doctor <host>` is the explicit validation and troubleshooting view.
 
 ## Advanced Per-Host Commands
 

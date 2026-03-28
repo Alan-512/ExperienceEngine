@@ -1,6 +1,7 @@
 import { installClaudeCodeAdapter } from "../../install/claude-code-installer.js";
 import { installCodexAdapter } from "../../install/codex-installer.js";
 import { installOpenClawAdapter } from "../../install/openclaw-installer.js";
+import { buildHostPostInstallOrientation } from "../../install/public-install.js";
 import {
   buildRegistryRecommendationCommands,
   readRegistryHealth,
@@ -53,6 +54,12 @@ const logFirstValueGuidance = (): void => {
   );
 };
 
+const logPostInstallOrientation = (host: keyof ReturnType<typeof buildHostPostInstallOrientation>): void => {
+  const orientation = buildHostPostInstallOrientation()[host];
+  console.log(`[ExperienceEngine] Setup state: ${orientation.setupState}.`);
+  console.log(`[ExperienceEngine] Next step: ${orientation.nextStep}`);
+};
+
 export const runInstallCommand = (
   target?: string,
   argsOrDeps: string[] | InstallDeps = [],
@@ -74,6 +81,7 @@ export const runInstallCommand = (
       console.log("OpenClaw gateway restart recommended.");
     }
     logRegistryHealth(registryHealth);
+    logPostInstallOrientation("openclaw");
     logFirstValueGuidance();
     return;
   }
@@ -91,6 +99,7 @@ export const runInstallCommand = (
     console.log(`Server command: ${report.serverCommand}`);
     console.log(`Capture path: ${report.captureDir}`);
     logRegistryHealth(registryHealth);
+    logPostInstallOrientation("claude-code");
     logFirstValueGuidance();
     return;
   }
@@ -107,6 +116,7 @@ export const runInstallCommand = (
     console.log(`Server command: ${report.serverCommand}`);
     console.log(`Capture path: ${report.captureDir}`);
     logRegistryHealth(registryHealth);
+    logPostInstallOrientation("codex");
     logFirstValueGuidance();
     return;
   }
