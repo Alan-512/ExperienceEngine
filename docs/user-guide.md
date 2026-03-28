@@ -134,8 +134,8 @@ Then continue using your host agent normally.
 For most users, ExperienceEngine should stay in the background and be inspected through the host agent itself. Typical prompts are:
 
 - "What did ExperienceEngine just inject?"
-- "Show the last ExperienceEngine intervention."
-- "Mark the last ExperienceEngine intervention as helpful."
+- "Why did that ExperienceEngine hint match?"
+- "Mark the last ExperienceEngine intervention as helpful or harmful."
 
 For `Codex` and `Claude Code`, these routine follow-ups should stay in the host session first.
 For `OpenClaw`, the product language stays the same, but CLI/operator fallback remains more visible for now.
@@ -259,11 +259,11 @@ This is one host-specific implementation of the same shared product model descri
 
 Typical examples:
 - "What did ExperienceEngine just inject?"
+- "Why did that ExperienceEngine hint match?"
 - "Show the recent injected turns."
 - "List active warning nodes."
 - "Pause ExperienceEngine for this project."
-- "Mark the last ExperienceEngine intervention as harmful."
-- "Record quick feedback for the last ExperienceEngine intervention."
+- "Mark the last ExperienceEngine intervention as helpful or harmful."
 - "Create a backup of ExperienceEngine state."
 - "Rollback ExperienceEngine to backup `<id>`."
 
@@ -703,7 +703,7 @@ For risky changes:
 For normal day-to-day usage in Claude Code or Codex, ask the host agent first:
 
 - "What did ExperienceEngine just inject?"
-- "Show the last ExperienceEngine intervention."
+- "Why did that ExperienceEngine hint match?"
 
 Fallback CLI:
 

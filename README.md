@@ -135,7 +135,7 @@ For routine use, ask the host agent naturally for ExperienceEngine state or feed
 
 - "What did ExperienceEngine just inject?"
 - "Why did that ExperienceEngine hint match?"
-- "Mark the last ExperienceEngine intervention as helpful."
+- "Mark the last ExperienceEngine intervention as helpful or harmful."
 
 For `Codex` and `Claude Code`, these routine follow-ups should stay in the host session first.
 For `OpenClaw`, the product language stays the same, but CLI/operator fallback remains more visible for now.
