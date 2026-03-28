@@ -6,9 +6,11 @@ import {
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import { inspectRecordedOpenClawInstallState } from "../install/openclaw-installer.js";
 import {
+  deriveStructuredSilenceReason,
   ExperienceInteractionService,
   type ExperienceFirstValueReadiness,
   type ExperienceLastInspection,
+  type ExperienceSilenceReason,
   type FeedbackResult
 } from "../interaction/service.js";
 
@@ -187,24 +189,19 @@ const buildFirstValueProgressContext = (summary: ExperienceFirstValueReadiness):
   ].join("\n");
 };
 
-const summarizeSilenceReason = (
-  inspection: ExperienceLastInspection,
-  readiness: ExperienceFirstValueReadiness
-): string => {
-  if (deriveValueState(readiness) === "Warming up") {
-    return "ExperienceEngine is still warming up in this repo, so it is gathering more real-task evidence before reusing guidance.";
+const renderSilenceReason = (reason: ExperienceSilenceReason): string => {
+  switch (reason) {
+    case "warming_up":
+      return "ExperienceEngine is still warming up in this repo, so it is gathering more real-task evidence before reusing guidance.";
+    case "no_strong_match":
+      return "ExperienceEngine stayed quiet because it did not find a strong enough reusable match for that turn.";
+    case "withheld_low_confidence":
+      return "ExperienceEngine stayed cautious because it saw some signal, but confidence stayed below the delivery bar on that turn.";
+    case "non_applicable_turn":
+      return "The latest turn was not the kind of task where ExperienceEngine would normally inject reusable guidance.";
+    default:
+      return "ExperienceEngine stayed quiet on that turn, but the stored state does not point to a more specific silence reason yet.";
   }
-
-  const decisionSummary = inspection.timeline.find((entry) => entry.kind === "decision")?.summary.toLowerCase() ?? "";
-  if (decisionSummary.includes("no guidance was delivered")) {
-    return "ExperienceEngine deliberately stayed quiet because it did not have a confident enough hint to deliver on that turn.";
-  }
-
-  if (decisionSummary.includes("no matching experience guidance")) {
-    return "ExperienceEngine stayed quiet because it did not find a strong enough reusable match for that turn.";
-  }
-
-  return "ExperienceEngine stayed quiet because it did not have a grounded reusable hint worth showing on that turn.";
 };
 
 const buildRecentSilenceContext = (
@@ -229,7 +226,7 @@ const buildRecentSilenceContext = (
     "ExperienceEngine routine interaction:",
     "The user is asking why ExperienceEngine stayed quiet on the latest turn.",
     "The latest turn delivered no hint.",
-    `Reason: ${summarizeSilenceReason(inspection, readiness)}`,
+    `Reason: ${renderSilenceReason(deriveStructuredSilenceReason({ inspection, readiness }))}`,
     `Next step: ${readiness.nextStep}`,
     "Answer briefly from this grounded state. Mention CLI only if the user asks for deeper diagnostics."
   ].join("\n");

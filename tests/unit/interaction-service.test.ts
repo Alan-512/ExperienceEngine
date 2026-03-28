@@ -4,7 +4,11 @@ import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../../src/config/load-config.js";
 import { resolveScope } from "../../src/input/scope-resolver.js";
-import { ExperienceInteractionService } from "../../src/interaction/service.js";
+import {
+  deriveStructuredSilenceReason,
+  ExperienceInteractionService,
+  type ExperienceLastInspection
+} from "../../src/interaction/service.js";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
 import { ReviewEventRepository } from "../../src/store/sqlite/repositories/review-event-repo.js";
@@ -66,6 +70,38 @@ const seedStrategyNode = (nodeRepo: NodeRepository, cwd: string, timestamp: stri
 };
 
 describe("ExperienceInteractionService", () => {
+  it("derives no_strong_match for a mature repo skip without a stronger structured silence reason", () => {
+    const inspection: ExperienceLastInspection = {
+      scopeId: "scope_repo",
+      taskType: "general",
+      intervention: "skip",
+      outcome: "success",
+      autoFeedback: "none",
+      injectedNodes: [],
+      hints: [],
+      evidence: [],
+      retrievalNotes: [],
+      timeline: [],
+      learningStatus: "rejected",
+      learningReason: "no reusable candidate crossed the delivery bar for this turn",
+      summary: "Inspect the current repo files",
+      createdAt: nowIso()
+    };
+
+    expect(
+      deriveStructuredSilenceReason({
+        inspection,
+        readiness: {
+          rawRecords: 4,
+          taskRuns: 4,
+          candidates: 0,
+          nodes: 1,
+          nextStep: "Keep working in the same repo."
+        }
+      })
+    ).toBe("no_strong_match");
+  });
+
   it("returns structured node views", () => {
     const homeDir = makeTempDir();
     const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });

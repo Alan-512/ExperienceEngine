@@ -185,6 +185,13 @@ export type ExperienceFirstValueReadiness = {
   nextStep: string;
 };
 
+export type ExperienceSilenceReason =
+  | "warming_up"
+  | "no_strong_match"
+  | "withheld_low_confidence"
+  | "non_applicable_turn"
+  | "unknown";
+
 export type ExperienceDecisionHealth = {
   scopeId: string;
   recentDecisions: number;
@@ -198,6 +205,50 @@ export type ExperienceDecisionHealth = {
   recentConvergedUpdates: number;
   recentPriorityPromotions: number;
   lastDecisionMode?: "inject" | "inject_conservative" | "skip";
+};
+
+export const deriveStructuredSilenceReason = (input: {
+  inspection: ExperienceLastInspection;
+  readiness: ExperienceFirstValueReadiness;
+}): ExperienceSilenceReason => {
+  const { inspection, readiness } = input;
+  const learningReason = inspection.learningReason?.toLowerCase() ?? "";
+  const hasEarlyRepoEvidence = readiness.rawRecords < 3 && readiness.taskRuns < 3 && readiness.candidates === 0 && readiness.nodes === 0;
+
+  if (inspection.learningStatus === "not_applicable") {
+    return "non_applicable_turn";
+  }
+
+  if (inspection.learningStatus === "rejected" && learningReason.includes("expression-layer refinement")) {
+    return "non_applicable_turn";
+  }
+
+  if (
+    inspection.scorecard?.decisionReason === "ambiguous_same_family_candidate"
+    || inspection.scorecard?.decisionReason === "promising_candidate_quality"
+    || inspection.intervention === "shadow"
+    || inspection.intervention === "holdout"
+  ) {
+    return "withheld_low_confidence";
+  }
+
+  if (hasEarlyRepoEvidence) {
+    return "warming_up";
+  }
+
+  if (
+    inspection.learningStatus === "captured"
+    || learningReason.includes("llm gate failed")
+    || learningReason.includes("rule fallback rejected candidate")
+  ) {
+    return "unknown";
+  }
+
+  if (inspection.intervention === "skip" && (readiness.rawRecords > 0 || readiness.taskRuns > 0 || readiness.candidates > 0 || readiness.nodes > 0)) {
+    return "no_strong_match";
+  }
+
+  return "unknown";
 };
 
 const toReviewEvent = (

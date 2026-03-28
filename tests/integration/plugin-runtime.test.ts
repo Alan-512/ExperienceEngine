@@ -197,6 +197,66 @@ const seedInjectedOpenClawTurn = async (
   );
 };
 
+const seedSkippedOpenClawTurn = (
+  sqlitePath: string,
+  cwd = "/tmp/repo",
+  options: {
+    sessionId?: string;
+    summary?: string;
+    contextSummary?: string;
+    outcomeSignal?: "success" | "failure" | "unknown";
+    learningStatus?: "captured" | "rejected" | "not_applicable";
+    learningReason?: string;
+    createdAt?: string;
+  } = {}
+): void => {
+  const db = new DatabaseSync(sqlitePath);
+  const scopeId = resolveScope(cwd).scope_id;
+  const sessionId = options.sessionId ?? "seed_skip";
+  const summary = options.summary ?? "Inspect the current repo files";
+  const createdAt = options.createdAt ?? "2099-03-28T11:31:00.000Z";
+
+  db.prepare(
+    `INSERT INTO task_runs
+      (id, host, scope_id, session_id, task_type, task_summary, prompt_excerpt, context_summary, started_at, ended_at, final_status, failure_signature, learning_status, learning_reason, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    `task_run:${sessionId}`,
+    "openclaw",
+    scopeId,
+    sessionId,
+    "general",
+    summary,
+    summary,
+    options.contextSummary ?? summary,
+    createdAt,
+    createdAt,
+    options.outcomeSignal === "failure" ? "failure" : options.outcomeSignal === "unknown" ? "unknown" : "success",
+    null,
+    options.learningStatus ?? "rejected",
+    options.learningReason ?? "insufficient substantive evidence: only edit or exploratory events were observed",
+    createdAt,
+    createdAt
+  );
+
+  db.prepare(
+    `INSERT INTO experience_input_records
+      (record_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary, evidence_json, injected_node_ids_json, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    `skip_record:${sessionId}`,
+    scopeId,
+    sessionId,
+    "general",
+    summary,
+    options.outcomeSignal ?? "success",
+    options.contextSummary ?? summary,
+    "[]",
+    "[]",
+    createdAt
+  );
+};
+
 const geminiJsonResponse = (payload: unknown): Response =>
   new Response(
     JSON.stringify({
@@ -876,6 +936,81 @@ describe("OpenClaw plugin runtime", () => {
 
     await finalize?.({
       session: { key: "why_quiet" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Why didn't ExperienceEngine inject anything just now?" }
+    });
+
+    const countsAfter = db.prepare("SELECT COUNT(*) AS count FROM task_runs").get() as { count: number };
+    expect(countsAfter.count).toBe(countsBefore.count);
+  });
+
+  it("uses the warming-up silence explanation when the repo has only early skip evidence", async () => {
+    const runtimeDir = makeTempDir();
+    const { sqlitePath, handlers } = registerPluginRuntime(runtimeDir);
+
+    writeSharedInitialization(runtimeDir);
+    seedSkippedOpenClawTurn(sqlitePath, "/tmp/repo", {
+      sessionId: "warming_up_skip",
+      summary: "Inspect the current repo files",
+      createdAt: "2099-03-28T11:32:00.000Z"
+    });
+
+    const db = new DatabaseSync(sqlitePath);
+    const countsBefore = db.prepare("SELECT COUNT(*) AS count FROM task_runs").get() as { count: number };
+    const beforePromptBuild = handlers.get("before_prompt_build");
+    const finalize = handlers.get("message_sent");
+
+    const silenceTurn = (await beforePromptBuild?.({
+      session: { key: "warming_up_silence" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Why didn't ExperienceEngine inject anything just now?" }
+    })) as Record<string, unknown>;
+
+    expect(String(silenceTurn.prependContext)).toContain(
+      "Reason: ExperienceEngine is still warming up in this repo, so it is gathering more real-task evidence before reusing guidance."
+    );
+
+    await finalize?.({
+      session: { key: "warming_up_silence" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Why didn't ExperienceEngine inject anything just now?" }
+    });
+
+    const countsAfter = db.prepare("SELECT COUNT(*) AS count FROM task_runs").get() as { count: number };
+    expect(countsAfter.count).toBe(countsBefore.count);
+  });
+
+  it("uses the fallback silence explanation when no more specific structured reason is available", async () => {
+    const runtimeDir = makeTempDir();
+    const { sqlitePath, handlers } = registerPluginRuntime(runtimeDir);
+
+    writeSharedInitialization(runtimeDir);
+    await seedInjectedOpenClawTurn(handlers, sqlitePath);
+    seedSkippedOpenClawTurn(sqlitePath, "/tmp/repo", {
+      sessionId: "fallback_skip",
+      summary: "Inspect the current repo files",
+      learningStatus: "rejected",
+      learningReason: "llm gate failed: timeout",
+      createdAt: "2099-03-28T11:33:00.000Z"
+    });
+
+    const db = new DatabaseSync(sqlitePath);
+    const countsBefore = db.prepare("SELECT COUNT(*) AS count FROM task_runs").get() as { count: number };
+    const beforePromptBuild = handlers.get("before_prompt_build");
+    const finalize = handlers.get("message_sent");
+
+    const silenceTurn = (await beforePromptBuild?.({
+      session: { key: "fallback_silence" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Why didn't ExperienceEngine inject anything just now?" }
+    })) as Record<string, unknown>;
+
+    expect(String(silenceTurn.prependContext)).toContain(
+      "Reason: ExperienceEngine stayed quiet on that turn, but the stored state does not point to a more specific silence reason yet."
+    );
+
+    await finalize?.({
+      session: { key: "fallback_silence" },
       workspace: { cwd: "/tmp/repo" },
       message: { content: "Why didn't ExperienceEngine inject anything just now?" }
     });
