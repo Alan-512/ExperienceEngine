@@ -423,8 +423,16 @@ describe("inspect command", () => {
     bootstrapDatabase(db);
 
     const nodeRepo = new NodeRepository(db);
+    const inputRepo = new InputRecordRepository(db);
     const node = makeNode({ scope_id: resolveScope(process.cwd()).scope_id });
     nodeRepo.upsert(node);
+    inputRepo.upsert(
+      makeRecord({
+        scope_id: resolveScope(process.cwd()).scope_id,
+        session_id: "session_repo_summary",
+        task_summary: "Review the auth test routing"
+      })
+    );
     runInspectCommand("repo");
 
     expect(consoleLogSpy.mock.calls).toEqual(
@@ -433,6 +441,8 @@ describe("inspect command", () => {
         [`- Scope: ${resolveScope(process.cwd()).scope_id}`],
         ["- Benchmark verdict: warming_up"],
         ["- Suggested mode: shadow"],
+        ["- Latest intervention summary: inject on the latest recorded task."],
+        ["- Latest decision explanation: ExperienceEngine injected the best available reusable guidance for this task."],
         ["Recommended next action:"]
       ])
     );

@@ -506,6 +506,9 @@ describe("Codex MCP behavior loop", () => {
       }),
       recommendedNextAction: expect.any(String)
     });
+    expect(
+      JSON.parse((repoSummaryPayload as { contents: Array<{ text: string }> }).contents[0].text).recent.latestDecisionExplanation
+    ).toBeUndefined();
     expect(JSON.parse((nodePayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({
       id: "node_codex_resource_view",
       type: "strategy",

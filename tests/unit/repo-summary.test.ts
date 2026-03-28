@@ -20,6 +20,9 @@ describe("repo summary", () => {
         injectedNodes: [],
         hints: [],
         evidence: [],
+        decisionExplanation: "Candidate quality was strong enough to justify intervention for this task.",
+        trustSummary: "low-risk active guidance with 1 helped and 0 harmed signal(s).",
+        retrievalNotes: ["A strong candidate fast path was used."],
         timeline: [],
         summary: "Fix auth test",
         createdAt: "2026-03-20T00:00:00.000Z"
@@ -69,6 +72,10 @@ describe("repo summary", () => {
 
     expect(summary.scope.scopeId).toBe("scope_a");
     expect(summary.benchmark.verdict).toBe("healthy");
+    expect(summary.recent.latestDecisionExplanation).toBe(
+      "Candidate quality was strong enough to justify intervention for this task."
+    );
+    expect(summary.recent.latestTrustSummary).toBe("low-risk active guidance with 1 helped and 0 harmed signal(s).");
     expect(summary.recommendedNextAction).toContain("live");
   });
 

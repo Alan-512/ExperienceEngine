@@ -363,6 +363,12 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
     console.log(`- Scope: ${summary.scope.scopeId}`);
     console.log(`- Benchmark verdict: ${summary.benchmark.verdict}`);
     console.log(`- Suggested mode: ${summary.benchmark.suggestedMode}`);
+    if (summary.recent.latestIntervention) {
+      console.log(`- Latest intervention summary: ${summary.recent.latestIntervention} on the latest recorded task.`);
+    }
+    if (summary.recent.latestDecisionExplanation) {
+      console.log(`- Latest decision explanation: ${summary.recent.latestDecisionExplanation}`);
+    }
     console.log("Recommended next action:");
     console.log(`- ${summary.recommendedNextAction}`);
     return;

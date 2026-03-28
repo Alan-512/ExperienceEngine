@@ -14,6 +14,8 @@ export type ExperienceRepoSummary = {
     latestIntervention?: ExperienceLastInspection["intervention"];
     latestAutoFeedback?: ExperienceLastInspection["autoFeedback"];
     latestAutoFeedbackReason?: ExperienceLastInspection["autoFeedbackReason"];
+    latestDecisionExplanation?: ExperienceLastInspection["decisionExplanation"];
+    latestTrustSummary?: ExperienceLastInspection["trustSummary"];
   };
   benchmark: BenchmarkSummary;
   recommendedNextAction: string;
@@ -48,7 +50,9 @@ export const buildRepoSummary = (input: {
     latestActivityAt: input.latest?.createdAt,
     latestIntervention: input.latest?.intervention,
     latestAutoFeedback: input.latest?.autoFeedback,
-    latestAutoFeedbackReason: input.latest?.autoFeedbackReason
+    latestAutoFeedbackReason: input.latest?.autoFeedbackReason,
+    latestDecisionExplanation: input.latest?.decisionExplanation,
+    latestTrustSummary: input.latest?.trustSummary
   },
   benchmark: input.learning.benchmark,
   recommendedNextAction: summarizeRecommendation(input.learning.benchmark)
