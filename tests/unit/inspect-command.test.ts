@@ -350,6 +350,7 @@ describe("inspect command", () => {
 
     expect(consoleLogSpy.mock.calls).toEqual(
       expect.arrayContaining([
+        ["Route mode: inject"],
         ["- Top candidate score: 0.88"],
         ["- Score margin: 0.02"],
         ["- Fast path applied: yes"],

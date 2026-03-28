@@ -5,7 +5,11 @@ import { inspectOpenClawInstall } from "../../install/openclaw-installer.js";
 import { loadConfig } from "../../config/load-config.js";
 import { detectAvailableHosts } from "../../install/host-detection.js";
 import type { ExperienceDecisionHealth } from "../../interaction/service.js";
-import type { ExperienceFirstValueReadiness } from "../../interaction/service.js";
+import {
+  deriveSetupState,
+  deriveValueState,
+  inspectSharedSetupState
+} from "../state-model.js";
 
 const summarizeRetrievalPattern = (decisionHealth: ExperienceDecisionHealth): string | undefined => {
   if (decisionHealth.recentDecisions === 0) {
@@ -26,18 +30,12 @@ const summarizeRetrievalPattern = (decisionHealth: ExperienceDecisionHealth): st
 
   return undefined;
 };
-
-const deriveSetupState = (installedHosts: string[]): "Ready" | "Initialized" | "Installed" =>
-  installedHosts.length > 0 ? "Ready" : "Installed";
-
-const deriveValueState = (readiness: ExperienceFirstValueReadiness): "Warming up" | "First value reached" =>
-  readiness.nodes > 0 ? "First value reached" : "Warming up";
-
 export const runStatusCommand = (): void => {
   const config = loadConfig();
   const interaction = new ExperienceInteractionService(config);
   const decisionHealth = interaction.inspectDecisionHealth();
   const firstValueReadiness = interaction.inspectFirstValueReadiness();
+  const sharedSetup = inspectSharedSetupState();
   const availableHosts = detectAvailableHosts().map((host) => host.id);
   const codex = inspectCodexInstall();
   const claude = inspectClaudeCodeInstall();
@@ -47,6 +45,12 @@ export const runStatusCommand = (): void => {
     claude.installed ? "claude-code" : null,
     openclaw.installed ? "openclaw" : null
   ].filter(Boolean) as string[];
+  const interactionReady = Boolean(
+    codex.hostWiring?.enabled ||
+      claude.interactionReady ||
+      (claude.hostWiring?.wired && claude.hooksPresent?.userPromptSubmit && claude.hooksPresent?.sessionEnd) ||
+      openclaw.hostState?.enabled
+  );
 
   console.log("ExperienceEngine status:");
   console.log(`- Available host CLIs: ${availableHosts.join(", ") || "none"}`);
@@ -57,7 +61,13 @@ export const runStatusCommand = (): void => {
   console.log(`- Distillation model: ${config.distillerModel}`);
   console.log(`- Embedding provider mode: ${config.embeddingProvider}`);
   console.log(`- Embedding API provider override: ${config.embeddingApiProvider}`);
-  console.log(`- Setup state: ${deriveSetupState(installedHosts)}`);
+  console.log(
+    `- Setup state: ${deriveSetupState({
+      sharedInitialized: sharedSetup.initialized,
+      installed: installedHosts.length > 0,
+      interactionReady
+    })}`
+  );
   console.log(`- Value state: ${deriveValueState(firstValueReadiness)}`);
   console.log(`- Next step: ${firstValueReadiness.nextStep}`);
   if (codex.learningLoop) {
@@ -66,15 +76,15 @@ export const runStatusCommand = (): void => {
     console.log(`- Codex task runs in current repo: ${codex.learningLoop.recentTaskRuns}`);
   }
   console.log(`- Recent retrieval decisions in current repo: ${decisionHealth.recentDecisions}`);
-  console.log(`- Recent standard hints: ${decisionHealth.recentInjects}`);
-  console.log(`- Recent cautious hints: ${decisionHealth.recentConservativeInjects}`);
-  console.log(`- Recent no-hint decisions: ${decisionHealth.recentSkips}`);
-  console.log(`- Recent fast matches: ${decisionHealth.recentFastPathActivations}`);
-  console.log(`- Recent rerank reviews: ${decisionHealth.recentRerankParticipations}`);
-  console.log(`- Recent query normalizations: ${decisionHealth.recentQueryRewriteUsages}`);
-  console.log(`- Current rising patterns: ${decisionHealth.currentPriorityCandidates}`);
-  console.log(`- Recent merged refinements: ${decisionHealth.recentConvergedUpdates}`);
-  console.log(`- Recent newly promoted hints: ${decisionHealth.recentPriorityPromotions}`);
+  console.log(`- Recent standard hints (inject): ${decisionHealth.recentInjects}`);
+  console.log(`- Recent cautious hints (inject_conservative): ${decisionHealth.recentConservativeInjects}`);
+  console.log(`- Recent no-hint decisions (skip): ${decisionHealth.recentSkips}`);
+  console.log(`- Recent fast matches (fast path): ${decisionHealth.recentFastPathActivations}`);
+  console.log(`- Recent rerank reviews (rerank): ${decisionHealth.recentRerankParticipations}`);
+  console.log(`- Recent query normalizations (query rewrites): ${decisionHealth.recentQueryRewriteUsages}`);
+  console.log(`- Current rising patterns (priority candidates): ${decisionHealth.currentPriorityCandidates}`);
+  console.log(`- Recent merged refinements (converged updates): ${decisionHealth.recentConvergedUpdates}`);
+  console.log(`- Recent newly promoted hints (priority promotions): ${decisionHealth.recentPriorityPromotions}`);
   const retrievalPattern = summarizeRetrievalPattern(decisionHealth);
   if (retrievalPattern) {
     console.log(`- Retrieval pattern: ${retrievalPattern}`);

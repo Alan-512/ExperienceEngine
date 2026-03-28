@@ -18,6 +18,12 @@ import {
   type RegistryHealth
 } from "../../install/registry-health.js";
 import { fetchLatestGitHubReleaseStatus, type RemoteReleaseStatus } from "../../version/remote-release.js";
+import {
+  deriveSetupState,
+  deriveValueState,
+  inspectSharedSetupState,
+  type SharedSetupState
+} from "../state-model.js";
 
 type DoctorDeps = {
   fetchLatestGitHubReleaseStatus?: typeof fetchLatestGitHubReleaseStatus;
@@ -27,6 +33,7 @@ type DoctorDeps = {
   readRegistryHealth?: typeof readRegistryHealth;
   inspectFirstValueReadiness?: () => ExperienceFirstValueReadiness;
   inspectDecisionHealth?: () => ExperienceDecisionHealth;
+  inspectSharedSetupState?: () => SharedSetupState;
 };
 
 const logRemoteReleaseStatus = (target: string, remoteStatus: RemoteReleaseStatus): void => {
@@ -64,34 +71,6 @@ const inspectFirstValueReadiness = (): ExperienceFirstValueReadiness =>
 
 const inspectDecisionHealth = (): ExperienceDecisionHealth =>
   new ExperienceInteractionService(loadConfig()).inspectDecisionHealth();
-
-const deriveValueState = (summary: ExperienceFirstValueReadiness): "Warming up" | "First value reached" =>
-  summary.nodes > 0 ? "First value reached" : "Warming up";
-
-const deriveSetupState = (status: {
-  installed?: boolean;
-  hostWiring?: {
-    wired?: boolean;
-    enabled?: boolean;
-  };
-  interactionReady?: boolean;
-  hostState?: {
-    enabled?: boolean | null;
-  };
-}): "Ready" | "Initialized" | "Installed" => {
-  const interactionReady =
-    status.hostWiring?.enabled ?? status.interactionReady ?? status.hostState?.enabled ?? false;
-
-  if (interactionReady || status.hostWiring?.wired) {
-    return "Ready";
-  }
-
-  if (status.installed) {
-    return "Initialized";
-  }
-
-  return "Installed";
-};
 
 const logEvaluationMode = (): void => {
   const config = loadConfig();
@@ -313,15 +292,15 @@ const logDecisionHealth = (summary?: ExperienceDecisionHealth): void => {
 
   console.log("Recent retrieval activity:");
   console.log(`- Decisions in current repo: ${summary.recentDecisions}`);
-  console.log(`- Standard hints: ${summary.recentInjects}`);
-  console.log(`- Cautious hints: ${summary.recentConservativeInjects}`);
-  console.log(`- No-hint decisions: ${summary.recentSkips}`);
-  console.log(`- Fast matches: ${summary.recentFastPathActivations}`);
-  console.log(`- Rerank reviews: ${summary.recentRerankParticipations}`);
-  console.log(`- Query normalizations: ${summary.recentQueryRewriteUsages}`);
-  console.log(`- Rising patterns: ${summary.currentPriorityCandidates}`);
-  console.log(`- Merged refinements: ${summary.recentConvergedUpdates}`);
-  console.log(`- Newly promoted hints: ${summary.recentPriorityPromotions}`);
+  console.log(`- Standard hints (inject): ${summary.recentInjects}`);
+  console.log(`- Cautious hints (inject_conservative): ${summary.recentConservativeInjects}`);
+  console.log(`- No-hint decisions (skip): ${summary.recentSkips}`);
+  console.log(`- Fast matches (fast path): ${summary.recentFastPathActivations}`);
+  console.log(`- Rerank reviews (rerank): ${summary.recentRerankParticipations}`);
+  console.log(`- Query normalizations (query rewrites): ${summary.recentQueryRewriteUsages}`);
+  console.log(`- Rising patterns (priority candidates): ${summary.currentPriorityCandidates}`);
+  console.log(`- Merged refinements (converged updates): ${summary.recentConvergedUpdates}`);
+  console.log(`- Newly promoted hints (priority promotions): ${summary.recentPriorityPromotions}`);
 };
 
 const getCodexSkipHeavyHint = (summary: ExperienceDecisionHealth): string | undefined => {
@@ -353,6 +332,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
   const registryHealth = (deps.readRegistryHealth ?? readRegistryHealth)();
   const firstValueReadiness = (deps.inspectFirstValueReadiness ?? inspectFirstValueReadiness)();
   const decisionHealth = (deps.inspectDecisionHealth ?? inspectDecisionHealth)();
+  const sharedSetup = (deps.inspectSharedSetupState ?? inspectSharedSetupState)();
   if (!target) {
     const codexStatus = (deps.inspectCodexInstall ?? inspectCodexInstall)();
     const claudeStatus = (deps.inspectClaudeCodeInstall ?? inspectClaudeCodeInstall)();
@@ -435,11 +415,12 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     logRegistryHealth(registryHealth);
     logEvaluationMode();
     const aggregateSetupState =
-      codexStatus.hostWiring.enabled || isClaudeInteractionReady(claudeStatus) || (openclawStatus.hostState.enabled ?? false)
-        ? "Ready"
-        : codexStatus.installed || claudeStatus.installed || openclawStatus.installed
-          ? "Initialized"
-          : "Installed";
+      deriveSetupState({
+        sharedInitialized: sharedSetup.initialized,
+        installed: codexStatus.installed || claudeStatus.installed || openclawStatus.installed,
+        interactionReady:
+          codexStatus.hostWiring.enabled || isClaudeInteractionReady(claudeStatus) || (openclawStatus.hostState.enabled ?? false)
+      });
     logFirstValueReadiness(firstValueReadiness, aggregateSetupState);
     return;
   }
@@ -478,7 +459,14 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     logRemoteReleaseStatus("claude-code", remoteStatus);
     logRegistryHealth(registryHealth);
     logEvaluationMode();
-    logFirstValueReadiness(firstValueReadiness, deriveSetupState(status));
+    logFirstValueReadiness(
+      firstValueReadiness,
+      deriveSetupState({
+        sharedInitialized: sharedSetup.initialized,
+        installed: status.installed,
+        interactionReady: Boolean(status.interactionReady || status.hostWiring?.wired)
+      })
+    );
     return;
   }
 
@@ -522,7 +510,14 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     }
     logRegistryHealth(registryHealth);
     logEvaluationMode();
-    logFirstValueReadiness(firstValueReadiness, deriveSetupState(status));
+    logFirstValueReadiness(
+      firstValueReadiness,
+      deriveSetupState({
+        sharedInitialized: sharedSetup.initialized,
+        installed: status.installed,
+        interactionReady: Boolean(status.hostWiring?.enabled || status.hostWiring?.wired)
+      })
+    );
     return;
   }
 
@@ -598,5 +593,12 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
   logRemoteReleaseStatus("openclaw", remoteStatus);
   logRegistryHealth(registryHealth);
   logEvaluationMode();
-  logFirstValueReadiness(firstValueReadiness, deriveSetupState(status));
+  logFirstValueReadiness(
+    firstValueReadiness,
+    deriveSetupState({
+      sharedInitialized: sharedSetup.initialized,
+      installed: status.installed,
+      interactionReady: Boolean(status.hostState.enabled ?? status.hostWiring?.wired)
+    })
+  );
 };

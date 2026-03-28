@@ -164,6 +164,9 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
     console.log(`Intervention: ${record.intervention}`);
     if (record.scorecard?.mode) {
       console.log(`Delivery style: ${describeDeliveryStyle(record.scorecard.mode)}`);
+      if (verbose) {
+        console.log(`Route mode: ${record.scorecard.mode}`);
+      }
     }
     console.log(`Automatic feedback: ${record.autoFeedback}`);
     if (record.autoFeedbackReason) {

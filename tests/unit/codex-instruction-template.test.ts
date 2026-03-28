@@ -18,6 +18,9 @@ describe("Codex instruction template", () => {
     expect(text).toContain("mark the guidance as helped or harmed in-session");
     expect(text).toContain("CLI fallback");
     expect(text).toContain("keep tool summaries concise");
+    expect(text).toContain("meaningful coding and debugging tasks");
+    expect(text).toContain("before finishing each meaningful task");
+    expect(text).toContain("Skip it for lightweight wording-only, Q&A, or no-op turns");
     expect(text).toContain("omit `prompt`");
     expect(text).not.toMatch(/pack|compiler|AGENTS\.md|CLAUDE\.md|CODEX\.md/i);
   });

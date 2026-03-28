@@ -265,15 +265,15 @@ describe("doctor command", () => {
         ["- Codex task runs in current repo: 2"],
         ["Recent retrieval activity:"],
         ["- Decisions in current repo: 4"],
-        ["- Standard hints: 2"],
-        ["- Cautious hints: 1"],
-        ["- No-hint decisions: 1"],
-        ["- Fast matches: 1"],
-        ["- Rerank reviews: 2"],
-        ["- Query normalizations: 1"],
-        ["- Rising patterns: 2"],
-        ["- Merged refinements: 3"],
-        ["- Newly promoted hints: 1"]
+        ["- Standard hints (inject): 2"],
+        ["- Cautious hints (inject_conservative): 1"],
+        ["- No-hint decisions (skip): 1"],
+        ["- Fast matches (fast path): 1"],
+        ["- Rerank reviews (rerank): 2"],
+        ["- Query normalizations (query rewrites): 1"],
+        ["- Rising patterns (priority candidates): 2"],
+        ["- Merged refinements (converged updates): 3"],
+        ["- Newly promoted hints (priority promotions): 1"]
       ])
     );
   });
@@ -446,6 +446,7 @@ describe("doctor command", () => {
   it("prints a cold-start readiness summary when formal experience is still warming up", async () => {
     await runDoctorCommand("codex", {
       inspectCodexInstall: () => codexStatus(),
+      inspectSharedSetupState: () => ({ initialized: true }),
       fetchLatestGitHubReleaseStatus: async () => ({
         source: "github-releases",
         repository: "Alan-512/ExperienceEngine",
@@ -469,7 +470,7 @@ describe("doctor command", () => {
       expect.arrayContaining([
         ["First-value readiness:"],
         ["- Setup state: Ready"],
-        ["- Value state: Warming up"],
+        ["- Value state: First value reached"],
         ["- Raw task records: 2"],
         ["- Task runs: 2"],
         ["- Candidates waiting for promotion: 1"],
@@ -484,6 +485,7 @@ describe("doctor command", () => {
   it("does not claim first value reached when only static guidance exists without real task output", async () => {
     await runDoctorCommand("codex", {
       inspectCodexInstall: () => codexStatus(),
+      inspectSharedSetupState: () => ({ initialized: true }),
       fetchLatestGitHubReleaseStatus: async () => ({
         source: "github-releases",
         repository: "Alan-512/ExperienceEngine",
@@ -504,6 +506,40 @@ describe("doctor command", () => {
 
     expect(consoleLogSpy).toHaveBeenCalledWith("- Value state: Warming up");
     expect(consoleLogSpy).not.toHaveBeenCalledWith("- Value state: First value reached");
+  });
+
+  it("prints Initialized when shared state exists but host wiring is not ready yet", async () => {
+    await runDoctorCommand("codex", {
+      inspectCodexInstall: () =>
+        codexStatus({
+          hostWiring: {
+            wired: false,
+            enabled: false,
+            transport: "stdio",
+            command: "node dist/cli/index.js codex-mcp-server"
+          }
+        }),
+      inspectSharedSetupState: () => ({ initialized: true }),
+      inspectFirstValueReadiness: () => ({
+        rawRecords: 0,
+        taskRuns: 0,
+        candidates: 0,
+        nodes: 0,
+        nextStep: "Run a few real coding tasks in this repo so ExperienceEngine can start capturing task signals."
+      }),
+      fetchLatestGitHubReleaseStatus: async () => ({
+        source: "github-releases",
+        repository: "Alan-512/ExperienceEngine",
+        latestVersion: "0.1.0",
+        releaseUrl: null,
+        publishedAt: "2026-03-12T12:00:00Z",
+        state: "current",
+        updateAvailable: false
+      })
+    });
+
+    expect(consoleLogSpy).toHaveBeenCalledWith("- Setup state: Initialized");
+    expect(consoleLogSpy).toHaveBeenCalledWith("- Value state: Warming up");
   });
 
   it("prints distillation mode and explicit-provider diagnostics", async () => {
