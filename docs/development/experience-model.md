@@ -2,6 +2,12 @@
 
 ExperienceEngine does not primarily record facts. It records **reusable execution experience**.
 
+That core model is shared across hosts even when installation and daily interaction mechanics differ. Host-specific setup steps should change as little as possible about the product concepts users see:
+
+- shared setup/value states
+- shared first-value expectations
+- shared distinction between host-native routine interaction and CLI/operator fallback
+
 That means the system is trying to preserve guidance like:
 
 ```text

@@ -105,7 +105,19 @@ Install ExperienceEngine through the host setup flow for the host you want to us
   - `ee install claude-code` remains the operator fallback when you need direct hooks + MCP wiring outside the marketplace flow
   - after installation, start a new Claude Code session so the plugin hooks and bundled MCP config are loaded
 
-After the host setup completes, the normal user path is to keep working through the host agent itself.
+Across all three hosts, the intended product journey is the same:
+
+1. install ExperienceEngine through the host-specific setup path
+2. initialize shared ExperienceEngine state with `ee init`
+3. restart or open a fresh host session until the repo is `Ready`
+4. keep routine review and feedback inside the host agent when the host supports it cleanly
+5. use `ee` as the operator fallback for validation, repair, and deeper inspection
+
+The host-specific differences are real, but they sit underneath one shared model:
+
+- installation mechanics differ by host
+- routine interaction should feel similar wherever the host supports it
+- CLI remains the explicit fallback and operator surface
 
 ExperienceEngine now treats onboarding and value as two separate layers:
 
@@ -119,14 +131,15 @@ ExperienceEngine now treats onboarding and value as two separate layers:
 
 These are not one linear ladder. A repo can already be `Ready` while still `Warming up`.
 
-Ask the host agent naturally for ExperienceEngine state or feedback actions, for example:
+For routine use, ask the host agent naturally for ExperienceEngine state or feedback actions, for example:
 
 - "What did ExperienceEngine just inject?"
 - "Why did that ExperienceEngine hint match?"
 - "Mark the last ExperienceEngine intervention as helpful."
 
 For `Codex` and `Claude Code`, these routine follow-ups should stay in the host session first.
-Use CLI fallback only when the host-side path is unavailable or you need explicit operator control.
+For `OpenClaw`, the product language stays the same, but CLI/operator fallback remains more visible for now.
+Use CLI fallback whenever the host-side path is unavailable or you need explicit operator control.
 
 Use the `ee` CLI only when you need explicit operator validation or troubleshooting:
 
@@ -170,11 +183,17 @@ ExperienceEngine now treats installation and operations as separate concerns:
 - installation belongs to the host
 - validation and maintenance belong to `ee`
 
-That means:
+That means the user-facing concepts stay stable even though the host integrations differ:
 
-- `Codex` uses the shared ExperienceEngine MCP server, and `ee install codex` is the preferred first-time onboarding path
-- `Claude Code` uses Claude-native plugin assets and marketplace distribution
-- `OpenClaw` uses plugin/runtime integration
+- `OpenClaw`
+  - installs through plugin/runtime integration
+  - keeps stronger CLI/operator support today
+- `Claude Code`
+  - installs through Claude-native marketplace/plugin assets
+  - prefers MCP-native routine interaction inside the host session
+- `Codex`
+  - uses the shared ExperienceEngine MCP server
+  - prefers MCP-native routine interaction inside the host session
 
 Once installation is complete, the host agent remains the primary interaction surface.
 

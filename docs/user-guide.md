@@ -115,6 +115,20 @@ Install ExperienceEngine through the host setup flow for:
   - `ee install claude-code` remains the explicit operator fallback when you need direct hooks + MCP wiring outside the marketplace flow
   - after installation, start a new Claude Code session so the plugin hooks and bundled MCP config are loaded
 
+Across all three hosts, the intended product journey is the same:
+
+1. install ExperienceEngine through the host-specific setup path
+2. initialize shared ExperienceEngine state with `ee init`
+3. restart or open a fresh host session until the repo is `Ready`
+4. keep routine review and feedback inside the host agent when the host supports it cleanly
+5. use `ee` as the operator fallback for validation, repair, and deeper inspection
+
+The host-specific differences are real, but they sit underneath one shared model:
+
+- installation mechanics differ by host
+- routine interaction should feel similar wherever the host supports it
+- CLI remains the explicit fallback and operator surface
+
 Then continue using your host agent normally.
 
 For most users, ExperienceEngine should stay in the background and be inspected through the host agent itself. Typical prompts are:
@@ -122,6 +136,9 @@ For most users, ExperienceEngine should stay in the background and be inspected 
 - "What did ExperienceEngine just inject?"
 - "Show the last ExperienceEngine intervention."
 - "Mark the last ExperienceEngine intervention as helpful."
+
+For `Codex` and `Claude Code`, these routine follow-ups should stay in the host session first.
+For `OpenClaw`, the product language stays the same, but CLI/operator fallback remains more visible for now.
 
 Use the `ee` CLI only when you need explicit validation, repair, or operator-style troubleshooting:
 
@@ -223,6 +240,14 @@ For `Codex` and `Claude Code`, ExperienceEngine is designed to work mainly throu
 
 That means after installation, you usually do not leave the agent session to manage ExperienceEngine. Instead, you ask the agent naturally and the agent can call ExperienceEngine MCP resources, prompts, and tools for you.
 
+This is one host-specific implementation of the same shared product model described above:
+
+- host-native install or wiring gets the repo to `Installed`
+- shared `ee init` state gets the product to `Initialized`
+- a fresh host session gets the repo to `Ready`
+- routine inspection and feedback stay inside the host when the host supports them cleanly
+- CLI remains the explicit fallback and operator path
+
 Typical examples:
 - "What did ExperienceEngine just inject?"
 - "Show the recent injected turns."
@@ -269,6 +294,11 @@ Today, ExperienceEngine's minimal governance surface is:
 - `ee` CLI for explicit fallback, maintenance, and operator workflows
 
 A dedicated standalone review UI is still deferred. The current product shape is intentionally CLI/MCP-first rather than UI-first.
+
+That does not mean every host surface is identical today:
+
+- `Codex` and `Claude Code` already lean harder on host-native MCP interaction for routine use
+- `OpenClaw` shares the same product language and setup/value states, but operator-style CLI fallback is still more visible in daily use
 
 ## Host-Specific Setup
 
