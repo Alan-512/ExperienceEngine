@@ -121,4 +121,59 @@ describe("buildCandidateSignals", () => {
     expect(signals.directional_correction?.sources).toEqual([]);
     expect(signals.directional_correction?.snippets).toEqual([]);
   });
+
+  it("captures an evidence-driven reversal window without explicit user correction", () => {
+    const signals = buildCandidateSignals(
+      makeInput({
+        outcome_signal: "success",
+        task_summary: "Follow the strongest root-cause evidence for the failing request path.",
+        context_summary:
+          "The initial timeout-tuning hypothesis was ruled out after a targeted provider probe showed the request was still failing inside provider routing. The investigation pivoted into provider routing, and the final integration verification passed.",
+        tool_events: [
+          {
+            event_id: "evt_initial_hypothesis",
+            tool_name: "analysis-note",
+            status: "success",
+            output_summary: "Initial working hypothesis: retry timeout tuning may be enough to fix the failing request path.",
+            started_at: "2026-03-29T12:00:00.000Z"
+          },
+          {
+            event_id: "evt_invalidate_probe",
+            tool_name: "targeted-probe",
+            status: "success",
+            output_summary:
+              "The targeted provider probe ruled out the timeout hypothesis and showed the request was still failing inside provider routing.",
+            started_at: "2026-03-29T12:04:00.000Z"
+          },
+          {
+            event_id: "evt_pivot_routing",
+            tool_name: "apply_patch",
+            status: "success",
+            output_summary: "Moved the fix from timeout tuning into provider routing.",
+            started_at: "2026-03-29T12:08:00.000Z"
+          },
+          {
+            event_id: "evt_validate_routing",
+            tool_name: "integration-test",
+            status: "success",
+            output_summary: "The provider-routing integration verification passed after the routing fix.",
+            started_at: "2026-03-29T12:12:00.000Z"
+          }
+        ]
+      })
+    );
+
+    expect(signals.directional_correction?.detected).toBe(false);
+    expect(signals.evidence_driven_reversal).toMatchObject({
+      detected: true,
+      reversal_source: "task_evidence",
+      prior_hypothesis: true,
+      invalidating_evidence: true,
+      validating_evidence: true
+    });
+    expect(signals.evidence_driven_reversal?.hypothesis_snippets).not.toEqual([]);
+    expect(signals.evidence_driven_reversal?.invalidating_snippets).not.toEqual([]);
+    expect(signals.evidence_driven_reversal?.pivot_snippets).not.toEqual([]);
+    expect(signals.evidence_driven_reversal?.validating_snippets).not.toEqual([]);
+  });
 });

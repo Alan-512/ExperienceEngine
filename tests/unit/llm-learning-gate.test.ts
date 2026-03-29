@@ -218,6 +218,128 @@ describe("LlmLearningGate", () => {
     });
   });
 
+  it("upgrades a generic execution-pattern capture into expectation correction for evidence-driven reversal", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  worth_capturing: true,
+                  experience_kind: "execution_pattern",
+                  reason: "The task exposed a reusable execution pattern.",
+                  candidate: {
+                    node_type: "strategy",
+                    task_type: "config_debug",
+                    trigger_pattern: "When the first infrastructure hypothesis looks plausible",
+                    compact_hint: "Validate the current hypothesis before broad changes.",
+                    success_signal: "The targeted verification passes.",
+                    evidence_summary: "The task converged after a focused verification loop."
+                  }
+                })
+              }
+            }
+          ]
+        })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  reversal_detected: true,
+                  reversal_source: "task_evidence",
+                  superseded_hypothesis: "Timeout tuning was the wrong active hypothesis.",
+                  replacement_constraint: "Follow provider-routing evidence instead of persisting in timeout tuning.",
+                  verification_evidence: "The provider-routing verification passed after the replacement fix.",
+                  pivot_summary: "The task pivoted into provider routing after the stronger probe.",
+                  correction_scope: "host_local",
+                  correction_category: "implementation_boundary",
+                  deviation_pattern: "the earlier direction was disproven by later task evidence",
+                  corrected_constraint:
+                    "Follow provider-routing evidence instead of persisting in timeout tuning."
+                })
+              }
+            }
+          ]
+        })
+      });
+
+    const gate = new LlmLearningGate(
+      loadConfig({
+        distillerProvider: "openai",
+        distillerModel: "gpt-5.4-nano",
+        distillationMode: "llm"
+      }),
+      {
+        env: {
+          EXPERIENCE_ENGINE_DISTILLER_PROVIDER: "openai",
+          EXPERIENCE_ENGINE_DISTILLER_MODEL: "gpt-5.4-nano",
+          OPENAI_API_KEY: "secret"
+        },
+        fetchImpl: fetchImpl as unknown as typeof fetch
+      }
+    );
+
+    const result = await gate.generateCandidateDrafts(
+      makeInput({
+        outcome_signal: "success",
+        task_summary: "Fix the failing request path by following the strongest root-cause evidence.",
+        context_summary:
+          "The initial timeout-tuning hypothesis was ruled out after a targeted provider probe showed the request was still failing inside provider routing. The investigation pivoted into provider routing, and the final integration verification passed.",
+        tool_events: [
+          {
+            event_id: "evt_initial_hypothesis",
+            tool_name: "analysis-note",
+            status: "success",
+            output_summary: "Initial working hypothesis: retry timeout tuning may be enough to fix the failing request path.",
+            started_at: "2026-03-29T12:00:00.000Z"
+          },
+          {
+            event_id: "evt_invalidate_probe",
+            tool_name: "targeted-probe",
+            status: "success",
+            output_summary:
+              "The targeted provider probe ruled out the timeout hypothesis and showed the request was still failing inside provider routing.",
+            started_at: "2026-03-29T12:04:00.000Z"
+          },
+          {
+            event_id: "evt_pivot_routing",
+            tool_name: "apply_patch",
+            status: "success",
+            output_summary: "Moved the fix from timeout tuning into provider routing.",
+            started_at: "2026-03-29T12:08:00.000Z"
+          },
+          {
+            event_id: "evt_validate_routing",
+            tool_name: "integration-test",
+            status: "success",
+            output_summary: "The provider-routing integration verification passed after the routing fix.",
+            started_at: "2026-03-29T12:12:00.000Z"
+          }
+        ]
+      })
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(result.drafts[0]).toMatchObject({
+      experience_kind: "expectation_correction",
+      correction_category: "implementation_boundary",
+      corrected_constraint: "Follow provider-routing evidence instead of persisting in timeout tuning."
+    });
+    expect(result.evidenceDrivenReversalSignal).toMatchObject({
+      detected: true,
+      semantic_detected: true,
+      reversal_source: "task_evidence",
+      correction_category: "implementation_boundary"
+    });
+  });
+
   it("rejects edit-only wording tasks even when the llm tries to capture them", async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,

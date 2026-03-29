@@ -49,6 +49,7 @@ type LearningGateResult = {
   drafts: ExperienceCandidateDraft[];
   source: "llm" | "rule" | "disabled";
   directionalCorrectionSignal?: NonNullable<CandidateSourceSignal["directional_correction"]>;
+  evidenceDrivenReversalSignal?: NonNullable<CandidateSourceSignal["evidence_driven_reversal"]>;
 };
 
 type ExpectationCorrectionRepair = {
@@ -64,6 +65,24 @@ type ExpectationCorrectionRepair = {
 type ExpectationCorrectionRescue = {
   draft: ExperienceCandidateDraft;
   directionalCorrectionSignal: NonNullable<CandidateSourceSignal["directional_correction"]>;
+};
+
+type EvidenceDrivenReversalRepair = {
+  reversal_detected?: boolean;
+  reversal_source?: "task_evidence";
+  superseded_hypothesis?: string;
+  replacement_constraint?: string;
+  verification_evidence?: string;
+  pivot_summary?: string;
+  correction_scope?: CorrectionScope;
+  correction_category?: CorrectionCategory;
+  deviation_pattern?: string;
+  corrected_constraint?: string;
+};
+
+type EvidenceDrivenReversalRescue = {
+  draft: ExperienceCandidateDraft;
+  evidenceDrivenReversalSignal: NonNullable<CandidateSourceSignal["evidence_driven_reversal"]>;
 };
 
 const DEFAULT_REQUEST_TIMEOUT_MS = 45_000;
@@ -211,6 +230,60 @@ Do not rescue:
 - style-only
 - presentation-only
 - ordinary verification loops without a corrected direction`;
+
+const EVIDENCE_DRIVEN_REVERSAL_REPAIR_PROMPT = `You are repairing a coding-experience draft for evidence-driven reversal.
+
+Use the provided reversal_window as the semantic detection context. Only promote when:
+- an earlier active hypothesis or direction existed
+- later task evidence invalidated it
+- the task pivoted to a replacement path
+- later verification supported the replacement path
+
+Return strict JSON:
+- reversal_detected: boolean
+- reversal_source: task_evidence (required when true)
+- superseded_hypothesis: short sentence (required when true)
+- replacement_constraint: short sentence (required when true)
+- verification_evidence: short sentence (required when true)
+- pivot_summary: short sentence (optional)
+- correction_scope: task_local | repo_local | workflow_local | host_local | cross_repo_candidate (required when true)
+- correction_category: goal_interpretation | quality_bar | interaction_behavior | verification_order | implementation_boundary | style_constraint (required when true)
+- deviation_pattern: short sentence (required when true)
+- corrected_constraint: short sentence (required when true)
+
+Do not promote ordinary verification loops, confirmation of the same direction, or loose narrowing that did not overturn the original path.`;
+
+const EVIDENCE_DRIVEN_REVERSAL_RESCUE_PROMPT = `You are rescuing a missed evidence-driven reversal from a coding task.
+
+The main learner did not capture a reusable candidate. Rescue only when the reversal window shows:
+- a prior active hypothesis
+- stronger invalidating task evidence
+- a pivot into a replacement path
+- later validating evidence on the replacement path
+
+Return strict JSON:
+- reversal_detected: boolean
+- reversal_source: task_evidence (required when true)
+- superseded_hypothesis: short sentence (required when true)
+- replacement_constraint: short sentence (required when true)
+- verification_evidence: short sentence (required when true)
+- pivot_summary: short sentence (optional)
+- candidate: required only when reversal_detected=true
+
+candidate must include:
+- node_type: strategy | warning
+- task_type
+- trigger_pattern
+- compact_hint
+- success_signal
+- evidence_summary
+- experience_kind: expectation_correction
+- confidence_signal: confirmed_by_user | supported_by_objective_success | unconfirmed
+- validation_state: pending_reuse_validation
+- correction_scope: task_local | repo_local | workflow_local | host_local | cross_repo_candidate
+- correction_category: goal_interpretation | quality_bar | interaction_behavior | verification_order | implementation_boundary | style_constraint
+- deviation_pattern
+- corrected_constraint`;
 
 const sha256Hex = (value: string): string => createHash("sha256").update(value, "utf8").digest("hex");
 const hmac = (key: string | Buffer, value: string): Buffer => createHmac("sha256", key).update(value, "utf8").digest();
@@ -692,6 +765,198 @@ export class LlmLearningGate {
     };
   }
 
+  private buildEvidenceDrivenReversalRepairBody(
+    endpoint: DistillerEndpoint,
+    input: ExperienceInput,
+    draft: ExperienceCandidateDraft,
+    reason: string,
+    reversal: NonNullable<CandidateSourceSignal["evidence_driven_reversal"]>
+  ): Record<string, unknown> {
+    const payload = JSON.stringify(
+      {
+        task_summary: input.task_summary,
+        task_type: input.task_type,
+        context_summary: input.context_summary,
+        outcome_signal: input.outcome_signal,
+        tool_events: input.tool_events.map((event) => ({
+          tool_name: event.tool_name,
+          status: event.status,
+          error_signature: event.error_signature,
+          output_summary: event.output_summary
+        })),
+        draft: {
+          task_type: draft.task_type,
+          node_type: draft.node_type,
+          experience_kind: draft.experience_kind,
+          trigger_pattern: draft.trigger_pattern,
+          compact_hint: draft.compact_hint,
+          success_signal: draft.success_signal,
+          evidence_summary: draft.evidence_summary
+        },
+        reversal_window: {
+          selected: reversal.detected,
+          hypothesis_snippets: reversal.hypothesis_snippets,
+          invalidating_snippets: reversal.invalidating_snippets,
+          pivot_snippets: reversal.pivot_snippets,
+          validating_snippets: reversal.validating_snippets
+        },
+        evidence_gate: {
+          prior_hypothesis: reversal.prior_hypothesis,
+          invalidating_evidence: reversal.invalidating_evidence,
+          validating_evidence: reversal.validating_evidence
+        },
+        original_reason: reason
+      },
+      null,
+      2
+    );
+
+    if (endpoint.kind === "anthropic") {
+      return {
+        model: endpoint.model,
+        max_tokens: 640,
+        system: EVIDENCE_DRIVEN_REVERSAL_REPAIR_PROMPT,
+        messages: [{ role: "user", content: payload }],
+        temperature: 0
+      };
+    }
+
+    if (endpoint.kind === "gemini") {
+      return {
+        system_instruction: {
+          parts: [{ text: EVIDENCE_DRIVEN_REVERSAL_REPAIR_PROMPT }]
+        },
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: payload }]
+          }
+        ],
+        generationConfig: {
+          temperature: 0,
+          responseMimeType: "application/json"
+        }
+      };
+    }
+
+    if (endpoint.kind === "bedrock") {
+      return {
+        system: [{ text: EVIDENCE_DRIVEN_REVERSAL_REPAIR_PROMPT }],
+        messages: [
+          {
+            role: "user",
+            content: [{ text: payload }]
+          }
+        ],
+        inferenceConfig: {
+          maxTokens: 640,
+          temperature: 0
+        }
+      };
+    }
+
+    return {
+      model: endpoint.model,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: EVIDENCE_DRIVEN_REVERSAL_REPAIR_PROMPT },
+        { role: "user", content: payload }
+      ],
+      temperature: 0
+    };
+  }
+
+  private buildEvidenceDrivenReversalRescueBody(
+    endpoint: DistillerEndpoint,
+    input: ExperienceInput,
+    reason: string,
+    reversal: NonNullable<CandidateSourceSignal["evidence_driven_reversal"]>
+  ): Record<string, unknown> {
+    const payload = JSON.stringify(
+      {
+        task_summary: input.task_summary,
+        task_type: input.task_type,
+        context_summary: input.context_summary,
+        outcome_signal: input.outcome_signal,
+        tool_events: input.tool_events.map((event) => ({
+          tool_name: event.tool_name,
+          status: event.status,
+          error_signature: event.error_signature,
+          output_summary: event.output_summary
+        })),
+        reversal_window: {
+          selected: reversal.detected,
+          hypothesis_snippets: reversal.hypothesis_snippets,
+          invalidating_snippets: reversal.invalidating_snippets,
+          pivot_snippets: reversal.pivot_snippets,
+          validating_snippets: reversal.validating_snippets
+        },
+        evidence_gate: {
+          prior_hypothesis: reversal.prior_hypothesis,
+          invalidating_evidence: reversal.invalidating_evidence,
+          validating_evidence: reversal.validating_evidence
+        },
+        original_reason: reason
+      },
+      null,
+      2
+    );
+
+    if (endpoint.kind === "anthropic") {
+      return {
+        model: endpoint.model,
+        max_tokens: 768,
+        system: EVIDENCE_DRIVEN_REVERSAL_RESCUE_PROMPT,
+        messages: [{ role: "user", content: payload }],
+        temperature: 0
+      };
+    }
+
+    if (endpoint.kind === "gemini") {
+      return {
+        system_instruction: {
+          parts: [{ text: EVIDENCE_DRIVEN_REVERSAL_RESCUE_PROMPT }]
+        },
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: payload }]
+          }
+        ],
+        generationConfig: {
+          temperature: 0,
+          responseMimeType: "application/json"
+        }
+      };
+    }
+
+    if (endpoint.kind === "bedrock") {
+      return {
+        system: [{ text: EVIDENCE_DRIVEN_REVERSAL_RESCUE_PROMPT }],
+        messages: [
+          {
+            role: "user",
+            content: [{ text: payload }]
+          }
+        ],
+        inferenceConfig: {
+          maxTokens: 768,
+          temperature: 0
+        }
+      };
+    }
+
+    return {
+      model: endpoint.model,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: EVIDENCE_DRIVEN_REVERSAL_RESCUE_PROMPT },
+        { role: "user", content: payload }
+      ],
+      temperature: 0
+    };
+  }
+
   private parseExpectationCorrectionRepair(content: string): ExpectationCorrectionRepair | undefined {
     const parsed = JSON.parse(content) as Record<string, unknown>;
     if (parsed.expectation_correction !== true) {
@@ -760,6 +1025,99 @@ export class LlmLearningGate {
       directionalCorrectionSignal: {
         ...directionalCorrection,
         semantic_detected: true,
+        correction_category: draft.correction_category,
+        deviation_pattern: draft.deviation_pattern,
+        corrected_constraint: draft.corrected_constraint
+      }
+    };
+  }
+
+  private parseEvidenceDrivenReversalRepair(content: string): EvidenceDrivenReversalRepair | undefined {
+    const parsed = JSON.parse(content) as Record<string, unknown>;
+    if (parsed.reversal_detected !== true) {
+      return undefined;
+    }
+
+    const reversalSource = parsed.reversal_source === "task_evidence" ? "task_evidence" : undefined;
+    const supersededHypothesis = pickString(parsed.superseded_hypothesis);
+    const replacementConstraint = pickString(parsed.replacement_constraint);
+    const verificationEvidence = pickString(parsed.verification_evidence);
+    const pivotSummary = pickString(parsed.pivot_summary);
+    const correctionScope = isCorrectionScope(parsed.correction_scope) ? parsed.correction_scope : undefined;
+    const correctionCategory = isCorrectionCategory(parsed.correction_category) ? parsed.correction_category : undefined;
+    const deviationPattern = pickString(parsed.deviation_pattern);
+    const correctedConstraint = pickString(parsed.corrected_constraint);
+
+    if (
+      !reversalSource ||
+      !supersededHypothesis ||
+      !replacementConstraint ||
+      !verificationEvidence ||
+      !correctionScope ||
+      !correctionCategory ||
+      !deviationPattern ||
+      !correctedConstraint
+    ) {
+      return undefined;
+    }
+
+    return {
+      reversal_detected: true,
+      reversal_source: reversalSource,
+      superseded_hypothesis: supersededHypothesis,
+      replacement_constraint: replacementConstraint,
+      verification_evidence: verificationEvidence,
+      pivot_summary: pivotSummary,
+      correction_scope: correctionScope,
+      correction_category: correctionCategory,
+      deviation_pattern: deviationPattern,
+      corrected_constraint: correctedConstraint
+    };
+  }
+
+  private parseEvidenceDrivenReversalRescue(
+    content: string,
+    input: ExperienceInput,
+    reversal: NonNullable<CandidateSourceSignal["evidence_driven_reversal"]>
+  ): EvidenceDrivenReversalRescue | undefined {
+    const parsed = JSON.parse(content) as Record<string, unknown>;
+    if (parsed.reversal_detected !== true) {
+      return undefined;
+    }
+
+    const reversalSource = parsed.reversal_source === "task_evidence" ? "task_evidence" : undefined;
+    const supersededHypothesis = pickString(parsed.superseded_hypothesis);
+    const replacementConstraint = pickString(parsed.replacement_constraint);
+    const verificationEvidence = pickString(parsed.verification_evidence);
+    const pivotSummary = pickString(parsed.pivot_summary);
+    const rawCandidate =
+      parsed.candidate && typeof parsed.candidate === "object"
+        ? (parsed.candidate as Record<string, unknown>)
+        : undefined;
+    if (!rawCandidate || !reversalSource || !supersededHypothesis || !replacementConstraint || !verificationEvidence) {
+      return undefined;
+    }
+
+    const draft = normalizeDraft(rawCandidate, input);
+    if (
+      draft.experience_kind !== "expectation_correction" ||
+      !draft.correction_category ||
+      !draft.deviation_pattern ||
+      !draft.corrected_constraint
+    ) {
+      return undefined;
+    }
+
+    return {
+      draft,
+      evidenceDrivenReversalSignal: {
+        ...reversal,
+        semantic_detected: true,
+        reversal_source: reversalSource,
+        superseded_hypothesis: supersededHypothesis,
+        replacement_constraint: replacementConstraint,
+        verification_evidence: verificationEvidence,
+        pivot_summary: pivotSummary,
         correction_category: draft.correction_category,
         deviation_pattern: draft.deviation_pattern,
         corrected_constraint: draft.corrected_constraint
@@ -848,6 +1206,87 @@ export class LlmLearningGate {
     }
   }
 
+  private async maybeRepairEvidenceDrivenReversal(
+    endpoint: DistillerEndpoint,
+    input: ExperienceInput,
+    reason: string,
+    draft: ExperienceCandidateDraft,
+    directionalCorrection: CandidateSourceSignal["directional_correction"],
+    reversal: CandidateSourceSignal["evidence_driven_reversal"]
+  ): Promise<{
+    draft: ExperienceCandidateDraft;
+    evidenceDrivenReversalSignal?: NonNullable<CandidateSourceSignal["evidence_driven_reversal"]>;
+  }> {
+    if (
+      input.outcome_signal !== "success" ||
+      (directionalCorrection?.correction_source &&
+        directionalCorrection.correction_source !== "task_evidence" &&
+        directionalCorrection.detected) ||
+      !reversal?.detected ||
+      !reversal.prior_hypothesis ||
+      !reversal.invalidating_evidence ||
+      !reversal.validating_evidence
+    ) {
+      return {
+        draft,
+        evidenceDrivenReversalSignal: reversal?.detected ? reversal : undefined
+      };
+    }
+
+    try {
+      const response = await this.postJsonWithRetry(
+        this.buildRequestUrl(endpoint),
+        endpoint,
+        this.buildEvidenceDrivenReversalRepairBody(endpoint, input, draft, reason, reversal)
+      );
+      if (!response.ok) {
+        return {
+          draft,
+          evidenceDrivenReversalSignal: reversal
+        };
+      }
+
+      const content = await this.parseResponseContent(endpoint, response);
+      const repair = this.parseEvidenceDrivenReversalRepair(content);
+      if (!repair) {
+        return {
+          draft,
+          evidenceDrivenReversalSignal: reversal
+        };
+      }
+
+      return {
+        draft: normalizeCandidate({
+          ...draft,
+          experience_kind: "expectation_correction",
+          confidence_signal: draft.confidence_signal ?? "supported_by_objective_success",
+          validation_state: draft.validation_state ?? "pending_reuse_validation",
+          correction_scope: repair.correction_scope,
+          correction_category: repair.correction_category,
+          deviation_pattern: repair.deviation_pattern,
+          corrected_constraint: repair.corrected_constraint
+        }),
+        evidenceDrivenReversalSignal: {
+          ...reversal,
+          semantic_detected: true,
+          reversal_source: repair.reversal_source,
+          superseded_hypothesis: repair.superseded_hypothesis,
+          replacement_constraint: repair.replacement_constraint,
+          verification_evidence: repair.verification_evidence,
+          pivot_summary: repair.pivot_summary,
+          correction_category: repair.correction_category,
+          deviation_pattern: repair.deviation_pattern,
+          corrected_constraint: repair.corrected_constraint
+        }
+      };
+    } catch {
+      return {
+        draft,
+        evidenceDrivenReversalSignal: reversal
+      };
+    }
+  }
+
   private async maybeRescueExpectationCorrection(
     endpoint: DistillerEndpoint,
     input: ExperienceInput,
@@ -874,6 +1313,43 @@ export class LlmLearningGate {
 
       const content = await this.parseResponseContent(endpoint, response);
       return this.parseExpectationCorrectionRescue(content, input, directionalCorrection);
+    } catch {
+      return undefined;
+    }
+  }
+
+  private async maybeRescueEvidenceDrivenReversal(
+    endpoint: DistillerEndpoint,
+    input: ExperienceInput,
+    reason: string,
+    directionalCorrection: CandidateSourceSignal["directional_correction"],
+    reversal: CandidateSourceSignal["evidence_driven_reversal"]
+  ): Promise<EvidenceDrivenReversalRescue | undefined> {
+    if (
+      input.outcome_signal !== "success" ||
+      (directionalCorrection?.correction_source &&
+        directionalCorrection.correction_source !== "task_evidence" &&
+        directionalCorrection.detected) ||
+      !reversal?.detected ||
+      !reversal.prior_hypothesis ||
+      !reversal.invalidating_evidence ||
+      !reversal.validating_evidence
+    ) {
+      return undefined;
+    }
+
+    try {
+      const response = await this.postJsonWithRetry(
+        this.buildRequestUrl(endpoint),
+        endpoint,
+        this.buildEvidenceDrivenReversalRescueBody(endpoint, input, reason, reversal)
+      );
+      if (!response.ok) {
+        return undefined;
+      }
+
+      const content = await this.parseResponseContent(endpoint, response);
+      return this.parseEvidenceDrivenReversalRescue(content, input, reversal);
     } catch {
       return undefined;
     }
@@ -1069,7 +1545,9 @@ export class LlmLearningGate {
       const parsed = JSON.parse(content) as Record<string, unknown>;
       const worthCapturing = parsed.worth_capturing === true;
       const reason = pickString(parsed.reason) ?? "no reason provided";
-      const directionalCorrection = buildCandidateSignals(input).directional_correction;
+      const candidateSignals = buildCandidateSignals(input);
+      const directionalCorrection = candidateSignals.directional_correction;
+      const evidenceDrivenReversal = candidateSignals.evidence_driven_reversal;
 
       if (!worthCapturing) {
         const rescued = await this.maybeRescueExpectationCorrection(
@@ -1085,6 +1563,23 @@ export class LlmLearningGate {
             drafts: dedupeCandidates([rescued.draft]),
             source: "llm",
             directionalCorrectionSignal: rescued.directionalCorrectionSignal
+          };
+        }
+
+        const rescuedReversal = await this.maybeRescueEvidenceDrivenReversal(
+          resolution.endpoint,
+          input,
+          reason,
+          directionalCorrection,
+          evidenceDrivenReversal
+        );
+        if (rescuedReversal) {
+          return {
+            worthCapturing: true,
+            reason: `rescued evidence-driven reversal: ${reason}`,
+            drafts: dedupeCandidates([rescuedReversal.draft]),
+            source: "llm",
+            evidenceDrivenReversalSignal: rescuedReversal.evidenceDrivenReversalSignal
           };
         }
 
@@ -1112,12 +1607,22 @@ export class LlmLearningGate {
         directionalCorrection
       );
 
+      const reversalRepaired = await this.maybeRepairEvidenceDrivenReversal(
+        resolution.endpoint,
+        input,
+        reason,
+        repaired.draft,
+        directionalCorrection,
+        evidenceDrivenReversal
+      );
+
       return {
         worthCapturing: true,
         reason,
-        drafts: dedupeCandidates([repaired.draft]),
+        drafts: dedupeCandidates([reversalRepaired.draft]),
         source: "llm",
-        directionalCorrectionSignal: repaired.directionalCorrectionSignal
+        directionalCorrectionSignal: repaired.directionalCorrectionSignal,
+        evidenceDrivenReversalSignal: reversalRepaired.evidenceDrivenReversalSignal
       };
     } catch (error) {
       const fallback = analyzeExperience(input);

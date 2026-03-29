@@ -306,6 +306,26 @@ export type CandidateSourceSignal = {
     deviation_pattern?: string;
     corrected_constraint?: string;
   };
+  evidence_driven_reversal?: {
+    detected: boolean;
+    reversal_source?: "task_evidence";
+    reversal_strength?: "low" | "medium" | "high";
+    prior_hypothesis: boolean;
+    invalidating_evidence: boolean;
+    validating_evidence: boolean;
+    hypothesis_snippets: string[];
+    invalidating_snippets: string[];
+    pivot_snippets: string[];
+    validating_snippets: string[];
+    semantic_detected?: boolean;
+    superseded_hypothesis?: string;
+    replacement_constraint?: string;
+    verification_evidence?: string;
+    pivot_summary?: string;
+    correction_category?: CorrectionCategory;
+    deviation_pattern?: string;
+    corrected_constraint?: string;
+  };
   tool_event_summary: string[];
 };
 

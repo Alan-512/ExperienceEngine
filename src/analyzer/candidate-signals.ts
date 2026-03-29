@@ -11,6 +11,12 @@ const OBJECTIVE_VERIFICATION_PATTERN =
   /\b(test|probe|verify|verification|typecheck|doctor|assert|integration|smoke check|health check|browser verify|browser verification)\b/i;
 const USER_CONFIRMATION_PATTERN =
   /\b(yes(?:,? this)?|that'?s right|looks good|approved|confirmed|accepted|this is correct|that works|exactly)\b/i;
+const REVERSAL_HYPOTHESIS_PATTERN =
+  /\b(initial|first|earlier|active|current) (?:working )?(?:hypothesis|direction|path|fix)|\bhypothesis\b|\blooked plausible\b/i;
+const INVALIDATING_EVIDENCE_PATTERN =
+  /\b(ruled out|disproved|contradicted|invalidated|showed .* still|showed .* wrong|proved .* wrong|not the root cause|wrong problem shape|still failing inside)\b/i;
+const REVERSAL_PIVOT_PATTERN =
+  /\b(pivoted|switched|moved the fix|moved .* into|reworked|replacement path|instead of continuing)\b/i;
 
 export type CandidateSignalSummary = {
   failure_signature?: string;
@@ -136,6 +142,83 @@ const buildDirectionalCorrectionSignal = (input: ExperienceInput): CandidateSour
   };
 };
 
+const buildEvidenceDrivenReversalSignal = (
+  input: ExperienceInput
+): CandidateSourceSignal["evidence_driven_reversal"] => {
+  const hypothesisSnippets: string[] = [];
+  const invalidatingSnippets: string[] = [];
+  const pivotSnippets: string[] = [];
+  const validatingSnippets: string[] = [];
+
+  const pushSourceSnippet = (target: string[], value?: string): void => {
+    const normalized = normalizeWhitespace(value ?? "");
+    if (!normalized || target.includes(normalized)) {
+      return;
+    }
+    target.push(normalized);
+  };
+
+  if (input.task_summary && REVERSAL_HYPOTHESIS_PATTERN.test(input.task_summary)) {
+    pushSourceSnippet(hypothesisSnippets, input.task_summary);
+  }
+  if (input.context_summary) {
+    if (REVERSAL_HYPOTHESIS_PATTERN.test(input.context_summary)) {
+      pushSourceSnippet(hypothesisSnippets, input.context_summary);
+    }
+    if (INVALIDATING_EVIDENCE_PATTERN.test(input.context_summary)) {
+      pushSourceSnippet(invalidatingSnippets, input.context_summary);
+    }
+    if (REVERSAL_PIVOT_PATTERN.test(input.context_summary)) {
+      pushSourceSnippet(pivotSnippets, input.context_summary);
+    }
+    if (OBJECTIVE_VERIFICATION_PATTERN.test(input.context_summary) && /\b(pass|passed|succeeded|confirmed)\b/i.test(input.context_summary)) {
+      pushSourceSnippet(validatingSnippets, input.context_summary);
+    }
+  }
+
+  for (const event of input.tool_events) {
+    const summary = normalizeWhitespace(event.output_summary ?? event.error_signature ?? "");
+    if (!summary) {
+      continue;
+    }
+    if (REVERSAL_HYPOTHESIS_PATTERN.test(summary)) {
+      pushSourceSnippet(hypothesisSnippets, summary);
+    }
+    if (INVALIDATING_EVIDENCE_PATTERN.test(summary)) {
+      pushSourceSnippet(invalidatingSnippets, summary);
+    }
+    if (REVERSAL_PIVOT_PATTERN.test(summary)) {
+      pushSourceSnippet(pivotSnippets, summary);
+    }
+    if (
+      event.status === "success" &&
+      OBJECTIVE_VERIFICATION_PATTERN.test([event.tool_name, summary].join(" ")) &&
+      /\b(pass|passed|succeeded|confirmed)\b/i.test(summary)
+    ) {
+      pushSourceSnippet(validatingSnippets, summary);
+    }
+  }
+
+  const priorHypothesis = hypothesisSnippets.length > 0;
+  const invalidatingEvidence = invalidatingSnippets.length > 0;
+  const validatingEvidence = input.outcome_signal === "success" && validatingSnippets.length > 0;
+  const detected = priorHypothesis && invalidatingEvidence && validatingEvidence && pivotSnippets.length > 0;
+  const reversalStrength = !detected ? "low" : validatingSnippets.length > 1 ? "high" : "medium";
+
+  return {
+    detected,
+    reversal_source: detected ? "task_evidence" : undefined,
+    reversal_strength: reversalStrength,
+    prior_hypothesis: priorHypothesis,
+    invalidating_evidence: invalidatingEvidence,
+    validating_evidence: validatingEvidence,
+    hypothesis_snippets: hypothesisSnippets.slice(0, 3),
+    invalidating_snippets: invalidatingSnippets.slice(0, 3),
+    pivot_snippets: pivotSnippets.slice(0, 3),
+    validating_snippets: validatingSnippets.slice(0, 3)
+  };
+};
+
 const summarizeToolEvents = (events: ToolEvent[]): string[] => {
   const summary: string[] = [];
   const failures = events.filter((event) => event.status === "failure");
@@ -169,6 +252,7 @@ export const buildCandidateSignals = (input: ExperienceInput): CandidateSignalSu
   const correctionEvents = input.tool_events.filter(isCorrectionEvent);
   const correctionSignals = [...new Set(correctionEvents.map((event) => event.tool_name))].slice(0, 3);
   const directionalCorrection = buildDirectionalCorrectionSignal(input);
+  const evidenceDrivenReversal = buildEvidenceDrivenReversalSignal(input);
   const toolEventSummary = summarizeToolEvents(input.tool_events);
 
   const criticality = Boolean(failureSignature) || retryCount > 0 || correctionSignals.length > 0;
@@ -180,6 +264,7 @@ export const buildCandidateSignals = (input: ExperienceInput): CandidateSignalSu
     retry_count: retryCount,
     correction_signals: correctionSignals,
     directional_correction: directionalCorrection,
+    evidence_driven_reversal: evidenceDrivenReversal,
     tool_event_summary: toolEventSummary,
     criticality,
     improvement_room: improvementRoom,

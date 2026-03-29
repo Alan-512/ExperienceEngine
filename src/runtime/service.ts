@@ -123,6 +123,7 @@ const buildCandidateSourceSignal = (input: ExperienceInput): CandidateSourceSign
     retry_count: signals.retry_count,
     correction_signals: signals.correction_signals,
     directional_correction: signals.directional_correction,
+    evidence_driven_reversal: signals.evidence_driven_reversal,
     tool_event_summary: signals.tool_event_summary
   };
 };
@@ -151,6 +152,38 @@ const mergeDirectionalCorrectionIntoSourceSignal = (
     ...sourceSignal,
     directional_correction: {
       ...directionalCorrection,
+      semantic_detected: true,
+      correction_category: draft.correction_category,
+      deviation_pattern: draft.deviation_pattern,
+      corrected_constraint: draft.corrected_constraint
+    }
+  };
+};
+
+const mergeEvidenceDrivenReversalIntoSourceSignal = (
+  sourceSignal: CandidateSourceSignal,
+  draft: ExperienceCandidateDraft
+): CandidateSourceSignal => {
+  const reversal = sourceSignal.evidence_driven_reversal;
+  if (!reversal) {
+    return sourceSignal;
+  }
+
+  const semanticDetected = Boolean(
+    draft.experience_kind === "expectation_correction" &&
+      draft.correction_category &&
+      draft.deviation_pattern &&
+      draft.corrected_constraint
+  );
+
+  if (!semanticDetected) {
+    return sourceSignal;
+  }
+
+  return {
+    ...sourceSignal,
+    evidence_driven_reversal: {
+      ...reversal,
       semantic_detected: true,
       correction_category: draft.correction_category,
       deviation_pattern: draft.deviation_pattern,
@@ -188,15 +221,20 @@ const draftToCandidate = (
   input: ExperienceInput,
   originRecordId: string,
   taskRunId?: string,
-  directionalCorrectionSignal?: CandidateSourceSignal["directional_correction"]
+  directionalCorrectionSignal?: CandidateSourceSignal["directional_correction"],
+  evidenceDrivenReversalSignal?: CandidateSourceSignal["evidence_driven_reversal"]
 ): ExperienceCandidate => {
   const timestamp = nowIso();
   const baseSourceSignal = buildCandidateSourceSignal(input);
-  const sourceSignal = mergeDirectionalCorrectionIntoSourceSignal(
-    {
-      ...baseSourceSignal,
-      directional_correction: directionalCorrectionSignal ?? baseSourceSignal.directional_correction
-    },
+  const sourceSignal = mergeEvidenceDrivenReversalIntoSourceSignal(
+    mergeDirectionalCorrectionIntoSourceSignal(
+      {
+        ...baseSourceSignal,
+        directional_correction: directionalCorrectionSignal ?? baseSourceSignal.directional_correction,
+        evidence_driven_reversal: evidenceDrivenReversalSignal ?? baseSourceSignal.evidence_driven_reversal
+      },
+      draft
+    ),
     draft
   );
   const candidateId = stableId(
@@ -487,7 +525,14 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     }
 
     const persistedCandidates = result.drafts.map((draft) =>
-      draftToCandidate(draft, input, originRecordId, taskRunId, result.directionalCorrectionSignal)
+      draftToCandidate(
+        draft,
+        input,
+        originRecordId,
+        taskRunId,
+        result.directionalCorrectionSignal,
+        result.evidenceDrivenReversalSignal
+      )
     );
     withTransaction(this.db, () => {
       for (const candidate of persistedCandidates) {
