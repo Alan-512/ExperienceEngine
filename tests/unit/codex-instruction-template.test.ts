@@ -12,7 +12,8 @@ describe("Codex instruction template", () => {
     expect(text).toContain("experienceengine_lookup_hints");
     expect(text).toContain("experienceengine_record_tool_result");
     expect(text).toContain("experienceengine_finalize_task");
-    expect(text).toContain("experienceengine_quick_feedback");
+    expect(text).toContain("experienceengine_feedback_last");
+    expect(text).not.toContain("experienceengine_quick_feedback");
     expect(text).toContain("ask what ExperienceEngine just injected");
     expect(text).toContain("ask why it matched");
     expect(text).toContain("mark the guidance as helped or harmed in-session");

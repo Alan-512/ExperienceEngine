@@ -894,7 +894,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
           content: {
             type: "text",
             text:
-              `Pause ExperienceEngine interventions for the current project${cwd ? ` at ${cwd}` : ""}. Confirm this action before calling the experienceengine_disable_scope tool, then summarize which scope was changed.`
+              `Pause ExperienceEngine interventions for the current project${cwd ? ` at ${cwd}` : ""}. Confirm this action before calling the experienceengine_set_scope_intervention_state tool with action=disable, then summarize which scope was changed.`
           }
         }
       ]
@@ -917,7 +917,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
           content: {
             type: "text",
             text:
-              `Resume ExperienceEngine interventions for the current project${cwd ? ` at ${cwd}` : ""}. Confirm this action before calling the experienceengine_enable_scope tool, then summarize which scope was changed.`
+              `Resume ExperienceEngine interventions for the current project${cwd ? ` at ${cwd}` : ""}. Confirm this action before calling the experienceengine_set_scope_intervention_state tool with action=enable, then summarize which scope was changed.`
           }
         }
       ]
@@ -1197,30 +1197,11 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
   );
 
   server.registerTool(
-    "experienceengine_quick_feedback",
-    {
-      title: "ExperienceEngine Quick Feedback",
-      description:
-        "Use after injected guidance when it clearly helped or harmed the completed task, using the shortest in-session feedback path before falling back to CLI.",
-      inputSchema: z.object({
-        feedback: z.enum(["helped", "harmed"])
-      }),
-      outputSchema: z.object({
-        status: z.enum(["updated", "not_found"]),
-        feedback: z.enum(["helped", "harmed"]).optional(),
-        nodeIds: z.array(z.string()).optional(),
-        reason: z.enum(["last_injected_missing", "node_missing"]).optional(),
-        nodeId: z.string().optional()
-      })
-    },
-    async ({ feedback }) => toStructuredToolResult(await interactionSurface.feedbackLast({ feedback }))
-  );
-
-  server.registerTool(
     "experienceengine_feedback_last",
     {
       title: "ExperienceEngine Feedback Last",
-      description: "Record helped or harmed feedback for the last injected ExperienceEngine node set.",
+      description:
+        "Record helped or harmed feedback after injected guidance for the last injected ExperienceEngine node set.",
       inputSchema: z.object({
         feedback: z.enum(["helped", "harmed"])
       }),
@@ -1257,11 +1238,12 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
   );
 
   server.registerTool(
-    "experienceengine_disable_scope",
+    "experienceengine_set_scope_intervention_state",
     {
-      title: "ExperienceEngine Disable Scope",
-      description: "Disable ExperienceEngine interventions for the provided working directory scope.",
+      title: "ExperienceEngine Set Scope Intervention State",
+      description: "Enable or disable ExperienceEngine interventions for the provided working directory scope.",
       inputSchema: z.object({
+        action: z.enum(["enable", "disable"]),
         cwd: z.string().optional()
       }),
       outputSchema: z.object({
@@ -1272,34 +1254,21 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
         changed: z.boolean()
       })
     },
-    async ({ cwd }) => toStructuredToolResult(await interactionSurface.disableScope({ cwd }))
+    async ({ action, cwd }) =>
+      toStructuredToolResult(
+        action === "disable"
+          ? await interactionSurface.disableScope({ cwd })
+          : await interactionSurface.enableScope({ cwd })
+      )
   );
 
   server.registerTool(
-    "experienceengine_enable_scope",
+    "experienceengine_set_node_lifecycle",
     {
-      title: "ExperienceEngine Enable Scope",
-      description: "Enable ExperienceEngine interventions for the provided working directory scope.",
+      title: "ExperienceEngine Set Node Lifecycle",
+      description: "Move a specific ExperienceEngine node into cooling or retired lifecycle state.",
       inputSchema: z.object({
-        cwd: z.string().optional()
-      }),
-      outputSchema: z.object({
-        scopeId: z.string(),
-        scopeName: z.string(),
-        rootPath: z.string().optional(),
-        isDisabled: z.boolean(),
-        changed: z.boolean()
-      })
-    },
-    async ({ cwd }) => toStructuredToolResult(await interactionSurface.enableScope({ cwd }))
-  );
-
-  server.registerTool(
-    "experienceengine_cool_node",
-    {
-      title: "ExperienceEngine Cool Node",
-      description: "Move a specific ExperienceEngine node into cooling state.",
-      inputSchema: z.object({
+        action: z.enum(["cool", "retire"]),
         nodeId: z.string().min(1)
       }),
       outputSchema: z.object({
@@ -1308,24 +1277,12 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
         state: z.enum(["candidate", "priority_candidate", "active", "cooling", "retired"]).optional()
       })
     },
-    async ({ nodeId }) => toStructuredToolResult(await interactionSurface.coolNode({ nodeId }))
-  );
-
-  server.registerTool(
-    "experienceengine_retire_node",
-    {
-      title: "ExperienceEngine Retire Node",
-      description: "Retire a specific ExperienceEngine node so it is no longer injected.",
-      inputSchema: z.object({
-        nodeId: z.string().min(1)
-      }),
-      outputSchema: z.object({
-        status: z.enum(["updated", "not_found"]),
-        nodeId: z.string(),
-        state: z.enum(["candidate", "priority_candidate", "active", "cooling", "retired"]).optional()
-      })
-    },
-    async ({ nodeId }) => toStructuredToolResult(await interactionSurface.retireNode({ nodeId }))
+    async ({ action, nodeId }) =>
+      toStructuredToolResult(
+        action === "cool"
+          ? await interactionSurface.coolNode({ nodeId })
+          : await interactionSurface.retireNode({ nodeId })
+      )
   );
 
   return server;

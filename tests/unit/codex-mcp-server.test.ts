@@ -523,7 +523,7 @@ describe("Codex MCP behavior loop", () => {
     });
   });
 
-  it("registers low-risk MCP tools for feedback and scope toggles", async () => {
+  it("registers low-risk MCP tools for feedback and scope state changes", async () => {
     const homeDir = makeTempDir();
     const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
     const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
@@ -546,8 +546,7 @@ describe("Codex MCP behavior loop", () => {
 
     const server = createCodexMcpServer({ homeDir, env });
     const feedbackLastTool = getRegisteredTool(server, "experienceengine_feedback_last");
-    const disableScopeTool = getRegisteredTool(server, "experienceengine_disable_scope");
-    const enableScopeTool = getRegisteredTool(server, "experienceengine_enable_scope");
+    const scopeStateTool = getRegisteredTool(server, "experienceengine_set_scope_intervention_state");
 
     const feedbackResult = parseTextPayload<{ status: string; nodeIds?: string[] }>(
       (await feedbackLastTool.handler({ feedback: "helped" })) as {
@@ -555,12 +554,12 @@ describe("Codex MCP behavior loop", () => {
       }
     );
     const disableResult = parseTextPayload<{ isDisabled: boolean; changed: boolean }>(
-      (await disableScopeTool.handler({ cwd: "/repo" })) as {
+      (await scopeStateTool.handler({ action: "disable", cwd: "/repo" })) as {
         content: Array<{ type: string; text?: string }>;
       }
     );
     const enableResult = parseTextPayload<{ isDisabled: boolean; changed: boolean }>(
-      (await enableScopeTool.handler({ cwd: "/repo" })) as {
+      (await scopeStateTool.handler({ action: "enable", cwd: "/repo" })) as {
         content: Array<{ type: string; text?: string }>;
       }
     );
@@ -582,43 +581,11 @@ describe("Codex MCP behavior loop", () => {
     expect(node?.helped_count).toBe(1);
   });
 
-  it("registers a quick-feedback MCP tool for the last injected guidance", async () => {
+  it("does not expose a separate quick-feedback MCP tool", async () => {
     const homeDir = makeTempDir();
     const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
-    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
-    const db = openDatabase(config);
-    bootstrapDatabase(db);
-    const nodeRepo = new NodeRepository(db);
-    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_codex_mcp_quick_feedback");
-
-    const loop = createCodexBehaviorLoop({ homeDir, env });
-    await loop.lookupHints({
-      cwd: "/repo",
-      prompt: "Fix the failing auth test",
-      sessionId: "codex-mcp-quick-feedback"
-    });
-    await loop.finalizeTask({
-      sessionId: "codex-mcp-quick-feedback",
-      cwd: "/repo",
-      prompt: "Fix the failing auth test"
-    });
-
     const server = createCodexMcpServer({ homeDir, env });
-    const quickFeedbackTool = getRegisteredTool(server, "experienceengine_quick_feedback");
-
-    const feedbackResult = parseTextPayload<{ status: string; nodeIds?: string[] }>(
-      (await quickFeedbackTool.handler({ feedback: "harmed" })) as {
-        content: Array<{ type: string; text?: string }>;
-      }
-    );
-
-    expect(feedbackResult).toMatchObject({
-      status: "updated",
-      nodeIds: ["node_codex_mcp_quick_feedback"]
-    });
-
-    const node = nodeRepo.getById("node_codex_mcp_quick_feedback");
-    expect(node?.harmed_count).toBe(1);
+    expect(getRegisteredTool(server, "experienceengine_quick_feedback")).toBeUndefined();
   });
 
   it("describes the Codex tools as a default learning workflow", () => {
@@ -626,7 +593,7 @@ describe("Codex MCP behavior loop", () => {
     const lookupTool = getRegisteredTool(server, "experienceengine_lookup_hints");
     const recordTool = getRegisteredTool(server, "experienceengine_record_tool_result");
     const finalizeTool = getRegisteredTool(server, "experienceengine_finalize_task");
-    const feedbackTool = getRegisteredTool(server, "experienceengine_quick_feedback");
+    const feedbackTool = getRegisteredTool(server, "experienceengine_feedback_last");
 
     expect(lookupTool.description).toContain("once at task start");
     expect(lookupTool.description).toContain("real coding or debugging task");
@@ -700,7 +667,8 @@ describe("Codex MCP behavior loop", () => {
       type: "resource_link",
       uri: "experienceengine://recent/injected/3"
     });
-    expect(pause.messages[0].content.text).toContain("experienceengine_disable_scope");
+    expect(pause.messages[0].content.text).toContain("experienceengine_set_scope_intervention_state");
+    expect(pause.messages[0].content.text).toContain("action=disable");
     expect(pause.messages[0].content.text).toContain("/repo");
     expect(harmful.messages[0].content.text).toContain("feedback=harmed");
   });
@@ -813,26 +781,25 @@ describe("Codex MCP behavior loop", () => {
     });
   });
 
-  it("registers MCP tools for node lifecycle control", async () => {
+  it("registers MCP tools for node lifecycle state changes", async () => {
     const homeDir = makeTempDir();
     const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
     const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
     const db = openDatabase(config);
     bootstrapDatabase(db);
     const nodeRepo = new NodeRepository(db);
-    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_codex_lifecycle");
+    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_codex_lifecycle_action");
 
     const server = createCodexMcpServer({ homeDir, env });
-    const coolTool = getRegisteredTool(server, "experienceengine_cool_node");
-    const retireTool = getRegisteredTool(server, "experienceengine_retire_node");
+    const lifecycleTool = getRegisteredTool(server, "experienceengine_set_node_lifecycle");
 
     const coolPayload = parseTextPayload<{ status: string; state?: string }>(
-      (await coolTool.handler({ nodeId: "node_codex_lifecycle" })) as {
+      (await lifecycleTool.handler({ action: "cool", nodeId: "node_codex_lifecycle_action" })) as {
         content: Array<{ type: string; text?: string }>;
       }
     );
     const retirePayload = parseTextPayload<{ status: string; state?: string }>(
-      (await retireTool.handler({ nodeId: "node_codex_lifecycle" })) as {
+      (await lifecycleTool.handler({ action: "retire", nodeId: "node_codex_lifecycle_action" })) as {
         content: Array<{ type: string; text?: string }>;
       }
     );
@@ -845,7 +812,9 @@ describe("Codex MCP behavior loop", () => {
       status: "updated",
       state: "retired"
     });
-    expect(nodeRepo.getById("node_codex_lifecycle")?.state).toBe("retired");
+    expect(nodeRepo.getById("node_codex_lifecycle_action")?.state).toBe("retired");
+    expect(getRegisteredTool(server, "experienceengine_cool_node")).toBeUndefined();
+    expect(getRegisteredTool(server, "experienceengine_retire_node")).toBeUndefined();
   });
 
   it("registers plan-and-confirm MCP tools for high-impact operations", async () => {
