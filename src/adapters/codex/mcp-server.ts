@@ -693,7 +693,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
           content: {
             type: "text",
             text:
-              "First read the experienceengine://repo-summary resource. Then call experienceengine_get_repo_summary if you need the structured form. Summarize the repo benchmark verdict, suggested mode, and the most conservative next action."
+              "Read experienceengine://repo-summary first. If needed, call experienceengine_get_repo_summary. Summarize the repo verdict, suggested mode, and safest next action."
           }
         }
       ]
@@ -713,7 +713,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
           content: {
             type: "text",
             text:
-              "First read the experienceengine://capabilities resource. Then summarize which ExperienceEngine operations are direct low-risk tools that stay in the normal host-agent path for Codex, which require confirmation, and which CLI fallback or operator paths remain outside routine in-session use."
+              "Read experienceengine://capabilities first. Summarize which ExperienceEngine actions are direct tools, which need confirmation, and which stay CLI/operator-only."
           }
         }
       ]
@@ -754,7 +754,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
             content: {
               type: "text",
               text:
-                `First call ${planTool}${suffix}. Review the returned summary, effects, and artifact path with the user. Only if the user explicitly confirms should you call experienceengine_execute_planned_state_operation with the returned planId and confirmationToken.`
+                `Call ${planTool}${suffix} first. Review the summary, effects, and artifact path with the user. Only after explicit confirmation should you call experienceengine_execute_planned_state_operation with the returned planId and confirmationToken.`
             }
           }
         ]
@@ -779,7 +779,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
           content: {
             type: "text",
             text:
-              `First call experienceengine_plan_${operation} with adapter=${adapter}. Review the returned summary, effects, and commandHint with the user. Only if the user explicitly confirms should you call experienceengine_execute_planned_operation with the returned planId and confirmationToken.`
+              `Call experienceengine_plan_${operation} with adapter=${adapter} first. Review the summary, effects, and commandHint with the user. Only after explicit confirmation should you call experienceengine_execute_planned_operation with the returned planId and confirmationToken.`
           }
         }
       ]
@@ -799,7 +799,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
           content: {
             type: "text",
             text:
-              "Review the latest ExperienceEngine interaction in this Codex session first. Summarize whether guidance was injected, which nodes were involved, and what outcome was recorded. Use CLI fallback only if the host-side surface is unavailable."
+              "Review the latest ExperienceEngine interaction in this Codex session. Summarize whether guidance was injected, which nodes were involved, and the recorded outcome. Use CLI fallback only if the host surface is unavailable."
           }
         },
         {
@@ -834,7 +834,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
             content: {
               type: "text",
               text:
-                `Review the ${resolvedLimit} most recent ExperienceEngine turns that injected guidance. Summarize recurring successful patterns and any harmful repeats.`
+                `Review the ${resolvedLimit} most recent ExperienceEngine turns that injected guidance. Summarize recurring wins and harmful repeats.`
             }
           },
           {
@@ -863,7 +863,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
           content: {
             type: "text",
             text:
-              "Review the current ExperienceEngine warning nodes. Identify noisy or stale warnings, and call out any warning that appears to be over-firing or no longer useful."
+              "Review the current ExperienceEngine warning nodes. Identify stale warnings and any warning that appears noisy or over-firing."
           }
         },
         {
@@ -894,7 +894,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
           content: {
             type: "text",
             text:
-              `Pause ExperienceEngine interventions for the current project${cwd ? ` at ${cwd}` : ""}. Confirm this action before calling the experienceengine_set_scope_intervention_state tool with action=disable, then summarize which scope was changed.`
+              `Pause ExperienceEngine interventions for the current project${cwd ? ` at ${cwd}` : ""}. Confirm first, then call experienceengine_set_scope_intervention_state with action=disable and summarize the changed scope.`
           }
         }
       ]
@@ -917,7 +917,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
           content: {
             type: "text",
             text:
-              `Resume ExperienceEngine interventions for the current project${cwd ? ` at ${cwd}` : ""}. Confirm this action before calling the experienceengine_set_scope_intervention_state tool with action=enable, then summarize which scope was changed.`
+              `Resume ExperienceEngine interventions for the current project${cwd ? ` at ${cwd}` : ""}. Confirm first, then call experienceengine_set_scope_intervention_state with action=enable and summarize the changed scope.`
           }
         }
       ]
@@ -937,7 +937,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
           content: {
             type: "text",
             text:
-              "Mark the last injected ExperienceEngine guidance as helpful in this Codex session. Confirm with the user if needed, then call the experienceengine_feedback_last tool with feedback=helped and summarize which nodes were updated. Use CLI fallback only when the host-side path is unavailable."
+              "Mark the last injected ExperienceEngine guidance as helpful in this Codex session. If needed, confirm first, call experienceengine_feedback_last with feedback=helped, and summarize updated nodes. Use CLI fallback only if the host path is unavailable."
           }
         }
       ]
@@ -957,7 +957,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
           content: {
             type: "text",
             text:
-              "Mark the last injected ExperienceEngine guidance as harmful in this Codex session. Confirm with the user if needed, then call the experienceengine_feedback_last tool with feedback=harmed and summarize which nodes were updated. Use CLI fallback only when the host-side path is unavailable."
+              "Mark the last injected ExperienceEngine guidance as harmful in this Codex session. If needed, confirm first, call experienceengine_feedback_last with feedback=harmed, and summarize updated nodes. Use CLI fallback only if the host path is unavailable."
           }
         }
       ]

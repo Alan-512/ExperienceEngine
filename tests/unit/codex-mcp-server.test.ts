@@ -620,12 +620,12 @@ describe("Codex MCP behavior loop", () => {
       messages: Array<{ role: string; content: { type: string; text?: string } }>;
     };
 
-    expect(showLast.messages[0].content.text).toContain("in this Codex session first");
+    expect(showLast.messages[0].content.text).toContain("in this Codex session");
     expect(showLast.messages[0].content.text).toContain("CLI fallback");
     expect(helpful.messages[0].content.text).toContain("in this Codex session");
     expect(helpful.messages[0].content.text).toContain("CLI fallback");
-    expect(reviewCapabilities.messages[0].content.text).toContain("normal host-agent path");
-    expect(reviewCapabilities.messages[0].content.text).toContain("CLI fallback");
+    expect(reviewCapabilities.messages[0].content.text).toContain("direct tools");
+    expect(reviewCapabilities.messages[0].content.text).toContain("CLI/operator-only");
   });
 
   it("registers MCP prompts for review and control workflows", async () => {
@@ -655,7 +655,7 @@ describe("Codex MCP behavior loop", () => {
       messages: Array<{ role: string; content: { type: string; text?: string } }>;
     };
     expect(reviewCapabilities.messages[0].content.text).toContain("experienceengine://capabilities");
-    expect(reviewCapabilities.messages[0].content.text).toContain("direct low-risk tools");
+    expect(reviewCapabilities.messages[0].content.text).toContain("direct tools");
     expect(reviewRepoStatus.messages[0].content.text).toContain("experienceengine://repo-summary");
     expect(reviewRepoStatus.messages[0].content.text).toContain("experienceengine_get_repo_summary");
     expect(showLast.messages[0].content.text).toContain("Summarize whether guidance was injected");
@@ -671,6 +671,32 @@ describe("Codex MCP behavior loop", () => {
     expect(pause.messages[0].content.text).toContain("action=disable");
     expect(pause.messages[0].content.text).toContain("/repo");
     expect(harmful.messages[0].content.text).toContain("feedback=harmed");
+  });
+
+  it("keeps high-traffic MCP prompt text compact", async () => {
+    const server = createCodexMcpServer();
+    const reviewCapabilitiesPrompt = getRegisteredPrompt(server, "experienceengine_review_capabilities");
+    const reviewRepoStatusPrompt = getRegisteredPrompt(server, "experienceengine_review_repo_status");
+    const showLastPrompt = getRegisteredPrompt(server, "experienceengine_show_last_intervention");
+    const helpfulPrompt = getRegisteredPrompt(server, "experienceengine_mark_last_experience_helpful");
+
+    const reviewCapabilities = (await reviewCapabilitiesPrompt.callback({})) as {
+      messages: Array<{ role: string; content: { type: string; text?: string } }>;
+    };
+    const reviewRepoStatus = (await reviewRepoStatusPrompt.callback({})) as {
+      messages: Array<{ role: string; content: { type: string; text?: string } }>;
+    };
+    const showLast = (await showLastPrompt.callback({})) as {
+      messages: Array<{ role: string; content: { type: string; text?: string } }>;
+    };
+    const helpful = (await helpfulPrompt.callback({})) as {
+      messages: Array<{ role: string; content: { type: string; text?: string } }>;
+    };
+
+    expect((reviewCapabilities.messages[0].content.text ?? "").length).toBeLessThan(180);
+    expect((reviewRepoStatus.messages[0].content.text ?? "").length).toBeLessThan(170);
+    expect((showLast.messages[0].content.text ?? "").length).toBeLessThan(230);
+    expect((helpful.messages[0].content.text ?? "").length).toBeLessThan(260);
   });
 
   it("registers operational MCP resources and read-only tools", async () => {
