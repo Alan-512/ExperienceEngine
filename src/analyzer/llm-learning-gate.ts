@@ -48,6 +48,7 @@ type LearningGateResult = {
   reason: string;
   drafts: ExperienceCandidateDraft[];
   source: "llm" | "rule" | "disabled";
+  directionalCorrectionSignal?: NonNullable<CandidateSourceSignal["directional_correction"]>;
 };
 
 type ExpectationCorrectionRepair = {
@@ -607,8 +608,12 @@ export class LlmLearningGate {
     endpoint: DistillerEndpoint,
     input: ExperienceInput,
     reason: string,
-    draft: ExperienceCandidateDraft
-  ): Promise<ExperienceCandidateDraft> {
+    draft: ExperienceCandidateDraft,
+    directionalCorrection: CandidateSourceSignal["directional_correction"]
+  ): Promise<{
+    draft: ExperienceCandidateDraft;
+    directionalCorrectionSignal?: NonNullable<CandidateSourceSignal["directional_correction"]>;
+  }> {
     const hasCompleteExpectationCorrectionShape =
       draft.experience_kind === "expectation_correction" &&
       Boolean(
@@ -621,15 +626,20 @@ export class LlmLearningGate {
       );
 
     if (input.outcome_signal !== "success" || hasCompleteExpectationCorrectionShape) {
-      return draft;
+      return {
+        draft,
+        directionalCorrectionSignal: directionalCorrection?.detected ? directionalCorrection : undefined
+      };
     }
 
-    const directionalCorrection = buildCandidateSignals(input).directional_correction;
     if (
       !directionalCorrection?.detected ||
       (!directionalCorrection.objective_support && !directionalCorrection.user_confirmation)
     ) {
-      return draft;
+      return {
+        draft,
+        directionalCorrectionSignal: directionalCorrection?.detected ? directionalCorrection : undefined
+      };
     }
 
     try {
@@ -639,21 +649,39 @@ export class LlmLearningGate {
         this.buildExpectationCorrectionRepairBody(endpoint, input, draft, reason, directionalCorrection)
       );
       if (!response.ok) {
-        return draft;
+        return {
+          draft,
+          directionalCorrectionSignal: directionalCorrection
+        };
       }
 
       const content = await this.parseResponseContent(endpoint, response);
       const repair = this.parseExpectationCorrectionRepair(content);
       if (!repair) {
-        return draft;
+        return {
+          draft,
+          directionalCorrectionSignal: directionalCorrection
+        };
       }
 
-      return normalizeCandidate({
-        ...draft,
-        ...repair
-      });
+      return {
+        draft: normalizeCandidate({
+          ...draft,
+          ...repair
+        }),
+        directionalCorrectionSignal: {
+          ...directionalCorrection,
+          semantic_detected: true,
+          correction_category: repair.correction_category,
+          deviation_pattern: repair.deviation_pattern,
+          corrected_constraint: repair.corrected_constraint
+        }
+      };
     } catch {
-      return draft;
+      return {
+        draft,
+        directionalCorrectionSignal: directionalCorrection
+      };
     }
   }
 
@@ -865,18 +893,21 @@ export class LlmLearningGate {
         throw new Error("Learning gate marked worth_capturing=true without a candidate payload");
       }
 
-      const draft = await this.maybeRepairExpectationCorrection(
+      const directionalCorrection = buildCandidateSignals(input).directional_correction;
+      const repaired = await this.maybeRepairExpectationCorrection(
         resolution.endpoint,
         input,
         reason,
-        normalizeDraft(rawCandidate, input)
+        normalizeDraft(rawCandidate, input),
+        directionalCorrection
       );
 
       return {
         worthCapturing: true,
         reason,
-        drafts: dedupeCandidates([draft]),
-        source: "llm"
+        drafts: dedupeCandidates([repaired.draft]),
+        source: "llm",
+        directionalCorrectionSignal: repaired.directionalCorrectionSignal
       };
     } catch (error) {
       const fallback = analyzeExperience(input);

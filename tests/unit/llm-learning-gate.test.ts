@@ -431,6 +431,13 @@ describe("LlmLearningGate", () => {
     expect(repairPayload.correction_window?.selected).toBe(true);
     expect(repairPayload.correction_window?.sources).toContain("context_summary");
     expect(repairPayload.evidence_gate?.objective_support).toBe(true);
+    expect(result.directionalCorrectionSignal).toMatchObject({
+      detected: true,
+      semantic_detected: true,
+      correction_category: "implementation_boundary",
+      deviation_pattern: "implementation solves the wrong layer of the problem",
+      corrected_constraint: "Move the fix into provider routing instead of persisting in the UI layer."
+    });
     expect(result.drafts[0]).toMatchObject({
       experience_kind: "expectation_correction",
       confidence_signal: "supported_by_objective_success",

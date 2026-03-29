@@ -187,10 +187,18 @@ const draftToCandidate = (
   draft: ExperienceCandidateDraft,
   input: ExperienceInput,
   originRecordId: string,
-  taskRunId?: string
+  taskRunId?: string,
+  directionalCorrectionSignal?: CandidateSourceSignal["directional_correction"]
 ): ExperienceCandidate => {
   const timestamp = nowIso();
-  const sourceSignal = mergeDirectionalCorrectionIntoSourceSignal(buildCandidateSourceSignal(input), draft);
+  const baseSourceSignal = buildCandidateSourceSignal(input);
+  const sourceSignal = mergeDirectionalCorrectionIntoSourceSignal(
+    {
+      ...baseSourceSignal,
+      directional_correction: directionalCorrectionSignal ?? baseSourceSignal.directional_correction
+    },
+    draft
+  );
   const candidateId = stableId(
     "candidate",
     [draft.scope_id, draft.task_type, draft.node_type, draft.compact_hint, originRecordId].join(":")
@@ -478,7 +486,9 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       return;
     }
 
-    const persistedCandidates = result.drafts.map((draft) => draftToCandidate(draft, input, originRecordId, taskRunId));
+    const persistedCandidates = result.drafts.map((draft) =>
+      draftToCandidate(draft, input, originRecordId, taskRunId, result.directionalCorrectionSignal)
+    );
     withTransaction(this.db, () => {
       for (const candidate of persistedCandidates) {
         this.candidateRepo.upsert(candidate);
