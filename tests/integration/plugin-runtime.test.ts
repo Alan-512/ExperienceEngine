@@ -1019,6 +1019,86 @@ describe("OpenClaw plugin runtime", () => {
     expect(countsAfter.count).toBe(countsBefore.count);
   });
 
+  it("answers with a compact repo-level ExperienceEngine summary inside OpenClaw without persisting a new task run", async () => {
+    const runtimeDir = makeTempDir();
+    const { sqlitePath, handlers } = registerPluginRuntime(runtimeDir);
+
+    writeSharedInitialization(runtimeDir);
+    await seedInjectedOpenClawTurn(handlers, sqlitePath);
+
+    const db = new DatabaseSync(sqlitePath);
+    const countsBefore = db.prepare("SELECT COUNT(*) AS count FROM task_runs").get() as { count: number };
+    const beforePromptBuild = handlers.get("before_prompt_build");
+    const finalize = handlers.get("message_sent");
+
+    const summaryTurn = (await beforePromptBuild?.({
+      session: { key: "repo_summary" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "What is ExperienceEngine doing in this repo right now?" }
+    })) as Record<string, unknown>;
+
+    expect(String(summaryTurn.prependContext)).toContain("ExperienceEngine routine interaction:");
+    expect(String(summaryTurn.prependContext)).toContain(
+      "The user is asking for a compact ExperienceEngine summary of this repo."
+    );
+    expect(String(summaryTurn.prependContext)).toContain("Setup state:");
+    expect(String(summaryTurn.prependContext)).toContain("Value state:");
+    expect(String(summaryTurn.prependContext)).toContain("Latest intervention:");
+    expect(String(summaryTurn.prependContext)).toContain("Repo activity:");
+    expect(String(summaryTurn.prependContext)).toContain("Next step:");
+    expect(String(summaryTurn.prependContext)).not.toContain("scorecard");
+    expect(String(summaryTurn.prependContext)).not.toContain("Top candidate");
+    expect(String(summaryTurn.prependContext)).not.toContain("retrieval notes");
+    expect(String(summaryTurn.prependContext)).not.toContain("Gate reason");
+    expect(String(summaryTurn.prependContext)).not.toContain("Decision reason");
+
+    await finalize?.({
+      session: { key: "repo_summary" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "What is ExperienceEngine doing in this repo right now?" }
+    });
+
+    const countsAfter = db.prepare("SELECT COUNT(*) AS count FROM task_runs").get() as { count: number };
+    expect(countsAfter.count).toBe(countsBefore.count);
+  });
+
+  it("keeps the OpenClaw repo-level summary scoped to the current workspace", async () => {
+    const runtimeDir = makeTempDir();
+    const { sqlitePath, handlers } = registerPluginRuntime(runtimeDir);
+
+    writeSharedInitialization(runtimeDir);
+    await seedInjectedOpenClawTurn(handlers, sqlitePath, "/tmp/repo-a");
+    seedSkippedOpenClawTurn(sqlitePath, "/tmp/repo-b", {
+      sessionId: "repo_b_skip",
+      summary: "Inspect repo-b files",
+      createdAt: "2099-03-28T11:40:00.000Z"
+    });
+
+    const db = new DatabaseSync(sqlitePath);
+    const countsBefore = db.prepare("SELECT COUNT(*) AS count FROM task_runs").get() as { count: number };
+    const beforePromptBuild = handlers.get("before_prompt_build");
+    const finalize = handlers.get("message_sent");
+
+    const summaryTurn = (await beforePromptBuild?.({
+      session: { key: "repo_summary_scope_a" },
+      workspace: { cwd: "/tmp/repo-a" },
+      message: { content: "What is ExperienceEngine doing in this repo right now?" }
+    })) as Record<string, unknown>;
+
+    expect(String(summaryTurn.prependContext)).toContain('Latest intervention: inject on "Fix the failing vitest auth test".');
+    expect(String(summaryTurn.prependContext)).not.toContain("Inspect repo-b files");
+    expect(String(summaryTurn.prependContext)).not.toContain("staying mostly quiet on recent turns");
+
+    await finalize?.({
+      session: { key: "repo_summary_scope_a" },
+      workspace: { cwd: "/tmp/repo-a" },
+      message: { content: "What is ExperienceEngine doing in this repo right now?" }
+    });
+
+    const countsAfter = db.prepare("SELECT COUNT(*) AS count FROM task_runs").get() as { count: number };
+    expect(countsAfter.count).toBe(countsBefore.count);
+  });
+
   it("injects on a later similar turn even when the host payload lacks context summary", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");

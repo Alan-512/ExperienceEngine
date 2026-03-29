@@ -19,6 +19,7 @@ export type OpenClawRoutineIntent =
   | "explain_last_match"
   | "inspect_readiness"
   | "inspect_first_value"
+  | "inspect_repo_summary"
   | "explain_recent_silence"
   | "feedback_helped"
   | "feedback_harmed";
@@ -77,6 +78,15 @@ export const detectOpenClawRoutineIntent = (userMessage?: string): OpenClawRouti
     || includesAll(message, ["first", "value"])
   ) {
     return "inspect_first_value";
+  }
+
+  if (
+    includesAll(message, ["doing", "repo", "right", "now"])
+    || includesAll(message, ["quick", "summary", "workspace"])
+    || includesAll(message, ["summarize", "state", "here"])
+    || includesAll(message, ["current", "status", "repo"])
+  ) {
+    return "inspect_repo_summary";
   }
 
   if (
@@ -152,13 +162,7 @@ const summarizeHostStatus = (setupState: "Ready" | "Initialized" | "Installed"):
 };
 
 const buildReadinessContext = (runtimeActive: boolean): string => {
-  const sharedSetup = inspectSharedSetupState();
-  const openclawStatus = inspectRecordedOpenClawInstallState();
-  const setupState = deriveSetupState({
-    sharedInitialized: sharedSetup.initialized,
-    installed: openclawStatus.installed || runtimeActive,
-    interactionReady: openclawStatus.hostWiring.wired || runtimeActive
-  });
+  const setupState = deriveOpenClawSetupState(runtimeActive);
 
   return [
     "ExperienceEngine routine interaction:",
@@ -167,6 +171,74 @@ const buildReadinessContext = (runtimeActive: boolean): string => {
     `Host status: ${summarizeHostStatus(setupState)}`,
     `Next step: ${summarizeReadinessNextStep(setupState)}`,
     "Answer briefly from this grounded state. Mention CLI only if the user asks for deeper validation or repair."
+  ].join("\n");
+};
+
+const deriveOpenClawSetupState = (runtimeActive: boolean): "Ready" | "Initialized" | "Installed" => {
+  const sharedSetup = inspectSharedSetupState();
+  const openclawStatus = inspectRecordedOpenClawInstallState();
+  return deriveSetupState({
+    sharedInitialized: sharedSetup.initialized,
+    installed: openclawStatus.installed || runtimeActive,
+    interactionReady: openclawStatus.hostWiring.wired || runtimeActive
+  });
+};
+
+const buildLatestInterventionSummary = (inspection: ExperienceLastInspection | undefined): string => {
+  if (!inspection) {
+    return "none recorded yet in this workspace.";
+  }
+
+  return `${inspection.intervention} on "${inspection.summary}".`;
+};
+
+const summarizeRepoActivity = (input: {
+  verdict: "warming_up" | "healthy" | "watch" | "failing";
+  latestIntervention?: ExperienceLastInspection["intervention"];
+}): string => {
+  if (input.verdict === "healthy") {
+    return "ExperienceEngine is currently finding reusable guidance in this repo.";
+  }
+
+  if (input.verdict === "warming_up") {
+    return "ExperienceEngine is still warming up in this repo.";
+  }
+
+  if (input.verdict === "failing") {
+    return "ExperienceEngine is active here, but recent guidance quality needs closer review.";
+  }
+
+  if (input.latestIntervention === "skip") {
+    return "ExperienceEngine is active in this repo but staying mostly quiet on recent turns.";
+  }
+
+  return "ExperienceEngine is active in this repo, but current results are still mixed.";
+};
+
+const buildRepoSummaryContext = (
+  interaction: ExperienceInteractionService,
+  cwd: string,
+  runtimeActive: boolean
+): string => {
+  const repoSummary = interaction.inspectRepoSummary(cwd);
+  const latest = interaction.inspectLast(cwd);
+  const readiness = interaction.inspectFirstValueReadiness(cwd);
+  const setupState = deriveOpenClawSetupState(runtimeActive);
+  const valueState = deriveValueState(readiness);
+  const nextStep = valueState === "Warming up" ? readiness.nextStep : repoSummary.recommendedNextAction;
+
+  return [
+    "ExperienceEngine routine interaction:",
+    "The user is asking for a compact ExperienceEngine summary of this repo.",
+    `Setup state: ${setupState}`,
+    `Value state: ${valueState}`,
+    `Latest intervention: ${buildLatestInterventionSummary(latest)}`,
+    `Repo activity: ${summarizeRepoActivity({
+      verdict: repoSummary.benchmark.verdict,
+      latestIntervention: latest?.intervention
+    })}`,
+    `Next step: ${nextStep}`,
+    "Answer briefly from this grounded state. Mention CLI only if the user asks for deeper inspection or repair."
   ].join("\n");
 };
 
@@ -317,6 +389,10 @@ export const buildOpenClawRoutineInteractionContext = (
 
   if (intent === "inspect_first_value") {
     return buildFirstValueProgressContext(interaction.inspectFirstValueReadiness(currentCwd));
+  }
+
+  if (intent === "inspect_repo_summary") {
+    return buildRepoSummaryContext(interaction, currentCwd, options.runtimeActive ?? false);
   }
 
   const inspection = interaction.inspectLast(currentCwd);
