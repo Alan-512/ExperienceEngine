@@ -175,3 +175,48 @@ export const negativeEvidenceDrivenReversalSamplesB: DirectionalReversalFixture[
     })
   }
 ];
+
+export const mixedPhase1PrioritySamples: DirectionalReversalFixture[] = [
+  {
+    name: "explicit user correction stays phase-1 primary even with later stronger evidence",
+    expectedCategory: "implementation_boundary",
+    input: makeInput({
+      task_type: "config_debug",
+      outcome_signal: "success",
+      task_summary: "Fix the request path without persisting the change in the wrong layer.",
+      context_summary:
+        "The user explicitly corrected the direction to provider routing. A later targeted provider probe then strengthened that same correction and the final verification passed.",
+      tool_events: [
+        {
+          event_id: "evt_feedback_boundary",
+          tool_name: "user-feedback",
+          status: "success",
+          output_summary: "The user said the issue is still in provider routing, not the UI layer.",
+          started_at: "2026-03-29T13:10:00.000Z"
+        },
+        {
+          event_id: "evt_invalidate_probe",
+          tool_name: "targeted-probe",
+          status: "success",
+          output_summary:
+            "The targeted provider probe ruled out the timeout hypothesis and showed the request was still failing inside provider routing.",
+          started_at: "2026-03-29T13:14:00.000Z"
+        },
+        {
+          event_id: "evt_pivot_routing",
+          tool_name: "apply_patch",
+          status: "success",
+          output_summary: "Moved the fix into provider routing.",
+          started_at: "2026-03-29T13:17:00.000Z"
+        },
+        {
+          event_id: "evt_validate_routing",
+          tool_name: "integration-test",
+          status: "success",
+          output_summary: "The provider-routing integration verification passed after the routing fix.",
+          started_at: "2026-03-29T13:20:00.000Z"
+        }
+      ]
+    })
+  }
+];

@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { loadConfig } from "../../src/config/load-config.js";
 import { LlmLearningGate } from "../../src/analyzer/llm-learning-gate.js";
 import {
+  mixedPhase1PrioritySamples,
   negativeEvidenceDrivenReversalSamplesA,
   negativeEvidenceDrivenReversalSamplesB,
   positiveEvidenceDrivenReversalSamples
@@ -170,5 +171,25 @@ describe("Directional correction phase-2A evaluation set", () => {
 
     const falsePositives = results.filter((entry) => entry.result.drafts[0]?.experience_kind === "expectation_correction");
     expect(falsePositives).toHaveLength(0);
+  });
+
+  it("does not count mixed explicit-correction cases as phase-2A wins", async () => {
+    const fetchImpl = createFetchImpl();
+    const gate = createGate(fetchImpl as unknown as typeof fetch);
+
+    const results = await Promise.all(
+      mixedPhase1PrioritySamples.map(async (sample) => ({
+        name: sample.name,
+        result: await gate.generateCandidateDrafts(sample.input)
+      }))
+    );
+
+    const phase2aUpgrades = results.filter(
+      (entry) =>
+        entry.result.evidenceDrivenReversalSignal?.semantic_detected === true &&
+        entry.result.drafts[0]?.experience_kind === "expectation_correction"
+    );
+
+    expect(phase2aUpgrades).toHaveLength(0);
   });
 });
