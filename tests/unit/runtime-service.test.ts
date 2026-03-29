@@ -439,6 +439,173 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     expect(secondLookup.text).toContain("provider routing");
   });
 
+  it("persists evidence-driven reversal semantics into candidate source signals", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const geminiJsonResponse = (payload: unknown) =>
+      new Response(
+        JSON.stringify({
+          candidates: [
+            {
+              content: {
+                parts: [{ text: JSON.stringify(payload) }]
+              }
+            }
+          ]
+        }),
+        {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json"
+          }
+        }
+      );
+    const fetchImpl = vi
+      .fn<typeof fetch>()
+      .mockResolvedValueOnce(
+        geminiJsonResponse({
+          worth_capturing: true,
+          experience_kind: "execution_pattern",
+          reason: "The task exposed a reusable execution pattern.",
+          candidate: {
+            node_type: "strategy",
+            task_type: "config_debug",
+            trigger_pattern: "When the first hypothesis looks plausible but needs stronger verification",
+            compact_hint: "Validate the current hypothesis with a targeted check before broad edits.",
+            success_signal: "The targeted verification passes.",
+            evidence_summary: "The task converged after a focused verification loop."
+          }
+        })
+      )
+      .mockResolvedValueOnce(
+        geminiJsonResponse({
+          reversal_detected: true,
+          reversal_source: "task_evidence",
+          superseded_hypothesis: "Timeout tuning was the wrong active hypothesis.",
+          replacement_constraint: "Follow provider-routing evidence instead of persisting in timeout tuning.",
+          verification_evidence: "The provider-routing verification passed after the replacement fix.",
+          pivot_summary: "The task pivoted into provider routing after the stronger probe.",
+          correction_scope: "host_local",
+          correction_category: "implementation_boundary",
+          deviation_pattern: "the earlier direction was disproven by later task evidence",
+          corrected_constraint: "Follow provider-routing evidence instead of persisting in timeout tuning."
+        })
+      )
+      .mockResolvedValueOnce(
+        geminiJsonResponse({
+          trigger_conditions: "When a stronger probe disproves the current timeout hypothesis",
+          success_criteria: "The replacement-path verification passes",
+          risk_level: "medium",
+          compact_hint: "Follow provider-routing evidence instead of persisting in timeout tuning.",
+          recommended_steps: [
+            "Identify the current active hypothesis.",
+            "Use the strongest invalidating probe to rule it out.",
+            "Pivot into the replacement path and re-verify."
+          ],
+          avoid_steps: ["Do not continue tuning timeouts after the stronger probe disproves that path."],
+          fallback_steps: ["If the replacement path is still ambiguous, narrow the provider-routing probe further."],
+          evidence_summary: "The provider-routing verification only passed after replacing the timeout hypothesis."
+        })
+      );
+
+    const service = new ExperienceRuntimeService(
+      loadConfig(
+        {
+          dataDir: join(runtimeDir, "data"),
+          sqlitePath,
+          captureDir: join(runtimeDir, "captures"),
+          distillerProvider: "gemini",
+          distillerModel: "gemini-3-flash-preview",
+          distillationAuthMode: "api_key",
+          distillationMode: "llm",
+          distillationAutoDrain: true,
+          distillationAllowPassthrough: true
+        },
+        { homeDir: runtimeDir }
+      ),
+      undefined,
+      {
+        homeDir: runtimeDir,
+        env: {
+          GEMINI_API_KEY: "secret"
+        },
+        fetchImpl: fetchImpl as unknown as typeof fetch
+      }
+    );
+
+    const prompt =
+      "The timeout tuning path looked plausible, but the stronger provider probe showed the issue was still in provider routing. Fix the failing request path using the strongest evidence.";
+
+    await service.beforePromptBuild({
+      sessionId: "reversal-a",
+      cwd: "/repo",
+      userMessage: prompt,
+      taskSummary: prompt,
+      contextSummary:
+        "The initial timeout-tuning hypothesis was later disproven by a stronger provider-routing probe."
+    });
+
+    await service.persistToolResult({
+      sessionId: "reversal-a",
+      toolName: "analysis-note",
+      inputSummary: "document the first hypothesis",
+      outputSummary: "Initial working hypothesis: retry timeout tuning may be enough to fix the failing request path.",
+      status: "success"
+    });
+    await service.persistToolResult({
+      sessionId: "reversal-a",
+      toolName: "targeted-probe",
+      inputSummary: "probe provider routing",
+      outputSummary:
+        "The targeted provider probe ruled out the timeout hypothesis and showed the request was still failing inside provider routing.",
+      status: "success"
+    });
+    await service.persistToolResult({
+      sessionId: "reversal-a",
+      toolName: "apply_patch",
+      inputSummary: "move the fix into provider routing",
+      outputSummary: "Moved the fix from timeout tuning into provider routing.",
+      status: "success"
+    });
+    await service.persistToolResult({
+      sessionId: "reversal-a",
+      toolName: "integration-test",
+      inputSummary: "verify provider routing after the pivot",
+      outputSummary: "The provider-routing integration verification passed after the routing fix.",
+      status: "success"
+    });
+    await service.finalizeTask({
+      sessionId: "reversal-a",
+      cwd: "/repo",
+      userMessage: prompt,
+      taskSummary: prompt,
+      contextSummary:
+        "The initial timeout-tuning hypothesis was ruled out after a targeted provider probe showed the request was still failing inside provider routing. The investigation pivoted into provider routing, and the final integration verification passed."
+    });
+    await service.waitForBackgroundLearning();
+
+    const db = new DatabaseSync(sqlitePath);
+    const storedCandidate = db.prepare(
+      `SELECT source_signal_json
+       FROM experience_candidates
+       WHERE experience_kind = 'expectation_correction'
+       ORDER BY created_at DESC
+       LIMIT 1`
+    ).get() as { source_signal_json: string } | undefined;
+
+    const sourceSignal = storedCandidate
+      ? (JSON.parse(storedCandidate.source_signal_json) as { evidence_driven_reversal?: Record<string, unknown> })
+      : undefined;
+
+    expect(sourceSignal?.evidence_driven_reversal).toMatchObject({
+      detected: true,
+      semantic_detected: true,
+      reversal_source: "task_evidence",
+      correction_category: "implementation_boundary",
+      corrected_constraint: "Follow provider-routing evidence instead of persisting in timeout tuning."
+    });
+  });
+
   it("keeps finalized state when background candidate persistence fails", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");

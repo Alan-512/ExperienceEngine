@@ -386,6 +386,95 @@ describe("LlmDistiller", () => {
     });
   });
 
+  it("passes evidence-driven reversal source signals into distillation prompts", async () => {
+    const { config } = makeDb();
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                compact_hint: "Follow provider-routing evidence instead of persisting in timeout tuning.",
+                trigger_conditions: "When a stronger probe disproves the current timeout hypothesis",
+                success_criteria: "The replacement-path verification passes",
+                risk_level: "medium",
+                evidence_summary: "The provider-routing verification only passed after replacing the timeout hypothesis."
+              })
+            }
+          }
+        ]
+      })
+    });
+
+    const distiller = new LlmDistiller(config, {
+      env: {
+        EXPERIENCE_ENGINE_DISTILLER_MODEL: "gpt-test",
+        EXPERIENCE_ENGINE_DISTILLER_API_KEY: "secret",
+        EXPERIENCE_ENGINE_DISTILLER_BASE_URL: "https://example.test/v1/chat/completions"
+      },
+      fetchImpl: fetchImpl as unknown as typeof fetch
+    });
+
+    await distiller.distill(
+      makeCandidate({
+        experience_kind: "expectation_correction",
+        correction_category: "implementation_boundary",
+        deviation_pattern: "the earlier direction was disproven by later task evidence",
+        corrected_constraint: "Follow provider-routing evidence instead of persisting in timeout tuning.",
+        source_signal: {
+          task_summary: "Fix the failing request path by following the strongest root-cause evidence.",
+          context_summary:
+            "The initial timeout-tuning hypothesis was ruled out after a targeted provider probe showed the request was still failing inside provider routing. The investigation pivoted into provider routing, and the final integration verification passed.",
+          outcome_signal: "success",
+          tool_events: [],
+          evidence: [],
+          failure_signature: "timeout tuning did not address provider routing failure",
+          retry_count: 1,
+          correction_signals: [],
+          evidence_driven_reversal: {
+            detected: true,
+            reversal_source: "task_evidence",
+            reversal_strength: "high",
+            prior_hypothesis: true,
+            invalidating_evidence: true,
+            validating_evidence: true,
+            hypothesis_snippets: ["Initial working hypothesis: retry timeout tuning may be enough to fix the failing request path."],
+            invalidating_snippets: [
+              "The targeted provider probe ruled out the timeout hypothesis and showed the request was still failing inside provider routing."
+            ],
+            pivot_snippets: ["Moved the fix from timeout tuning into provider routing."],
+            validating_snippets: ["The provider-routing integration verification passed after the routing fix."],
+            semantic_detected: true,
+            superseded_hypothesis: "Timeout tuning was the wrong active hypothesis.",
+            replacement_constraint: "Follow provider-routing evidence instead of persisting in timeout tuning.",
+            verification_evidence: "The provider-routing verification passed after the replacement fix.",
+            pivot_summary: "The task pivoted into provider routing after the stronger probe.",
+            correction_category: "implementation_boundary",
+            deviation_pattern: "the earlier direction was disproven by later task evidence",
+            corrected_constraint: "Follow provider-routing evidence instead of persisting in timeout tuning."
+          },
+          tool_event_summary: [
+            "success: targeted-probe succeeded: The targeted provider probe ruled out the timeout hypothesis and showed the request was still failing inside provider routing."
+          ]
+        }
+      })
+    );
+
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    const requestBody = JSON.parse((fetchImpl.mock.calls[0]?.[1] as { body: string }).body);
+    expect(requestBody.messages[0].content).toContain("evidence_driven_reversal");
+    const payload = JSON.parse(requestBody.messages[1].content);
+    expect(payload.sourceSignal.evidence_driven_reversal).toMatchObject({
+      detected: true,
+      semantic_detected: true,
+      reversal_source: "task_evidence",
+      replacement_constraint: "Follow provider-routing evidence instead of persisting in timeout tuning.",
+      correction_category: "implementation_boundary",
+      corrected_constraint: "Follow provider-routing evidence instead of persisting in timeout tuning."
+    });
+  });
+
   it("uses the selected provider resolution when openrouter is configured", async () => {
     const { config } = makeDb({
       distillerProvider: "openrouter"
