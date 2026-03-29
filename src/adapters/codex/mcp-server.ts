@@ -693,7 +693,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
           content: {
             type: "text",
             text:
-              "Read experienceengine://repo-summary first. If needed, call experienceengine_get_repo_summary. Summarize the repo verdict, suggested mode, and safest next action."
+              "Read experienceengine://repo-summary first. Summarize the repo verdict, suggested mode, and safest next action."
           }
         }
       ]
@@ -1117,18 +1117,6 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
       }
     },
     async ({ adapter }) => toTextToolResult(await operationalSurface.checkUpdate(adapter))
-  );
-
-  server.registerTool(
-    "experienceengine_get_repo_summary",
-    {
-      title: "ExperienceEngine Get Repo Summary",
-      description: "Read the current repo-level ExperienceEngine summary for the active or specified cwd.",
-      inputSchema: {
-        cwd: z.string().optional()
-      }
-    },
-    async ({ cwd }) => toStructuredToolResult(await interactionSurface.inspectRepoSummary({ cwd }))
   );
 
   server.registerTool(
