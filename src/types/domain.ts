@@ -296,8 +296,11 @@ export type CandidateSourceSignal = {
     detected: boolean;
     sources: string[];
     snippets: string[];
+    correction_strength?: "low" | "medium" | "high";
+    correction_source?: "user_explicit" | "task_evidence" | "mixed";
     objective_support: boolean;
     user_confirmation: boolean;
+    improvement_evidence?: "none" | "objective_support" | "user_confirmation" | "mixed";
   };
   tool_event_summary: string[];
 };

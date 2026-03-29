@@ -8,7 +8,7 @@ const DIRECTIONAL_CORRECTION_CUE_PATTERN =
   /\b(wrong (?:direction|layer|behavior|goal|abstraction|boundary)|not (?:the )?(?:right|requested)|not what (?:i|we) (?:want|asked)|instead of|rather than|focus on|problem is in|issue is in|priority is|quality bar|verification order|wrong scope|wrong abstraction)\b/i;
 const USER_FEEDBACK_EVENT_PATTERN = /\b(user|feedback|review|comment|instruction)\b/i;
 const OBJECTIVE_VERIFICATION_PATTERN =
-  /\b(test|probe|verify|verification|build|compile|lint|typecheck|doctor|assert|request|response|endpoint|routing|fixture|mock|integration)\b/i;
+  /\b(test|probe|verify|verification|typecheck|doctor|assert|integration|smoke check|health check|browser verify|browser verification)\b/i;
 const USER_CONFIRMATION_PATTERN =
   /\b(yes(?:,? this)?|that'?s right|looks good|approved|confirmed|accepted|this is correct|that works|exactly)\b/i;
 
@@ -59,9 +59,12 @@ const pushDirectionalSnippet = (
 const buildDirectionalCorrectionSignal = (input: ExperienceInput): CandidateSourceSignal["directional_correction"] => {
   const snippets: string[] = [];
   const sources: string[] = [];
+  let sawUserExplicit = false;
+  let sawTaskEvidence = false;
 
   if (input.context_summary && DIRECTIONAL_CORRECTION_CUE_PATTERN.test(input.context_summary)) {
     pushDirectionalSnippet(snippets, sources, input.context_summary, "context_summary");
+    sawTaskEvidence = true;
   }
 
   for (const event of input.tool_events) {
@@ -70,13 +73,22 @@ const buildDirectionalCorrectionSignal = (input: ExperienceInput): CandidateSour
       continue;
     }
 
-    if (USER_FEEDBACK_EVENT_PATTERN.test(event.tool_name) || DIRECTIONAL_CORRECTION_CUE_PATTERN.test(summary)) {
+    const hasDirectionalCue = DIRECTIONAL_CORRECTION_CUE_PATTERN.test(summary);
+    if (USER_FEEDBACK_EVENT_PATTERN.test(event.tool_name) && hasDirectionalCue) {
       pushDirectionalSnippet(snippets, sources, summary, `tool_event:${event.tool_name}`);
+      sawUserExplicit = true;
+      continue;
+    }
+
+    if (hasDirectionalCue) {
+      pushDirectionalSnippet(snippets, sources, summary, `tool_event:${event.tool_name}`);
+      sawTaskEvidence = true;
     }
   }
 
   if (snippets.length === 0 && DIRECTIONAL_CORRECTION_CUE_PATTERN.test(input.task_summary)) {
     pushDirectionalSnippet(snippets, sources, input.task_summary, "task_summary");
+    sawTaskEvidence = true;
   }
 
   const objectiveSupport =
@@ -93,12 +105,34 @@ const buildDirectionalCorrectionSignal = (input: ExperienceInput): CandidateSour
       .filter(Boolean)
       .some((text) => USER_CONFIRMATION_PATTERN.test(text));
 
+  const detected = snippets.length > 0;
+  const correctionSource =
+    sawUserExplicit && sawTaskEvidence ? "mixed" : sawUserExplicit ? "user_explicit" : sawTaskEvidence ? "task_evidence" : undefined;
+  const improvementEvidence =
+    objectiveSupport && userConfirmation
+      ? "mixed"
+      : objectiveSupport
+        ? "objective_support"
+        : userConfirmation
+          ? "user_confirmation"
+          : "none";
+  const correctionStrength = !detected
+    ? "low"
+    : improvementEvidence !== "none"
+      ? "high"
+      : correctionSource === "user_explicit" || correctionSource === "mixed"
+        ? "medium"
+        : "low";
+
   return {
-    detected: snippets.length > 0,
+    detected,
     sources: sources.slice(0, 4),
     snippets: snippets.slice(0, 4),
+    correction_strength: correctionStrength,
+    correction_source: correctionSource,
     objective_support: objectiveSupport,
-    user_confirmation: userConfirmation
+    user_confirmation: userConfirmation,
+    improvement_evidence: improvementEvidence
   };
 };
 

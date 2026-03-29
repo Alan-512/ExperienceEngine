@@ -516,6 +516,80 @@ describe("LlmLearningGate", () => {
     });
   });
 
+  it("does not trigger semantic repair for ordinary user feedback followed by successful verification", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                worth_capturing: true,
+                experience_kind: "execution_pattern",
+                reason: "The task converged after a small review-driven refinement.",
+                candidate: {
+                  node_type: "strategy",
+                  task_type: "general",
+                  experience_kind: "execution_pattern",
+                  trigger_pattern: "When polishing a button label after review",
+                  compact_hint: "Apply the reviewed copy change and verify the rendered label.",
+                  success_signal: "The browser verification shows the updated label.",
+                  evidence_summary: "The label rendered correctly after the reviewed copy change."
+                }
+              })
+            }
+          }
+        ]
+      })
+    });
+
+    const gate = new LlmLearningGate(
+      loadConfig({
+        distillerProvider: "openai",
+        distillerModel: "gpt-5.4-nano",
+        distillationMode: "llm"
+      }),
+      {
+        env: {
+          EXPERIENCE_ENGINE_DISTILLER_PROVIDER: "openai",
+          EXPERIENCE_ENGINE_DISTILLER_MODEL: "gpt-5.4-nano",
+          OPENAI_API_KEY: "secret"
+        },
+        fetchImpl: fetchImpl as unknown as typeof fetch
+      }
+    );
+
+    const result = await gate.generateCandidateDrafts(
+      makeInput({
+        task_type: "general",
+        task_summary: "Polish the button label after review.",
+        context_summary: "The button label was clarified after review and the final browser verification passed.",
+        tool_events: [
+          {
+            event_id: "evt_feedback_copy",
+            tool_name: "user-feedback",
+            status: "success",
+            output_summary: "Use a clearer label on the button.",
+            started_at: "2026-03-29T10:20:00.000Z"
+          },
+          {
+            event_id: "evt_verify_copy",
+            tool_name: "browser-verify",
+            status: "success",
+            output_summary: "The updated label renders correctly in the browser verification.",
+            started_at: "2026-03-29T10:24:00.000Z"
+          }
+        ],
+        outcome_signal: "success"
+      })
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(result.drafts[0]).toMatchObject({
+      experience_kind: "execution_pattern"
+    });
+  });
+
   it("falls back to rule analysis when the llm gate request fails", async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: false,

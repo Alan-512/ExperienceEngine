@@ -41,8 +41,11 @@ describe("buildCandidateSignals", () => {
 
     expect(signals.directional_correction).toMatchObject({
       detected: true,
+      correction_strength: "high",
+      correction_source: "mixed",
       objective_support: true,
-      user_confirmation: false
+      user_confirmation: false,
+      improvement_evidence: "objective_support"
     });
     expect(signals.directional_correction?.sources).toContain("context_summary");
     expect(signals.directional_correction?.sources).toContain("tool_event:user-feedback");
@@ -76,9 +79,46 @@ describe("buildCandidateSignals", () => {
 
     expect(signals.directional_correction).toMatchObject({
       detected: false,
+      correction_strength: "low",
       objective_support: true,
-      user_confirmation: false
+      user_confirmation: false,
+      improvement_evidence: "objective_support"
     });
+    expect(signals.directional_correction?.snippets).toEqual([]);
+  });
+
+  it("does not promote ordinary user feedback into directional snippets", () => {
+    const signals = buildCandidateSignals(
+      makeInput({
+        outcome_signal: "success",
+        task_summary: "Polish the button label after review.",
+        context_summary: "The button label was clarified after review and the final browser verification passed.",
+        tool_events: [
+          {
+            event_id: "evt_feedback_copy",
+            tool_name: "user-feedback",
+            status: "success",
+            output_summary: "Use a clearer label on the button.",
+            started_at: "2026-03-29T10:20:00.000Z"
+          },
+          {
+            event_id: "evt_verify_copy",
+            tool_name: "browser-verify",
+            status: "success",
+            output_summary: "The updated label renders correctly in the browser verification.",
+            started_at: "2026-03-29T10:24:00.000Z"
+          }
+        ]
+      })
+    );
+
+    expect(signals.directional_correction).toMatchObject({
+      detected: false,
+      objective_support: true,
+      user_confirmation: false,
+      improvement_evidence: "objective_support"
+    });
+    expect(signals.directional_correction?.sources).toEqual([]);
     expect(signals.directional_correction?.snippets).toEqual([]);
   });
 });
