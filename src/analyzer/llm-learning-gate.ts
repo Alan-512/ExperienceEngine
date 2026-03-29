@@ -1,5 +1,6 @@
 import { createHash, createHmac } from "node:crypto";
 import type {
+  CandidateSourceSignal,
   ConfidenceSignal,
   CorrectionCategory,
   CorrectionScope,
@@ -11,6 +12,7 @@ import type {
 } from "../types/domain.js";
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import { analyzeExperience } from "./experience-analyzer.js";
+import { buildCandidateSignals } from "./candidate-signals.js";
 import { dedupeCandidates } from "./node-deduper.js";
 import { normalizeCandidate } from "./node-normalizer.js";
 import { isSubstantiveToolEvent } from "../input/tool-event-significance.js";
@@ -147,6 +149,8 @@ If the corrected direction later succeeds through a targeted probe, test, or ver
 const EXPECTATION_CORRECTION_REPAIR_PROMPT = `You are repairing a coding-experience draft.
 
 Decide whether the task should actually be stored as expectation_correction.
+
+Use the provided correction_window as the semantic detection context. Only promote when the correction window shows a real directional correction and the evidence_gate shows objective support or user confirmation.
 
 Return strict JSON:
 - expectation_correction: boolean
@@ -470,7 +474,8 @@ export class LlmLearningGate {
     endpoint: DistillerEndpoint,
     input: ExperienceInput,
     draft: ExperienceCandidateDraft,
-    reason: string
+    reason: string,
+    directionalCorrection: NonNullable<CandidateSourceSignal["directional_correction"]>
   ): Record<string, unknown> {
     const payload = JSON.stringify(
       {
@@ -492,6 +497,15 @@ export class LlmLearningGate {
           compact_hint: draft.compact_hint,
           success_signal: draft.success_signal,
           evidence_summary: draft.evidence_summary
+        },
+        correction_window: {
+          selected: directionalCorrection.detected,
+          snippets: directionalCorrection.snippets,
+          sources: directionalCorrection.sources
+        },
+        evidence_gate: {
+          objective_support: directionalCorrection.objective_support,
+          user_confirmation: directionalCorrection.user_confirmation
         },
         original_reason: reason
       },
@@ -610,11 +624,19 @@ export class LlmLearningGate {
       return draft;
     }
 
+    const directionalCorrection = buildCandidateSignals(input).directional_correction;
+    if (
+      !directionalCorrection?.detected ||
+      (!directionalCorrection.objective_support && !directionalCorrection.user_confirmation)
+    ) {
+      return draft;
+    }
+
     try {
       const response = await this.postJsonWithRetry(
         this.buildRequestUrl(endpoint),
         endpoint,
-        this.buildExpectationCorrectionRepairBody(endpoint, input, draft, reason)
+        this.buildExpectationCorrectionRepairBody(endpoint, input, draft, reason, directionalCorrection)
       );
       if (!response.ok) {
         return draft;

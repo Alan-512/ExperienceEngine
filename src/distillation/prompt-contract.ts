@@ -24,9 +24,10 @@ Rules:
 - risk_level must be one of: low, medium, high.
 - Preserve the original node_type intent (strategy or warning).
 - Keep recommendations specific to the candidate evidence.
-- Use sourceSignal (failure_signature, retry_count, correction_signals, tool_event_summary) to ground the hindsight.
+- Use sourceSignal (failure_signature, retry_count, correction_signals, directional_correction, tool_event_summary) to ground the hindsight.
 - Do not invent tools or outcomes not present in the candidate.
 - For expectation_correction, keep only real solution-direction corrections; do not reframe wording-only, copy-only, or presentation-only refinements as reusable experience.
+- When sourceSignal.directional_correction is present, use it to preserve the original deviation, corrected constraint, and supporting evidence instead of drifting into generic advice.
 - recommended_steps / avoid_steps / fallback_steps must be arrays of short strings.`;
 
 export const buildCandidatePayload = (candidate: ExperienceCandidate): string =>

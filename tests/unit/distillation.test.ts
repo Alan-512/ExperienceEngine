@@ -285,6 +285,99 @@ describe("LlmDistiller", () => {
     expect(result.compact_hint).toContain("targeted auth verification loop");
   });
 
+  it("passes structured directional correction source signals into distillation prompts", async () => {
+    const { config } = makeDb();
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                compact_hint: "Move the fix into provider routing before polishing the UI layer.",
+                trigger_conditions: "When a technically working fix targets the wrong layer",
+                success_criteria: "The targeted provider probe succeeds after moving the fix",
+                risk_level: "medium",
+                evidence_summary: "The corrected provider-layer fix resolved the issue."
+              })
+            }
+          }
+        ]
+      })
+    });
+
+    const distiller = new LlmDistiller(config, {
+      env: {
+        EXPERIENCE_ENGINE_DISTILLER_MODEL: "gpt-test",
+        EXPERIENCE_ENGINE_DISTILLER_API_KEY: "secret",
+        EXPERIENCE_ENGINE_DISTILLER_BASE_URL: "https://example.test/v1/chat/completions"
+      },
+      fetchImpl: fetchImpl as unknown as typeof fetch
+    });
+
+    await distiller.distill(
+      makeCandidate({
+        experience_kind: "expectation_correction",
+        correction_category: "implementation_boundary",
+        deviation_pattern: "implementation solves the wrong layer of the problem",
+        corrected_constraint: "Move the fix into provider routing instead of persisting in the UI layer.",
+        source_signal: {
+          task_summary: "Move the fix out of the UI layer and into provider routing.",
+          context_summary:
+            "The user corrected the direction: the problem is in provider routing, not in the UI layer. A targeted provider probe then succeeded.",
+          outcome_signal: "success",
+          tool_events: [
+            {
+              event_id: "evt_feedback",
+              tool_name: "user-feedback",
+              status: "success",
+              output_summary: "The user said the problem is in provider routing, not in the UI layer.",
+              started_at: "2026-03-29T09:58:00.000Z"
+            },
+            {
+              event_id: "evt_probe",
+              tool_name: "targeted-probe",
+              status: "success",
+              output_summary: "The targeted provider probe succeeded after moving the fix into provider routing.",
+              started_at: "2026-03-29T10:02:00.000Z"
+            }
+          ],
+          evidence: [
+            "user-feedback: success: The user said the problem is in provider routing, not in the UI layer.",
+            "targeted-probe: success: The targeted provider probe succeeded after moving the fix into provider routing."
+          ],
+          failure_signature: "UI-layer fix did not address provider routing mismatch",
+          retry_count: 1,
+          correction_signals: ["user-feedback"],
+          directional_correction: {
+            detected: true,
+            sources: ["context_summary", "tool_event:user-feedback"],
+            snippets: [
+              "The user corrected the direction: the problem is in provider routing, not in the UI layer.",
+              "The targeted provider probe then succeeded."
+            ],
+            objective_support: true,
+            user_confirmation: false
+          },
+          tool_event_summary: [
+            "correction: user-feedback succeeded: The user said the problem is in provider routing, not in the UI layer.",
+            "success: targeted-probe succeeded: The targeted provider probe succeeded after moving the fix into provider routing."
+          ]
+        }
+      })
+    );
+
+    expect(fetchImpl).toHaveBeenCalledOnce();
+    const requestBody = JSON.parse((fetchImpl.mock.calls[0]?.[1] as { body: string }).body);
+    expect(requestBody.messages[0].content).toContain("directional_correction");
+    const payload = JSON.parse(requestBody.messages[1].content);
+    expect(payload.sourceSignal.directional_correction).toMatchObject({
+      detected: true,
+      objective_support: true,
+      user_confirmation: false
+    });
+  });
+
   it("uses the selected provider resolution when openrouter is configured", async () => {
     const { config } = makeDb({
       distillerProvider: "openrouter"

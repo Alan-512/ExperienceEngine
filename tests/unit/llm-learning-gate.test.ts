@@ -394,9 +394,43 @@ describe("LlmLearningGate", () => {
       }
     );
 
-    const result = await gate.generateCandidateDrafts(makeInput({ outcome_signal: "success" }));
+    const result = await gate.generateCandidateDrafts(
+      makeInput({
+        outcome_signal: "success",
+        context_summary:
+          "The user corrected the direction: the fix belongs in provider routing instead of the UI layer. The final targeted provider probe succeeded after moving the change.",
+        tool_events: [
+          {
+            event_id: "evt_feedback",
+            tool_name: "user-feedback",
+            status: "success",
+            output_summary: "The user said the problem is in provider routing, not in the UI layer.",
+            started_at: "2026-03-29T09:58:00.000Z"
+          },
+          {
+            event_id: "evt_probe",
+            tool_name: "targeted-probe",
+            status: "success",
+            output_summary: "The targeted provider probe succeeded after moving the fix into provider routing.",
+            started_at: "2026-03-29T10:02:00.000Z"
+          }
+        ]
+      })
+    );
 
     expect(fetchImpl).toHaveBeenCalledTimes(2);
+    const repairRequestBody = JSON.parse(fetchImpl.mock.calls[1]?.[1]?.body as string) as {
+      messages?: Array<{ role?: string; content?: string }>;
+    };
+    const repairPayload = JSON.parse(
+      repairRequestBody.messages?.find((message) => message.role === "user")?.content ?? "{}"
+    ) as {
+      correction_window?: { selected: boolean; snippets?: string[]; sources?: string[] };
+      evidence_gate?: { objective_support: boolean; user_confirmation: boolean };
+    };
+    expect(repairPayload.correction_window?.selected).toBe(true);
+    expect(repairPayload.correction_window?.sources).toContain("context_summary");
+    expect(repairPayload.evidence_gate?.objective_support).toBe(true);
     expect(result.drafts[0]).toMatchObject({
       experience_kind: "expectation_correction",
       confidence_signal: "supported_by_objective_success",
@@ -405,6 +439,80 @@ describe("LlmLearningGate", () => {
       correction_category: "implementation_boundary",
       deviation_pattern: "implementation solves the wrong layer of the problem.",
       corrected_constraint: "Move the fix into provider routing instead of persisting in the UI layer."
+    });
+  });
+
+  it("does not trigger semantic repair when no directional correction window is present", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                worth_capturing: true,
+                experience_kind: "verification_loop",
+                reason: "The task established a reusable targeted verification loop.",
+                candidate: {
+                  node_type: "strategy",
+                  task_type: "test_debug",
+                  experience_kind: "verification_loop",
+                  trigger_pattern: "When debugging a flaky integration test",
+                  compact_hint: "Run the targeted integration probe before broad code changes.",
+                  success_signal: "The targeted probe isolates the failing integration path.",
+                  evidence_summary: "A focused probe clarified the flaky path before changes."
+                }
+              })
+            }
+          }
+        ]
+      })
+    });
+
+    const gate = new LlmLearningGate(
+      loadConfig({
+        distillerProvider: "openai",
+        distillerModel: "gpt-5.4-nano",
+        distillationMode: "llm"
+      }),
+      {
+        env: {
+          EXPERIENCE_ENGINE_DISTILLER_PROVIDER: "openai",
+          EXPERIENCE_ENGINE_DISTILLER_MODEL: "gpt-5.4-nano",
+          OPENAI_API_KEY: "secret"
+        },
+        fetchImpl: fetchImpl as unknown as typeof fetch
+      }
+    );
+
+    const result = await gate.generateCandidateDrafts(
+      makeInput({
+        task_type: "test_debug",
+        task_summary: "Stabilize the flaky integration probe for the payments fixture.",
+        context_summary: "The targeted probe isolated the flaky path and the final verification passed.",
+        tool_events: [
+          {
+            event_id: "evt_probe",
+            tool_name: "targeted-probe",
+            status: "success",
+            output_summary: "The targeted payments integration probe reproduced and isolated the flaky path.",
+            started_at: "2026-03-29T10:00:00.000Z"
+          },
+          {
+            event_id: "evt_verify",
+            tool_name: "integration-test",
+            status: "success",
+            output_summary: "The payments integration test passed after the probe-driven fix.",
+            started_at: "2026-03-29T10:05:00.000Z"
+          }
+        ],
+        outcome_signal: "success"
+      })
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(result.drafts[0]).toMatchObject({
+      experience_kind: "verification_loop"
     });
   });
 
@@ -491,7 +599,7 @@ describe("LlmLearningGate", () => {
 
     const result = await gate.generateCandidateDrafts(makeInput({ outcome_signal: "success" }));
 
-    expect(fetchImpl).toHaveBeenCalledTimes(3);
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
     expect(result.source).toBe("llm");
     expect(result.worthCapturing).toBe(true);
     expect(result.drafts[0]?.task_type).toBe("config_debug");

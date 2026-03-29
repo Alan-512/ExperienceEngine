@@ -122,6 +122,7 @@ const buildCandidateSourceSignal = (input: ExperienceInput): CandidateSourceSign
     failure_signature: signals.failure_signature,
     retry_count: signals.retry_count,
     correction_signals: signals.correction_signals,
+    directional_correction: signals.directional_correction,
     tool_event_summary: signals.tool_event_summary
   };
 };

@@ -292,6 +292,13 @@ export type CandidateSourceSignal = {
   failure_signature?: string;
   retry_count: number;
   correction_signals: string[];
+  directional_correction?: {
+    detected: boolean;
+    sources: string[];
+    snippets: string[];
+    objective_support: boolean;
+    user_confirmation: boolean;
+  };
   tool_event_summary: string[];
 };
 

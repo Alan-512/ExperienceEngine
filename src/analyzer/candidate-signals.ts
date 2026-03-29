@@ -1,14 +1,22 @@
-import type { ExperienceInput, ToolEvent } from "../types/domain.js";
+import type { CandidateSourceSignal, ExperienceInput, ToolEvent } from "../types/domain.js";
 import { buildExtractionEvidence } from "./extraction-evidence.js";
 import { normalizeWhitespace, truncate } from "../utils/text.js";
 
 const CORRECTION_TOOL_PATTERN = /\b(apply_patch|edit|write|patch|update|modify)\b/i;
 const CORRECTION_OUTPUT_PATTERN = /\b(applied|updated|patched|modified|wrote|fixed)\b/i;
+const DIRECTIONAL_CORRECTION_CUE_PATTERN =
+  /\b(wrong (?:direction|layer|behavior|goal|abstraction|boundary)|not (?:the )?(?:right|requested)|not what (?:i|we) (?:want|asked)|instead of|rather than|focus on|problem is in|issue is in|priority is|quality bar|verification order|wrong scope|wrong abstraction)\b/i;
+const USER_FEEDBACK_EVENT_PATTERN = /\b(user|feedback|review|comment|instruction)\b/i;
+const OBJECTIVE_VERIFICATION_PATTERN =
+  /\b(test|probe|verify|verification|build|compile|lint|typecheck|doctor|assert|request|response|endpoint|routing|fixture|mock|integration)\b/i;
+const USER_CONFIRMATION_PATTERN =
+  /\b(yes(?:,? this)?|that'?s right|looks good|approved|confirmed|accepted|this is correct|that works|exactly)\b/i;
 
 export type CandidateSignalSummary = {
   failure_signature?: string;
   retry_count: number;
   correction_signals: string[];
+  directional_correction?: CandidateSourceSignal["directional_correction"];
   tool_event_summary: string[];
   criticality: boolean;
   improvement_room: boolean;
@@ -32,6 +40,66 @@ const pushUnique = (target: string[], value?: string): void => {
   if (!target.includes(value)) {
     target.push(value);
   }
+};
+
+const pushDirectionalSnippet = (
+  snippets: string[],
+  sources: string[],
+  snippet: string | undefined,
+  source: string
+): void => {
+  const normalized = normalizeWhitespace(snippet ?? "");
+  if (!normalized || snippets.includes(normalized)) {
+    return;
+  }
+  snippets.push(normalized);
+  sources.push(source);
+};
+
+const buildDirectionalCorrectionSignal = (input: ExperienceInput): CandidateSourceSignal["directional_correction"] => {
+  const snippets: string[] = [];
+  const sources: string[] = [];
+
+  if (input.context_summary && DIRECTIONAL_CORRECTION_CUE_PATTERN.test(input.context_summary)) {
+    pushDirectionalSnippet(snippets, sources, input.context_summary, "context_summary");
+  }
+
+  for (const event of input.tool_events) {
+    const summary = normalizeWhitespace(event.output_summary ?? event.error_signature ?? "");
+    if (!summary) {
+      continue;
+    }
+
+    if (USER_FEEDBACK_EVENT_PATTERN.test(event.tool_name) || DIRECTIONAL_CORRECTION_CUE_PATTERN.test(summary)) {
+      pushDirectionalSnippet(snippets, sources, summary, `tool_event:${event.tool_name}`);
+    }
+  }
+
+  if (snippets.length === 0 && DIRECTIONAL_CORRECTION_CUE_PATTERN.test(input.task_summary)) {
+    pushDirectionalSnippet(snippets, sources, input.task_summary, "task_summary");
+  }
+
+  const objectiveSupport =
+    input.outcome_signal === "success" &&
+    input.tool_events.some(
+      (event) =>
+        event.status === "success" &&
+        OBJECTIVE_VERIFICATION_PATTERN.test([event.tool_name, event.output_summary, event.error_signature].filter(Boolean).join(" "))
+    );
+
+  const userConfirmation =
+    input.outcome_signal === "success" &&
+    [input.context_summary, ...input.tool_events.map((event) => event.output_summary ?? event.error_signature ?? "")]
+      .filter(Boolean)
+      .some((text) => USER_CONFIRMATION_PATTERN.test(text));
+
+  return {
+    detected: snippets.length > 0,
+    sources: sources.slice(0, 4),
+    snippets: snippets.slice(0, 4),
+    objective_support: objectiveSupport,
+    user_confirmation: userConfirmation
+  };
 };
 
 const summarizeToolEvents = (events: ToolEvent[]): string[] => {
@@ -66,6 +134,7 @@ export const buildCandidateSignals = (input: ExperienceInput): CandidateSignalSu
   const retryCount = failureEvents.length;
   const correctionEvents = input.tool_events.filter(isCorrectionEvent);
   const correctionSignals = [...new Set(correctionEvents.map((event) => event.tool_name))].slice(0, 3);
+  const directionalCorrection = buildDirectionalCorrectionSignal(input);
   const toolEventSummary = summarizeToolEvents(input.tool_events);
 
   const criticality = Boolean(failureSignature) || retryCount > 0 || correctionSignals.length > 0;
@@ -76,6 +145,7 @@ export const buildCandidateSignals = (input: ExperienceInput): CandidateSignalSu
     failure_signature: failureSignature,
     retry_count: retryCount,
     correction_signals: correctionSignals,
+    directional_correction: directionalCorrection,
     tool_event_summary: toolEventSummary,
     criticality,
     improvement_room: improvementRoom,
