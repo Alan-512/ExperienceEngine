@@ -24,7 +24,8 @@ import type {
   ExperienceNode,
   ExperienceNodeType,
   ExperienceState,
-  ReviewEvent
+  ReviewEvent,
+  TaskRun
 } from "../types/domain.js";
 import { transitionState, transitionValidationState } from "../feedback/state-transition.js";
 import { nowIso } from "../utils/clock.js";
@@ -595,8 +596,8 @@ const buildRetrievalNotes = (scorecard?: InjectionScorecard): string[] => {
   }
 
   const rerankSource = scorecard.topCandidates?.[0]?.rerankSource;
-  if (rerankSource === "model" || rerankSource === "custom") {
-    notes.push(`${rerankSource === "model" ? "Model" : "External"} reranking participated in the final ordering.`);
+  if (rerankSource === "model") {
+    notes.push("Model reranking participated in the final ordering.");
   }
 
   if (scorecard.fastPathApplied) {

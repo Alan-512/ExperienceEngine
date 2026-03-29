@@ -12,7 +12,7 @@ describe("Claude plugin assets", () => {
 
     expect(manifest.name).toBe("experienceengine");
     expect(manifest.description).toBeTypeOf("string");
-    expect(manifest.version).toBe("0.1.2");
+    expect(manifest.version).toBe("0.1.3");
   });
 
   it("defines hooks that bootstrap dependencies and route Claude hook events into EE", () => {

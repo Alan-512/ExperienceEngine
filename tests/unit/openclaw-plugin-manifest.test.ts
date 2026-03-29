@@ -16,6 +16,6 @@ describe("OpenClaw plugin manifest", () => {
 
     expect(manifest.id).toBe("experienceengine");
     expect(manifest.name).toBe("ExperienceEngine");
-    expect(manifest.version).toBe("0.1.2");
+    expect(manifest.version).toBe("0.1.3");
   });
 });

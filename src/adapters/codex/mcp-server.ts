@@ -294,8 +294,8 @@ const summarizeRetrievalNotes = (scorecard: {
   }
 
   const rerankSource = scorecard.topCandidates?.[0]?.rerankSource;
-  if (rerankSource === "model" || rerankSource === "custom") {
-    notes.push(`${rerankSource === "model" ? "Model" : "External"} reranking participated in the final ordering.`);
+  if (rerankSource === "model") {
+    notes.push("Model reranking participated in the final ordering.");
   }
 
   if (scorecard.fastPathApplied) {
@@ -489,7 +489,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
   const stateArtifacts = createCodexStateArtifactService(options);
   const server = new McpServer({
     name: "experienceengine",
-    version: "0.1.2"
+    version: "0.1.3"
   });
 
   server.registerResource(

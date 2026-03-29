@@ -35,7 +35,7 @@ describe("Claude marketplace runtime state", () => {
           adapter: "claude-code",
           install_mode: "marketplace",
           hook_source: "marketplace",
-          package_version: "0.1.2",
+          package_version: "0.1.3",
           written_at: "2026-03-27T09:00:00.000Z"
         },
         null,
@@ -56,7 +56,7 @@ describe("Claude marketplace runtime state", () => {
           adapter: "claude-code",
           install_mode: "marketplace",
           hook_source: "marketplace",
-          package_version: "0.1.2",
+          package_version: "0.1.3",
           written_at: "2026-03-27T09:00:00.000Z",
           last_hook_seen_at: "2026-03-27T09:05:00.000Z"
         },

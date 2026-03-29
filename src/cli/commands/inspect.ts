@@ -70,8 +70,8 @@ const buildRetrievalNotes = (record: ExperienceLastInspection): string[] => {
   }
 
   const topCandidate = scorecard.topCandidates?.[0];
-  if (topCandidate?.rerankSource === "model" || topCandidate?.rerankSource === "custom") {
-    notes.push(`${topCandidate.rerankSource === "model" ? "Model" : "External"} reranking participated in the final ordering.`);
+  if (topCandidate?.rerankSource === "model") {
+    notes.push("Model reranking participated in the final ordering.");
   }
 
   if (scorecard.fastPathApplied) {
