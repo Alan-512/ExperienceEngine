@@ -114,6 +114,110 @@ describe("LlmLearningGate", () => {
     expect(result.drafts).toEqual([]);
   });
 
+  it("rescues a directional correction when the main gate rejects generic capture but semantic correction is strongly supported", async () => {
+    const fetchImpl = vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  worth_capturing: false,
+                  experience_kind: "none",
+                  reason: "The run looks task-local and not broadly reusable."
+                })
+              }
+            }
+          ]
+        })
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  expectation_correction: true,
+                  candidate: {
+                    node_type: "strategy",
+                    task_type: "config_debug",
+                    trigger_pattern: "When a technically working change still fixes the UI layer instead of provider routing",
+                    compact_hint:
+                      "Move the fix into provider routing when later verification shows the UI-layer change solved the wrong layer.",
+                    success_signal: "The targeted provider probe reflects the corrected behavior after the routing change.",
+                    evidence_summary: "A later provider probe only succeeded after replacing the earlier UI-layer direction.",
+                    experience_kind: "expectation_correction",
+                    confidence_signal: "supported_by_objective_success",
+                    validation_state: "pending_reuse_validation",
+                    correction_scope: "host_local",
+                    correction_category: "implementation_boundary",
+                    deviation_pattern: "implementation solves the wrong layer of the problem",
+                    corrected_constraint: "Move the fix into provider routing instead of persisting in the UI layer."
+                  }
+                })
+              }
+            }
+          ]
+        })
+      });
+
+    const gate = new LlmLearningGate(
+      loadConfig({
+        distillerProvider: "openai",
+        distillerModel: "gpt-5.4-nano",
+        distillationMode: "llm"
+      }),
+      {
+        env: {
+          EXPERIENCE_ENGINE_DISTILLER_PROVIDER: "openai",
+          EXPERIENCE_ENGINE_DISTILLER_MODEL: "gpt-5.4-nano",
+          OPENAI_API_KEY: "secret"
+        },
+        fetchImpl: fetchImpl as unknown as typeof fetch
+      }
+    );
+
+    const result = await gate.generateCandidateDrafts(
+      makeInput({
+        outcome_signal: "success",
+        context_summary:
+          "The initial UI-layer fix technically worked, but the later provider probe showed the real correction belonged in provider routing.",
+        tool_events: [
+          {
+            event_id: "evt_feedback",
+            tool_name: "user-feedback",
+            status: "success",
+            output_summary: "The issue is still in provider routing, not the UI layer.",
+            started_at: "2026-03-29T09:58:00.000Z"
+          },
+          {
+            event_id: "evt_probe",
+            tool_name: "targeted-probe",
+            status: "success",
+            output_summary: "The targeted provider probe only succeeded after moving the fix into provider routing.",
+            started_at: "2026-03-29T10:02:00.000Z"
+          }
+        ]
+      })
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(2);
+    expect(result.worthCapturing).toBe(true);
+    expect(result.drafts[0]).toMatchObject({
+      experience_kind: "expectation_correction",
+      correction_category: "implementation_boundary",
+      corrected_constraint: "Move the fix into provider routing instead of persisting in the UI layer."
+    });
+    expect(result.directionalCorrectionSignal).toMatchObject({
+      detected: true,
+      semantic_detected: true,
+      correction_category: "implementation_boundary"
+    });
+  });
+
   it("rejects edit-only wording tasks even when the llm tries to capture them", async () => {
     const fetchImpl = vi.fn().mockResolvedValue({
       ok: true,

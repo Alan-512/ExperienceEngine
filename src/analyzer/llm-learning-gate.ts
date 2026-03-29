@@ -61,6 +61,11 @@ type ExpectationCorrectionRepair = {
   corrected_constraint?: string;
 };
 
+type ExpectationCorrectionRescue = {
+  draft: ExperienceCandidateDraft;
+  directionalCorrectionSignal: NonNullable<CandidateSourceSignal["directional_correction"]>;
+};
+
 const DEFAULT_REQUEST_TIMEOUT_MS = 45_000;
 const FREE_MODEL_REQUEST_TIMEOUT_MS = 75_000;
 const TRANSIENT_RETRY_DELAY_MS = 1_500;
@@ -176,6 +181,36 @@ context_summary: "No user correction happened; this is a verification loop."
 draft.compact_hint: "Run pnpm typecheck after each change."
 output:
 {"expectation_correction":false}`;
+
+const EXPECTATION_CORRECTION_RESCUE_PROMPT = `You are rescuing a missed directional correction from a coding task.
+
+The main learner rejected this task as not broadly reusable. You should only rescue it when the correction window and evidence gate show a real reusable expectation correction.
+
+Return strict JSON:
+- expectation_correction: boolean
+- candidate: required only when expectation_correction=true
+
+candidate must include:
+- node_type: strategy | warning
+- task_type
+- trigger_pattern
+- compact_hint
+- success_signal
+- evidence_summary
+- experience_kind: expectation_correction
+- confidence_signal: confirmed_by_user | supported_by_objective_success | unconfirmed
+- validation_state: pending_reuse_validation
+- correction_scope: task_local | repo_local | workflow_local | host_local | cross_repo_candidate
+- correction_category: goal_interpretation | quality_bar | interaction_behavior | verification_order | implementation_boundary | style_constraint
+- deviation_pattern
+- corrected_constraint
+
+Do not rescue:
+- wording-only
+- copy-only
+- style-only
+- presentation-only
+- ordinary verification loops without a corrected direction`;
 
 const sha256Hex = (value: string): string => createHash("sha256").update(value, "utf8").digest("hex");
 const hmac = (key: string | Buffer, value: string): Buffer => createHmac("sha256", key).update(value, "utf8").digest();
@@ -569,6 +604,94 @@ export class LlmLearningGate {
     };
   }
 
+  private buildExpectationCorrectionRescueBody(
+    endpoint: DistillerEndpoint,
+    input: ExperienceInput,
+    reason: string,
+    directionalCorrection: NonNullable<CandidateSourceSignal["directional_correction"]>
+  ): Record<string, unknown> {
+    const payload = JSON.stringify(
+      {
+        task_summary: input.task_summary,
+        task_type: input.task_type,
+        context_summary: input.context_summary,
+        outcome_signal: input.outcome_signal,
+        tool_events: input.tool_events.map((event) => ({
+          tool_name: event.tool_name,
+          status: event.status,
+          error_signature: event.error_signature,
+          output_summary: event.output_summary
+        })),
+        correction_window: {
+          selected: directionalCorrection.detected,
+          snippets: directionalCorrection.snippets,
+          sources: directionalCorrection.sources
+        },
+        evidence_gate: {
+          objective_support: directionalCorrection.objective_support,
+          user_confirmation: directionalCorrection.user_confirmation
+        },
+        original_reason: reason
+      },
+      null,
+      2
+    );
+
+    if (endpoint.kind === "anthropic") {
+      return {
+        model: endpoint.model,
+        max_tokens: 768,
+        system: EXPECTATION_CORRECTION_RESCUE_PROMPT,
+        messages: [{ role: "user", content: payload }],
+        temperature: 0
+      };
+    }
+
+    if (endpoint.kind === "gemini") {
+      return {
+        system_instruction: {
+          parts: [{ text: EXPECTATION_CORRECTION_RESCUE_PROMPT }]
+        },
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: payload }]
+          }
+        ],
+        generationConfig: {
+          temperature: 0,
+          responseMimeType: "application/json"
+        }
+      };
+    }
+
+    if (endpoint.kind === "bedrock") {
+      return {
+        system: [{ text: EXPECTATION_CORRECTION_RESCUE_PROMPT }],
+        messages: [
+          {
+            role: "user",
+            content: [{ text: payload }]
+          }
+        ],
+        inferenceConfig: {
+          maxTokens: 768,
+          temperature: 0
+        }
+      };
+    }
+
+    return {
+      model: endpoint.model,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: EXPECTATION_CORRECTION_RESCUE_PROMPT },
+        { role: "user", content: payload }
+      ],
+      temperature: 0
+    };
+  }
+
   private parseExpectationCorrectionRepair(content: string): ExpectationCorrectionRepair | undefined {
     const parsed = JSON.parse(content) as Record<string, unknown>;
     if (parsed.expectation_correction !== true) {
@@ -601,6 +724,46 @@ export class LlmLearningGate {
       correction_category: correctionCategory,
       deviation_pattern: deviationPattern,
       corrected_constraint: correctedConstraint
+    };
+  }
+
+  private parseExpectationCorrectionRescue(
+    content: string,
+    input: ExperienceInput,
+    directionalCorrection: NonNullable<CandidateSourceSignal["directional_correction"]>
+  ): ExpectationCorrectionRescue | undefined {
+    const parsed = JSON.parse(content) as Record<string, unknown>;
+    if (parsed.expectation_correction !== true) {
+      return undefined;
+    }
+
+    const rawCandidate =
+      parsed.candidate && typeof parsed.candidate === "object"
+        ? (parsed.candidate as Record<string, unknown>)
+        : undefined;
+    if (!rawCandidate) {
+      return undefined;
+    }
+
+    const draft = normalizeDraft(rawCandidate, input);
+    if (
+      draft.experience_kind !== "expectation_correction" ||
+      !draft.correction_category ||
+      !draft.deviation_pattern ||
+      !draft.corrected_constraint
+    ) {
+      return undefined;
+    }
+
+    return {
+      draft,
+      directionalCorrectionSignal: {
+        ...directionalCorrection,
+        semantic_detected: true,
+        correction_category: draft.correction_category,
+        deviation_pattern: draft.deviation_pattern,
+        corrected_constraint: draft.corrected_constraint
+      }
     };
   }
 
@@ -682,6 +845,37 @@ export class LlmLearningGate {
         draft,
         directionalCorrectionSignal: directionalCorrection
       };
+    }
+  }
+
+  private async maybeRescueExpectationCorrection(
+    endpoint: DistillerEndpoint,
+    input: ExperienceInput,
+    reason: string,
+    directionalCorrection: CandidateSourceSignal["directional_correction"]
+  ): Promise<ExpectationCorrectionRescue | undefined> {
+    if (
+      input.outcome_signal !== "success" ||
+      !directionalCorrection?.detected ||
+      (!directionalCorrection.objective_support && !directionalCorrection.user_confirmation)
+    ) {
+      return undefined;
+    }
+
+    try {
+      const response = await this.postJsonWithRetry(
+        this.buildRequestUrl(endpoint),
+        endpoint,
+        this.buildExpectationCorrectionRescueBody(endpoint, input, reason, directionalCorrection)
+      );
+      if (!response.ok) {
+        return undefined;
+      }
+
+      const content = await this.parseResponseContent(endpoint, response);
+      return this.parseExpectationCorrectionRescue(content, input, directionalCorrection);
+    } catch {
+      return undefined;
     }
   }
 
@@ -875,8 +1069,25 @@ export class LlmLearningGate {
       const parsed = JSON.parse(content) as Record<string, unknown>;
       const worthCapturing = parsed.worth_capturing === true;
       const reason = pickString(parsed.reason) ?? "no reason provided";
+      const directionalCorrection = buildCandidateSignals(input).directional_correction;
 
       if (!worthCapturing) {
+        const rescued = await this.maybeRescueExpectationCorrection(
+          resolution.endpoint,
+          input,
+          reason,
+          directionalCorrection
+        );
+        if (rescued) {
+          return {
+            worthCapturing: true,
+            reason: `rescued directional correction: ${reason}`,
+            drafts: dedupeCandidates([rescued.draft]),
+            source: "llm",
+            directionalCorrectionSignal: rescued.directionalCorrectionSignal
+          };
+        }
+
         return {
           worthCapturing: false,
           reason,
@@ -893,7 +1104,6 @@ export class LlmLearningGate {
         throw new Error("Learning gate marked worth_capturing=true without a candidate payload");
       }
 
-      const directionalCorrection = buildCandidateSignals(input).directional_correction;
       const repaired = await this.maybeRepairExpectationCorrection(
         resolution.endpoint,
         input,

@@ -5,7 +5,7 @@ import { normalizeWhitespace, truncate } from "../utils/text.js";
 const CORRECTION_TOOL_PATTERN = /\b(apply_patch|edit|write|patch|update|modify)\b/i;
 const CORRECTION_OUTPUT_PATTERN = /\b(applied|updated|patched|modified|wrote|fixed)\b/i;
 const DIRECTIONAL_CORRECTION_CUE_PATTERN =
-  /\b(wrong (?:direction|layer|behavior|goal|abstraction|boundary)|not (?:the )?(?:right|requested)|not what (?:i|we) (?:want|asked)|instead of|rather than|focus on|problem is in|issue is in|priority is|quality bar|verification order|wrong scope|wrong abstraction)\b/i;
+  /\b(wrong (?:direction|layer|behavior|goal|abstraction|boundary)|not (?:the )?(?:right|requested)|not what (?:i|we) (?:want|asked)|instead of|rather than|focus on|problem is (?:still )?in|issue is (?:still )?in|belongs? in|priority is|quality bar|verification order|wrong scope|wrong abstraction)\b/i;
 const USER_FEEDBACK_EVENT_PATTERN = /\b(user|feedback|review|comment|instruction)\b/i;
 const OBJECTIVE_VERIFICATION_PATTERN =
   /\b(test|probe|verify|verification|typecheck|doctor|assert|integration|smoke check|health check|browser verify|browser verification)\b/i;
