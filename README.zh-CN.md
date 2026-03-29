@@ -11,6 +11,11 @@ ExperienceEngine 是一个面向编程 Agent 的本地经验介入层。
 - `Claude Code`
 - `Codex`
 
+OpenClaw 兼容要求：
+- 需要本机已经有可正常工作的 OpenClaw，并且支持原生插件安装
+- 下面的 OpenClaw 安装路径默认要求 `openclaw plugins install` 和 `openclaw gateway restart` 可用
+- 发布包要求 Node.js `>=20`
+
 ## 它解决的问题
 
 Coding agent 会重复踩同类坑，通常不是因为模型不够聪明，而是因为它缺少**可治理的经验积累机制**。
@@ -133,6 +138,17 @@ ee maintenance embedding-smoke
   - embedding 模式 / provider
   - 共享 provider secret
 - 之后再安装新的宿主，会复用同一个 EE 数据目录、配置和共享 secret。
+
+最小共享初始化示例：
+
+```bash
+ee init distillation --provider openai --model gpt-4.1-mini --auth-mode api_key
+ee init secret OPENAI_API_KEY <your-api-key>
+ee init embedding --mode api --api-provider openai --model text-embedding-3-small
+ee init show
+```
+
+如果你更想用 Gemini 或 Jina 做 embedding，可以沿用同样的 `ee init embedding` 流程，只替换 provider 和 model。
 
 ## 前置条件
 

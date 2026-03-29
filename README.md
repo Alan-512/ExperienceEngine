@@ -11,6 +11,11 @@ Supported hosts today:
 - `Claude Code`
 - `Codex`
 
+OpenClaw compatibility:
+- requires a working OpenClaw installation with native plugin support
+- the documented OpenClaw path assumes `openclaw plugins install` and `openclaw gateway restart` are available
+- Node.js `>=20` is required for the published package
+
 ## The Problem It Solves
 
 Coding agents repeat the same mistakes for a simple reason: most sessions do not accumulate reusable execution experience in a governed way.
@@ -171,6 +176,17 @@ After installation, ExperienceEngine should orient the user toward the next setu
 - once the host or repo has reloaded correctly for real work, the product is `Ready`
 
 `First value reached` should only be claimed after visible output from a real task run. A generic warm-up message or static onboarding text does not count as first value.
+
+Minimal shared initialization example:
+
+```bash
+ee init distillation --provider openai --model gpt-4.1-mini --auth-mode api_key
+ee init secret OPENAI_API_KEY <your-api-key>
+ee init embedding --mode api --api-provider openai --model text-embedding-3-small
+ee init show
+```
+
+If you prefer Gemini or Jina for embeddings, use the same `ee init embedding` flow with the matching provider and model.
 
 ## Prerequisites
 

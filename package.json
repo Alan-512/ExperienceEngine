@@ -2,7 +2,7 @@
   "name": "@alan512/experienceengine",
   "version": "0.1.2",
   "type": "module",
-  "description": "ExperienceEngine v2 MVP scaffold for OpenClaw companion-layer experience intervention.",
+  "description": "Experience governance for coding agents: learn from real task outcomes, inject reusable hints, and retire low-value guidance.",
   "license": "MIT",
   "repository": {
     "type": "git",
