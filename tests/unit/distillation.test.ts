@@ -356,6 +356,10 @@ describe("LlmDistiller", () => {
               "The user corrected the direction: the problem is in provider routing, not in the UI layer.",
               "The targeted provider probe then succeeded."
             ],
+            semantic_detected: true,
+            correction_category: "implementation_boundary",
+            deviation_pattern: "implementation solves the wrong layer of the problem",
+            corrected_constraint: "Move the fix into provider routing instead of persisting in the UI layer.",
             objective_support: true,
             user_confirmation: false
           },
@@ -373,6 +377,10 @@ describe("LlmDistiller", () => {
     const payload = JSON.parse(requestBody.messages[1].content);
     expect(payload.sourceSignal.directional_correction).toMatchObject({
       detected: true,
+      semantic_detected: true,
+      correction_category: "implementation_boundary",
+      deviation_pattern: "implementation solves the wrong layer of the problem",
+      corrected_constraint: "Move the fix into provider routing instead of persisting in the UI layer.",
       objective_support: true,
       user_confirmation: false
     });

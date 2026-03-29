@@ -301,6 +301,10 @@ export type CandidateSourceSignal = {
     objective_support: boolean;
     user_confirmation: boolean;
     improvement_evidence?: "none" | "objective_support" | "user_confirmation" | "mixed";
+    semantic_detected?: boolean;
+    correction_category?: CorrectionCategory;
+    deviation_pattern?: string;
+    corrected_constraint?: string;
   };
   tool_event_summary: string[];
 };

@@ -407,6 +407,24 @@ describe("ExperienceRuntimeService finalize transaction", () => {
       corrected_constraint: "Move the fix into provider routing instead of persisting in the UI layer."
     });
 
+    const storedCandidate = db.prepare(
+      `SELECT source_signal_json
+       FROM experience_candidates
+       WHERE experience_kind = 'expectation_correction'
+       ORDER BY created_at DESC
+       LIMIT 1`
+    ).get() as { source_signal_json: string } | undefined;
+
+    const sourceSignal = storedCandidate ? (JSON.parse(storedCandidate.source_signal_json) as { directional_correction?: Record<string, unknown> }) : undefined;
+
+    expect(sourceSignal?.directional_correction).toMatchObject({
+      detected: true,
+      semantic_detected: true,
+      correction_category: "implementation_boundary",
+      deviation_pattern: "implementation solves the wrong layer of the problem.",
+      corrected_constraint: "Move the fix into provider routing instead of persisting in the UI layer."
+    });
+
     const secondLookup = await service.beforePromptBuild({
       sessionId: "expectation-b",
       cwd: "/repo",

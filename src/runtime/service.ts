@@ -127,6 +127,38 @@ const buildCandidateSourceSignal = (input: ExperienceInput): CandidateSourceSign
   };
 };
 
+const mergeDirectionalCorrectionIntoSourceSignal = (
+  sourceSignal: CandidateSourceSignal,
+  draft: ExperienceCandidateDraft
+): CandidateSourceSignal => {
+  const directionalCorrection = sourceSignal.directional_correction;
+  if (!directionalCorrection) {
+    return sourceSignal;
+  }
+
+  const semanticDetected = Boolean(
+    draft.experience_kind === "expectation_correction" &&
+      draft.correction_category &&
+      draft.deviation_pattern &&
+      draft.corrected_constraint
+  );
+
+  if (!semanticDetected) {
+    return sourceSignal;
+  }
+
+  return {
+    ...sourceSignal,
+    directional_correction: {
+      ...directionalCorrection,
+      semantic_detected: true,
+      correction_category: draft.correction_category,
+      deviation_pattern: draft.deviation_pattern,
+      corrected_constraint: draft.corrected_constraint
+    }
+  };
+};
+
 const summarizeRawCandidate = (sourceSignal: CandidateSourceSignal): string => {
   const fragments = [...sourceSignal.tool_event_summary];
   if (sourceSignal.failure_signature) {
@@ -158,7 +190,7 @@ const draftToCandidate = (
   taskRunId?: string
 ): ExperienceCandidate => {
   const timestamp = nowIso();
-  const sourceSignal = buildCandidateSourceSignal(input);
+  const sourceSignal = mergeDirectionalCorrectionIntoSourceSignal(buildCandidateSourceSignal(input), draft);
   const candidateId = stableId(
     "candidate",
     [draft.scope_id, draft.task_type, draft.node_type, draft.compact_hint, originRecordId].join(":")
