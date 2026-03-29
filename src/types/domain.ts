@@ -316,6 +316,7 @@ export type CandidateSourceSignal = {
     hypothesis_snippets: string[];
     invalidating_snippets: string[];
     pivot_snippets: string[];
+    replacement_snippets: string[];
     validating_snippets: string[];
     semantic_detected?: boolean;
     superseded_hypothesis?: string;

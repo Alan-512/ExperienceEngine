@@ -798,6 +798,7 @@ export class LlmLearningGate {
           hypothesis_snippets: reversal.hypothesis_snippets,
           invalidating_snippets: reversal.invalidating_snippets,
           pivot_snippets: reversal.pivot_snippets,
+          replacement_snippets: reversal.replacement_snippets,
           validating_snippets: reversal.validating_snippets
         },
         evidence_gate: {
@@ -889,6 +890,7 @@ export class LlmLearningGate {
           hypothesis_snippets: reversal.hypothesis_snippets,
           invalidating_snippets: reversal.invalidating_snippets,
           pivot_snippets: reversal.pivot_snippets,
+          replacement_snippets: reversal.replacement_snippets,
           validating_snippets: reversal.validating_snippets
         },
         evidence_gate: {

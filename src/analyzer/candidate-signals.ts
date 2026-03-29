@@ -17,6 +17,8 @@ const INVALIDATING_EVIDENCE_PATTERN =
   /\b(ruled out|disproved|contradicted|invalidated|showed .* still|showed .* wrong|proved .* wrong|not the root cause|wrong problem shape|still failing inside)\b/i;
 const REVERSAL_PIVOT_PATTERN =
   /\b(pivoted|switched|moved the fix|moved .* into|reworked|replacement path|instead of continuing)\b/i;
+const REPLACEMENT_PATH_PATTERN =
+  /\b(provider routing|routing fix|interaction logic|replacement path|after the .* fix|after moving .* into|corrected .* path|updated .* after the stronger probe)\b/i;
 
 export type CandidateSignalSummary = {
   failure_signature?: string;
@@ -148,6 +150,7 @@ const buildEvidenceDrivenReversalSignal = (
   const hypothesisSnippets: string[] = [];
   const invalidatingSnippets: string[] = [];
   const pivotSnippets: string[] = [];
+  const replacementSnippets: string[] = [];
   const validatingSnippets: string[] = [];
 
   const pushSourceSnippet = (target: string[], value?: string): void => {
@@ -171,6 +174,9 @@ const buildEvidenceDrivenReversalSignal = (
     if (REVERSAL_PIVOT_PATTERN.test(input.context_summary)) {
       pushSourceSnippet(pivotSnippets, input.context_summary);
     }
+    if (REPLACEMENT_PATH_PATTERN.test(input.context_summary)) {
+      pushSourceSnippet(replacementSnippets, input.context_summary);
+    }
     if (OBJECTIVE_VERIFICATION_PATTERN.test(input.context_summary) && /\b(pass|passed|succeeded|confirmed)\b/i.test(input.context_summary)) {
       pushSourceSnippet(validatingSnippets, input.context_summary);
     }
@@ -190,6 +196,9 @@ const buildEvidenceDrivenReversalSignal = (
     if (REVERSAL_PIVOT_PATTERN.test(summary)) {
       pushSourceSnippet(pivotSnippets, summary);
     }
+    if (REPLACEMENT_PATH_PATTERN.test(summary)) {
+      pushSourceSnippet(replacementSnippets, summary);
+    }
     if (
       event.status === "success" &&
       OBJECTIVE_VERIFICATION_PATTERN.test([event.tool_name, summary].join(" ")) &&
@@ -202,7 +211,8 @@ const buildEvidenceDrivenReversalSignal = (
   const priorHypothesis = hypothesisSnippets.length > 0;
   const invalidatingEvidence = invalidatingSnippets.length > 0;
   const validatingEvidence = input.outcome_signal === "success" && validatingSnippets.length > 0;
-  const detected = priorHypothesis && invalidatingEvidence && validatingEvidence && pivotSnippets.length > 0;
+  const replacementPath = pivotSnippets.length > 0 || replacementSnippets.length > 0;
+  const detected = priorHypothesis && invalidatingEvidence && validatingEvidence && replacementPath;
   const reversalStrength = !detected ? "low" : validatingSnippets.length > 1 ? "high" : "medium";
 
   return {
@@ -215,6 +225,7 @@ const buildEvidenceDrivenReversalSignal = (
     hypothesis_snippets: hypothesisSnippets.slice(0, 3),
     invalidating_snippets: invalidatingSnippets.slice(0, 3),
     pivot_snippets: pivotSnippets.slice(0, 3),
+    replacement_snippets: replacementSnippets.slice(0, 3),
     validating_snippets: validatingSnippets.slice(0, 3)
   };
 };
