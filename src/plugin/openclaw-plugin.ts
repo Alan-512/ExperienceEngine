@@ -106,8 +106,9 @@ class OpenClawExperiencePlugin implements ExperiencePlugin {
         });
         return applyInjectionToPayload(
           payload,
-          buildOpenClawRoutineInteractionContext(this.runtime.config, routineIntent, context.cwd, {
-            runtimeActive: true
+          await buildOpenClawRoutineInteractionContext(this.runtime.config, routineIntent, context.cwd, {
+            runtimeActive: true,
+            userMessage: context.userMessage
           })
         );
       }

@@ -308,7 +308,8 @@ const buildRecentSilenceContext = (
 
 const buildInspectionContext = (
   record: ExperienceLastInspection,
-  intent: "inspect_last" | "explain_last_match"
+  intent: "inspect_last" | "explain_last_match",
+  explanationOverride?: string
 ): string => {
   const lines = [
     "ExperienceEngine routine interaction:",
@@ -334,8 +335,8 @@ const buildInspectionContext = (
   }
 
   if (intent === "explain_last_match") {
-    if (record.decisionExplanation) {
-      lines.push(`Why it matched: ${record.decisionExplanation}`);
+    if (explanationOverride ?? record.decisionExplanation) {
+      lines.push(`Why it matched: ${explanationOverride ?? record.decisionExplanation}`);
     }
     if (record.trustSummary) {
       lines.push(`Trust summary: ${record.trustSummary}`);
@@ -368,12 +369,12 @@ const buildFeedbackContext = (feedback: "helped" | "harmed", result: FeedbackRes
   ].join("\n");
 };
 
-export const buildOpenClawRoutineInteractionContext = (
+export const buildOpenClawRoutineInteractionContext = async (
   config: ExperienceEngineConfig,
   intent: OpenClawRoutineIntent,
   cwd?: string,
-  options: { runtimeActive?: boolean } = {}
-): string => {
+  options: { runtimeActive?: boolean; userMessage?: string } = {}
+): Promise<string> => {
   const interaction = new ExperienceInteractionService(config);
   const currentCwd = cwd ?? process.cwd();
 
@@ -406,5 +407,10 @@ export const buildOpenClawRoutineInteractionContext = (
     return buildMissingInspectionContext(intent);
   }
 
-  return buildInspectionContext(inspection, intent);
+  const explanationOverride =
+    intent === "explain_last_match"
+      ? await interaction.explainLastDecision(currentCwd, options.userMessage)
+      : undefined;
+
+  return buildInspectionContext(inspection, intent, explanationOverride);
 };

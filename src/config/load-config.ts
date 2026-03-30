@@ -158,7 +158,19 @@ export const loadConfig = (
     hybridPostmortemReviewProfileVersion:
       env.EXPERIENCE_ENGINE_HYBRID_POSTMORTEM_PROFILE_VERSION ??
       overrides.hybridPostmortemReviewProfileVersion ??
-      defaultConfig.hybridPostmortemReviewProfileVersion
+      defaultConfig.hybridPostmortemReviewProfileVersion,
+    hybridExplainLlmEnabled:
+      env.EXPERIENCE_ENGINE_HYBRID_EXPLAIN_LLM_ENABLED !== undefined
+        ? env.EXPERIENCE_ENGINE_HYBRID_EXPLAIN_LLM_ENABLED === "true"
+        : overrides.hybridExplainLlmEnabled ?? defaultConfig.hybridExplainLlmEnabled,
+    hybridExplainProviderMode:
+      (env.EXPERIENCE_ENGINE_HYBRID_EXPLAIN_PROVIDER_MODE as ExperienceEngineConfig["hybridExplainProviderMode"] | undefined) ??
+      overrides.hybridExplainProviderMode ??
+      defaultConfig.hybridExplainProviderMode,
+    hybridExplainModelProfileVersion:
+      env.EXPERIENCE_ENGINE_HYBRID_EXPLAIN_MODEL_PROFILE_VERSION ??
+      overrides.hybridExplainModelProfileVersion ??
+      defaultConfig.hybridExplainModelProfileVersion
   });
 
   return parsed;

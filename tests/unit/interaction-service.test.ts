@@ -269,6 +269,136 @@ describe("ExperienceInteractionService", () => {
     ]);
   });
 
+  it("uses the provider-backed explain path when explicitly enabled and records the phase 2 model profile", async () => {
+    const homeDir = makeTempDir();
+    const config = loadConfig({
+      dataDir: join(homeDir, ".experienceengine"),
+      hybridEnabled: true,
+      hybridSyncExplainEnabled: true,
+      hybridExplainLlmEnabled: true,
+      hybridExplainProviderMode: "shared_distiller",
+      hybridExplainModelProfileVersion: "hybrid-explain-llm-v1",
+      distillerProvider: "openai_compatible",
+      distillerModel: "gpt-5.4-mini"
+    });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_interaction_detail");
+    seedLatestInspectionRecord(homeDir, "/repo");
+
+    const originalFetch = globalThis.fetch;
+    const originalApiKey = process.env.EXPERIENCE_ENGINE_DISTILLER_API_KEY;
+    process.env.EXPERIENCE_ENGINE_DISTILLER_API_KEY = "test-key";
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  decision: "ExperienceEngine injected reusable guidance for this task.",
+                  reason: "The candidate was already validated and cleared the fast path.",
+                  confidence: "high",
+                  evidence_summary: "task summary, retrieval note"
+                })
+              }
+            }
+          ]
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )) as typeof fetch;
+
+    try {
+      const service = new ExperienceInteractionService(config);
+      const explanation = await service.explainLastDecision("/repo", "Why did ExperienceEngine inject that hint here?");
+      const traceRows = db
+        .prepare(
+          "SELECT worker_task, rollout_mode, output_action, worker_profile_version FROM hybrid_invocation_traces ORDER BY created_at ASC"
+        )
+        .all() as Array<{
+        worker_task: string;
+        rollout_mode: string;
+        output_action: string;
+        worker_profile_version: string;
+      }>;
+
+      expect(explanation).toContain("validated and cleared the fast path");
+      expect(traceRows).toEqual([
+        expect.objectContaining({
+          worker_task: "explain_decision",
+          rollout_mode: "live",
+          output_action: "surfaced",
+          worker_profile_version: "hybrid-explain-llm-v1"
+        })
+      ]);
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (originalApiKey === undefined) {
+        delete process.env.EXPERIENCE_ENGINE_DISTILLER_API_KEY;
+      } else {
+        process.env.EXPERIENCE_ENGINE_DISTILLER_API_KEY = originalApiKey;
+      }
+    }
+  });
+
+  it("records an explicit phase 2 fallback trace when provider-backed explain is enabled but provider resolution is unavailable", async () => {
+    const homeDir = makeTempDir();
+    const config = loadConfig({
+      dataDir: join(homeDir, ".experienceengine"),
+      hybridEnabled: true,
+      hybridSyncExplainEnabled: true,
+      hybridExplainLlmEnabled: true,
+      hybridExplainProviderMode: "shared_distiller",
+      hybridExplainModelProfileVersion: "hybrid-explain-llm-v1",
+      distillerProvider: "openai_compatible",
+      distillerModel: "gpt-5.4-mini"
+    });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_interaction_detail");
+    seedLatestInspectionRecord(homeDir, "/repo");
+
+    const originalApiKey = process.env.EXPERIENCE_ENGINE_DISTILLER_API_KEY;
+    delete process.env.EXPERIENCE_ENGINE_DISTILLER_API_KEY;
+
+    try {
+      const service = new ExperienceInteractionService(config);
+      const explanation = await service.explainLastDecision("/repo", "Why did ExperienceEngine inject that hint here?");
+      const traceRows = db
+        .prepare(
+          "SELECT worker_task, rollout_mode, output_action, worker_profile_version, validation_status, fallback_reason FROM hybrid_invocation_traces ORDER BY created_at ASC"
+        )
+        .all() as Array<{
+          worker_task: string;
+          rollout_mode: string;
+          output_action: string;
+          worker_profile_version: string;
+          validation_status: string;
+          fallback_reason: string | null;
+        }>;
+
+      expect(explanation).toContain("ExperienceEngine injected");
+      expect(traceRows).toEqual([
+        expect.objectContaining({
+          worker_task: "explain_decision",
+          rollout_mode: "live",
+          output_action: "none",
+          worker_profile_version: "hybrid-explain-llm-v1",
+          validation_status: "fallback",
+          fallback_reason: "provider_unavailable"
+        })
+      ]);
+    } finally {
+      if (originalApiKey === undefined) {
+        delete process.env.EXPERIENCE_ENGINE_DISTILLER_API_KEY;
+      } else {
+        process.env.EXPERIENCE_ENGINE_DISTILLER_API_KEY = originalApiKey;
+      }
+    }
+  });
+
   it("returns not_found for feedback when no injected record exists", () => {
     const homeDir = makeTempDir();
     const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });

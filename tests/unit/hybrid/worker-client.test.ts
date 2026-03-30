@@ -223,4 +223,50 @@ describe("HybridWorkerClient", () => {
     expect(second).toMatchObject({ status: "fallback", reason: "timeout" });
     expect(third).toMatchObject({ status: "fallback", reason: "circuit_open" });
   });
+
+  it("uses the provider-backed explain executor only when provider mode is explicitly selected", async () => {
+    const client = new HybridWorkerClient({
+      explainDecisionExecutor: async () => ({
+        task: "explain_decision",
+        decision: "deterministic explain",
+        reason: "deterministic reason",
+        confidence: "medium"
+      }),
+      explainDecisionLlmEnabled: true,
+      explainDecisionLlmExecutor: async () => ({
+        task: "explain_decision",
+        decision: "provider explain",
+        reason: "provider reason",
+        confidence: "high"
+      })
+    });
+
+    const deterministic = await client.runExplainDecision(buildCapsule());
+    const provider = await client.runExplainDecision(buildCapsule(), {
+      mode: "provider",
+      endpoint: {
+        kind: "openai",
+        provider: "openai_compatible",
+        model: "gpt-5.4-mini",
+        baseUrl: "https://api.openai.com/v1/chat/completions",
+        headers: {
+          Authorization: "Bearer test-key"
+        },
+        source: "explicit"
+      }
+    });
+
+    expect(deterministic).toMatchObject({
+      status: "accepted",
+      value: expect.objectContaining({
+        decision: "deterministic explain"
+      })
+    });
+    expect(provider).toMatchObject({
+      status: "accepted",
+      value: expect.objectContaining({
+        decision: "provider explain"
+      })
+    });
+  });
 });

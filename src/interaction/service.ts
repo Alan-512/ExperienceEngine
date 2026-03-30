@@ -2,6 +2,7 @@ import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import { buildInjectionScorecard } from "../controller/injection-scorecard.js";
 import { buildBenchmarkSummary, type BenchmarkSummary } from "../evaluation/benchmark-summary.js";
 import { buildExplainDecisionCapsule } from "../hybrid/capsule-builder.js";
+import { resolveHybridExplainProviderEndpoint } from "../hybrid/explain-provider-client.js";
 import { resolveHybridRolloutState } from "../hybrid/rollout.js";
 import { selectHybridRoute, type HybridRouteDecision } from "../hybrid/router.js";
 import { HybridWorkerClient } from "../hybrid/worker-client.js";
@@ -688,7 +689,9 @@ export class ExperienceInteractionService {
     this.reviewEventRepo = new ReviewEventRepository(db);
     this.scopeRepo = new ScopeRepository(db);
     this.hybridWorkerClient = new HybridWorkerClient({
-      explainDecisionEnabled: config.hybridEnabled && config.hybridSyncExplainEnabled
+      explainDecisionEnabled: config.hybridEnabled && config.hybridSyncExplainEnabled,
+      explainDecisionLlmEnabled:
+        config.hybridEnabled && config.hybridSyncExplainEnabled && config.hybridExplainLlmEnabled
     });
   }
 
@@ -725,7 +728,26 @@ export class ExperienceInteractionService {
       routeDecision,
       inspection
     });
-    const result = await this.hybridWorkerClient.runExplainDecision(capsule);
+    const providerResolution = this.config.hybridExplainLlmEnabled
+      ? resolveHybridExplainProviderEndpoint(this.config)
+      : { status: "disabled" as const, reason: "Phase 2 provider-backed explain is disabled." };
+    const phase2ExplainRequested = this.config.hybridExplainLlmEnabled;
+    const useProvider = providerResolution.status === "configured";
+    const result =
+      phase2ExplainRequested && providerResolution.status === "unavailable"
+        ? ({
+            status: "fallback",
+            reason: "provider_unavailable"
+          } as const)
+        : await this.hybridWorkerClient.runExplainDecision(
+            capsule,
+            useProvider
+              ? {
+                  mode: "provider",
+                  endpoint: providerResolution.endpoint
+                }
+              : undefined
+          );
     const timestamp = nowIso();
     this.hybridTraceRepo.upsert({
       id: createId("hybridtrace"),
@@ -736,10 +758,12 @@ export class ExperienceInteractionService {
       route: routeDecision.route,
       route_policy_version: routeDecision.policyVersion,
       capsule_schema_version: this.config.hybridCapsuleSchemaVersion,
-      worker_profile_version: this.config.hybridExplainDecisionProfileVersion,
+      worker_profile_version: phase2ExplainRequested
+        ? this.config.hybridExplainModelProfileVersion
+        : this.config.hybridExplainDecisionProfileVersion,
       rollout_mode: rollout.effectiveMode,
       rollout_reason: rollout.reason,
-      worker_ran: true,
+      worker_ran: result.status !== "fallback" || result.reason !== "provider_unavailable",
       validation_status: result.status === "accepted" ? "accepted" : "fallback",
       output_action: result.status === "accepted" && rollout.userVisible ? "surfaced" : "none",
       fallback_reason: result.status === "accepted" ? undefined : result.reason,

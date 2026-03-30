@@ -6,14 +6,16 @@ import type {
   PostmortemReviewCapsule,
   PostmortemReviewWorkerOutput
 } from "./types.js";
+import type { DistillerEndpoint } from "../distillation/providers/types.js";
 import { validateExplainDecisionOutput, validatePostmortemReviewOutput } from "./validators.js";
 import { runExplainDecisionWorker } from "./workers/explain-decision.js";
+import { runExplainDecisionLlmWorker } from "./workers/explain-decision-llm.js";
 import { runPostmortemReviewWorker } from "./workers/postmortem-review.js";
 
 export type HybridExplainFallback =
   | {
       status: "fallback";
-      reason: "disabled" | "timeout" | "circuit_open";
+      reason: "disabled" | "timeout" | "circuit_open" | "provider_unavailable";
     }
   | {
       status: "fallback";
@@ -42,6 +44,11 @@ type HybridWorkerClientOptions = {
   explainDecisionEnabled?: boolean;
   explainDecisionTimeoutMs?: number;
   explainDecisionExecutor?: (capsule: ExplainDecisionCapsule) => Promise<ExplainDecisionWorkerOutput> | ExplainDecisionWorkerOutput;
+  explainDecisionLlmEnabled?: boolean;
+  explainDecisionLlmExecutor?: (
+    capsule: ExplainDecisionCapsule,
+    endpoint: DistillerEndpoint
+  ) => Promise<ExplainDecisionWorkerOutput> | ExplainDecisionWorkerOutput;
   postmortemReviewEnabled?: boolean;
   postmortemReviewTimeoutMs?: number;
   postmortemReviewExecutor?: (
@@ -59,6 +66,11 @@ export class HybridWorkerClient {
   private readonly explainDecisionExecutor: (
     capsule: ExplainDecisionCapsule
   ) => Promise<ExplainDecisionWorkerOutput> | ExplainDecisionWorkerOutput;
+  private readonly explainDecisionLlmEnabled: boolean;
+  private readonly explainDecisionLlmExecutor: (
+    capsule: ExplainDecisionCapsule,
+    endpoint: DistillerEndpoint
+  ) => Promise<ExplainDecisionWorkerOutput> | ExplainDecisionWorkerOutput;
   private readonly postmortemReviewEnabled: boolean;
   private readonly postmortemReviewTimeoutMs: number;
   private readonly postmortemReviewExecutor: (
@@ -72,13 +84,23 @@ export class HybridWorkerClient {
     this.explainDecisionEnabled = options.explainDecisionEnabled ?? true;
     this.explainDecisionTimeoutMs = options.explainDecisionTimeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.explainDecisionExecutor = options.explainDecisionExecutor ?? runExplainDecisionWorker;
+    this.explainDecisionLlmEnabled = options.explainDecisionLlmEnabled ?? false;
+    this.explainDecisionLlmExecutor =
+      options.explainDecisionLlmExecutor
+      ?? ((capsule, endpoint) => runExplainDecisionLlmWorker(capsule, { endpoint }));
     this.postmortemReviewEnabled = options.postmortemReviewEnabled ?? true;
     this.postmortemReviewTimeoutMs = options.postmortemReviewTimeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.postmortemReviewExecutor = options.postmortemReviewExecutor ?? runPostmortemReviewWorker;
     this.timeoutCircuitThreshold = options.timeoutCircuitThreshold ?? DEFAULT_CIRCUIT_THRESHOLD;
   }
 
-  async runExplainDecision(capsule: ExplainDecisionCapsule): Promise<HybridExplainResult> {
+  async runExplainDecision(
+    capsule: ExplainDecisionCapsule,
+    options: {
+      mode?: "deterministic" | "provider";
+      endpoint?: DistillerEndpoint;
+    } = {}
+  ): Promise<HybridExplainResult> {
     if (!this.explainDecisionEnabled) {
       return {
         status: "fallback",
@@ -94,8 +116,17 @@ export class HybridWorkerClient {
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
+      const run =
+        options.mode === "provider"
+          ? () => {
+              if (!this.explainDecisionLlmEnabled || !options.endpoint) {
+                throw new Error("provider_disabled");
+              }
+              return this.explainDecisionLlmExecutor(capsule, options.endpoint);
+            }
+          : () => this.explainDecisionExecutor(capsule);
       const result = await Promise.race([
-        Promise.resolve(this.explainDecisionExecutor(capsule)),
+        Promise.resolve(run()),
         new Promise<never>((_, reject) => {
           timer = setTimeout(() => reject(new Error("timeout")), this.explainDecisionTimeoutMs);
         })
@@ -113,6 +144,13 @@ export class HybridWorkerClient {
       this.explainTimeoutStreak = 0;
       return validated;
     } catch (error) {
+      if (error instanceof Error && error.message === "provider_disabled") {
+        this.explainTimeoutStreak = 0;
+        return {
+          status: "fallback",
+          reason: "disabled"
+        };
+      }
       if (error instanceof Error && error.message === "timeout") {
         this.explainTimeoutStreak += 1;
         return {

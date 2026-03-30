@@ -113,7 +113,10 @@ const waitFor = async (assertion: () => void, attempts = 25, delayMs = 20): Prom
   throw lastError instanceof Error ? lastError : new Error(String(lastError));
 };
 
-const registerPluginRuntime = (runtimeDir: string): {
+const registerPluginRuntime = (
+  runtimeDir: string,
+  pluginConfigOverrides: Record<string, unknown> = {}
+): {
   sqlitePath: string;
   handlers: Map<string, Handler>;
 } => {
@@ -125,7 +128,8 @@ const registerPluginRuntime = (runtimeDir: string): {
       dataDir: join(runtimeDir, "data"),
       sqlitePath,
       triggerThreshold: 0.6,
-      maxHints: 3
+      maxHints: 3,
+      ...pluginConfigOverrides
     },
     on(event, handler) {
       handlers.set(event, handler);
@@ -743,6 +747,62 @@ describe("OpenClaw plugin runtime", () => {
 
     const countsAfter = db.prepare("SELECT COUNT(*) AS count FROM task_runs").get() as { count: number };
     expect(countsAfter.count).toBe(countsBefore.count);
+  });
+
+  it("uses provider-backed explain output for the existing OpenClaw explain_last_match routine path when phase 2 explain is enabled", async () => {
+    const runtimeDir = makeTempDir();
+    const { sqlitePath, handlers } = registerPluginRuntime(runtimeDir, {
+      hybridEnabled: true,
+      hybridSyncExplainEnabled: true,
+      hybridExplainLlmEnabled: true,
+      hybridExplainProviderMode: "shared_distiller",
+      hybridExplainModelProfileVersion: "hybrid-explain-llm-v1",
+      distillerProvider: "openai_compatible",
+      distillerModel: "gpt-5.4-mini"
+    });
+    await seedInjectedOpenClawTurn(handlers, sqlitePath);
+
+    const originalFetch = globalThis.fetch;
+    const originalApiKey = process.env.EXPERIENCE_ENGINE_DISTILLER_API_KEY;
+    process.env.EXPERIENCE_ENGINE_DISTILLER_API_KEY = "test-key";
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  decision: "ExperienceEngine injected reusable guidance for this task.",
+                  reason: "The candidate was already validated and cleared the fast path.",
+                  confidence: "high",
+                  evidence_summary: "task summary, retrieval note"
+                })
+              }
+            }
+          ]
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )) as typeof fetch;
+
+    try {
+      const beforePromptBuild = handlers.get("before_prompt_build");
+      const explainTurn = (await beforePromptBuild?.({
+        session: { key: "explain_last_phase2" },
+        workspace: { cwd: "/tmp/repo" },
+        message: { content: "Why did that ExperienceEngine hint match?" }
+      })) as Record<string, unknown>;
+
+      expect(String(explainTurn.prependContext)).toContain("ExperienceEngine routine interaction:");
+      expect(String(explainTurn.prependContext)).toContain("The user is asking why the last ExperienceEngine hint matched.");
+      expect(String(explainTurn.prependContext)).toContain("Why it matched: ExperienceEngine injected reusable guidance for this task. The candidate was already validated and cleared the fast path.");
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (originalApiKey === undefined) {
+        delete process.env.EXPERIENCE_ENGINE_DISTILLER_API_KEY;
+      } else {
+        process.env.EXPERIENCE_ENGINE_DISTILLER_API_KEY = originalApiKey;
+      }
+    }
   });
 
   it("records harmful feedback inside OpenClaw without persisting a new task run", async () => {

@@ -36,5 +36,8 @@ export const defaultConfig: ExperienceEngineConfig = {
   hybridRoutePolicyVersion: "hybrid-phase1-v1",
   hybridCapsuleSchemaVersion: "hybrid-capsule-v1",
   hybridExplainDecisionProfileVersion: "hybrid-explain-v1",
-  hybridPostmortemReviewProfileVersion: "hybrid-postmortem-v1"
+  hybridPostmortemReviewProfileVersion: "hybrid-postmortem-v1",
+  hybridExplainLlmEnabled: false,
+  hybridExplainProviderMode: "shared_distiller",
+  hybridExplainModelProfileVersion: "hybrid-explain-llm-v1"
 };

@@ -18,6 +18,11 @@ export type HybridPhase1RolloutSummary = {
     policyGatedArtifacts: number;
     rejectedRuns: number;
   };
+  phase2ExplainSummary?: {
+    llmBackedAttempts: number;
+    llmBackedFallbacks: number;
+    recommendation: "blocked" | "shadow_only" | "canary_ready" | "live_ready";
+  };
   releaseGate?: {
     stage: "offline" | "shadow" | "canary";
     routeGatePassed: boolean;
@@ -40,6 +45,12 @@ export const buildHybridPhase1RolloutSummary = (input: {
     explainGatePassed: boolean;
     postmortemGatePassed: boolean;
     runtimeGuardrailsPassed: boolean;
+  };
+  phase2ExplainGate?: {
+    stage: "offline" | "shadow" | "canary";
+    explainFaithfulnessPassed: boolean;
+    explainFallbackRatePassed: boolean;
+    explainTimeoutRatePassed: boolean;
   };
 }): HybridPhase1RolloutSummary => {
   const routeDistribution = input.traces.reduce<Record<string, number>>((acc, trace) => {
@@ -68,6 +79,31 @@ export const buildHybridPhase1RolloutSummary = (input: {
     rejectedRuns: postmortemTraces.filter((trace) => trace.output_action === "rejected").length
   };
 
+  const llmExplainTraces = explainTraces.filter((trace) => trace.worker_profile_version?.startsWith("hybrid-explain-llm"));
+  const phase2ExplainGate = input.phase2ExplainGate;
+  let phase2ExplainSummary: HybridPhase1RolloutSummary["phase2ExplainSummary"];
+  if (phase2ExplainGate) {
+    const explainGatesPassed =
+      phase2ExplainGate.explainFaithfulnessPassed
+      && phase2ExplainGate.explainFallbackRatePassed
+      && phase2ExplainGate.explainTimeoutRatePassed;
+    let recommendation: HybridPhase1ReleaseRecommendation = "blocked";
+    if (explainGatesPassed) {
+      if (phase2ExplainGate.stage === "offline") {
+        recommendation = "shadow_only";
+      } else if (phase2ExplainGate.stage === "shadow") {
+        recommendation = "canary_ready";
+      } else if (phase2ExplainGate.stage === "canary") {
+        recommendation = "live_ready";
+      }
+    }
+    phase2ExplainSummary = {
+      llmBackedAttempts: llmExplainTraces.length,
+      llmBackedFallbacks: llmExplainTraces.filter((trace) => trace.validation_status === "fallback").length,
+      recommendation
+    };
+  }
+
   const gate = input.releaseGate;
   let recommendation: HybridPhase1ReleaseRecommendation = "blocked";
   const gatesPassed =
@@ -93,6 +129,7 @@ export const buildHybridPhase1RolloutSummary = (input: {
     fallbackRate: ratio(fallbacks, totalTraces),
     explanationQualitySummary,
     postmortemQualitySummary,
+    phase2ExplainSummary,
     releaseGate: gate,
     recommendation
   };

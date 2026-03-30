@@ -15,6 +15,9 @@ describe("hybrid phase 1 config", () => {
     expect(config.hybridCapsuleSchemaVersion).toBe("hybrid-capsule-v1");
     expect(config.hybridExplainDecisionProfileVersion).toBe("hybrid-explain-v1");
     expect(config.hybridPostmortemReviewProfileVersion).toBe("hybrid-postmortem-v1");
+    expect(config.hybridExplainLlmEnabled).toBe(false);
+    expect(config.hybridExplainProviderMode).toBe("shared_distiller");
+    expect(config.hybridExplainModelProfileVersion).toBe("hybrid-explain-llm-v1");
   });
 
   it("accepts explicit phase 1 hybrid overrides", () => {
@@ -29,7 +32,10 @@ describe("hybrid phase 1 config", () => {
         hybridRoutePolicyVersion: "hybrid-phase1-canary",
         hybridCapsuleSchemaVersion: "hybrid-capsule-v2",
         hybridExplainDecisionProfileVersion: "hybrid-explain-canary",
-        hybridPostmortemReviewProfileVersion: "hybrid-postmortem-canary"
+        hybridPostmortemReviewProfileVersion: "hybrid-postmortem-canary",
+        hybridExplainLlmEnabled: true,
+        hybridExplainProviderMode: "shared_distiller",
+        hybridExplainModelProfileVersion: "hybrid-explain-llm-canary"
       },
       { env: {}, homeDir: "/tmp/experienceengine-hybrid-config-overrides" }
     );
@@ -44,5 +50,8 @@ describe("hybrid phase 1 config", () => {
     expect(config.hybridCapsuleSchemaVersion).toBe("hybrid-capsule-v2");
     expect(config.hybridExplainDecisionProfileVersion).toBe("hybrid-explain-canary");
     expect(config.hybridPostmortemReviewProfileVersion).toBe("hybrid-postmortem-canary");
+    expect(config.hybridExplainLlmEnabled).toBe(true);
+    expect(config.hybridExplainProviderMode).toBe("shared_distiller");
+    expect(config.hybridExplainModelProfileVersion).toBe("hybrid-explain-llm-canary");
   });
 });

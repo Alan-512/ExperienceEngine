@@ -122,4 +122,83 @@ describe("buildHybridPhase1RolloutSummary", () => {
     expect(summary.fallbackRate).toBe(1);
     expect(summary.recommendation).toBe("blocked");
   });
+
+  it("reports phase 2 explain-only readiness without changing the phase 1 recommendation model", () => {
+    const summary = buildHybridPhase1RolloutSummary({
+      traces: [
+        {
+          id: "trace_1",
+          surface: "interaction",
+          route: "ESCALATE_SYNC_EXPLAIN",
+          route_policy_version: "hybrid-phase1-v1",
+          capsule_schema_version: "hybrid-capsule-v1",
+          worker_profile_version: "hybrid-explain-llm-v1",
+          rollout_mode: "shadow",
+          rollout_reason: "shadow",
+          worker_task: "explain_decision",
+          worker_ran: true,
+          validation_status: "accepted",
+          output_action: "none",
+          created_at: "2026-03-30T00:00:00.000Z"
+        }
+      ],
+      artifacts: [],
+      releaseGate: {
+        stage: "shadow",
+        routeGatePassed: true,
+        explainGatePassed: true,
+        postmortemGatePassed: true,
+        runtimeGuardrailsPassed: true
+      },
+      phase2ExplainGate: {
+        stage: "shadow",
+        explainFaithfulnessPassed: true,
+        explainFallbackRatePassed: true,
+        explainTimeoutRatePassed: true
+      }
+    });
+
+    expect(summary.phase2ExplainSummary).toEqual({
+      llmBackedAttempts: 1,
+      llmBackedFallbacks: 0,
+      recommendation: "canary_ready"
+    });
+    expect(summary.recommendation).toBe("canary_ready");
+  });
+
+  it("counts provider-unavailable phase 2 fallback traces as llm-backed attempts for gate visibility", () => {
+    const summary = buildHybridPhase1RolloutSummary({
+      traces: [
+        {
+          id: "trace_phase2_unavailable",
+          surface: "interaction",
+          route: "ESCALATE_SYNC_EXPLAIN",
+          route_policy_version: "hybrid-phase1-v1",
+          capsule_schema_version: "hybrid-capsule-v1",
+          worker_profile_version: "hybrid-explain-llm-v1",
+          rollout_mode: "shadow",
+          rollout_reason: "shadow",
+          worker_task: "explain_decision",
+          worker_ran: false,
+          validation_status: "fallback",
+          output_action: "none",
+          fallback_reason: "provider_unavailable",
+          created_at: "2026-03-30T00:00:00.000Z"
+        }
+      ],
+      artifacts: [],
+      phase2ExplainGate: {
+        stage: "shadow",
+        explainFaithfulnessPassed: true,
+        explainFallbackRatePassed: false,
+        explainTimeoutRatePassed: true
+      }
+    });
+
+    expect(summary.phase2ExplainSummary).toEqual({
+      llmBackedAttempts: 1,
+      llmBackedFallbacks: 1,
+      recommendation: "blocked"
+    });
+  });
 });
