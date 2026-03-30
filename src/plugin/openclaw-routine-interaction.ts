@@ -65,6 +65,8 @@ export const detectOpenClawRoutineIntent = (userMessage?: string): OpenClawRouti
 
   if (
     includesAll(message, ["ready", "here"])
+    || includesAll(message, ["ready", "repo"])
+    || includesAll(message, ["ready", "this", "repo"])
     || includesAll(message, ["set", "up", "repo"])
     || includesAll(message, ["work", "workspace", "now"])
   ) {
@@ -288,7 +290,7 @@ const buildRecentSilenceContext = (
     return [
       "ExperienceEngine routine interaction:",
       "The user is asking why ExperienceEngine stayed quiet on the latest turn.",
-      "The latest turn already delivered a hint, so ExperienceEngine did not stay quiet.",
+      "The latest turn already delivered a hint, so the latest ExperienceEngine turn was not actually quiet.",
       `Latest intervention: ${inspection.intervention}`,
       "Answer briefly and directly from this grounded state."
     ].join("\n");

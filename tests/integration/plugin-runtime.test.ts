@@ -851,6 +851,37 @@ describe("OpenClaw plugin runtime", () => {
     expect(countsAfter.count).toBe(countsBefore.count);
   });
 
+  it("treats natural repo phrasing as a readiness routine interaction without persisting a new task run", async () => {
+    const runtimeDir = makeTempDir();
+    const { sqlitePath, handlers } = registerPluginRuntime(runtimeDir);
+
+    writeSharedInitialization(runtimeDir);
+
+    const db = new DatabaseSync(sqlitePath);
+    const countsBefore = db.prepare("SELECT COUNT(*) AS count FROM task_runs").get() as { count: number };
+    const beforePromptBuild = handlers.get("before_prompt_build");
+    const finalize = handlers.get("message_sent");
+
+    const readinessTurn = (await beforePromptBuild?.({
+      session: { key: "ready_in_repo" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Is ExperienceEngine ready in this repo?" }
+    })) as Record<string, unknown>;
+
+    expect(String(readinessTurn.prependContext)).toContain("ExperienceEngine routine interaction:");
+    expect(String(readinessTurn.prependContext)).toContain("The user is asking whether ExperienceEngine is ready in this repo.");
+    expect(String(readinessTurn.prependContext)).toContain("Setup state: Ready");
+
+    await finalize?.({
+      session: { key: "ready_in_repo" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Is ExperienceEngine ready in this repo?" }
+    });
+
+    const countsAfter = db.prepare("SELECT COUNT(*) AS count FROM task_runs").get() as { count: number };
+    expect(countsAfter.count).toBe(countsBefore.count);
+  });
+
   it("still reports OpenClaw as ready when the current plugin runtime is active but install wiring was not recorded", async () => {
     const runtimeDir = makeTempDir();
     const { handlers } = registerPluginRuntime(runtimeDir);
@@ -1013,6 +1044,40 @@ describe("OpenClaw plugin runtime", () => {
       session: { key: "fallback_silence" },
       workspace: { cwd: "/tmp/repo" },
       message: { content: "Why didn't ExperienceEngine inject anything just now?" }
+    });
+
+    const countsAfter = db.prepare("SELECT COUNT(*) AS count FROM task_runs").get() as { count: number };
+    expect(countsAfter.count).toBe(countsBefore.count);
+  });
+
+  it("grounds recent-silence answers to the latest turn state when the latest turn was not actually quiet", async () => {
+    const runtimeDir = makeTempDir();
+    const { sqlitePath, handlers } = registerPluginRuntime(runtimeDir);
+
+    writeSharedInitialization(runtimeDir);
+    await seedInjectedOpenClawTurn(handlers, sqlitePath);
+
+    const db = new DatabaseSync(sqlitePath);
+    const countsBefore = db.prepare("SELECT COUNT(*) AS count FROM task_runs").get() as { count: number };
+    const beforePromptBuild = handlers.get("before_prompt_build");
+    const finalize = handlers.get("message_sent");
+
+    const silenceTurn = (await beforePromptBuild?.({
+      session: { key: "why_quiet_after_hint" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Why has ExperienceEngine stayed quiet lately in this repo?" }
+    })) as Record<string, unknown>;
+
+    expect(String(silenceTurn.prependContext)).toContain("ExperienceEngine routine interaction:");
+    expect(String(silenceTurn.prependContext)).toContain(
+      "The latest turn already delivered a hint, so the latest ExperienceEngine turn was not actually quiet."
+    );
+    expect(String(silenceTurn.prependContext)).toContain("Latest intervention: inject");
+
+    await finalize?.({
+      session: { key: "why_quiet_after_hint" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Why has ExperienceEngine stayed quiet lately in this repo?" }
     });
 
     const countsAfter = db.prepare("SELECT COUNT(*) AS count FROM task_runs").get() as { count: number };
