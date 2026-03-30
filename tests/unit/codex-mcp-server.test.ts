@@ -407,7 +407,7 @@ describe("Codex MCP behavior loop", () => {
     ]);
   });
 
-  it("registers MCP resources for inspect views", async () => {
+  it("serves routine read views publicly and inspect-heavy views through broker actions", async () => {
     const homeDir = makeTempDir();
     const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
     const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
@@ -437,29 +437,29 @@ describe("Codex MCP behavior loop", () => {
 
     const server = createCodexMcpServer({ homeDir, env });
     const lastResource = getRegisteredResource(server, "experienceengine://last");
-    const recentResource = getRegisteredResourceTemplate(server, "experienceengine_recent");
-    const learningResource = getRegisteredResource(server, "experienceengine://learning/summary");
     const repoSummaryResource = getRegisteredResource(server, "experienceengine://repo-summary");
-    const nodeResource = getRegisteredResourceTemplate(server, "experienceengine_node");
+    const executeActionTool = getRegisteredTool(server, "experienceengine_execute_action");
 
     const lastPayload = await lastResource.readCallback(new URL("experienceengine://last"), {});
-    const recentPayload = await recentResource.readCallback(
-      new URL("experienceengine://recent/injected/5"),
-      { mode: "injected", limit: "5" },
-      {}
-    );
-    const learningPayload = await learningResource.readCallback(
-      new URL("experienceengine://learning/summary"),
-      {}
-    );
     const repoSummaryPayload = await repoSummaryResource.readCallback(
       new URL("experienceengine://repo-summary"),
       {}
     );
-    const nodePayload = await nodeResource.readCallback(
-      new URL("experienceengine://node/node_codex_resource_view"),
-      { id: "node_codex_resource_view" },
-      {}
+    const recentPayload = parseTextPayload<{ actionId: string; result: unknown[] }>(
+      (await executeActionTool.handler({
+        actionId: "inspect_recent_history",
+        payload: { mode: "injected", limit: 5 }
+      })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+    const nodePayload = parseTextPayload<{ actionId: string; result: ExperienceNode }>(
+      (await executeActionTool.handler({
+        actionId: "inspect_node_detail",
+        payload: { nodeId: "node_codex_resource_view" }
+      })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
     );
 
     expect(JSON.parse((lastPayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({
@@ -487,8 +487,30 @@ describe("Codex MCP behavior loop", () => {
         riskLevel: "low"
       })
     });
-    expect(JSON.parse((recentPayload as { contents: Array<{ text: string }> }).contents[0].text)).toHaveLength(1);
-    expect(JSON.parse((learningPayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({
+    expect(recentPayload.actionId).toBe("inspect_recent_history");
+    expect(recentPayload.result).toHaveLength(1);
+    expect(getRegisteredResource(server, "experienceengine://learning/summary")).toBeUndefined();
+    expect(getRegisteredResourceTemplate(server, "experienceengine_recent")).toBeUndefined();
+    expect(getRegisteredResourceTemplate(server, "experienceengine_node")).toBeUndefined();
+    const learningPayload = parseTextPayload<{
+      actionId: string;
+      result: {
+        candidates: object;
+        jobs: object;
+        nodes: object;
+      };
+    }>((await executeActionTool.handler({ actionId: "inspect_learning_summary" })) as {
+      content: Array<{ type: string; text?: string }>;
+    });
+    expect(learningPayload).toMatchObject({
+      actionId: "inspect_learning_summary",
+      result: {
+        candidates: expect.any(Object),
+        jobs: expect.any(Object),
+        nodes: expect.any(Object)
+      }
+    });
+    expect(learningPayload.result).toMatchObject({
       candidates: expect.objectContaining({
         distilled: expect.any(Number)
       }),
@@ -511,19 +533,22 @@ describe("Codex MCP behavior loop", () => {
     expect(
       JSON.parse((repoSummaryPayload as { contents: Array<{ text: string }> }).contents[0].text).recent.latestDecisionExplanation
     ).toBeUndefined();
-    expect(JSON.parse((nodePayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({
-      id: "node_codex_resource_view",
-      type: "strategy",
-      sourceKind: "system_derived",
-      originRecordIds: ["input_origin"],
-      qualityBand: "building",
-      applicabilityProfile: expect.objectContaining({
-        bestFit: "test_debug tasks in this repo scope"
-      })
+    expect(nodePayload).toMatchObject({
+      actionId: "inspect_node_detail",
+      result: {
+        id: "node_codex_resource_view",
+        type: "strategy",
+        sourceKind: "system_derived",
+        originRecordIds: ["input_origin"],
+        qualityBand: "building",
+        applicabilityProfile: expect.objectContaining({
+          bestFit: "test_debug tasks in this repo scope"
+        })
+      }
     });
   });
 
-  it("registers low-risk MCP tools for feedback and scope state changes", async () => {
+  it("routes long-tail feedback and scope state changes through broker actions", async () => {
     const homeDir = makeTempDir();
     const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
     const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
@@ -546,20 +571,28 @@ describe("Codex MCP behavior loop", () => {
 
     const server = createCodexMcpServer({ homeDir, env });
     const feedbackLastTool = getRegisteredTool(server, "experienceengine_feedback_last");
-    const scopeStateTool = getRegisteredTool(server, "experienceengine_set_scope_intervention_state");
+    const executeActionTool = getRegisteredTool(server, "experienceengine_execute_action");
 
     const feedbackResult = parseTextPayload<{ status: string; nodeIds?: string[] }>(
       (await feedbackLastTool.handler({ feedback: "helped" })) as {
         content: Array<{ type: string; text?: string }>;
       }
     );
-    const disableResult = parseTextPayload<{ isDisabled: boolean; changed: boolean }>(
-      (await scopeStateTool.handler({ action: "disable", cwd: "/repo" })) as {
+    const disableResult = parseTextPayload<{ actionId: string; result: { isDisabled: boolean; changed: boolean } }>(
+      (await executeActionTool.handler({ actionId: "set_scope_intervention_state", payload: { action: "disable", cwd: "/repo" } })) as {
         content: Array<{ type: string; text?: string }>;
       }
     );
-    const enableResult = parseTextPayload<{ isDisabled: boolean; changed: boolean }>(
-      (await scopeStateTool.handler({ action: "enable", cwd: "/repo" })) as {
+    const enableResult = parseTextPayload<{ actionId: string; result: { isDisabled: boolean; changed: boolean } }>(
+      (await executeActionTool.handler({ actionId: "set_scope_intervention_state", payload: { action: "enable", cwd: "/repo" } })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+    const feedbackNodeResult = parseTextPayload<{ actionId: string; result: { status: string; nodeIds?: string[] } }>(
+      (await executeActionTool.handler({
+        actionId: "feedback_node",
+        payload: { nodeId: "node_codex_mcp_feedback", feedback: "helped" }
+      })) as {
         content: Array<{ type: string; text?: string }>;
       }
     );
@@ -569,16 +602,31 @@ describe("Codex MCP behavior loop", () => {
       nodeIds: ["node_codex_mcp_feedback"]
     });
     expect(disableResult).toMatchObject({
-      isDisabled: true,
-      changed: true
+      actionId: "set_scope_intervention_state",
+      result: {
+        isDisabled: true,
+        changed: true
+      }
     });
     expect(enableResult).toMatchObject({
-      isDisabled: false,
-      changed: true
+      actionId: "set_scope_intervention_state",
+      result: {
+        isDisabled: false,
+        changed: true
+      }
     });
+    expect(feedbackNodeResult).toMatchObject({
+      actionId: "feedback_node",
+      result: {
+        status: "updated",
+        nodeIds: ["node_codex_mcp_feedback"]
+      }
+    });
+    expect(getRegisteredTool(server, "experienceengine_feedback_node")).toBeUndefined();
+    expect(getRegisteredTool(server, "experienceengine_set_scope_intervention_state")).toBeUndefined();
 
     const node = nodeRepo.getById("node_codex_mcp_feedback");
-    expect(node?.helped_count).toBe(1);
+    expect(node?.helped_count).toBe(2);
   });
 
   it("does not expose a separate quick-feedback MCP tool", async () => {
@@ -605,98 +653,20 @@ describe("Codex MCP behavior loop", () => {
     expect(feedbackTool.description).toContain("helped or harmed");
   });
 
-  it("describes routine follow-up as host-first with CLI fallback", async () => {
+  it("does not expose public prompts after broker migration", () => {
     const server = createCodexMcpServer();
-    const showLastPrompt = getRegisteredPrompt(server, "experienceengine_show_last_intervention");
-    const helpfulPrompt = getRegisteredPrompt(server, "experienceengine_mark_last_experience_helpful");
-    const reviewCapabilitiesPrompt = getRegisteredPrompt(server, "experienceengine_review_capabilities");
-    const showLast = (await showLastPrompt.callback({})) as {
-      messages: Array<{ role: string; content: { type: string; text?: string; uri?: string } }>;
-    };
-    const helpful = (await helpfulPrompt.callback({})) as {
-      messages: Array<{ role: string; content: { type: string; text?: string } }>;
-    };
-    const reviewCapabilities = (await reviewCapabilitiesPrompt.callback({})) as {
-      messages: Array<{ role: string; content: { type: string; text?: string } }>;
-    };
 
-    expect(showLast.messages[0].content.text).toContain("in this Codex session");
-    expect(showLast.messages[0].content.text).toContain("CLI fallback");
-    expect(helpful.messages[0].content.text).toContain("in this Codex session");
-    expect(helpful.messages[0].content.text).toContain("CLI fallback");
-    expect(reviewCapabilities.messages[0].content.text).toContain("direct tools");
-    expect(reviewCapabilities.messages[0].content.text).toContain("CLI/operator-only");
-  });
-
-  it("registers MCP prompts for review and control workflows", async () => {
-    const server = createCodexMcpServer();
-    const reviewCapabilitiesPrompt = getRegisteredPrompt(server, "experienceengine_review_capabilities");
-    const reviewRepoStatusPrompt = getRegisteredPrompt(server, "experienceengine_review_repo_status");
-    const showLastPrompt = getRegisteredPrompt(server, "experienceengine_show_last_intervention");
-    const recentPrompt = getRegisteredPrompt(server, "experienceengine_review_recent_injected");
-    const pausePrompt = getRegisteredPrompt(server, "experienceengine_pause_current_project");
-    const harmfulPrompt = getRegisteredPrompt(server, "experienceengine_mark_last_experience_harmful");
-    const reviewCapabilities = (await reviewCapabilitiesPrompt.callback({})) as {
-      messages: Array<{ role: string; content: { type: string; text?: string; uri?: string } }>;
-    };
-    const reviewRepoStatus = (await reviewRepoStatusPrompt.callback({})) as {
-      messages: Array<{ role: string; content: { type: string; text?: string; uri?: string } }>;
-    };
-    const showLast = (await showLastPrompt.callback({})) as {
-      messages: Array<{ role: string; content: { type: string; text?: string; uri?: string } }>;
-    };
-    const recent = (await recentPrompt.callback({ limit: "3" })) as {
-      messages: Array<{ role: string; content: { type: string; text?: string; uri?: string } }>;
-    };
-    const pause = (await pausePrompt.callback({ cwd: "/repo" })) as {
-      messages: Array<{ role: string; content: { type: string; text?: string } }>;
-    };
-    const harmful = (await harmfulPrompt.callback({})) as {
-      messages: Array<{ role: string; content: { type: string; text?: string } }>;
-    };
-    expect(reviewCapabilities.messages[0].content.text).toContain("experienceengine://capabilities");
-    expect(reviewCapabilities.messages[0].content.text).toContain("direct tools");
-    expect(reviewRepoStatus.messages[0].content.text).toContain("experienceengine://repo-summary");
-    expect(reviewRepoStatus.messages[0].content.text).not.toContain("experienceengine_get_repo_summary");
-    expect(showLast.messages[0].content.text).toContain("Summarize whether guidance was injected");
-    expect(showLast.messages[1].content).toMatchObject({
-      type: "resource_link",
-      uri: "experienceengine://last"
-    });
-    expect(recent.messages[1].content).toMatchObject({
-      type: "resource_link",
-      uri: "experienceengine://recent/injected/3"
-    });
-    expect(pause.messages[0].content.text).toContain("experienceengine_set_scope_intervention_state");
-    expect(pause.messages[0].content.text).toContain("action=disable");
-    expect(pause.messages[0].content.text).toContain("/repo");
-    expect(harmful.messages[0].content.text).toContain("feedback=harmed");
-  });
-
-  it("keeps high-traffic MCP prompt text compact", async () => {
-    const server = createCodexMcpServer();
-    const reviewCapabilitiesPrompt = getRegisteredPrompt(server, "experienceengine_review_capabilities");
-    const reviewRepoStatusPrompt = getRegisteredPrompt(server, "experienceengine_review_repo_status");
-    const showLastPrompt = getRegisteredPrompt(server, "experienceengine_show_last_intervention");
-    const helpfulPrompt = getRegisteredPrompt(server, "experienceengine_mark_last_experience_helpful");
-
-    const reviewCapabilities = (await reviewCapabilitiesPrompt.callback({})) as {
-      messages: Array<{ role: string; content: { type: string; text?: string } }>;
-    };
-    const reviewRepoStatus = (await reviewRepoStatusPrompt.callback({})) as {
-      messages: Array<{ role: string; content: { type: string; text?: string } }>;
-    };
-    const showLast = (await showLastPrompt.callback({})) as {
-      messages: Array<{ role: string; content: { type: string; text?: string } }>;
-    };
-    const helpful = (await helpfulPrompt.callback({})) as {
-      messages: Array<{ role: string; content: { type: string; text?: string } }>;
-    };
-
-    expect((reviewCapabilities.messages[0].content.text ?? "").length).toBeLessThan(180);
-    expect((reviewRepoStatus.messages[0].content.text ?? "").length).toBeLessThan(170);
-    expect((showLast.messages[0].content.text ?? "").length).toBeLessThan(230);
-    expect((helpful.messages[0].content.text ?? "").length).toBeLessThan(260);
+    expect(getRegisteredPrompt(server, "experienceengine_review_capabilities")).toBeUndefined();
+    expect(getRegisteredPrompt(server, "experienceengine_review_repo_status")).toBeUndefined();
+    expect(getRegisteredPrompt(server, "experienceengine_show_last_intervention")).toBeUndefined();
+    expect(getRegisteredPrompt(server, "experienceengine_review_recent_injected")).toBeUndefined();
+    expect(getRegisteredPrompt(server, "experienceengine_review_warning_nodes")).toBeUndefined();
+    expect(getRegisteredPrompt(server, "experienceengine_pause_current_project")).toBeUndefined();
+    expect(getRegisteredPrompt(server, "experienceengine_resume_current_project")).toBeUndefined();
+    expect(getRegisteredPrompt(server, "experienceengine_mark_last_experience_helpful")).toBeUndefined();
+    expect(getRegisteredPrompt(server, "experienceengine_mark_last_experience_harmful")).toBeUndefined();
+    expect(getRegisteredPrompt(server, "experienceengine_prepare_operational_change")).toBeUndefined();
+    expect(getRegisteredPrompt(server, "experienceengine_prepare_state_operation")).toBeUndefined();
   });
 
   it("registers operational MCP resources and read-only tools", async () => {
@@ -712,28 +682,23 @@ describe("Codex MCP behavior loop", () => {
 
     const server = createCodexMcpServer({ fetchImpl });
     const capabilitiesResource = getRegisteredResource(server, "experienceengine://capabilities");
-    const doctorResource = getRegisteredResourceTemplate(server, "experienceengine_doctor");
-    const updateResource = getRegisteredResourceTemplate(server, "experienceengine_updates_latest");
     const capabilitiesTool = getRegisteredTool(server, "experienceengine_get_capabilities");
     const doctorTool = getRegisteredTool(server, "experienceengine_doctor");
-    const updateTool = getRegisteredTool(server, "experienceengine_check_update");
+    const executeActionTool = getRegisteredTool(server, "experienceengine_execute_action");
 
     const capabilitiesPayload = await capabilitiesResource.readCallback(
       new URL("experienceengine://capabilities"),
       {}
     );
-    const doctorPayload = await doctorResource.readCallback(
-      new URL("experienceengine://doctor/codex"),
-      { adapter: "codex" },
-      {}
-    );
-    const updatePayload = await updateResource.readCallback(
-      new URL("experienceengine://updates/latest/codex"),
-      { adapter: "codex" },
-      {}
-    );
     const capabilitiesToolPayload = parseTextPayload<{
-      model: string;
+      core_actions: string[];
+      routine_read_surfaces: string[];
+      advanced_actions: string[];
+      high_risk_actions: string[];
+      surface_model: string;
+      prompts?: unknown;
+      resources?: unknown;
+      cliFallbacks?: unknown;
     }>((await capabilitiesTool.handler({})) as {
       content: Array<{ type: string; text?: string }>;
     });
@@ -742,36 +707,78 @@ describe("Codex MCP behavior loop", () => {
         content: Array<{ type: string; text?: string }>;
       }
     );
-    const updateToolPayload = parseTextPayload<{ adapter: string; remote: { latestVersion: string | null } }>(
-      (await updateTool.handler({ adapter: "codex" })) as {
+    const updateToolPayload = parseTextPayload<{ actionId: string; result: { adapter: string; remote: { latestVersion: string | null } } }>(
+      (await executeActionTool.handler({ actionId: "check_update", payload: { adapter: "codex" } })) as {
         content: Array<{ type: string; text?: string }>;
       }
     );
 
-    expect(JSON.parse((capabilitiesPayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({
-      model: "agent-first"
+    const capabilitiesResourcePayload = JSON.parse(
+      (capabilitiesPayload as { contents: Array<{ text: string }> }).contents[0].text
+    ) as {
+      core_actions: string[];
+      routine_read_surfaces: string[];
+      advanced_actions: string[];
+      high_risk_actions: string[];
+      surface_model: string;
+      prompts?: unknown;
+      resources?: unknown;
+      cliFallbacks?: unknown;
+    };
+
+    expect(capabilitiesResourcePayload).toMatchObject({
+      core_actions: expect.arrayContaining([
+        "experienceengine_lookup_hints",
+        "experienceengine_record_tool_result",
+        "experienceengine_finalize_task",
+        "experienceengine_feedback_last",
+        "experienceengine_get_capabilities",
+        "experienceengine_doctor"
+      ]),
+      routine_read_surfaces: expect.arrayContaining([
+        "experienceengine://doctor/{adapter}",
+        "experienceengine://capabilities",
+        "experienceengine://last",
+        "experienceengine://repo-summary"
+      ]),
+      advanced_actions: expect.arrayContaining([
+        "brokered admin actions",
+        "brokered maintenance actions",
+        "brokered inspect actions"
+      ]),
+      high_risk_actions: expect.arrayContaining([
+        "install / repair / upgrade",
+        "backup / export / import / rollback"
+      ]),
+      surface_model: "public core loop + public routine reads + brokered long-tail actions"
     });
-    expect(capabilitiesToolPayload).toMatchObject({
-      model: "agent-first"
-    });
-    expect(JSON.parse((doctorPayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({
-      adapter: "codex"
-    });
-    expect(JSON.parse((updatePayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({
-      adapter: "codex",
-      remote: {
-        latestVersion: "0.2.0"
-      }
-    });
+    expect(capabilitiesResourcePayload.prompts).toBeUndefined();
+    expect(capabilitiesResourcePayload.resources).toBeUndefined();
+    expect(capabilitiesResourcePayload.cliFallbacks).toBeUndefined();
+    expect(capabilitiesToolPayload).toMatchObject(capabilitiesResourcePayload);
+    expect(capabilitiesToolPayload.prompts).toBeUndefined();
+    expect(capabilitiesToolPayload.resources).toBeUndefined();
+    expect(capabilitiesToolPayload.cliFallbacks).toBeUndefined();
+    expect(getRegisteredResourceTemplate(server, "experienceengine_doctor")).toBeDefined();
+    expect(getRegisteredResourceTemplate(server, "experienceengine_updates_latest")).toBeUndefined();
+    expect(getRegisteredResourceTemplate(server, "experienceengine_recent")).toBeUndefined();
+    expect(getRegisteredResource(server, "experienceengine://nodes/active")).toBeUndefined();
+    expect(getRegisteredResourceTemplate(server, "experienceengine_node")).toBeUndefined();
+    expect(getRegisteredResourceTemplate(server, "experienceengine_nodes_by_state")).toBeUndefined();
+    expect(getRegisteredResourceTemplate(server, "experienceengine_nodes_by_type")).toBeUndefined();
     expect(doctorToolPayload).toMatchObject({
       adapter: "codex"
     });
     expect(updateToolPayload).toMatchObject({
-      adapter: "codex",
-      remote: {
-        latestVersion: "0.2.0"
+      actionId: "check_update",
+      result: {
+        adapter: "codex",
+        remote: {
+          latestVersion: "0.2.0"
+        }
       }
     });
+    expect(getRegisteredTool(server, "experienceengine_check_update")).toBeUndefined();
   });
 
   it("keeps repo summary as a resource-only MCP surface", async () => {
@@ -818,33 +825,40 @@ describe("Codex MCP behavior loop", () => {
     seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_codex_lifecycle_action");
 
     const server = createCodexMcpServer({ homeDir, env });
-    const lifecycleTool = getRegisteredTool(server, "experienceengine_set_node_lifecycle");
+    const executeActionTool = getRegisteredTool(server, "experienceengine_execute_action");
 
-    const coolPayload = parseTextPayload<{ status: string; state?: string }>(
-      (await lifecycleTool.handler({ action: "cool", nodeId: "node_codex_lifecycle_action" })) as {
+    const coolPayload = parseTextPayload<{ actionId: string; result: { status: string; state?: string } }>(
+      (await executeActionTool.handler({ actionId: "set_node_lifecycle", payload: { action: "cool", nodeId: "node_codex_lifecycle_action" } })) as {
         content: Array<{ type: string; text?: string }>;
       }
     );
-    const retirePayload = parseTextPayload<{ status: string; state?: string }>(
-      (await lifecycleTool.handler({ action: "retire", nodeId: "node_codex_lifecycle_action" })) as {
+    const retirePayload = parseTextPayload<{ actionId: string; result: { status: string; state?: string } }>(
+      (await executeActionTool.handler({ actionId: "set_node_lifecycle", payload: { action: "retire", nodeId: "node_codex_lifecycle_action" } })) as {
         content: Array<{ type: string; text?: string }>;
       }
     );
 
     expect(coolPayload).toMatchObject({
-      status: "updated",
-      state: "cooling"
+      actionId: "set_node_lifecycle",
+      result: {
+        status: "updated",
+        state: "cooling"
+      }
     });
     expect(retirePayload).toMatchObject({
-      status: "updated",
-      state: "retired"
+      actionId: "set_node_lifecycle",
+      result: {
+        status: "updated",
+        state: "retired"
+      }
     });
     expect(nodeRepo.getById("node_codex_lifecycle_action")?.state).toBe("retired");
+    expect(getRegisteredTool(server, "experienceengine_set_node_lifecycle")).toBeUndefined();
     expect(getRegisteredTool(server, "experienceengine_cool_node")).toBeUndefined();
     expect(getRegisteredTool(server, "experienceengine_retire_node")).toBeUndefined();
   });
 
-  it("registers plan-and-confirm MCP tools for high-impact operations", async () => {
+  it("registers plan-and-confirm MCP tools for high-impact operations without public prompts", async () => {
     const server = createCodexMcpServer({
       operationalActionsDeps: {
         tokenFactory: (() => {
@@ -862,61 +876,59 @@ describe("Codex MCP behavior loop", () => {
         })
       }
     });
-    const planUpgradeTool = getRegisteredTool(server, "experienceengine_plan_upgrade");
-    const executeTool = getRegisteredTool(server, "experienceengine_execute_planned_operation");
-    const repairTool = getRegisteredTool(server, "experienceengine_plan_repair");
-    const prompt = getRegisteredPrompt(server, "experienceengine_prepare_operational_change");
-
+    const prepareActionTool = getRegisteredTool(server, "experienceengine_prepare_action");
+    const executeActionTool = getRegisteredTool(server, "experienceengine_execute_action");
     const planPayload = parseTextPayload<{
-      adapter: string;
-      operation: string;
-      planId: string;
-      confirmationToken: string;
-      commandHint: string;
-    }>((await planUpgradeTool.handler({ adapter: "codex" })) as {
+      action: { id: string; category: string; riskLevel: string; requiresConfirmation: boolean };
+      inputSchema: string;
+    }>((await prepareActionTool.handler({ actionId: "plan_upgrade" })) as {
       content: Array<{ type: string; text?: string }>;
     });
 
     expect(planPayload).toMatchObject({
-      adapter: "codex",
-      operation: "upgrade",
-      commandHint: "ee upgrade codex"
+      action: {
+        id: "plan_upgrade",
+        category: "admin",
+        riskLevel: "high",
+        requiresConfirmation: true
+      }
     });
 
     const executePayload = parseTextPayload<{
-      status: string;
-      adapter: string;
-      operation: string;
-      result: { previousVersion?: string; installedVersion?: string };
-    }>((await executeTool.handler({
-      planId: planPayload.planId,
-      confirmationToken: planPayload.confirmationToken
+      actionId: string;
+      result: { adapter: string; operation: string; planId: string; confirmationToken: string; commandHint: string };
+    }>((await executeActionTool.handler({
+      actionId: "plan_upgrade",
+      payload: { adapter: "codex" }
     })) as {
       content: Array<{ type: string; text?: string }>;
     });
 
     expect(executePayload).toMatchObject({
-      status: "executed",
-      adapter: "codex",
-      operation: "upgrade"
+      actionId: "plan_upgrade",
+      result: {
+        adapter: "codex",
+        operation: "upgrade",
+        commandHint: "ee upgrade codex"
+      }
     });
 
-    await expect(repairTool.handler({ adapter: "claude-code" })).rejects.toThrow(
+    await expect(
+      executeActionTool.handler({
+        actionId: "plan_repair",
+        payload: { adapter: "claude-code" }
+      })
+    ).rejects.toThrow(
       "Unsupported repair operation for claude-code"
     );
 
-    const promptPayload = (await prompt.callback({
-      adapter: "openclaw",
-      operation: "repair"
-    })) as {
-      messages: Array<{ role: string; content: { type: string; text?: string } }>;
-    };
-
-    expect(promptPayload.messages[0].content.text).toContain("experienceengine_plan_repair");
-    expect(promptPayload.messages[0].content.text).toContain("experienceengine_execute_planned_operation");
+    expect(getRegisteredTool(server, "experienceengine_plan_upgrade")).toBeUndefined();
+    expect(getRegisteredTool(server, "experienceengine_plan_repair")).toBeUndefined();
+    expect(getRegisteredTool(server, "experienceengine_execute_planned_operation")).toBeUndefined();
+    expect(getRegisteredPrompt(server, "experienceengine_prepare_operational_change")).toBeUndefined();
   });
 
-  it("registers backup inventory resources and state-operation MCP tools", async () => {
+  it("registers backup inventory resources and state-operation MCP tools without public prompts", async () => {
     const homeDir = makeTempDir();
     const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
     const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
@@ -942,35 +954,45 @@ describe("Codex MCP behavior loop", () => {
         })()
       })
     });
-    const planBackupTool = getRegisteredTool(server, "experienceengine_plan_backup");
-    const executeStateTool = getRegisteredTool(server, "experienceengine_execute_planned_state_operation");
-    const backupsResource = getRegisteredResource(server, "experienceengine://backups");
-    const prompt = getRegisteredPrompt(server, "experienceengine_prepare_state_operation");
-
+    const prepareActionTool = getRegisteredTool(server, "experienceengine_prepare_action");
+    const executeActionTool = getRegisteredTool(server, "experienceengine_execute_action");
     const planPayload = parseTextPayload<{
-      planId: string;
-      confirmationToken: string;
-      operation: string;
-    }>((await planBackupTool.handler({})) as {
+      action: { id: string; category: string; riskLevel: string; requiresConfirmation: boolean };
+    }>((await prepareActionTool.handler({ actionId: "plan_backup" })) as {
       content: Array<{ type: string; text?: string }>;
     });
-    await executeStateTool.handler({
-      planId: planPayload.planId,
-      confirmationToken: planPayload.confirmationToken
+    expect(planPayload.action).toMatchObject({
+      id: "plan_backup",
+      category: "maintenance",
+      riskLevel: "high",
+      requiresConfirmation: true
     });
 
-    const backupsPayload = await backupsResource.readCallback(new URL("experienceengine://backups"), {});
-    const promptPayload = (await prompt.callback({
-      operation: "rollback",
-      backupId: "backup-1"
-    })) as {
-      messages: Array<{ role: string; content: { type: string; text?: string } }>;
-    };
+    const backupPlanPayload = parseTextPayload<{
+      actionId: string;
+      result: { planId: string; confirmationToken: string; operation: string };
+    }>((await executeActionTool.handler({ actionId: "plan_backup" })) as {
+      content: Array<{ type: string; text?: string }>;
+    });
+    await executeActionTool.handler({
+      actionId: "execute_state_plan",
+      payload: {
+        planId: backupPlanPayload.result.planId,
+        confirmationToken: backupPlanPayload.result.confirmationToken
+      }
+    });
 
-    expect(
-      JSON.parse((backupsPayload as { contents: Array<{ text: string }> }).contents[0].text)
-    ).toHaveLength(1);
-    expect(promptPayload.messages[0].content.text).toContain("experienceengine_plan_rollback");
-    expect(promptPayload.messages[0].content.text).toContain("experienceengine_execute_planned_state_operation");
+    const backupsPayload = parseTextPayload<{ actionId: string; result: unknown[] }>(
+      (await executeActionTool.handler({ actionId: "inspect_backup_inventory" })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+
+    expect(getRegisteredResource(server, "experienceengine://backups")).toBeUndefined();
+    expect(getRegisteredTool(server, "experienceengine_plan_backup")).toBeUndefined();
+    expect(getRegisteredTool(server, "experienceengine_execute_planned_state_operation")).toBeUndefined();
+    expect(backupsPayload.actionId).toBe("inspect_backup_inventory");
+    expect(backupsPayload.result).toHaveLength(1);
+    expect(getRegisteredPrompt(server, "experienceengine_prepare_state_operation")).toBeUndefined();
   });
 });

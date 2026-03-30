@@ -251,9 +251,9 @@ When you inspect a specific node, ExperienceEngine now also shows a lightweight 
 
 ## How MCP Interaction Works
 
-For `Codex` and `Claude Code`, ExperienceEngine is designed to work mainly through MCP.
+For `Codex` and `Claude Code`, ExperienceEngine is designed to keep routine review and management inside the host session first.
 
-That means after installation, you usually do not leave the agent session to manage ExperienceEngine. Instead, you ask the agent naturally and the agent can call ExperienceEngine MCP resources, prompts, and tools for you.
+That means after installation, you usually do not leave the agent session to manage ExperienceEngine. Instead, you ask the agent naturally and the host uses its native EE wiring for routine interaction.
 
 This is one host-specific implementation of the same shared product model described above:
 
@@ -275,14 +275,23 @@ Typical examples:
 
 ### MCP Interaction Model
 
-ExperienceEngine exposes three MCP categories:
+`Codex` exposes a layered MCP surface:
 
-- `Resources`
-  - read-only state like last interaction, recent history, nodes, doctor output, update state, and backups
-- `Prompts`
-  - reusable workflows that guide the agent to inspect or manage ExperienceEngine safely
-- `Tools`
-  - executable actions like feedback, scope toggles, node lifecycle changes, and high-impact operations
+- `Direct tools`
+  - core loop actions like lookup, recording important tool outcomes, finalize, last-feedback, capabilities, and doctor
+- `Routine read resources`
+  - read-only state like last interaction, recent history, repo summary, and routine node views
+- `Brokered advanced actions`
+  - lower-frequency inspect, admin, maintenance, and high-impact plan/execute flows exposed through a small broker tool surface instead of many direct schemas
+
+For `Codex`, this means routine host-native interaction stays discoverable, while long-tail admin and maintenance actions are reached through brokered actions rather than public prompts or one-tool-per-action registration.
+
+`Claude Code` still uses both `hooks` and `MCP`:
+
+- hooks drive runtime capture and injection
+- MCP drives inspect, control, and operational interaction
+
+So the two hosts share the same product model, but they do not expose the exact same interaction shape.
 
 For high-impact actions, ExperienceEngine does not execute immediately. It uses a:
 

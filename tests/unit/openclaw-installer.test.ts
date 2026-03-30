@@ -222,6 +222,9 @@ describe("OpenClaw installer", () => {
 
     const report = installOpenClawAdapter({
       homeDir,
+      packageSourceBuilder() {
+        return join(homeDir, "tmp", "experienceengine-openclaw.tgz");
+      },
       runner(command) {
         const key = [command.bin, ...command.args].join(" ");
         commands.push(key);

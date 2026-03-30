@@ -57,10 +57,10 @@ This acceptance pass covers:
 ## MCP-Native Interaction Surface
 
 - [x] read-only state is available through MCP resources
-- [x] reusable workflows are available through MCP prompts
+- [x] brokered advanced workflows remain reachable without keeping public MCP prompts
 - [x] low-risk interaction actions are available through MCP tools
 - [x] high-impact operational actions use `plan -> confirm -> execute`
-- [x] Claude Code and Codex both use the shared MCP interaction server
+- [x] Claude Code and Codex both use the shared MCP interaction server, but Claude also relies on hooks
 
 ## CLI Fallback Surface
 
