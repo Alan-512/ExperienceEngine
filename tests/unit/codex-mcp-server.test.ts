@@ -815,6 +815,109 @@ describe("Codex MCP behavior loop", () => {
     expect(getRegisteredTool(server, "experienceengine_get_repo_summary")).toBeUndefined();
   });
 
+  it("registers a direct explain-last-decision tool that writes a hybrid explain trace", async () => {
+    const homeDir = makeTempDir();
+    const env = {
+      EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine"),
+      EXPERIENCE_ENGINE_DISTILLER_API_KEY: "test-key",
+      EXPERIENCE_ENGINE_HYBRID_ENABLED: "true",
+      EXPERIENCE_ENGINE_HYBRID_SYNC_EXPLAIN_ENABLED: "true",
+      EXPERIENCE_ENGINE_HYBRID_EXPLAIN_LLM_ENABLED: "true",
+      EXPERIENCE_ENGINE_HYBRID_EXPLAIN_PROVIDER_MODE: "shared_distiller",
+      EXPERIENCE_ENGINE_HYBRID_EXPLAIN_MODEL_PROFILE_VERSION: "hybrid-explain-llm-v1",
+      EXPERIENCE_ENGINE_DISTILLER_PROVIDER: "openai_compatible",
+      EXPERIENCE_ENGINE_DISTILLER_MODEL: "gpt-5.4-mini"
+    };
+    const config = loadConfig({
+      dataDir: env.EXPERIENCE_ENGINE_HOME,
+      hybridEnabled: true,
+      hybridSyncExplainEnabled: true,
+      hybridExplainLlmEnabled: true,
+      hybridExplainProviderMode: "shared_distiller",
+      hybridExplainModelProfileVersion: "hybrid-explain-llm-v1",
+      distillerProvider: "openai_compatible",
+      distillerModel: "gpt-5.4-mini"
+    });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_codex_explain_detail");
+
+    const loop = createCodexBehaviorLoop({ homeDir, env });
+    await loop.lookupHints({
+      cwd: "/repo",
+      prompt: "Fix the failing auth test",
+      sessionId: "codex-session-explain"
+    });
+
+    const originalFetch = globalThis.fetch;
+    const originalApiKey = process.env.EXPERIENCE_ENGINE_DISTILLER_API_KEY;
+    process.env.EXPERIENCE_ENGINE_DISTILLER_API_KEY = "test-key";
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({
+          choices: [
+            {
+              message: {
+                content: JSON.stringify({
+                  decision: "ExperienceEngine injected reusable guidance for this task.",
+                  reason: "The candidate was already validated and cleared the fast path.",
+                  confidence: "high",
+                  evidence_summary: "task summary, retrieval note"
+                })
+              }
+            }
+          ]
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      )) as typeof fetch;
+
+    try {
+      const server = createCodexMcpServer({ homeDir, env });
+      const explainTool = getRegisteredTool(server, "experienceengine_explain_last_decision");
+
+      expect(explainTool).toBeDefined();
+
+      const payload = parseTextPayload<string>(
+        (await explainTool.handler({
+          cwd: "/repo",
+          userMessage: "Why did that ExperienceEngine hint match?"
+        })) as { content: Array<{ type: string; text?: string }> }
+      );
+      const traceRows = db
+        .prepare(
+          "SELECT worker_task, route, worker_profile_version, rollout_mode, validation_status, output_action FROM hybrid_invocation_traces ORDER BY created_at ASC"
+        )
+        .all() as Array<{
+          worker_task: string;
+          route: string;
+          worker_profile_version: string;
+          rollout_mode: string;
+          validation_status: string;
+          output_action: string;
+        }>;
+
+      expect(payload).toContain("validated and cleared the fast path");
+      expect(traceRows).toEqual([
+        expect.objectContaining({
+          worker_task: "explain_decision",
+          route: "ESCALATE_SYNC_EXPLAIN",
+          worker_profile_version: "hybrid-explain-llm-v1",
+          rollout_mode: "live",
+          validation_status: "accepted",
+          output_action: "surfaced"
+        })
+      ]);
+    } finally {
+      globalThis.fetch = originalFetch;
+      if (originalApiKey === undefined) {
+        delete process.env.EXPERIENCE_ENGINE_DISTILLER_API_KEY;
+      } else {
+        process.env.EXPERIENCE_ENGINE_DISTILLER_API_KEY = originalApiKey;
+      }
+    }
+  });
+
   it("registers MCP tools for node lifecycle state changes", async () => {
     const homeDir = makeTempDir();
     const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };

@@ -73,6 +73,7 @@ const HIGH_IMPACT_OPERATIONS = ["install", "repair", "upgrade"] as const satisfi
 const buildExperienceCapabilities = () => ({
   core_actions: [
     "experienceengine_lookup_hints",
+    "experienceengine_explain_last_decision",
     "experienceengine_record_tool_result",
     "experienceengine_finalize_task",
     "experienceengine_feedback_last",
@@ -440,6 +441,10 @@ export const createCodexInteractionSurface = (options: CodexServerOptions = {}) 
       return interaction.inspectRepoSummary(args.cwd);
     },
 
+    async explainLastDecision(args: { cwd?: string; userMessage: string }) {
+      return interaction.explainLastDecision(args.cwd, args.userMessage);
+    },
+
     async feedbackLast(args: { feedback: FeedbackValue }) {
       return interaction.feedbackLast(args.feedback);
     },
@@ -604,6 +609,25 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
       }
     },
     async () => toStructuredToolResult(buildExperienceCapabilities())
+  );
+
+  server.registerTool(
+    "experienceengine_explain_last_decision",
+    {
+      title: "ExperienceEngine Explain Last Decision",
+      description:
+        "Explain why the latest ExperienceEngine intervention matched or stayed quiet for the current workspace.",
+      inputSchema: z.object({
+        cwd: z.string().optional(),
+        userMessage: z.string().min(1)
+      }),
+      annotations: {
+        readOnlyHint: true,
+        openWorldHint: false
+      }
+    },
+    async ({ cwd, userMessage }) =>
+      toTextToolResult(await interactionSurface.explainLastDecision({ cwd, userMessage }))
   );
 
   server.registerTool(
