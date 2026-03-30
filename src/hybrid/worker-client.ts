@@ -43,6 +43,7 @@ export type HybridPostmortemResult =
 type HybridWorkerClientOptions = {
   explainDecisionEnabled?: boolean;
   explainDecisionTimeoutMs?: number;
+  explainDecisionProviderTimeoutMs?: number;
   explainDecisionExecutor?: (capsule: ExplainDecisionCapsule) => Promise<ExplainDecisionWorkerOutput> | ExplainDecisionWorkerOutput;
   explainDecisionLlmEnabled?: boolean;
   explainDecisionLlmExecutor?: (
@@ -58,11 +59,13 @@ type HybridWorkerClientOptions = {
 };
 
 const DEFAULT_TIMEOUT_MS = 150;
+const DEFAULT_PROVIDER_TIMEOUT_MS = 5000;
 const DEFAULT_CIRCUIT_THRESHOLD = 3;
 
 export class HybridWorkerClient {
   private readonly explainDecisionEnabled: boolean;
   private readonly explainDecisionTimeoutMs: number;
+  private readonly explainDecisionProviderTimeoutMs: number;
   private readonly explainDecisionExecutor: (
     capsule: ExplainDecisionCapsule
   ) => Promise<ExplainDecisionWorkerOutput> | ExplainDecisionWorkerOutput;
@@ -83,6 +86,8 @@ export class HybridWorkerClient {
   constructor(options: HybridWorkerClientOptions = {}) {
     this.explainDecisionEnabled = options.explainDecisionEnabled ?? true;
     this.explainDecisionTimeoutMs = options.explainDecisionTimeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.explainDecisionProviderTimeoutMs =
+      options.explainDecisionProviderTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
     this.explainDecisionExecutor = options.explainDecisionExecutor ?? runExplainDecisionWorker;
     this.explainDecisionLlmEnabled = options.explainDecisionLlmEnabled ?? false;
     this.explainDecisionLlmExecutor =
@@ -116,6 +121,8 @@ export class HybridWorkerClient {
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
+      const timeoutMs =
+        options.mode === "provider" ? this.explainDecisionProviderTimeoutMs : this.explainDecisionTimeoutMs;
       const run =
         options.mode === "provider"
           ? () => {
@@ -128,7 +135,7 @@ export class HybridWorkerClient {
       const result = await Promise.race([
         Promise.resolve(run()),
         new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new Error("timeout")), this.explainDecisionTimeoutMs);
+          timer = setTimeout(() => reject(new Error("timeout")), timeoutMs);
         })
       ]);
       const validated = validateExplainDecisionOutput(result);

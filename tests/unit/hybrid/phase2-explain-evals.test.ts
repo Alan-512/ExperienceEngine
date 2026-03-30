@@ -98,6 +98,7 @@ describe("hybrid phase 2 explain eval gate", () => {
       explainDecisionEnabled: true,
       explainDecisionLlmEnabled: true,
       explainDecisionTimeoutMs: 1,
+      explainDecisionProviderTimeoutMs: 1,
       explainDecisionLlmExecutor: () => new Promise(() => undefined)
     });
     const fixture = phase2ExplainFixtures[0];

@@ -269,4 +269,56 @@ describe("HybridWorkerClient", () => {
       })
     });
   });
+
+  it("uses a wider timeout budget for provider-backed explain without changing deterministic timeout behavior", async () => {
+    const client = new HybridWorkerClient({
+      explainDecisionTimeoutMs: 5,
+      explainDecisionProviderTimeoutMs: 100,
+      explainDecisionExecutor: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return {
+          task: "explain_decision",
+          decision: "late deterministic explain",
+          reason: "late deterministic reason",
+          confidence: "medium"
+        };
+      },
+      explainDecisionLlmEnabled: true,
+      explainDecisionLlmExecutor: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+        return {
+          task: "explain_decision",
+          decision: "provider explain",
+          reason: "provider reason",
+          confidence: "high"
+        };
+      }
+    });
+
+    const deterministic = await client.runExplainDecision(buildCapsule());
+    const provider = await client.runExplainDecision(buildCapsule(), {
+      mode: "provider",
+      endpoint: {
+        kind: "openai",
+        provider: "openai_compatible",
+        model: "gpt-5.4-mini",
+        baseUrl: "https://api.openai.com/v1/chat/completions",
+        headers: {
+          Authorization: "Bearer test-key"
+        },
+        source: "explicit"
+      }
+    });
+
+    expect(deterministic).toMatchObject({
+      status: "fallback",
+      reason: "timeout"
+    });
+    expect(provider).toMatchObject({
+      status: "accepted",
+      value: expect.objectContaining({
+        decision: "provider explain"
+      })
+    });
+  });
 });
