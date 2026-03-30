@@ -444,6 +444,9 @@ describe("LlmDistiller", () => {
               "The targeted provider probe ruled out the timeout hypothesis and showed the request was still failing inside provider routing."
             ],
             pivot_snippets: ["Moved the fix from timeout tuning into provider routing."],
+            replacement_snippets: [
+              "The replacement path focused on provider routing after the timeout hypothesis was disproven."
+            ],
             validating_snippets: ["The provider-routing integration verification passed after the routing fix."],
             semantic_detected: true,
             superseded_hypothesis: "Timeout tuning was the wrong active hypothesis.",

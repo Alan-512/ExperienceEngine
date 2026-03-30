@@ -25,6 +25,7 @@ export type CandidateSignalSummary = {
   retry_count: number;
   correction_signals: string[];
   directional_correction?: CandidateSourceSignal["directional_correction"];
+  evidence_driven_reversal?: CandidateSourceSignal["evidence_driven_reversal"];
   tool_event_summary: string[];
   criticality: boolean;
   improvement_room: boolean;
@@ -110,7 +111,7 @@ const buildDirectionalCorrectionSignal = (input: ExperienceInput): CandidateSour
   const userConfirmation =
     input.outcome_signal === "success" &&
     [input.context_summary, ...input.tool_events.map((event) => event.output_summary ?? event.error_signature ?? "")]
-      .filter(Boolean)
+      .filter((text): text is string => typeof text === "string" && text.length > 0)
       .some((text) => USER_CONFIRMATION_PATTERN.test(text));
 
   const detected = snippets.length > 0;
