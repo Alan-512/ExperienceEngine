@@ -5,11 +5,14 @@ import { afterEach, describe, expect, it } from "vitest";
 import { loadConfig } from "../../src/config/load-config.js";
 import { resolveScope } from "../../src/input/scope-resolver.js";
 import {
+  decideHybridExplainRoute,
   deriveStructuredSilenceReason,
   ExperienceInteractionService,
   type ExperienceLastInspection
 } from "../../src/interaction/service.js";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
+import { InputRecordRepository } from "../../src/store/sqlite/repositories/input-record-repo.js";
+import { InjectionRepository } from "../../src/store/sqlite/repositories/injection-repo.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
 import { ReviewEventRepository } from "../../src/store/sqlite/repositories/review-event-repo.js";
 import { ScopeRepository } from "../../src/store/sqlite/repositories/scope-repo.js";
@@ -69,7 +72,72 @@ const seedStrategyNode = (nodeRepo: NodeRepository, cwd: string, timestamp: stri
   });
 };
 
+const seedLatestInspectionRecord = (homeDir: string, cwd: string): void => {
+  const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });
+  const db = openDatabase(config);
+  bootstrapDatabase(db);
+  const scope = resolveScope(cwd);
+  const inputRepo = new InputRecordRepository(db);
+  const injectionRepo = new InjectionRepository(db);
+  const timestamp = nowIso();
+
+  inputRepo.upsert({
+    record_id: "input_latest_explain",
+    scope_id: scope.scope_id,
+    session_id: "session_latest_explain",
+    task_type: "test_debug",
+    task_summary: "Fix the failing auth test",
+    outcome_signal: "success",
+    context_summary: "The targeted auth test now passes after using the validated recovery loop.",
+    evidence: ["vitest: success: targeted auth test now passes"],
+    injected_node_ids: ["node_interaction_detail"],
+    created_at: timestamp
+  });
+
+  injectionRepo.upsert({
+    injection_id: "inject_latest_explain",
+    session_id: "session_latest_explain",
+    scope_id: scope.scope_id,
+    task_type: "test_debug",
+    task_summary: "Fix the failing auth test",
+    mode: "inject",
+    delivery_mode: "live",
+    delivered: true,
+    injected_node_ids: ["node_interaction_detail"],
+    injection_count: 1,
+    scorecard: {
+      scopeId: scope.scope_id,
+      taskType: "test_debug",
+      taskSummary: "Fix the failing auth test",
+      mode: "inject",
+      riskLevel: "low",
+      recommendation: "Inject the strongest validated auth-test recovery hint.",
+      reasons: ["The best candidate is validated by reuse."],
+      decisionReason: "mature_validated_candidate",
+      nodes: [],
+      createdAt: timestamp
+    },
+    was_successful: null,
+    harm_observed: null,
+    created_at: timestamp
+  });
+};
+
 describe("ExperienceInteractionService", () => {
+  it("routes explicit explanation questions into hybrid sync explain", () => {
+    expect(decideHybridExplainRoute("Why did ExperienceEngine inject that hint here?")).toMatchObject({
+      route: "ESCALATE_SYNC_EXPLAIN",
+      reasonCode: "explicit_explanation_request"
+    });
+  });
+
+  it("keeps routine repo questions on the fast path", () => {
+    expect(decideHybridExplainRoute("Show me the current ExperienceEngine repo summary.")).toMatchObject({
+      route: "FAST_PATH",
+      reasonCode: "default_fast_path"
+    });
+  });
+
   it("derives no_strong_match for a mature repo skip without a stronger structured silence reason", () => {
     const inspection: ExperienceLastInspection = {
       scopeId: "scope_repo",
@@ -129,6 +197,76 @@ describe("ExperienceInteractionService", () => {
       helpedRecordIds: ["input_helped"],
       harmedRecordIds: ["input_harmed"]
     });
+  });
+
+  it("uses the hybrid explain worker for explicit explanation requests and keeps deterministic fallback safe", async () => {
+    const homeDir = makeTempDir();
+    const config = loadConfig({
+      dataDir: join(homeDir, ".experienceengine"),
+      hybridEnabled: true,
+      hybridSyncExplainEnabled: true
+    });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_interaction_detail");
+    seedLatestInspectionRecord(homeDir, "/repo");
+
+    const service = new ExperienceInteractionService(config);
+    const explanation = await service.explainLastDecision("/repo", "Why did ExperienceEngine inject that hint here?");
+
+    expect(explanation).toContain("ExperienceEngine");
+    expect(explanation).toContain("validated");
+  });
+
+  it("falls back to the deterministic explanation when hybrid explain is disabled", async () => {
+    const homeDir = makeTempDir();
+    const config = loadConfig({
+      dataDir: join(homeDir, ".experienceengine"),
+      hybridEnabled: false,
+      hybridSyncExplainEnabled: false
+    });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_interaction_detail");
+    seedLatestInspectionRecord(homeDir, "/repo");
+
+    const service = new ExperienceInteractionService(config);
+    const explanation = await service.explainLastDecision("/repo", "Why did ExperienceEngine inject that hint here?");
+
+    expect(explanation).toContain("ExperienceEngine injected");
+  });
+
+  it("keeps shadow-mode hybrid explanations non-user-visible", async () => {
+    const homeDir = makeTempDir();
+    const config = loadConfig({
+      dataDir: join(homeDir, ".experienceengine"),
+      hybridEnabled: true,
+      hybridSyncExplainEnabled: true,
+      hybridRolloutMode: "shadow"
+    });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_interaction_detail");
+    seedLatestInspectionRecord(homeDir, "/repo");
+
+    const service = new ExperienceInteractionService(config);
+    const explanation = await service.explainLastDecision("/repo", "Why did ExperienceEngine inject that hint here?");
+    const traceRows = db
+      .prepare("SELECT worker_task, rollout_mode, output_action FROM hybrid_invocation_traces ORDER BY created_at ASC")
+      .all() as Array<{ worker_task: string; rollout_mode: string; output_action: string }>;
+
+    expect(explanation).toContain("ExperienceEngine injected");
+    expect(explanation).not.toContain("clear the fast path");
+    expect(traceRows).toEqual([
+      expect.objectContaining({
+        worker_task: "explain_decision",
+        rollout_mode: "shadow",
+        output_action: "none"
+      })
+    ]);
   });
 
   it("returns not_found for feedback when no injected record exists", () => {

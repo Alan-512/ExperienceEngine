@@ -167,6 +167,8 @@ describe("bootstrapDatabase", () => {
     expect(tableNames).toContain("task_runs");
     expect(tableNames).toContain("outcome_records");
     expect(tableNames).toContain("review_events");
+    expect(tableNames).toContain("hybrid_review_artifacts");
+    expect(tableNames).toContain("hybrid_invocation_traces");
   });
 });
 

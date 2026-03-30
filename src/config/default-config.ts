@@ -26,5 +26,15 @@ export const defaultConfig: ExperienceEngineConfig = {
   distillationAllowPassthrough: true,
   distillationMaxRetries: 2,
   distillationBatchSize: 5,
-  distillationAutoDrain: true
+  distillationAutoDrain: true,
+  hybridEnabled: false,
+  hybridSyncExplainEnabled: false,
+  hybridAsyncPostmortemEnabled: false,
+  hybridRolloutMode: "live",
+  hybridCanaryRate: 0.1,
+  hybridKillSwitch: false,
+  hybridRoutePolicyVersion: "hybrid-phase1-v1",
+  hybridCapsuleSchemaVersion: "hybrid-capsule-v1",
+  hybridExplainDecisionProfileVersion: "hybrid-explain-v1",
+  hybridPostmortemReviewProfileVersion: "hybrid-postmortem-v1"
 };

@@ -118,7 +118,47 @@ export const loadConfig = (
     distillationAutoDrain:
       env.EXPERIENCE_ENGINE_DISTILLATION_AUTO_DRAIN !== undefined
         ? env.EXPERIENCE_ENGINE_DISTILLATION_AUTO_DRAIN === "true"
-        : overrides.distillationAutoDrain ?? defaultConfig.distillationAutoDrain
+        : overrides.distillationAutoDrain ?? defaultConfig.distillationAutoDrain,
+    hybridEnabled:
+      env.EXPERIENCE_ENGINE_HYBRID_ENABLED !== undefined
+        ? env.EXPERIENCE_ENGINE_HYBRID_ENABLED === "true"
+        : overrides.hybridEnabled ?? defaultConfig.hybridEnabled,
+    hybridSyncExplainEnabled:
+      env.EXPERIENCE_ENGINE_HYBRID_SYNC_EXPLAIN_ENABLED !== undefined
+        ? env.EXPERIENCE_ENGINE_HYBRID_SYNC_EXPLAIN_ENABLED === "true"
+        : overrides.hybridSyncExplainEnabled ?? defaultConfig.hybridSyncExplainEnabled,
+    hybridAsyncPostmortemEnabled:
+      env.EXPERIENCE_ENGINE_HYBRID_ASYNC_POSTMORTEM_ENABLED !== undefined
+        ? env.EXPERIENCE_ENGINE_HYBRID_ASYNC_POSTMORTEM_ENABLED === "true"
+        : overrides.hybridAsyncPostmortemEnabled ?? defaultConfig.hybridAsyncPostmortemEnabled,
+    hybridRolloutMode:
+      env.EXPERIENCE_ENGINE_HYBRID_ROLLOUT_MODE ??
+      overrides.hybridRolloutMode ??
+      defaultConfig.hybridRolloutMode,
+    hybridCanaryRate:
+      env.EXPERIENCE_ENGINE_HYBRID_CANARY_RATE !== undefined
+        ? Number(env.EXPERIENCE_ENGINE_HYBRID_CANARY_RATE)
+        : overrides.hybridCanaryRate ?? defaultConfig.hybridCanaryRate,
+    hybridKillSwitch:
+      env.EXPERIENCE_ENGINE_HYBRID_KILL_SWITCH !== undefined
+        ? env.EXPERIENCE_ENGINE_HYBRID_KILL_SWITCH === "true"
+        : overrides.hybridKillSwitch ?? defaultConfig.hybridKillSwitch,
+    hybridRoutePolicyVersion:
+      env.EXPERIENCE_ENGINE_HYBRID_ROUTE_POLICY_VERSION ??
+      overrides.hybridRoutePolicyVersion ??
+      defaultConfig.hybridRoutePolicyVersion,
+    hybridCapsuleSchemaVersion:
+      env.EXPERIENCE_ENGINE_HYBRID_CAPSULE_SCHEMA_VERSION ??
+      overrides.hybridCapsuleSchemaVersion ??
+      defaultConfig.hybridCapsuleSchemaVersion,
+    hybridExplainDecisionProfileVersion:
+      env.EXPERIENCE_ENGINE_HYBRID_EXPLAIN_PROFILE_VERSION ??
+      overrides.hybridExplainDecisionProfileVersion ??
+      defaultConfig.hybridExplainDecisionProfileVersion,
+    hybridPostmortemReviewProfileVersion:
+      env.EXPERIENCE_ENGINE_HYBRID_POSTMORTEM_PROFILE_VERSION ??
+      overrides.hybridPostmortemReviewProfileVersion ??
+      defaultConfig.hybridPostmortemReviewProfileVersion
   });
 
   return parsed;

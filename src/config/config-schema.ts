@@ -27,7 +27,17 @@ export const configSchema = z.object({
   distillationAllowPassthrough: z.boolean().default(false),
   distillationMaxRetries: z.number().int().min(0).max(10).default(2),
   distillationBatchSize: z.number().int().min(1).max(20).default(5),
-  distillationAutoDrain: z.boolean().default(true)
+  distillationAutoDrain: z.boolean().default(true),
+  hybridEnabled: z.boolean().default(false),
+  hybridSyncExplainEnabled: z.boolean().default(false),
+  hybridAsyncPostmortemEnabled: z.boolean().default(false),
+  hybridRolloutMode: z.enum(["live", "shadow", "canary"]).default("live"),
+  hybridCanaryRate: z.number().min(0).max(1).default(0.1),
+  hybridKillSwitch: z.boolean().default(false),
+  hybridRoutePolicyVersion: z.string().default("hybrid-phase1-v1"),
+  hybridCapsuleSchemaVersion: z.string().default("hybrid-capsule-v1"),
+  hybridExplainDecisionProfileVersion: z.string().default("hybrid-explain-v1"),
+  hybridPostmortemReviewProfileVersion: z.string().default("hybrid-postmortem-v1")
 });
 
 export type ExperienceEngineConfig = z.infer<typeof configSchema>;
@@ -162,6 +172,49 @@ export const pluginConfigJsonSchema = {
     distillationAutoDrain: {
       type: "boolean",
       description: "Automatically drain asynchronous distillation jobs after finalize."
+    },
+    hybridEnabled: {
+      type: "boolean",
+      description: "Enable the phase 1 hybrid routing layer."
+    },
+    hybridSyncExplainEnabled: {
+      type: "boolean",
+      description: "Allow bounded sync escalation for explicit explanation requests."
+    },
+    hybridAsyncPostmortemEnabled: {
+      type: "boolean",
+      description: "Allow bounded async postmortem review for deterministic eligible completed runs."
+    },
+    hybridRolloutMode: {
+      type: "string",
+      enum: ["live", "shadow", "canary"],
+      description: "Controls whether hybrid worker paths are live, shadow-only, or limited to a canary slice."
+    },
+    hybridCanaryRate: {
+      type: "number",
+      minimum: 0,
+      maximum: 1,
+      description: "Fraction of hybrid-eligible turns allowed into the canary slice when hybridRolloutMode is `canary`."
+    },
+    hybridKillSwitch: {
+      type: "boolean",
+      description: "Immediately disables hybrid worker paths without affecting the deterministic core."
+    },
+    hybridRoutePolicyVersion: {
+      type: "string",
+      description: "Version label for the active hybrid route policy."
+    },
+    hybridCapsuleSchemaVersion: {
+      type: "string",
+      description: "Version label for the active hybrid capsule schema."
+    },
+    hybridExplainDecisionProfileVersion: {
+      type: "string",
+      description: "Version label for the explain_decision worker profile."
+    },
+    hybridPostmortemReviewProfileVersion: {
+      type: "string",
+      description: "Version label for the postmortem_review worker profile."
     }
   }
 } as const;
@@ -248,5 +301,35 @@ export const pluginUiHints = {
   },
   distillationAutoDrain: {
     label: "Distillation Auto Drain"
+  },
+  hybridEnabled: {
+    label: "Hybrid Enabled"
+  },
+  hybridSyncExplainEnabled: {
+    label: "Hybrid Sync Explain Enabled"
+  },
+  hybridAsyncPostmortemEnabled: {
+    label: "Hybrid Async Postmortem Enabled"
+  },
+  hybridRolloutMode: {
+    label: "Hybrid Rollout Mode"
+  },
+  hybridCanaryRate: {
+    label: "Hybrid Canary Rate"
+  },
+  hybridKillSwitch: {
+    label: "Hybrid Kill Switch"
+  },
+  hybridRoutePolicyVersion: {
+    label: "Hybrid Route Policy Version"
+  },
+  hybridCapsuleSchemaVersion: {
+    label: "Hybrid Capsule Schema Version"
+  },
+  hybridExplainDecisionProfileVersion: {
+    label: "Hybrid Explain Profile Version"
+  },
+  hybridPostmortemReviewProfileVersion: {
+    label: "Hybrid Postmortem Profile Version"
   }
 } as const;

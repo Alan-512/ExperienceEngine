@@ -131,6 +131,41 @@ export type ReviewEvent = {
   created_at: string;
 };
 
+export type HybridReviewArtifact = {
+  id: string;
+  task_run_id: string;
+  scope_id: string;
+  worker_task: "postmortem_review";
+  approval_class: "review_artifact" | "policy_gated";
+  schema_version: string;
+  route_policy_version: string;
+  worker_profile_version: string;
+  recommendation: "capture" | "reject" | "observe";
+  summary: string;
+  payload: Record<string, unknown>;
+  created_at: string;
+  updated_at: string;
+};
+
+export type HybridInvocationTrace = {
+  id: string;
+  surface: "interaction" | "runtime";
+  session_id?: string;
+  scope_id?: string;
+  worker_task?: "explain_decision" | "postmortem_review";
+  route: string;
+  route_policy_version: string;
+  capsule_schema_version?: string;
+  worker_profile_version?: string;
+  rollout_mode: string;
+  rollout_reason: string;
+  worker_ran: boolean;
+  validation_status: "accepted" | "fallback" | "skipped";
+  output_action: "surfaced" | "stored" | "rejected" | "none";
+  fallback_reason?: string;
+  created_at: string;
+};
+
 export type ExperienceNode = {
   id: string;
   node_type: ExperienceNodeType;

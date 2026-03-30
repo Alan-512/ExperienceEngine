@@ -9,6 +9,10 @@ import { buildExperienceInput } from "../input/input-adapter.js";
 import { resolveScope } from "../input/scope-resolver.js";
 import { decideIntervention } from "../controller/intervention-controller.js";
 import { renderInlineNotice } from "../controller/inline-notice.js";
+import { buildPostmortemReviewCapsule } from "../hybrid/capsule-builder.js";
+import { resolveHybridRolloutState } from "../hybrid/rollout.js";
+import { selectHybridRoute, type HybridRouteDecision, type HybridRouteSignals } from "../hybrid/router.js";
+import { HybridWorkerClient } from "../hybrid/worker-client.js";
 import { nowIso } from "../utils/clock.js";
 import { createId, stableId } from "../utils/ids.js";
 import type {
@@ -19,6 +23,7 @@ import type {
   ExperienceCandidateDraft,
   ExperienceInput,
   ExperienceInputRecord,
+  HybridReviewArtifact,
   InjectionEvent,
   ExperienceNode,
   OutcomeRecord,
@@ -44,9 +49,11 @@ import { ScopeRepository } from "../store/sqlite/repositories/scope-repo.js";
 import { StatsRepository } from "../store/sqlite/repositories/stats-repo.js";
 import { TaskRunRepository } from "../store/sqlite/repositories/task-run-repo.js";
 import { InjectionRepository } from "../store/sqlite/repositories/injection-repo.js";
+import { HybridInvocationTraceRepository } from "../store/sqlite/repositories/hybrid-invocation-trace-repo.js";
 import { RuntimeCaptureWriter } from "../plugin/runtime-capture.js";
 import { normalizeToolResult } from "../plugin/hooks/tool-result-persist.js";
 import { extractToolResultsFromPayload } from "../plugin/runtime-helpers.js";
+import { HybridReviewArtifactRepository } from "../store/sqlite/repositories/hybrid-review-artifact-repo.js";
 
 type SessionState = {
   context?: HostPromptContext;
@@ -343,6 +350,38 @@ const resolveDeliveryMode = (
   };
 };
 
+const HYBRID_LIGHTWEIGHT_PATTERN = /\b(wording-only|wording only|copy-only|copy only|copy pass|inline notice wording|expression-layer refinement)\b/i;
+
+const isLightweightHybridExcludedTask = (input: Pick<ExperienceInput, "task_summary" | "context_summary">): boolean =>
+  HYBRID_LIGHTWEIGHT_PATTERN.test(`${input.task_summary} ${input.context_summary ?? ""}`);
+
+export const decidePosttaskHybridRoute = (
+  config: Pick<
+    ExperienceEngineConfig,
+    "hybridEnabled" | "hybridAsyncPostmortemEnabled" | "hybridRoutePolicyVersion" | "hybridRolloutMode" | "hybridCanaryRate" | "hybridKillSwitch"
+  >,
+  input: Pick<ExperienceInput, "task_summary" | "context_summary">,
+  signals: Omit<HybridRouteSignals, "explicitExplanationRequest" | "existingConservativePathRequired" | "rolloutAllowsAsyncPostmortem">,
+  rolloutKey: string = input.task_summary
+): HybridRouteDecision => {
+  const rollout = resolveHybridRolloutState(config, rolloutKey);
+  return selectHybridRoute(
+    {
+      ...signals,
+      explicitExplanationRequest: false,
+      existingConservativePathRequired: false,
+      lightweightOrExcludedTask: signals.lightweightOrExcludedTask || isLightweightHybridExcludedTask(input),
+      rolloutAllowsAsyncPostmortem: config.hybridAsyncPostmortemEnabled && rollout.hybridActive
+    },
+    {
+      enabled: config.hybridEnabled && rollout.hybridActive,
+      syncExplainEnabled: false,
+      asyncPostmortemEnabled: config.hybridAsyncPostmortemEnabled && rollout.hybridActive,
+      policyVersion: config.hybridRoutePolicyVersion
+    }
+  );
+};
+
 export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly db;
   private readonly logger: OpenClawLogger;
@@ -358,15 +397,20 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly reviewEventRepo;
   private readonly statsRepo;
   private readonly injectionRepo;
+  private readonly hybridReviewArtifactRepo;
+  private readonly hybridTraceRepo;
   private readonly distillationWorker;
   private readonly learningGate;
+  private readonly hybridWorkerClient;
   private readonly pendingLearningTasks = new Set<Promise<void>>();
   readonly captureWriter;
 
   constructor(
     readonly config: ExperienceEngineConfig,
     logger?: OpenClawLogger,
-    runtimeOptions: ConstructorParameters<typeof LlmLearningGate>[1] = {}
+    runtimeOptions: ConstructorParameters<typeof LlmLearningGate>[1] & {
+      hybridWorkerClientOptions?: ConstructorParameters<typeof HybridWorkerClient>[0];
+    } = {}
   ) {
     this.logger = logger ?? {};
     this.db = openDatabase(config);
@@ -381,6 +425,8 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     this.reviewEventRepo = new ReviewEventRepository(this.db);
     this.statsRepo = new StatsRepository(this.db);
     this.injectionRepo = new InjectionRepository(this.db);
+    this.hybridReviewArtifactRepo = new HybridReviewArtifactRepository(this.db);
+    this.hybridTraceRepo = new HybridInvocationTraceRepository(this.db);
     this.distillationWorker = new DistillationQueueWorker(
       config,
       this.candidateRepo,
@@ -390,6 +436,11 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     );
     this.learningGate = new LlmLearningGate(config, runtimeOptions);
     this.captureWriter = new RuntimeCaptureWriter(config, this.logger);
+    this.hybridWorkerClient = new HybridWorkerClient({
+      explainDecisionEnabled: config.hybridEnabled && config.hybridSyncExplainEnabled,
+      postmortemReviewEnabled: config.hybridEnabled && config.hybridAsyncPostmortemEnabled,
+      ...runtimeOptions.hybridWorkerClientOptions
+    });
   }
 
   private getSession(sessionId: string): SessionState {
@@ -490,6 +541,99 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
 
   async waitForBackgroundLearning(): Promise<void> {
     await Promise.allSettled([...this.pendingLearningTasks]);
+  }
+
+  private buildPostmortemArtifact(input: {
+    taskRun: TaskRun;
+    result: Extract<Awaited<ReturnType<HybridWorkerClient["runPostmortemReview"]>>, { status: "accepted" }>;
+    routeDecision: HybridRouteDecision;
+  }): HybridReviewArtifact {
+    const timestamp = nowIso();
+    return {
+      id: createId("hybridreview"),
+      task_run_id: input.taskRun.id,
+      scope_id: input.taskRun.scope_id,
+      worker_task: "postmortem_review",
+      approval_class:
+        input.result.approvalClass === "policy_gated" ? "policy_gated" : "review_artifact",
+      schema_version: this.config.hybridCapsuleSchemaVersion,
+      route_policy_version: input.routeDecision.policyVersion,
+      worker_profile_version: this.config.hybridPostmortemReviewProfileVersion,
+      recommendation: input.result.value.candidate_recommendation,
+      summary: input.result.value.review_artifact?.summary ?? input.result.value.reason,
+      payload: input.result.value as unknown as Record<string, unknown>,
+      created_at: timestamp,
+      updated_at: timestamp
+    };
+  }
+
+  private async persistHybridPostmortemArtifactAsync(input: {
+    taskRun: TaskRun;
+    experienceInput: ExperienceInput;
+    routeDecision: HybridRouteDecision;
+    toolEvents: ToolEvent[];
+    rolloutMode: string;
+    rolloutReason: string;
+  }): Promise<void> {
+    if (this.hybridReviewArtifactRepo.getByTaskRunId(input.taskRun.id)) {
+      return;
+    }
+
+    const candidateSignals = buildCandidateSignals(input.experienceInput);
+    const capsule = buildPostmortemReviewCapsule({
+      schemaVersion: this.config.hybridCapsuleSchemaVersion,
+      routeDecision: input.routeDecision,
+      taskRun: input.taskRun,
+      outcomeSignal: input.experienceInput.outcome_signal,
+      triggers: {
+        directionalCorrectionPresent:
+          candidateSignals.directional_correction?.detected === true
+          || candidateSignals.evidence_driven_reversal?.detected === true,
+        injectedNodeInteractionPresent: input.experienceInput.injected_node_ids.length > 0,
+        retryOrInvalidationSignaturePresent:
+          candidateSignals.retry_count > 0 || candidateSignals.evidence_driven_reversal?.invalidating_evidence === true,
+        meaningfulFailureSignaturePresent: Boolean(candidateSignals.failure_signature),
+        conservativeTransitionReviewWorthy:
+          input.experienceInput.outcome_signal === "success" && input.experienceInput.injected_node_ids.length > 0
+      },
+      toolEvents: input.toolEvents
+    });
+
+    const result = await this.hybridWorkerClient.runPostmortemReview(capsule);
+    const timestamp = nowIso();
+    this.hybridTraceRepo.upsert({
+      id: createId("hybridtrace"),
+      surface: "runtime",
+      session_id: input.taskRun.session_id,
+      scope_id: input.taskRun.scope_id,
+      worker_task: "postmortem_review",
+      route: input.routeDecision.route,
+      route_policy_version: input.routeDecision.policyVersion,
+      capsule_schema_version: this.config.hybridCapsuleSchemaVersion,
+      worker_profile_version: this.config.hybridPostmortemReviewProfileVersion,
+      rollout_mode: input.rolloutMode,
+      rollout_reason: input.rolloutReason,
+      worker_ran: true,
+      validation_status: result.status === "accepted" ? "accepted" : "fallback",
+      output_action: result.status === "accepted" ? "stored" : "rejected",
+      fallback_reason: result.status === "accepted" ? undefined : result.reason,
+      created_at: timestamp
+    });
+    if (result.status !== "accepted") {
+      this.logger.debug?.("experienceengine.hybrid_postmortem_skipped", {
+        taskRunId: input.taskRun.id,
+        reason: result.reason
+      });
+      return;
+    }
+
+    this.hybridReviewArtifactRepo.upsert(
+      this.buildPostmortemArtifact({
+        taskRun: input.taskRun,
+        result,
+        routeDecision: input.routeDecision
+      })
+    );
   }
 
   private async persistCandidatesAsync(
@@ -754,6 +898,8 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
           originRecordId: string;
           taskRunId: string;
           sessionId: string;
+          taskRun: TaskRun;
+          toolEvents: ToolEvent[];
         }
       | undefined;
     withTransaction(this.db, () => {
@@ -789,10 +935,41 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
         input,
         originRecordId: record.record_id,
         taskRunId: taskRun.id,
-        sessionId
+        sessionId,
+        taskRun,
+        toolEvents: [...session.toolEvents]
       };
     });
     this.sessions.delete(sessionId);
+
+    const rollout = resolveHybridRolloutState(this.config, `${sessionId}:${input.task_summary}`);
+    const hybridPosttaskRoute = decidePosttaskHybridRoute(this.config, input, {
+      taskStage: "posttask",
+      completedRun: true,
+      terminalOutcomeRecorded: true,
+      boundedPosttaskCapsuleAvailable: Boolean(input.task_summary),
+      postmortemAlreadyRecorded: learningTaskContext
+        ? Boolean(this.hybridReviewArtifactRepo.getByTaskRunId(learningTaskContext.taskRun.id))
+        : false,
+      lightweightOrExcludedTask: false,
+      directionalCorrectionPresent: Boolean(
+        learningTaskContext
+          ? buildCandidateSignals(learningTaskContext.input).directional_correction?.detected
+            || buildCandidateSignals(learningTaskContext.input).evidence_driven_reversal?.detected
+          : false
+      ),
+      injectedNodeInteractionPresent: input.injected_node_ids.length > 0,
+      retryOrInvalidationSignaturePresent: Boolean(
+        learningTaskContext
+          ? buildCandidateSignals(learningTaskContext.input).retry_count > 0
+            || buildCandidateSignals(learningTaskContext.input).evidence_driven_reversal?.invalidating_evidence
+          : false
+      ),
+      meaningfulFailureSignaturePresent: Boolean(
+        learningTaskContext ? buildCandidateSignals(learningTaskContext.input).failure_signature : input.outcome_signal === "failure"
+      ),
+      conservativeTransitionReviewWorthy: false
+    }, `${sessionId}:${input.task_summary}`);
 
     if (learningTaskContext) {
       this.trackLearningTask(
@@ -803,12 +980,29 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
           learningTaskContext.sessionId
         )
       );
+      if (hybridPosttaskRoute.route === "ESCALATE_ASYNC_POSTMORTEM") {
+        this.trackLearningTask(
+          this.persistHybridPostmortemArtifactAsync({
+            taskRun: learningTaskContext.taskRun,
+            experienceInput: learningTaskContext.input,
+            routeDecision: hybridPosttaskRoute,
+            toolEvents: learningTaskContext.toolEvents,
+            rolloutMode: rollout.effectiveMode,
+            rolloutReason: rollout.reason
+          })
+        );
+      }
     }
 
     this.logger.info?.("experienceengine.finalize", {
       sessionId,
       taskType: input.task_type,
-      outcome: input.outcome_signal
+      outcome: input.outcome_signal,
+      hybridPosttaskRoute: hybridPosttaskRoute.route,
+      hybridPosttaskRouteReason: hybridPosttaskRoute.reasonCode,
+      hybridRoutePolicyVersion: hybridPosttaskRoute.policyVersion,
+      hybridRolloutMode: rollout.effectiveMode,
+      hybridRolloutReason: rollout.reason
     });
 
     return input;

@@ -1,10 +1,15 @@
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import { buildInjectionScorecard } from "../controller/injection-scorecard.js";
 import { buildBenchmarkSummary, type BenchmarkSummary } from "../evaluation/benchmark-summary.js";
+import { buildExplainDecisionCapsule } from "../hybrid/capsule-builder.js";
+import { resolveHybridRolloutState } from "../hybrid/rollout.js";
+import { selectHybridRoute, type HybridRouteDecision } from "../hybrid/router.js";
+import { HybridWorkerClient } from "../hybrid/worker-client.js";
 import { resolveScope } from "../input/scope-resolver.js";
 import { bootstrapDatabase, openDatabase } from "../store/sqlite/db.js";
 import { CandidateRepository } from "../store/sqlite/repositories/candidate-repo.js";
 import { DistillationJobRepository } from "../store/sqlite/repositories/distillation-job-repo.js";
+import { HybridInvocationTraceRepository } from "../store/sqlite/repositories/hybrid-invocation-trace-repo.js";
 import { InputRecordRepository } from "../store/sqlite/repositories/input-record-repo.js";
 import { InjectionRepository } from "../store/sqlite/repositories/injection-repo.js";
 import { NodeRepository } from "../store/sqlite/repositories/node-repo.js";
@@ -207,6 +212,53 @@ export type ExperienceDecisionHealth = {
   recentPriorityPromotions: number;
   lastDecisionMode?: "inject" | "inject_conservative" | "skip";
 };
+
+const normalizeHybridExplainPrompt = (value: string): string =>
+  value
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+
+export const isExplicitHybridExplanationRequest = (userMessage: string): boolean => {
+  const message = normalizeHybridExplainPrompt(userMessage);
+  const mentionsEe =
+    message.includes("experienceengine")
+    || message.includes("experience engine")
+    || /\bee\b/.test(message);
+  if (!mentionsEe) {
+    return false;
+  }
+
+  const hasExplainIntent =
+    /\bwhy\b/.test(message)
+    || /\bexplain\b/.test(message)
+    || (/\bwhat\b/.test(message) && /\binject\b/.test(message))
+    || (/\bwhy\b/.test(message) && /\bmatch\b/.test(message))
+    || (/\bwhy\b/.test(message) && /\bskip\b/.test(message))
+    || (/\bwhy\b/.test(message) && /\bconservative\b/.test(message))
+    || message.includes("stayed quiet")
+    || message.includes("stay quiet");
+
+  return hasExplainIntent;
+};
+
+export const decideHybridExplainRoute = (userMessage: string): HybridRouteDecision =>
+  selectHybridRoute({
+    taskStage: "prompt",
+    explicitExplanationRequest: isExplicitHybridExplanationRequest(userMessage),
+    existingConservativePathRequired: false,
+    completedRun: false,
+    terminalOutcomeRecorded: false,
+    boundedPosttaskCapsuleAvailable: false,
+    postmortemAlreadyRecorded: false,
+    lightweightOrExcludedTask: false,
+    directionalCorrectionPresent: false,
+    injectedNodeInteractionPresent: false,
+    retryOrInvalidationSignaturePresent: false,
+    meaningfulFailureSignaturePresent: false,
+    conservativeTransitionReviewWorthy: false,
+    rolloutAllowsAsyncPostmortem: false
+  });
 
 export const deriveStructuredSilenceReason = (input: {
   inspection: ExperienceLastInspection;
@@ -608,17 +660,21 @@ const buildRetrievalNotes = (scorecard?: InjectionScorecard): string[] => {
 };
 
 export class ExperienceInteractionService {
+  private readonly config;
+  private readonly hybridWorkerClient;
   private readonly inputRepo;
   private readonly injectionRepo;
   private readonly nodeRepo;
   private readonly candidateRepo;
   private readonly jobRepo;
+  private readonly hybridTraceRepo;
   private readonly taskRunRepo;
   private readonly outcomeRepo;
   private readonly reviewEventRepo;
   private readonly scopeRepo;
 
   constructor(config: ExperienceEngineConfig) {
+    this.config = config;
     const db = openDatabase(config);
     bootstrapDatabase(db);
     this.inputRepo = new InputRecordRepository(db);
@@ -626,10 +682,77 @@ export class ExperienceInteractionService {
     this.nodeRepo = new NodeRepository(db);
     this.candidateRepo = new CandidateRepository(db);
     this.jobRepo = new DistillationJobRepository(db);
+    this.hybridTraceRepo = new HybridInvocationTraceRepository(db);
     this.taskRunRepo = new TaskRunRepository(db);
     this.outcomeRepo = new OutcomeRecordRepository(db);
     this.reviewEventRepo = new ReviewEventRepository(db);
     this.scopeRepo = new ScopeRepository(db);
+    this.hybridWorkerClient = new HybridWorkerClient({
+      explainDecisionEnabled: config.hybridEnabled && config.hybridSyncExplainEnabled
+    });
+  }
+
+  decideExplainRoute(userMessage: string): HybridRouteDecision {
+    return decideHybridExplainRoute(userMessage);
+  }
+
+  async explainLastDecision(cwd: string = process.cwd(), userMessage?: string): Promise<string> {
+    const inspection = this.inspectLast(cwd);
+    if (!inspection) {
+      return "There is no recent ExperienceEngine intervention in this workspace yet.";
+    }
+
+    const fallback =
+      inspection.decisionExplanation
+      ?? "ExperienceEngine used the current bounded decision path, but no deeper explanation is stored for the latest turn.";
+
+    if (!userMessage) {
+      return fallback;
+    }
+
+    const rollout = resolveHybridRolloutState(this.config, `${cwd}:${userMessage}`);
+    if (!rollout.hybridActive) {
+      return fallback;
+    }
+
+    const routeDecision = this.decideExplainRoute(userMessage);
+    if (routeDecision.route !== "ESCALATE_SYNC_EXPLAIN") {
+      return fallback;
+    }
+
+    const capsule = buildExplainDecisionCapsule({
+      schemaVersion: this.config.hybridCapsuleSchemaVersion,
+      routeDecision,
+      inspection
+    });
+    const result = await this.hybridWorkerClient.runExplainDecision(capsule);
+    const timestamp = nowIso();
+    this.hybridTraceRepo.upsert({
+      id: createId("hybridtrace"),
+      surface: "interaction",
+      session_id: inspection.sessionId,
+      scope_id: inspection.scopeId,
+      worker_task: "explain_decision",
+      route: routeDecision.route,
+      route_policy_version: routeDecision.policyVersion,
+      capsule_schema_version: this.config.hybridCapsuleSchemaVersion,
+      worker_profile_version: this.config.hybridExplainDecisionProfileVersion,
+      rollout_mode: rollout.effectiveMode,
+      rollout_reason: rollout.reason,
+      worker_ran: true,
+      validation_status: result.status === "accepted" ? "accepted" : "fallback",
+      output_action: result.status === "accepted" && rollout.userVisible ? "surfaced" : "none",
+      fallback_reason: result.status === "accepted" ? undefined : result.reason,
+      created_at: timestamp
+    });
+    if (!rollout.userVisible) {
+      return fallback;
+    }
+    if (result.status !== "accepted") {
+      return fallback;
+    }
+
+      return `${result.value.decision} ${result.value.reason}`.trim();
   }
 
   private inspectRecord(record: ExperienceInputRecord | undefined): ExperienceLastInspection | undefined {

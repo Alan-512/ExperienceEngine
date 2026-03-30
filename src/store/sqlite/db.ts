@@ -112,6 +112,12 @@ export const bootstrapDatabase = (db: DatabaseSync): void => {
   ensureColumn(db, "injection_events", "attribution_reason", "TEXT");
   ensureColumn(db, "task_runs", "learning_status", "TEXT");
   ensureColumn(db, "task_runs", "learning_reason", "TEXT");
+  ensureColumn(db, "hybrid_review_artifacts", "schema_version", "TEXT NOT NULL DEFAULT 'hybrid-capsule-v1'");
+  ensureColumn(db, "hybrid_review_artifacts", "route_policy_version", "TEXT NOT NULL DEFAULT 'hybrid-phase1-v1'");
+  ensureColumn(db, "hybrid_review_artifacts", "worker_profile_version", "TEXT NOT NULL DEFAULT 'hybrid-postmortem-v1'");
+  ensureColumn(db, "hybrid_invocation_traces", "capsule_schema_version", "TEXT");
+  ensureColumn(db, "hybrid_invocation_traces", "worker_profile_version", "TEXT");
+  ensureColumn(db, "hybrid_invocation_traces", "fallback_reason", "TEXT");
 };
 
 const isBusyLockError = (error: unknown): boolean => {

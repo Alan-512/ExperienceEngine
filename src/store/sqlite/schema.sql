@@ -58,6 +58,41 @@ CREATE TABLE IF NOT EXISTS review_events (
   created_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS hybrid_review_artifacts (
+  id TEXT PRIMARY KEY,
+  task_run_id TEXT NOT NULL UNIQUE,
+  scope_id TEXT NOT NULL,
+  worker_task TEXT NOT NULL,
+  approval_class TEXT NOT NULL,
+  schema_version TEXT NOT NULL,
+  route_policy_version TEXT NOT NULL,
+  worker_profile_version TEXT NOT NULL,
+  recommendation TEXT NOT NULL,
+  summary TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS hybrid_invocation_traces (
+  id TEXT PRIMARY KEY,
+  surface TEXT NOT NULL,
+  session_id TEXT,
+  scope_id TEXT,
+  worker_task TEXT,
+  route TEXT NOT NULL,
+  route_policy_version TEXT NOT NULL,
+  capsule_schema_version TEXT,
+  worker_profile_version TEXT,
+  rollout_mode TEXT NOT NULL,
+  rollout_reason TEXT NOT NULL,
+  worker_ran INTEGER NOT NULL DEFAULT 0,
+  validation_status TEXT NOT NULL,
+  output_action TEXT NOT NULL,
+  fallback_reason TEXT,
+  created_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS experience_nodes (
   id TEXT PRIMARY KEY,
   node_type TEXT NOT NULL,

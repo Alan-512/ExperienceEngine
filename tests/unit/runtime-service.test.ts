@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadConfig } from "../../src/config/load-config.js";
 import { resolveScope } from "../../src/input/scope-resolver.js";
 import { ExperienceRuntimeService } from "../../src/runtime/service.js";
+import { decidePosttaskHybridRoute } from "../../src/runtime/service.js";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
 import { clearEmbeddingProviderForTests, setEmbeddingProviderForTests } from "../../src/store/vector/embeddings.js";
@@ -84,6 +85,124 @@ afterEach(() => {
 });
 
 describe("ExperienceRuntimeService finalize transaction", () => {
+  it("routes an eligible completed run into async hybrid postmortem when enabled", () => {
+    const decision = decidePosttaskHybridRoute({
+      hybridEnabled: true,
+      hybridAsyncPostmortemEnabled: true,
+      hybridRoutePolicyVersion: "hybrid-phase1-v1"
+    } as ReturnType<typeof loadConfig>, {
+      task_summary: "Fix the failing vitest auth test",
+      context_summary: "The test failed first, then passed after moving the fix to the provider path."
+    }, {
+      taskStage: "posttask",
+      completedRun: true,
+      terminalOutcomeRecorded: true,
+      boundedPosttaskCapsuleAvailable: true,
+      postmortemAlreadyRecorded: false,
+      lightweightOrExcludedTask: false,
+      directionalCorrectionPresent: true,
+      injectedNodeInteractionPresent: false,
+      retryOrInvalidationSignaturePresent: false,
+      meaningfulFailureSignaturePresent: false,
+      conservativeTransitionReviewWorthy: false
+    });
+
+    expect(decision).toMatchObject({
+      route: "ESCALATE_ASYNC_POSTMORTEM",
+      reasonCode: "eligible_async_postmortem_review"
+    });
+  });
+
+  it("keeps wording-only completed runs on the fast path even after task completion", () => {
+    const decision = decidePosttaskHybridRoute({
+      hybridEnabled: true,
+      hybridAsyncPostmortemEnabled: true,
+      hybridRoutePolicyVersion: "hybrid-phase1-v1"
+    } as ReturnType<typeof loadConfig>, {
+      task_summary: "Refine the inline notice wording so it feels lighter.",
+      context_summary: "This is a wording-only pass for the inline notice copy."
+    }, {
+      taskStage: "posttask",
+      completedRun: true,
+      terminalOutcomeRecorded: true,
+      boundedPosttaskCapsuleAvailable: true,
+      postmortemAlreadyRecorded: false,
+      lightweightOrExcludedTask: true,
+      directionalCorrectionPresent: false,
+      injectedNodeInteractionPresent: false,
+      retryOrInvalidationSignaturePresent: false,
+      meaningfulFailureSignaturePresent: true,
+      conservativeTransitionReviewWorthy: false
+    });
+
+    expect(decision).toMatchObject({
+      route: "FAST_PATH",
+      reasonCode: "default_fast_path"
+    });
+  });
+
+  it("keeps async postmortem on the fast path when canary excludes the run", () => {
+    const decision = decidePosttaskHybridRoute({
+      hybridEnabled: true,
+      hybridAsyncPostmortemEnabled: true,
+      hybridRolloutMode: "canary",
+      hybridCanaryRate: 0,
+      hybridKillSwitch: false,
+      hybridRoutePolicyVersion: "hybrid-phase1-v1"
+    } as ReturnType<typeof loadConfig>, {
+      task_summary: "Fix the failing vitest auth test",
+      context_summary: "The test failed first, then passed after moving the fix to the provider path."
+    }, {
+      taskStage: "posttask",
+      completedRun: true,
+      terminalOutcomeRecorded: true,
+      boundedPosttaskCapsuleAvailable: true,
+      postmortemAlreadyRecorded: false,
+      lightweightOrExcludedTask: false,
+      directionalCorrectionPresent: true,
+      injectedNodeInteractionPresent: false,
+      retryOrInvalidationSignaturePresent: false,
+      meaningfulFailureSignaturePresent: false,
+      conservativeTransitionReviewWorthy: false
+    }, "session:control");
+
+    expect(decision).toMatchObject({
+      route: "FAST_PATH",
+      reasonCode: "default_fast_path"
+    });
+  });
+
+  it("keeps async postmortem on the fast path when the hybrid kill switch is enabled", () => {
+    const decision = decidePosttaskHybridRoute({
+      hybridEnabled: true,
+      hybridAsyncPostmortemEnabled: true,
+      hybridRolloutMode: "live",
+      hybridCanaryRate: 1,
+      hybridKillSwitch: true,
+      hybridRoutePolicyVersion: "hybrid-phase1-v1"
+    } as ReturnType<typeof loadConfig>, {
+      task_summary: "Fix the failing vitest auth test",
+      context_summary: "The test failed first, then passed after moving the fix to the provider path."
+    }, {
+      taskStage: "posttask",
+      completedRun: true,
+      terminalOutcomeRecorded: true,
+      boundedPosttaskCapsuleAvailable: true,
+      postmortemAlreadyRecorded: false,
+      lightweightOrExcludedTask: false,
+      directionalCorrectionPresent: true,
+      injectedNodeInteractionPresent: false,
+      retryOrInvalidationSignaturePresent: false,
+      meaningfulFailureSignaturePresent: false,
+      conservativeTransitionReviewWorthy: false
+    }, "session:kill");
+
+    expect(decision).toMatchObject({
+      route: "FAST_PATH",
+      reasonCode: "default_fast_path"
+    });
+  });
+
   it("lets a high-value first-seen lesson enter priority_candidate", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
@@ -1069,6 +1188,254 @@ describe("ExperienceRuntimeService finalize transaction", () => {
         source: "automatic"
       })
     ]);
+  });
+
+  it("schedules an async postmortem review and stores only a non-authoritative artifact", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const service = new ExperienceRuntimeService(
+      loadConfig(
+        {
+          dataDir: join(runtimeDir, "data"),
+          sqlitePath,
+          captureDir: join(runtimeDir, "captures"),
+          hybridEnabled: true,
+          hybridAsyncPostmortemEnabled: true
+        },
+        { homeDir: runtimeDir }
+      ),
+      undefined,
+      {
+        homeDir: runtimeDir,
+        env: {},
+        hybridWorkerClientOptions: {
+          postmortemReviewExecutor: async () => ({
+            task: "postmortem_review",
+            review_verdict: "review_artifact",
+            candidate_recommendation: "capture",
+            feedback_followup_recommendation: "none",
+            confidence: "high",
+            reason: "The run shows a reusable provider-path correction.",
+            review_artifact: {
+              summary: "The run shows a reusable provider-path correction.",
+              notes: ["Keep this as a non-authoritative review artifact."]
+            }
+          })
+        }
+      }
+    );
+
+    await service.persistToolResult({
+      sessionId: "hybrid-postmortem-session",
+      toolName: "user-feedback",
+      outputSummary: "The first approach was wrong; the fix belongs in the provider path.",
+      status: "success"
+    });
+    await service.persistToolResult({
+      sessionId: "hybrid-postmortem-session",
+      toolName: "vitest",
+      outputSummary: "The focused auth test passed after the provider-path correction.",
+      status: "success"
+    });
+
+    await service.finalizeTask({
+      sessionId: "hybrid-postmortem-session",
+      cwd: "/repo",
+      userMessage: "Fix the auth test by moving the fix into the provider path",
+      taskSummary: "Fix the auth test by moving the fix into the provider path",
+      contextSummary: "The first attempt was wrong until the fix moved into provider routing."
+    });
+    await service.waitForBackgroundLearning();
+
+    const db = new DatabaseSync(sqlitePath);
+    const artifactRows = db
+      .prepare(
+        "SELECT worker_task, approval_class, recommendation, summary FROM hybrid_review_artifacts ORDER BY created_at ASC"
+      )
+      .all() as Array<{
+      worker_task: string;
+      approval_class: string;
+      recommendation: string;
+      summary: string;
+    }>;
+    const traceRows = db
+      .prepare(
+        "SELECT worker_task, rollout_mode, validation_status, output_action FROM hybrid_invocation_traces ORDER BY created_at ASC"
+      )
+      .all() as Array<{
+      worker_task: string;
+      rollout_mode: string;
+      validation_status: string;
+      output_action: string;
+    }>;
+    const nodeCount = (db.prepare("SELECT COUNT(*) AS count FROM experience_nodes").get() as { count: number }).count;
+    const candidateCount = (db.prepare("SELECT COUNT(*) AS count FROM experience_candidates").get() as { count: number })
+      .count;
+
+    expect(artifactRows).toEqual([
+      expect.objectContaining({
+        worker_task: "postmortem_review",
+        approval_class: "review_artifact",
+        recommendation: "capture"
+      })
+    ]);
+    expect(traceRows).toEqual([
+      expect.objectContaining({
+        worker_task: "postmortem_review",
+        rollout_mode: "live",
+        validation_status: "accepted",
+        output_action: "stored"
+      })
+    ]);
+    expect(nodeCount).toBe(0);
+    expect(candidateCount).toBe(0);
+  });
+
+  it("records a rejected postmortem trace when repeated timeouts force safe fallback", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const service = new ExperienceRuntimeService(
+      loadConfig(
+        {
+          dataDir: join(runtimeDir, "data"),
+          sqlitePath,
+          captureDir: join(runtimeDir, "captures"),
+          hybridEnabled: true,
+          hybridAsyncPostmortemEnabled: true
+        },
+        { homeDir: runtimeDir }
+      ),
+      undefined,
+      {
+        homeDir: runtimeDir,
+        env: {},
+        hybridWorkerClientOptions: {
+          timeoutCircuitThreshold: 1,
+          postmortemReviewTimeoutMs: 5,
+          postmortemReviewExecutor: async () => {
+            await new Promise((resolve) => setTimeout(resolve, 50));
+            return {
+              task: "postmortem_review",
+              review_verdict: "review_artifact",
+              candidate_recommendation: "observe",
+              feedback_followup_recommendation: "none",
+              confidence: "low",
+              reason: "late",
+              review_artifact: {
+                summary: "late",
+                notes: ["late"]
+              }
+            };
+          }
+        }
+      }
+    );
+
+    await service.persistToolResult({
+      sessionId: "hybrid-postmortem-timeout",
+      toolName: "user-feedback",
+      outputSummary: "The first direction was wrong; the fix belongs in the provider path.",
+      status: "success"
+    });
+    await service.persistToolResult({
+      sessionId: "hybrid-postmortem-timeout",
+      toolName: "vitest",
+      outputSummary: "The focused auth test passed after the provider-path correction.",
+      status: "success"
+    });
+
+    await service.finalizeTask({
+      sessionId: "hybrid-postmortem-timeout",
+      cwd: "/repo",
+      userMessage: "Fix the auth test by moving the fix into the provider path",
+      taskSummary: "Fix the auth test by moving the fix into the provider path",
+      contextSummary: "The first attempt was wrong until the provider-path correction passed the targeted auth test."
+    });
+    await service.waitForBackgroundLearning();
+
+    const db = new DatabaseSync(sqlitePath);
+    const traces = db
+      .prepare("SELECT validation_status, output_action, fallback_reason FROM hybrid_invocation_traces ORDER BY created_at ASC")
+      .all() as Array<{ validation_status: string; output_action: string; fallback_reason: string | null }>;
+
+    expect(traces).toEqual([
+      expect.objectContaining({
+        validation_status: "fallback",
+        output_action: "rejected",
+        fallback_reason: "timeout"
+      })
+    ]);
+  });
+
+  it("does not create duplicate postmortem artifacts for the same completed run", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const service = new ExperienceRuntimeService(
+      loadConfig(
+        {
+          dataDir: join(runtimeDir, "data"),
+          sqlitePath,
+          captureDir: join(runtimeDir, "captures"),
+          hybridEnabled: true,
+          hybridAsyncPostmortemEnabled: true
+        },
+        { homeDir: runtimeDir }
+      ),
+      undefined,
+      {
+        homeDir: runtimeDir,
+        env: {},
+        hybridWorkerClientOptions: {
+          postmortemReviewExecutor: async () => ({
+            task: "postmortem_review",
+            review_verdict: "review_artifact",
+            candidate_recommendation: "observe",
+            feedback_followup_recommendation: "none",
+            confidence: "medium",
+            reason: "The run suggests a reusable correction.",
+            review_artifact: {
+              summary: "The run suggests a reusable correction.",
+              notes: ["Keep this review bounded and non-authoritative."]
+            }
+          })
+        }
+      }
+    );
+
+    await service.persistToolResult({
+      sessionId: "hybrid-postmortem-dup",
+      toolName: "vitest",
+      outputSummary: "The auth test still fails in the UI-layer path with the same assertion.",
+      errorSignature: "auth test still fails in the UI-layer path",
+      status: "failure"
+    });
+    await service.persistToolResult({
+      sessionId: "hybrid-postmortem-dup",
+      toolName: "user-feedback",
+      outputSummary: "The first direction was wrong; the fix belongs in the provider path instead of the UI layer.",
+      status: "success"
+    });
+    await service.persistToolResult({
+      sessionId: "hybrid-postmortem-dup",
+      toolName: "vitest",
+      outputSummary: "The focused auth test passed after the provider-path correction.",
+      status: "success"
+    });
+    await service.finalizeTask({
+      sessionId: "hybrid-postmortem-dup",
+      cwd: "/repo",
+      userMessage: "Fix the auth test by moving the fix into the provider path",
+      taskSummary: "Fix the auth test by moving the fix into the provider path",
+      contextSummary: "The initial UI-layer approach was wrong until the provider-path correction passed the targeted auth test."
+    });
+    await service.waitForBackgroundLearning();
+
+    const db = new DatabaseSync(sqlitePath);
+    const artifactCount = (
+      db.prepare("SELECT COUNT(*) AS count FROM hybrid_review_artifacts").get() as { count: number }
+    ).count;
+
+    expect(artifactCount).toBe(1);
   });
 
 });
