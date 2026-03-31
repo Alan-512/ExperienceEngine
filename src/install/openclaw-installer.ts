@@ -14,6 +14,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
+import { loadConfig } from "../config/load-config.js";
 import { resolveExperienceEnginePaths, resolveProductStateDir, type ResolvedPathInfo } from "../config/path-resolver.js";
 import {
   buildOpenClawInstallCommands,
@@ -49,6 +50,14 @@ export type OpenClawInstallReport = {
     dataDir: string;
     sqlitePath: string;
     captureDir: string;
+    distillerProvider: string;
+    distillerModel: string;
+    hybridEnabled: boolean;
+    hybridSyncExplainEnabled: boolean;
+    hybridAsyncPostmortemEnabled: boolean;
+    hybridExplainLlmEnabled: boolean;
+    hybridExplainProviderMode: string;
+    hybridExplainModelProfileVersion: string;
   };
 };
 
@@ -58,6 +67,12 @@ type InstallerOptions = {
   runner?: OpenClawCommandRunner;
   packageSourceBuilder?: (packageRoot: string, paths: ResolvedPathInfo) => string;
 };
+
+const readExplicitBooleanEnv = (env: NodeJS.ProcessEnv, key: string): boolean | undefined =>
+  env[key] !== undefined ? env[key] === "true" : undefined;
+
+const readExplicitStringEnv = (env: NodeJS.ProcessEnv, key: string): string | undefined =>
+  env[key] !== undefined ? env[key] : undefined;
 
 type HostState = {
   status?: string;
@@ -410,7 +425,18 @@ const readOpenClawPluginsConfig = (runner?: OpenClawCommandRunner) => {
   return parseOpenClawPluginsConfig(pluginsOutput).config;
 };
 
+const readOpenClawPluginEntryConfig = (runner?: OpenClawCommandRunner) => {
+  try {
+    const output = runOpenClawCommand(buildOpenClawConfigGetCommand("experienceengine"), runner);
+    return parseOpenClawPluginEntryConfig(output).entry?.config ?? null;
+  } catch {
+    return null;
+  }
+};
+
 export const installOpenClawAdapter = (options: InstallerOptions = {}): OpenClawInstallReport => {
+  const env = options.env ?? process.env;
+  const resolvedConfig = loadConfig({}, { env, homeDir: options.homeDir });
   const paths = resolveExperienceEnginePaths({
     adapter: "openclaw",
     env: options.env ?? process.env,
@@ -418,10 +444,43 @@ export const installOpenClawAdapter = (options: InstallerOptions = {}): OpenClaw
   });
   const packageRoot = resolveExperienceEnginePackageRoot();
   const installedVersion = readCurrentPackageVersion(packageRoot);
+  const existingEntryConfig = readOpenClawPluginEntryConfig(options.runner);
   const pluginConfig = {
     dataDir: paths.dataDir,
     sqlitePath: paths.sqlitePath,
-    captureDir: paths.captureDir
+    captureDir: paths.captureDir,
+    distillerProvider:
+      readExplicitStringEnv(env, "EXPERIENCE_ENGINE_DISTILLER_PROVIDER")
+      ?? (typeof existingEntryConfig?.distillerProvider === "string" ? existingEntryConfig.distillerProvider : undefined)
+      ?? resolvedConfig.distillerProvider,
+    distillerModel:
+      readExplicitStringEnv(env, "EXPERIENCE_ENGINE_DISTILLER_MODEL")
+      ?? (typeof existingEntryConfig?.distillerModel === "string" ? existingEntryConfig.distillerModel : undefined)
+      ?? resolvedConfig.distillerModel,
+    hybridEnabled:
+      readExplicitBooleanEnv(env, "EXPERIENCE_ENGINE_HYBRID_ENABLED")
+      ?? (typeof existingEntryConfig?.hybridEnabled === "boolean" ? existingEntryConfig.hybridEnabled : undefined)
+      ?? resolvedConfig.hybridEnabled,
+    hybridSyncExplainEnabled:
+      readExplicitBooleanEnv(env, "EXPERIENCE_ENGINE_HYBRID_SYNC_EXPLAIN_ENABLED")
+      ?? (typeof existingEntryConfig?.hybridSyncExplainEnabled === "boolean" ? existingEntryConfig.hybridSyncExplainEnabled : undefined)
+      ?? resolvedConfig.hybridSyncExplainEnabled,
+    hybridAsyncPostmortemEnabled:
+      readExplicitBooleanEnv(env, "EXPERIENCE_ENGINE_HYBRID_ASYNC_POSTMORTEM_ENABLED")
+      ?? (typeof existingEntryConfig?.hybridAsyncPostmortemEnabled === "boolean" ? existingEntryConfig.hybridAsyncPostmortemEnabled : undefined)
+      ?? resolvedConfig.hybridAsyncPostmortemEnabled,
+    hybridExplainLlmEnabled:
+      readExplicitBooleanEnv(env, "EXPERIENCE_ENGINE_HYBRID_EXPLAIN_LLM_ENABLED")
+      ?? (typeof existingEntryConfig?.hybridExplainLlmEnabled === "boolean" ? existingEntryConfig.hybridExplainLlmEnabled : undefined)
+      ?? resolvedConfig.hybridExplainLlmEnabled,
+    hybridExplainProviderMode:
+      readExplicitStringEnv(env, "EXPERIENCE_ENGINE_HYBRID_EXPLAIN_PROVIDER_MODE")
+      ?? (typeof existingEntryConfig?.hybridExplainProviderMode === "string" ? existingEntryConfig.hybridExplainProviderMode : undefined)
+      ?? resolvedConfig.hybridExplainProviderMode,
+    hybridExplainModelProfileVersion:
+      readExplicitStringEnv(env, "EXPERIENCE_ENGINE_HYBRID_EXPLAIN_MODEL_PROFILE_VERSION")
+      ?? (typeof existingEntryConfig?.hybridExplainModelProfileVersion === "string" ? existingEntryConfig.hybridExplainModelProfileVersion : undefined)
+      ?? resolvedConfig.hybridExplainModelProfileVersion
   };
 
   mkdirSync(paths.dataDir, { recursive: true });
@@ -494,6 +553,14 @@ type PersistedInstallState = {
   dataDir?: string;
   sqlitePath?: string;
   captureDir?: string;
+  distillerProvider?: string;
+  distillerModel?: string;
+  hybridEnabled?: boolean;
+  hybridSyncExplainEnabled?: boolean;
+  hybridAsyncPostmortemEnabled?: boolean;
+  hybridExplainLlmEnabled?: boolean;
+  hybridExplainProviderMode?: string;
+  hybridExplainModelProfileVersion?: string;
 };
 
 const readInstallState = (installStatePath: string): PersistedInstallState | null => {
@@ -533,7 +600,15 @@ export const inspectOpenClawInstall = (options: InstallerOptions = {}) => {
     ? {
         dataDir: state.dataDir,
         sqlitePath: state.sqlitePath,
-        captureDir: state.captureDir
+        captureDir: state.captureDir,
+        distillerProvider: state.distillerProvider,
+        distillerModel: state.distillerModel,
+        hybridEnabled: state.hybridEnabled,
+        hybridSyncExplainEnabled: state.hybridSyncExplainEnabled,
+        hybridAsyncPostmortemEnabled: state.hybridAsyncPostmortemEnabled,
+        hybridExplainLlmEnabled: state.hybridExplainLlmEnabled,
+        hybridExplainProviderMode: state.hybridExplainProviderMode,
+        hybridExplainModelProfileVersion: state.hybridExplainModelProfileVersion
       }
     : undefined;
 
@@ -563,7 +638,15 @@ export const inspectOpenClawInstall = (options: InstallerOptions = {}) => {
         Boolean(liveConfig) &&
         liveConfig?.dataDir === expected?.dataDir &&
         liveConfig?.sqlitePath === expected?.sqlitePath &&
-        liveConfig?.captureDir === expected?.captureDir
+        liveConfig?.captureDir === expected?.captureDir &&
+        liveConfig?.distillerProvider === expected?.distillerProvider &&
+        liveConfig?.distillerModel === expected?.distillerModel &&
+        liveConfig?.hybridEnabled === expected?.hybridEnabled &&
+        liveConfig?.hybridSyncExplainEnabled === expected?.hybridSyncExplainEnabled &&
+        liveConfig?.hybridAsyncPostmortemEnabled === expected?.hybridAsyncPostmortemEnabled &&
+        liveConfig?.hybridExplainLlmEnabled === expected?.hybridExplainLlmEnabled &&
+        liveConfig?.hybridExplainProviderMode === expected?.hybridExplainProviderMode &&
+        liveConfig?.hybridExplainModelProfileVersion === expected?.hybridExplainModelProfileVersion
     };
 
     const drift = inspectInstalledOpenClawBundleDrift(state?.packageRoot, info.installPath, options.homeDir);

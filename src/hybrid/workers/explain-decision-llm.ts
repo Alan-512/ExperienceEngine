@@ -133,6 +133,31 @@ const parseResponseContent = async (endpoint: DistillerEndpoint, response: Respo
   return content;
 };
 
+const normalizeConfidence = (value: unknown): unknown => {
+  if (typeof value === "string" && (value === "high" || value === "medium" || value === "low")) {
+    return value;
+  }
+
+  const numeric =
+    typeof value === "number"
+      ? value
+      : typeof value === "string" && value.trim().length > 0
+        ? Number(value)
+        : Number.NaN;
+
+  if (Number.isNaN(numeric)) {
+    return value;
+  }
+
+  if (numeric >= 0.8) {
+    return "high";
+  }
+  if (numeric >= 0.5) {
+    return "medium";
+  }
+  return "low";
+};
+
 export const runExplainDecisionLlmWorker = async (
   capsule: ExplainDecisionCapsule,
   options: ExplainDecisionLlmOptions
@@ -157,7 +182,7 @@ export const runExplainDecisionLlmWorker = async (
     task: "explain_decision",
     decision: parsed.decision,
     reason: parsed.reason,
-    confidence: parsed.confidence,
+    confidence: normalizeConfidence(parsed.confidence),
     evidence_summary: parsed.evidence_summary
   });
 

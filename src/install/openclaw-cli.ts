@@ -14,6 +14,14 @@ export type OpenClawConfigPayload = {
   dataDir: string;
   sqlitePath: string;
   captureDir: string;
+  distillerProvider?: string;
+  distillerModel?: string;
+  hybridEnabled?: boolean;
+  hybridSyncExplainEnabled?: boolean;
+  hybridAsyncPostmortemEnabled?: boolean;
+  hybridExplainLlmEnabled?: boolean;
+  hybridExplainProviderMode?: string;
+  hybridExplainModelProfileVersion?: string;
 };
 
 export type OpenClawInstallAction = "install" | "reinstall" | "update";

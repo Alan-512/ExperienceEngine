@@ -28,6 +28,15 @@
         "type": "string",
         "description": "Directory used to store raw runtime payload captures."
       },
+      "distillerProvider": {
+        "type": "string",
+        "enum": ["openai", "anthropic", "gemini", "openrouter", "deepseek", "bedrock", "vertex_gemini", "groq", "openai_compatible"],
+        "description": "Distillation provider reused by phase 2 provider-backed explain."
+      },
+      "distillerModel": {
+        "type": "string",
+        "description": "Distillation model identifier reused by phase 2 provider-backed explain."
+      },
       "maxHints": {
         "type": "integer",
         "minimum": 1,
@@ -39,6 +48,31 @@
         "minimum": 0,
         "maximum": 1,
         "description": "Trigger threshold for intervention gating."
+      },
+      "hybridEnabled": {
+        "type": "boolean",
+        "description": "Enable the hybrid routing layer."
+      },
+      "hybridSyncExplainEnabled": {
+        "type": "boolean",
+        "description": "Allow bounded sync escalation for explicit explanation requests."
+      },
+      "hybridAsyncPostmortemEnabled": {
+        "type": "boolean",
+        "description": "Allow bounded async postmortem review for eligible completed runs."
+      },
+      "hybridExplainLlmEnabled": {
+        "type": "boolean",
+        "description": "Enable provider-backed explain_decision in phase 2."
+      },
+      "hybridExplainProviderMode": {
+        "type": "string",
+        "enum": ["shared_distiller"],
+        "description": "Provider resolution mode for phase 2 explain_decision."
+      },
+      "hybridExplainModelProfileVersion": {
+        "type": "string",
+        "description": "Version label for the provider-backed explain_decision model profile."
       }
     }
   },
@@ -61,11 +95,35 @@
       "label": "Capture Directory",
       "placeholder": "./data/runtime-captures"
     },
+    "distillerProvider": {
+      "label": "Distiller Provider"
+    },
+    "distillerModel": {
+      "label": "Distiller Model"
+    },
     "maxHints": {
       "label": "Max Hints"
     },
     "triggerThreshold": {
       "label": "Trigger Threshold"
+    },
+    "hybridEnabled": {
+      "label": "Hybrid Enabled"
+    },
+    "hybridSyncExplainEnabled": {
+      "label": "Hybrid Sync Explain Enabled"
+    },
+    "hybridAsyncPostmortemEnabled": {
+      "label": "Hybrid Async Postmortem Enabled"
+    },
+    "hybridExplainLlmEnabled": {
+      "label": "Hybrid Explain LLM Enabled"
+    },
+    "hybridExplainProviderMode": {
+      "label": "Hybrid Explain Provider Mode"
+    },
+    "hybridExplainModelProfileVersion": {
+      "label": "Hybrid Explain Model Profile Version"
     }
   }
 }

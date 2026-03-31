@@ -84,4 +84,85 @@ describe("runExplainDecisionLlmWorker", () => {
       evidence_summary: "task summary, retrieval note"
     });
   });
+
+  it("normalizes numeric confidence strings into the bounded confidence enum", async () => {
+    const capsule = buildExplainDecisionCapsule({
+      schemaVersion: "hybrid-capsule-v1",
+      routeDecision: {
+        route: "ESCALATE_SYNC_EXPLAIN",
+        reasonCode: "explicit_explanation_request",
+        policyVersion: "hybrid-phase1-v1"
+      },
+      inspection: {
+        scopeId: "scope_workspace",
+        taskType: "test_debug",
+        intervention: "inject",
+        deliveryMode: "live",
+        delivered: true,
+        autoFeedback: "none",
+        outcome: "success",
+        injectedNodes: [],
+        hints: ["Use the validated reuse path."],
+        evidence: ["replay: success: validated candidate surfaced"],
+        scorecard: {
+          scopeId: "scope_workspace",
+          taskType: "test_debug",
+          taskSummary: "Explain why the hint matched",
+          mode: "inject",
+          riskLevel: "low",
+          recommendation: "Explain the validated fast-path match.",
+          reasons: ["The best candidate is validated by reuse."],
+          decisionReason: "mature_validated_candidate",
+          nodes: [],
+          createdAt: "2026-03-31T00:00:00.000Z"
+        },
+        decisionExplanation: "ExperienceEngine injected a mature validated candidate.",
+        trustSummary: "low-risk active guidance with strong helped-over-harmed history.",
+        retrievalNotes: ["Fast-path reuse matched the current task family."],
+        timeline: [],
+        learningStatus: "captured",
+        learningReason: "captured after successful reuse",
+        summary: "Explain why the hint matched",
+        createdAt: "2026-03-31T00:00:00.000Z"
+      }
+    });
+
+    const output = await runExplainDecisionLlmWorker(capsule, {
+      endpoint: {
+        kind: "gemini",
+        provider: "gemini",
+        model: "gemini-3.1-flash-lite-preview",
+        baseUrl: "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite-preview:generateContent",
+        headers: {
+          "x-goog-api-key": "test-key"
+        },
+        source: "explicit",
+        authMode: "api_key"
+      },
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            candidates: [
+              {
+                content: {
+                  parts: [
+                    {
+                      text: JSON.stringify({
+                        decision: "The hint matched because a mature validated candidate cleared the fast path.",
+                        reason: "The latest reusable candidate had strong empirical support and fit the task family.",
+                        confidence: "0.95",
+                        evidence_summary: "validated reuse history and fast-path retrieval"
+                      })
+                    }
+                  ]
+                }
+              }
+            ]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+    });
+
+    expect(output.confidence).toBe("high");
+  });
 });
