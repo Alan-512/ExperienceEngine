@@ -135,8 +135,11 @@ const parseResponseContent = async (endpoint: DistillerEndpoint, response: Respo
 };
 
 const normalizeConfidence = (value: unknown): unknown => {
-  if (typeof value === "string" && (value === "high" || value === "medium" || value === "low")) {
-    return value;
+  if (typeof value === "string") {
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "high" || normalized === "medium" || normalized === "low") {
+      return normalized;
+    }
   }
 
   const numeric =
@@ -157,6 +160,120 @@ const normalizeConfidence = (value: unknown): unknown => {
     return "medium";
   }
   return "low";
+};
+
+const normalizeReviewVerdict = (value: unknown): unknown => {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "review_artifact" || normalized === "policy_gated") {
+    return normalized;
+  }
+  if (normalized === "approved" || normalized === "accepted") {
+    return "review_artifact";
+  }
+  if (normalized === "governance_review" || normalized === "needs_review") {
+    return "policy_gated";
+  }
+  return value;
+};
+
+const normalizeCandidateRecommendation = (value: unknown): unknown => {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "capture" || normalized === "reject" || normalized === "observe") {
+    return normalized;
+  }
+  if (
+    normalized === "proceed_to_validation"
+    || normalized === "retain_for_validation"
+    || normalized === "promote_for_review"
+  ) {
+    return "capture";
+  }
+  if (normalized === "retain_internal_only" || normalized === "internal_only" || normalized === "hold_internal") {
+    return "observe";
+  }
+  if (normalized === "discard" || normalized === "do_not_keep") {
+    return "reject";
+  }
+  return value;
+};
+
+const normalizeFeedbackFollowupRecommendation = (value: unknown): unknown => {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (
+    normalized === "none"
+    || normalized === "mark_helped"
+    || normalized === "mark_harmed"
+    || normalized === "review"
+  ) {
+    return normalized;
+  }
+  if (
+    normalized === "integrate_phase3_validation"
+    || normalized === "needs_review"
+    || normalized === "operator_review"
+  ) {
+    return "review";
+  }
+  if (normalized === "helped") {
+    return "mark_helped";
+  }
+  if (normalized === "harmed") {
+    return "mark_harmed";
+  }
+  return value;
+};
+
+const normalizeReviewArtifact = (value: unknown): unknown => {
+  if (typeof value === "string") {
+    const text = value.trim();
+    if (!text) {
+      return undefined;
+    }
+    return {
+      summary: text,
+      notes: [text]
+    };
+  }
+
+  if (!value || typeof value !== "object") {
+    return value;
+  }
+
+  const artifact = value as {
+    summary?: unknown;
+    notes?: unknown;
+  };
+  const summary =
+    typeof artifact.summary === "string" && artifact.summary.trim().length > 0
+      ? artifact.summary.trim()
+      : undefined;
+  const notes =
+    Array.isArray(artifact.notes)
+      ? artifact.notes
+          .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+          .map((entry) => entry.trim())
+      : [];
+
+  if (!summary && notes.length === 0) {
+    return value;
+  }
+
+  return {
+    summary: summary ?? notes[0],
+    notes: notes.length > 0 ? notes : summary ? [summary] : []
+  };
 };
 
 const isValidationFailure = (
@@ -185,12 +302,14 @@ export const runPostmortemReviewLlmWorker = async (
   const parsed = JSON.parse(content) as Record<string, unknown>;
   const validated = parsePostmortemReviewOutput({
     task: "postmortem_review",
-    review_verdict: parsed.review_verdict,
-    candidate_recommendation: parsed.candidate_recommendation,
-    feedback_followup_recommendation: parsed.feedback_followup_recommendation,
+    review_verdict: normalizeReviewVerdict(parsed.review_verdict),
+    candidate_recommendation: normalizeCandidateRecommendation(parsed.candidate_recommendation),
+    feedback_followup_recommendation: normalizeFeedbackFollowupRecommendation(
+      parsed.feedback_followup_recommendation
+    ),
     confidence: normalizeConfidence(parsed.confidence),
     reason: parsed.reason,
-    review_artifact: parsed.review_artifact,
+    review_artifact: normalizeReviewArtifact(parsed.review_artifact),
     suggestedFollowUps: parsed.suggestedFollowUps,
     candidateShapingSuggestions: parsed.candidateShapingSuggestions,
     governanceRecommendations: parsed.governanceRecommendations,
