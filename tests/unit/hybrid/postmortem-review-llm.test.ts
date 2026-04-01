@@ -106,4 +106,91 @@ describe("runPostmortemReviewLlmWorker", () => {
       }
     });
   });
+
+  it("normalizes maintenance-style retention recommendations into observe", async () => {
+    const fixture = phase3PostmortemFixtures[0];
+    const result = await runPostmortemReviewLlmWorker(fixture.capsule, {
+      endpoint: openAiEndpoint,
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    review_verdict: "APPROVED",
+                    candidate_recommendation: "MAINTAIN",
+                    feedback_followup_recommendation: "NONE",
+                    confidence: "HIGH",
+                    reason: "The run is worth retaining as a bounded diagnostic artifact without promotion.",
+                    review_artifact: "taskrun_9cd9614bded0_diagnostic_summary",
+                    suggestedFollowUps: [
+                      "Review the captured diagnostic table for specific plugin version mismatches."
+                    ],
+                    candidateShapingSuggestions: [
+                      "Standardize the diagnostic output format to improve readability in postmortem reports."
+                    ],
+                    governanceRecommendations: [
+                      "Maintain read-only constraints for all diagnostic-only task runs."
+                    ]
+                  })
+                }
+              }
+            ]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+    });
+
+    expect(result).toMatchObject({
+      task: "postmortem_review",
+      review_verdict: "review_artifact",
+      candidate_recommendation: "observe",
+      feedback_followup_recommendation: "none",
+      confidence: "high",
+      review_artifact: {
+        summary: "taskrun_9cd9614bded0_diagnostic_summary",
+        notes: ["taskrun_9cd9614bded0_diagnostic_summary"]
+      }
+    });
+  });
+
+  it("normalizes maintain_current_state style recommendations into observe", async () => {
+    const fixture = phase3PostmortemFixtures[0];
+    const result = await runPostmortemReviewLlmWorker(fixture.capsule, {
+      endpoint: openAiEndpoint,
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    review_verdict: "APPROVED",
+                    candidate_recommendation: "MAINTAIN_CURRENT_STATE",
+                    feedback_followup_recommendation: "NONE",
+                    confidence: "HIGH",
+                    reason: "The run should be preserved as a bounded diagnostic artifact without promotion.",
+                    review_artifact: "taskrun_93ed01f22959_diagnostic_summary"
+                  })
+                }
+              }
+            ]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+    });
+
+    expect(result).toMatchObject({
+      task: "postmortem_review",
+      review_verdict: "review_artifact",
+      candidate_recommendation: "observe",
+      feedback_followup_recommendation: "none",
+      confidence: "high",
+      review_artifact: {
+        summary: "taskrun_93ed01f22959_diagnostic_summary",
+        notes: ["taskrun_93ed01f22959_diagnostic_summary"]
+      }
+    });
+  });
 });

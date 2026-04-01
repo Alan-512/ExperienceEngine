@@ -196,7 +196,17 @@ const normalizeCandidateRecommendation = (value: unknown): unknown => {
   ) {
     return "capture";
   }
-  if (normalized === "retain_internal_only" || normalized === "internal_only" || normalized === "hold_internal") {
+  if (
+    normalized === "retain_internal_only"
+    || normalized === "internal_only"
+    || normalized === "hold_internal"
+    || normalized === "maintain"
+    || normalized === "keep"
+    || normalized === "retain"
+    || normalized === "maintain_current_state"
+    || normalized === "keep_current_state"
+    || normalized === "retain_current_state"
+  ) {
     return "observe";
   }
   if (normalized === "discard" || normalized === "do_not_keep") {

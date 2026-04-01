@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { loadConfig } from "../config/load-config.js";
 import {
   resolveExperienceEnginePaths,
   resolveProductStateDir,
@@ -22,6 +23,7 @@ import {
   resolveClaudeRuntimeTarget,
   type ClaudeRuntimeTarget
 } from "./claude-runtime-target.js";
+import { setHybridSettings } from "../config/settings-store.js";
 
 type ClaudeHookCommand = {
   type: "command";
@@ -166,6 +168,10 @@ const mergeExperienceEngineHooks = (
     command: hookCommand,
     timeout: 30
   };
+  const sessionEndCommand: ClaudeHookCommand = {
+    ...command,
+    timeout: 120
+  };
 
   removeStaleExperienceEngineHooks(next.hooks!, "UserPromptSubmit", undefined);
   removeStaleExperienceEngineHooks(next.hooks!, "PreToolUse", "*");
@@ -177,7 +183,7 @@ const mergeExperienceEngineHooks = (
   upsertHookMatcher(next.hooks!, "PreToolUse", "*", command);
   upsertHookMatcher(next.hooks!, "PostToolUse", "*", command);
   upsertHookMatcher(next.hooks!, "PostToolUseFailure", "*", command);
-  upsertHookMatcher(next.hooks!, "SessionEnd", undefined, command);
+  upsertHookMatcher(next.hooks!, "SessionEnd", undefined, sessionEndCommand);
 
   return next;
 };
@@ -217,6 +223,7 @@ export const installClaudeCodeAdapter = (options: InstallerOptions = {}): Claude
   const mergedSettings = mergeExperienceEngineHooks(settings, hookCommand);
   const globalSettings = disableMarketplaceExperienceEnginePlugin(readClaudeGlobalSettings(options.homeDir).settings);
   const globalSettingsPath = readClaudeGlobalSettings(options.homeDir).path;
+  const effectiveConfig = loadConfig({}, { env: options.env ?? process.env, homeDir: options.homeDir });
   const existingHost = inspectClaudeHost(runner, options.cliEnv);
 
   mkdirSync(paths.dataDir, { recursive: true });
@@ -225,6 +232,27 @@ export const installClaudeCodeAdapter = (options: InstallerOptions = {}): Claude
   mkdirSync(dirname(settingsPath), { recursive: true });
   mkdirSync(dirname(globalSettingsPath), { recursive: true });
 
+  setHybridSettings(
+    {
+      enabled: effectiveConfig.hybridEnabled,
+      sync_explain_enabled: effectiveConfig.hybridSyncExplainEnabled,
+      async_postmortem_enabled: effectiveConfig.hybridAsyncPostmortemEnabled,
+      rollout_mode: effectiveConfig.hybridRolloutMode,
+      canary_rate: effectiveConfig.hybridCanaryRate,
+      kill_switch: effectiveConfig.hybridKillSwitch,
+      route_policy_version: effectiveConfig.hybridRoutePolicyVersion,
+      capsule_schema_version: effectiveConfig.hybridCapsuleSchemaVersion,
+      explain_profile_version: effectiveConfig.hybridExplainDecisionProfileVersion,
+      postmortem_profile_version: effectiveConfig.hybridPostmortemReviewProfileVersion,
+      explain_llm_enabled: effectiveConfig.hybridExplainLlmEnabled,
+      explain_provider_mode: effectiveConfig.hybridExplainProviderMode,
+      explain_model_profile_version: effectiveConfig.hybridExplainModelProfileVersion,
+      async_postmortem_llm_enabled: effectiveConfig.hybridAsyncPostmortemLlmEnabled,
+      postmortem_provider_mode: effectiveConfig.hybridPostmortemProviderMode,
+      postmortem_model_profile_version: effectiveConfig.hybridPostmortemModelProfileVersion
+    },
+    { env: options.env, homeDir: options.homeDir }
+  );
   writeFileSync(settingsPath, `${JSON.stringify(mergedSettings, null, 2)}\n`, "utf8");
   writeFileSync(globalSettingsPath, `${JSON.stringify(globalSettings, null, 2)}\n`, "utf8");
 

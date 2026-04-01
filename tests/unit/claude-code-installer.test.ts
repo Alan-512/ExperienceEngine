@@ -62,7 +62,7 @@ To remove this server, run: claude mcp remove "experienceengine" -s project`;
     });
     const settingsPath = join(projectDir, ".claude", "settings.local.json");
     const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as {
-      hooks?: Record<string, Array<{ matcher?: string; hooks: Array<{ command: string }> }>>;
+      hooks?: Record<string, Array<{ matcher?: string; hooks: Array<{ command: string; timeout?: number }> }>>;
     };
     const installState = JSON.parse(readFileSync(report.paths.installStatePath, "utf8")) as {
       adapter: string;
@@ -83,6 +83,8 @@ To remove this server, run: claude mcp remove "experienceengine" -s project`;
     expect(settings.hooks?.UserPromptSubmit?.[0]?.hooks[0]?.command).toContain(
       "experienceengine-claude-hook"
     );
+    expect(settings.hooks?.UserPromptSubmit?.[0]?.hooks[0]?.timeout).toBe(30);
+    expect(settings.hooks?.SessionEnd?.[0]?.hooks[0]?.timeout).toBe(120);
     expect(commands[0]).toBe("claude mcp get experienceengine");
     expect(commands[1]).toContain("claude mcp add -s project experienceengine -e");
     expect(commands[1]).toContain("experienceengine-mcp-server");
@@ -293,5 +295,56 @@ To remove this server, run: claude mcp remove "experienceengine" -s project`;
 
     expect(globalSettings.enabledPlugins?.["experienceengine@experienceengine"]).toBe(false);
     expect(globalSettings.enabledPlugins?.["other-plugin@example"]).toBe(true);
+  });
+
+  it("persists effective hybrid settings for Claude hook processes", () => {
+    const homeDir = makeTempDir();
+    const projectDir = makeTempDir();
+
+    installClaudeCodeAdapter({
+      homeDir,
+      projectDir,
+      env: {
+        EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine"),
+        EXPERIENCE_ENGINE_HYBRID_ENABLED: "true",
+        EXPERIENCE_ENGINE_HYBRID_SYNC_EXPLAIN_ENABLED: "true",
+        EXPERIENCE_ENGINE_HYBRID_ASYNC_POSTMORTEM_ENABLED: "true",
+        EXPERIENCE_ENGINE_HYBRID_EXPLAIN_LLM_ENABLED: "true",
+        EXPERIENCE_ENGINE_HYBRID_ASYNC_POSTMORTEM_LLM_ENABLED: "true",
+        EXPERIENCE_ENGINE_HYBRID_ROLLOUT_MODE: "canary",
+        EXPERIENCE_ENGINE_HYBRID_CANARY_RATE: "0.5",
+        EXPERIENCE_ENGINE_DISTILLER_PROVIDER: "gemini",
+        EXPERIENCE_ENGINE_DISTILLER_MODEL: "gemini-3.1-flash-lite-preview"
+      },
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        if (key === "claude mcp get experienceengine") {
+          throw new Error("missing");
+        }
+        return "";
+      }
+    });
+
+    const eeSettings = JSON.parse(
+      readFileSync(join(homeDir, ".experienceengine", "settings.json"), "utf8")
+    ) as {
+      hybrid?: {
+        enabled?: boolean;
+        sync_explain_enabled?: boolean;
+        async_postmortem_enabled?: boolean;
+        rollout_mode?: string;
+        canary_rate?: number;
+        explain_llm_enabled?: boolean;
+        async_postmortem_llm_enabled?: boolean;
+      };
+    };
+
+    expect(eeSettings.hybrid?.enabled).toBe(true);
+    expect(eeSettings.hybrid?.sync_explain_enabled).toBe(true);
+    expect(eeSettings.hybrid?.async_postmortem_enabled).toBe(true);
+    expect(eeSettings.hybrid?.rollout_mode).toBe("canary");
+    expect(eeSettings.hybrid?.canary_rate).toBe(0.5);
+    expect(eeSettings.hybrid?.explain_llm_enabled).toBe(true);
+    expect(eeSettings.hybrid?.async_postmortem_llm_enabled).toBe(true);
   });
 });
