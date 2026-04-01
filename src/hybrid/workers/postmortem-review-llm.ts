@@ -206,6 +206,19 @@ const normalizeCandidateRecommendation = (value: unknown): unknown => {
     || normalized === "maintain_current_state"
     || normalized === "keep_current_state"
     || normalized === "retain_current_state"
+    || normalized === "maintain_current_trajectory"
+    || normalized === "keep_current_trajectory"
+    || normalized === "retain_current_trajectory"
+  ) {
+    return "observe";
+  }
+  if (
+    normalized.includes("no further automated intervention")
+    || normalized.includes("no further intervention")
+    || normalized.includes("no further action")
+    || normalized.includes("maintain current diagnostic findings")
+    || normalized.includes("proceed with current diagnostic findings")
+    || normalized.includes("no immediate code mutation required")
   ) {
     return "observe";
   }
@@ -233,6 +246,7 @@ const normalizeFeedbackFollowupRecommendation = (value: unknown): unknown => {
     normalized === "integrate_phase3_validation"
     || normalized === "needs_review"
     || normalized === "operator_review"
+    || normalized === "required"
   ) {
     return "review";
   }
@@ -241,6 +255,24 @@ const normalizeFeedbackFollowupRecommendation = (value: unknown): unknown => {
   }
   if (normalized === "harmed") {
     return "mark_harmed";
+  }
+  if (
+    normalized.includes("document")
+    || normalized.includes("issue tracker")
+    || normalized.includes("review")
+    || normalized.includes("follow up")
+    || normalized.includes("follow-up")
+    || normalized.includes("validate ")
+  ) {
+    return "review";
+  }
+  if (
+    normalized.includes("no follow-up")
+    || normalized.includes("no follow up")
+    || normalized.includes("none required")
+    || normalized.includes("no action required")
+  ) {
+    return "none";
   }
   return value;
 };

@@ -193,4 +193,149 @@ describe("runPostmortemReviewLlmWorker", () => {
       }
     });
   });
+
+  it("normalizes freeform recommendation sentences into bounded enums", async () => {
+    const fixture = phase3PostmortemFixtures[0];
+    const result = await runPostmortemReviewLlmWorker(fixture.capsule, {
+      endpoint: openAiEndpoint,
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    review_verdict: "APPROVED",
+                    candidate_recommendation:
+                      "Proceed with current diagnostic findings; no further automated intervention required.",
+                    feedback_followup_recommendation:
+                      "Ensure the identified stale plugin state is documented in the repository's known issues tracker.",
+                    confidence: "HIGH",
+                    reason: "The run is useful as a retained diagnostic artifact with governance follow-up only.",
+                    review_artifact: "taskrun_09a93_postmortem_summary"
+                  })
+                }
+              }
+            ]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+    });
+
+    expect(result).toMatchObject({
+      task: "postmortem_review",
+      review_verdict: "review_artifact",
+      candidate_recommendation: "observe",
+      feedback_followup_recommendation: "review",
+      confidence: "high",
+      review_artifact: {
+        summary: "taskrun_09a93_postmortem_summary",
+        notes: ["taskrun_09a93_postmortem_summary"]
+      }
+    });
+  });
+
+  it("normalizes REQUIRED followup recommendations into review", async () => {
+    const fixture = phase3PostmortemFixtures[0];
+    const result = await runPostmortemReviewLlmWorker(fixture.capsule, {
+      endpoint: openAiEndpoint,
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    review_verdict: "APPROVED",
+                    candidate_recommendation: "MAINTAIN_CURRENT_STATE",
+                    feedback_followup_recommendation: "REQUIRED",
+                    confidence: "HIGH",
+                    reason: "A retained diagnostic artifact is useful and requires governance followup.",
+                    review_artifact: "taskrun_required_followup_summary"
+                  })
+                }
+              }
+            ]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+    });
+
+    expect(result).toMatchObject({
+      task: "postmortem_review",
+      candidate_recommendation: "observe",
+      feedback_followup_recommendation: "review",
+      confidence: "high"
+    });
+  });
+
+  it("normalizes maintain_current_trajectory recommendations into observe", async () => {
+    const fixture = phase3PostmortemFixtures[0];
+    const result = await runPostmortemReviewLlmWorker(fixture.capsule, {
+      endpoint: openAiEndpoint,
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    review_verdict: "APPROVED",
+                    candidate_recommendation: "MAINTAIN_CURRENT_TRAJECTORY",
+                    feedback_followup_recommendation: "NONE",
+                    confidence: "HIGH",
+                    reason: "The current diagnostic trajectory should be retained as-is.",
+                    review_artifact: "taskrun_trajectory_summary"
+                  })
+                }
+              }
+            ]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+    });
+
+    expect(result).toMatchObject({
+      task: "postmortem_review",
+      candidate_recommendation: "observe",
+      feedback_followup_recommendation: "none",
+      confidence: "high"
+    });
+  });
+
+  it("normalizes proceed-with-findings and validate followup sentences into bounded enums", async () => {
+    const fixture = phase3PostmortemFixtures[0];
+    const result = await runPostmortemReviewLlmWorker(fixture.capsule, {
+      endpoint: openAiEndpoint,
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    review_verdict: "APPROVED",
+                    candidate_recommendation:
+                      "Proceed with current diagnostic findings; no immediate code mutation required.",
+                    feedback_followup_recommendation:
+                      "Validate plugin manifest versioning against the detected OpenClaw stale state.",
+                    confidence: "HIGH",
+                    reason: "The run should be retained as a bounded diagnostic artifact without immediate mutation.",
+                    review_artifact: "taskrun_validate_manifest_summary"
+                  })
+                }
+              }
+            ]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+    });
+
+    expect(result).toMatchObject({
+      task: "postmortem_review",
+      candidate_recommendation: "observe",
+      feedback_followup_recommendation: "review",
+      confidence: "high"
+    });
+  });
 });
