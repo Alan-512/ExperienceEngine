@@ -19,9 +19,12 @@ export type OpenClawConfigPayload = {
   hybridEnabled?: boolean;
   hybridSyncExplainEnabled?: boolean;
   hybridAsyncPostmortemEnabled?: boolean;
+  hybridAsyncPostmortemLlmEnabled?: boolean;
   hybridExplainLlmEnabled?: boolean;
   hybridExplainProviderMode?: string;
   hybridExplainModelProfileVersion?: string;
+  hybridPostmortemProviderMode?: string;
+  hybridPostmortemModelProfileVersion?: string;
 };
 
 export type OpenClawInstallAction = "install" | "reinstall" | "update";

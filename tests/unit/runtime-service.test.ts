@@ -1367,6 +1367,76 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     ]);
   });
 
+  it("records shadow postmortem telemetry without persisting an artifact", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const service = new ExperienceRuntimeService(
+      loadConfig(
+        {
+          dataDir: join(runtimeDir, "data"),
+          sqlitePath,
+          captureDir: join(runtimeDir, "captures"),
+          hybridEnabled: true,
+          hybridAsyncPostmortemEnabled: true,
+          hybridRolloutMode: "shadow"
+        },
+        { homeDir: runtimeDir }
+      ),
+      undefined,
+      {
+        homeDir: runtimeDir,
+        env: {},
+        hybridWorkerClientOptions: {
+          postmortemReviewExecutor: async () => ({
+            task: "postmortem_review",
+            review_verdict: "review_artifact",
+            candidate_recommendation: "capture",
+            feedback_followup_recommendation: "none",
+            confidence: "high",
+            reason: "bounded shadow artifact",
+            review_artifact: {
+              summary: "bounded shadow artifact",
+              notes: ["telemetry only"]
+            }
+          })
+        }
+      }
+    );
+
+    await service.persistToolResult({
+      sessionId: "hybrid-postmortem-shadow",
+      toolName: "vitest",
+      outputSummary: "The targeted auth test passed after moving the fix into provider routing.",
+      status: "success"
+    });
+
+    await service.finalizeTask({
+      sessionId: "hybrid-postmortem-shadow",
+      cwd: "/repo",
+      userMessage: "Fix the auth test by moving the fix into the provider path",
+      taskSummary: "Fix the auth test by moving the fix into the provider path",
+      contextSummary: "The provider-path correction converged after the first direction was invalidated."
+    });
+    await service.waitForBackgroundLearning();
+
+    const db = new DatabaseSync(sqlitePath);
+    const artifactCount = (
+      db.prepare("SELECT COUNT(*) AS count FROM hybrid_review_artifacts").get() as { count: number }
+    ).count;
+    const traces = db
+      .prepare("SELECT rollout_mode, validation_status, output_action FROM hybrid_invocation_traces ORDER BY created_at ASC")
+      .all() as Array<{ rollout_mode: string; validation_status: string; output_action: string }>;
+
+    expect(artifactCount).toBe(0);
+    expect(traces).toEqual([
+      expect.objectContaining({
+        rollout_mode: "shadow",
+        validation_status: "accepted",
+        output_action: "rejected"
+      })
+    ]);
+  });
+
   it("does not create duplicate postmortem artifacts for the same completed run", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");

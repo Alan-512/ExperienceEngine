@@ -253,6 +253,7 @@ export const processClaudeHookPayload = async (
         ...promptContext,
         host: "claude-code"
       });
+      await runtime.waitForBackgroundLearning();
     }
 
     clearClaudeSession(event.sessionId, options);

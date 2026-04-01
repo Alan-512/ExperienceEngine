@@ -11,6 +11,7 @@ import { validateExplainDecisionOutput, validatePostmortemReviewOutput } from ".
 import { runExplainDecisionWorker } from "./workers/explain-decision.js";
 import { runExplainDecisionLlmWorker } from "./workers/explain-decision-llm.js";
 import { runPostmortemReviewWorker } from "./workers/postmortem-review.js";
+import { runPostmortemReviewLlmWorker } from "./workers/postmortem-review-llm.js";
 
 export type HybridExplainFallback =
   | {
@@ -28,7 +29,7 @@ export type HybridExplainResult = HybridValidationSuccess<ExplainDecisionWorkerO
 export type HybridPostmortemFallback =
   | {
       status: "fallback";
-      reason: "disabled" | "timeout" | "circuit_open";
+      reason: "disabled" | "timeout" | "circuit_open" | "provider_unavailable";
     }
   | {
       status: "fallback";
@@ -52,8 +53,14 @@ type HybridWorkerClientOptions = {
   ) => Promise<ExplainDecisionWorkerOutput> | ExplainDecisionWorkerOutput;
   postmortemReviewEnabled?: boolean;
   postmortemReviewTimeoutMs?: number;
+  postmortemReviewProviderTimeoutMs?: number;
   postmortemReviewExecutor?: (
     capsule: PostmortemReviewCapsule
+  ) => Promise<PostmortemReviewWorkerOutput> | PostmortemReviewWorkerOutput;
+  postmortemReviewLlmEnabled?: boolean;
+  postmortemReviewLlmExecutor?: (
+    capsule: PostmortemReviewCapsule,
+    endpoint: DistillerEndpoint
   ) => Promise<PostmortemReviewWorkerOutput> | PostmortemReviewWorkerOutput;
   timeoutCircuitThreshold?: number;
 };
@@ -76,8 +83,14 @@ export class HybridWorkerClient {
   ) => Promise<ExplainDecisionWorkerOutput> | ExplainDecisionWorkerOutput;
   private readonly postmortemReviewEnabled: boolean;
   private readonly postmortemReviewTimeoutMs: number;
+  private readonly postmortemReviewProviderTimeoutMs: number;
   private readonly postmortemReviewExecutor: (
     capsule: PostmortemReviewCapsule
+  ) => Promise<PostmortemReviewWorkerOutput> | PostmortemReviewWorkerOutput;
+  private readonly postmortemReviewLlmEnabled: boolean;
+  private readonly postmortemReviewLlmExecutor: (
+    capsule: PostmortemReviewCapsule,
+    endpoint: DistillerEndpoint
   ) => Promise<PostmortemReviewWorkerOutput> | PostmortemReviewWorkerOutput;
   private readonly timeoutCircuitThreshold: number;
   private explainTimeoutStreak = 0;
@@ -95,7 +108,13 @@ export class HybridWorkerClient {
       ?? ((capsule, endpoint) => runExplainDecisionLlmWorker(capsule, { endpoint }));
     this.postmortemReviewEnabled = options.postmortemReviewEnabled ?? true;
     this.postmortemReviewTimeoutMs = options.postmortemReviewTimeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.postmortemReviewProviderTimeoutMs =
+      options.postmortemReviewProviderTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
     this.postmortemReviewExecutor = options.postmortemReviewExecutor ?? runPostmortemReviewWorker;
+    this.postmortemReviewLlmEnabled = options.postmortemReviewLlmEnabled ?? false;
+    this.postmortemReviewLlmExecutor =
+      options.postmortemReviewLlmExecutor
+      ?? ((capsule, endpoint) => runPostmortemReviewLlmWorker(capsule, { endpoint }));
     this.timeoutCircuitThreshold = options.timeoutCircuitThreshold ?? DEFAULT_CIRCUIT_THRESHOLD;
   }
 
@@ -183,7 +202,13 @@ export class HybridWorkerClient {
     }
   }
 
-  async runPostmortemReview(capsule: PostmortemReviewCapsule): Promise<HybridPostmortemResult> {
+  async runPostmortemReview(
+    capsule: PostmortemReviewCapsule,
+    options: {
+      mode?: "deterministic" | "provider";
+      endpoint?: DistillerEndpoint;
+    } = {}
+  ): Promise<HybridPostmortemResult> {
     if (!this.postmortemReviewEnabled) {
       return {
         status: "fallback",
@@ -199,10 +224,21 @@ export class HybridWorkerClient {
 
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
+      const timeoutMs =
+        options.mode === "provider" ? this.postmortemReviewProviderTimeoutMs : this.postmortemReviewTimeoutMs;
+      const run =
+        options.mode === "provider"
+          ? () => {
+              if (!this.postmortemReviewLlmEnabled || !options.endpoint) {
+                throw new Error("provider_disabled");
+              }
+              return this.postmortemReviewLlmExecutor(capsule, options.endpoint);
+            }
+          : () => this.postmortemReviewExecutor(capsule);
       const result = await Promise.race([
-        Promise.resolve(this.postmortemReviewExecutor(capsule)),
+        Promise.resolve(run()),
         new Promise<never>((_, reject) => {
-          timer = setTimeout(() => reject(new Error("timeout")), this.postmortemReviewTimeoutMs);
+          timer = setTimeout(() => reject(new Error("timeout")), timeoutMs);
         })
       ]);
       const validated = validatePostmortemReviewOutput(result);
@@ -218,6 +254,13 @@ export class HybridWorkerClient {
       this.postmortemTimeoutStreak = 0;
       return validated;
     } catch (error) {
+      if (error instanceof Error && error.message === "provider_disabled") {
+        this.postmortemTimeoutStreak = 0;
+        return {
+          status: "fallback",
+          reason: "provider_unavailable"
+        };
+      }
       if (error instanceof Error && error.message === "timeout") {
         this.postmortemTimeoutStreak += 1;
         return {

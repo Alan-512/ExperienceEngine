@@ -1,4 +1,5 @@
 import { existsSync, readFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { resolveExperienceEnginePaths } from "../config/path-resolver.js";
 import { resolveExperienceEnginePackageRoot } from "./openclaw-cli.js";
@@ -31,6 +32,10 @@ type ClaudeHookMatcher = {
 
 type ClaudeSettings = {
   hooks?: Record<string, ClaudeHookMatcher[]>;
+};
+
+type ClaudeGlobalSettings = {
+  enabledPlugins?: Record<string, boolean>;
 };
 
 type InstallerOptions = {
@@ -87,6 +92,15 @@ const inspectClaudeHost = (
   }
 };
 
+const readClaudeGlobalSettings = (homeDir?: string): ClaudeGlobalSettings | null => {
+  const path = join(resolve(homeDir ?? homedir()), ".claude", "settings.json");
+  if (!existsSync(path)) {
+    return null;
+  }
+
+  return JSON.parse(readFileSync(path, "utf8")) as ClaudeGlobalSettings;
+};
+
 const isMarketplaceManagedClaudeHost = (hostInfo: ClaudeMcpServerInfo | null): boolean => {
   if (hostInfo?.env?.includes(CLAUDE_MARKETPLACE_HOOK_SOURCE)) {
     return true;
@@ -126,6 +140,8 @@ export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
   const hostInfo = inspectClaudeHost(runner, options.cliEnv);
   const marketplaceHome = extractClaudeHostEnvValue(hostInfo?.env, "EXPERIENCE_ENGINE_HOME");
   const marketplaceState = readClaudeMarketplaceRuntimeState(marketplaceHome);
+  const globalSettings = readClaudeGlobalSettings(options.homeDir);
+  const marketplacePluginEnabled = globalSettings?.enabledPlugins?.["experienceengine@experienceengine"] === true;
   const hooksPresent = {
     userPromptSubmit: hasHookCommand(settings, "UserPromptSubmit", undefined, expectedCommand),
     preToolUse: hasHookCommand(settings, "PreToolUse", "*", expectedCommand),
@@ -139,15 +155,20 @@ export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
     hooksPresent.postToolUse &&
     hooksPresent.postToolUseFailure &&
     hooksPresent.sessionEnd;
+  const marketplaceManaged =
+    isMarketplaceManagedClaudeHost(hostInfo) ||
+    (marketplacePluginEnabled && marketplaceState?.install_mode === "marketplace");
+  const duplicateHookSources = hasLocalManagedHooks && marketplaceManaged;
   const hookSource: ClaudeHookSource = hasLocalManagedHooks
     ? "project-local"
-    : marketplaceState?.install_mode === "marketplace" || isMarketplaceManagedClaudeHost(hostInfo)
+    : marketplaceManaged
       ? "marketplace"
       : "missing";
-  const interactionReady =
-    hasLocalManagedHooks ||
-    Boolean(marketplaceState?.last_hook_seen_at || marketplaceState?.last_mcp_seen_at) ||
-    (Boolean(hostInfo?.commandDisplay) && hookSource !== "missing");
+  const interactionReady = duplicateHookSources
+    ? false
+    : hasLocalManagedHooks ||
+      Boolean(marketplaceState?.last_hook_seen_at || marketplaceState?.last_mcp_seen_at) ||
+      (Boolean(hostInfo?.commandDisplay) && hookSource !== "missing");
   const config = loadConfig({}, { env: options.env ?? process.env, homeDir: options.homeDir });
   const resolutionEnv: NodeJS.ProcessEnv = {
     ...(options.env ?? process.env),
@@ -176,6 +197,7 @@ export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
     launcherPaths: resolvedLauncherPaths,
     hooksPresent,
     hookSource,
+    duplicateHookSources,
     interactionReady,
     marketplaceState: marketplaceState as ClaudeMarketplaceRuntimeState | null,
     hostWiring: {

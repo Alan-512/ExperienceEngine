@@ -55,9 +55,12 @@ export type OpenClawInstallReport = {
     hybridEnabled: boolean;
     hybridSyncExplainEnabled: boolean;
     hybridAsyncPostmortemEnabled: boolean;
+    hybridAsyncPostmortemLlmEnabled: boolean;
     hybridExplainLlmEnabled: boolean;
     hybridExplainProviderMode: string;
     hybridExplainModelProfileVersion: string;
+    hybridPostmortemProviderMode: string;
+    hybridPostmortemModelProfileVersion: string;
   };
 };
 
@@ -469,6 +472,10 @@ export const installOpenClawAdapter = (options: InstallerOptions = {}): OpenClaw
       readExplicitBooleanEnv(env, "EXPERIENCE_ENGINE_HYBRID_ASYNC_POSTMORTEM_ENABLED")
       ?? (typeof existingEntryConfig?.hybridAsyncPostmortemEnabled === "boolean" ? existingEntryConfig.hybridAsyncPostmortemEnabled : undefined)
       ?? resolvedConfig.hybridAsyncPostmortemEnabled,
+    hybridAsyncPostmortemLlmEnabled:
+      readExplicitBooleanEnv(env, "EXPERIENCE_ENGINE_HYBRID_ASYNC_POSTMORTEM_LLM_ENABLED")
+      ?? (typeof existingEntryConfig?.hybridAsyncPostmortemLlmEnabled === "boolean" ? existingEntryConfig.hybridAsyncPostmortemLlmEnabled : undefined)
+      ?? resolvedConfig.hybridAsyncPostmortemLlmEnabled,
     hybridExplainLlmEnabled:
       readExplicitBooleanEnv(env, "EXPERIENCE_ENGINE_HYBRID_EXPLAIN_LLM_ENABLED")
       ?? (typeof existingEntryConfig?.hybridExplainLlmEnabled === "boolean" ? existingEntryConfig.hybridExplainLlmEnabled : undefined)
@@ -480,7 +487,15 @@ export const installOpenClawAdapter = (options: InstallerOptions = {}): OpenClaw
     hybridExplainModelProfileVersion:
       readExplicitStringEnv(env, "EXPERIENCE_ENGINE_HYBRID_EXPLAIN_MODEL_PROFILE_VERSION")
       ?? (typeof existingEntryConfig?.hybridExplainModelProfileVersion === "string" ? existingEntryConfig.hybridExplainModelProfileVersion : undefined)
-      ?? resolvedConfig.hybridExplainModelProfileVersion
+      ?? resolvedConfig.hybridExplainModelProfileVersion,
+    hybridPostmortemProviderMode:
+      readExplicitStringEnv(env, "EXPERIENCE_ENGINE_HYBRID_POSTMORTEM_PROVIDER_MODE")
+      ?? (typeof existingEntryConfig?.hybridPostmortemProviderMode === "string" ? existingEntryConfig.hybridPostmortemProviderMode : undefined)
+      ?? resolvedConfig.hybridPostmortemProviderMode,
+    hybridPostmortemModelProfileVersion:
+      readExplicitStringEnv(env, "EXPERIENCE_ENGINE_HYBRID_POSTMORTEM_MODEL_PROFILE_VERSION")
+      ?? (typeof existingEntryConfig?.hybridPostmortemModelProfileVersion === "string" ? existingEntryConfig.hybridPostmortemModelProfileVersion : undefined)
+      ?? resolvedConfig.hybridPostmortemModelProfileVersion
   };
 
   mkdirSync(paths.dataDir, { recursive: true });
@@ -558,9 +573,12 @@ type PersistedInstallState = {
   hybridEnabled?: boolean;
   hybridSyncExplainEnabled?: boolean;
   hybridAsyncPostmortemEnabled?: boolean;
+  hybridAsyncPostmortemLlmEnabled?: boolean;
   hybridExplainLlmEnabled?: boolean;
   hybridExplainProviderMode?: string;
   hybridExplainModelProfileVersion?: string;
+  hybridPostmortemProviderMode?: string;
+  hybridPostmortemModelProfileVersion?: string;
 };
 
 const readInstallState = (installStatePath: string): PersistedInstallState | null => {
@@ -606,9 +624,12 @@ export const inspectOpenClawInstall = (options: InstallerOptions = {}) => {
         hybridEnabled: state.hybridEnabled,
         hybridSyncExplainEnabled: state.hybridSyncExplainEnabled,
         hybridAsyncPostmortemEnabled: state.hybridAsyncPostmortemEnabled,
+        hybridAsyncPostmortemLlmEnabled: state.hybridAsyncPostmortemLlmEnabled,
         hybridExplainLlmEnabled: state.hybridExplainLlmEnabled,
         hybridExplainProviderMode: state.hybridExplainProviderMode,
-        hybridExplainModelProfileVersion: state.hybridExplainModelProfileVersion
+        hybridExplainModelProfileVersion: state.hybridExplainModelProfileVersion,
+        hybridPostmortemProviderMode: state.hybridPostmortemProviderMode,
+        hybridPostmortemModelProfileVersion: state.hybridPostmortemModelProfileVersion
       }
     : undefined;
 
@@ -644,9 +665,12 @@ export const inspectOpenClawInstall = (options: InstallerOptions = {}) => {
         liveConfig?.hybridEnabled === expected?.hybridEnabled &&
         liveConfig?.hybridSyncExplainEnabled === expected?.hybridSyncExplainEnabled &&
         liveConfig?.hybridAsyncPostmortemEnabled === expected?.hybridAsyncPostmortemEnabled &&
+        liveConfig?.hybridAsyncPostmortemLlmEnabled === expected?.hybridAsyncPostmortemLlmEnabled &&
         liveConfig?.hybridExplainLlmEnabled === expected?.hybridExplainLlmEnabled &&
         liveConfig?.hybridExplainProviderMode === expected?.hybridExplainProviderMode &&
-        liveConfig?.hybridExplainModelProfileVersion === expected?.hybridExplainModelProfileVersion
+        liveConfig?.hybridExplainModelProfileVersion === expected?.hybridExplainModelProfileVersion &&
+        liveConfig?.hybridPostmortemProviderMode === expected?.hybridPostmortemProviderMode &&
+        liveConfig?.hybridPostmortemModelProfileVersion === expected?.hybridPostmortemModelProfileVersion
     };
 
     const drift = inspectInstalledOpenClawBundleDrift(state?.packageRoot, info.installPath, options.homeDir);

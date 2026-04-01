@@ -35,6 +35,21 @@ const postmortemReviewOutputSchema = z.object({
   writeBackSuggestions: z.array(z.string()).optional()
 });
 
+export const parsePostmortemReviewOutput = (
+  value: unknown
+): PostmortemReviewWorkerOutput | HybridValidationFailure => {
+  const parsed = postmortemReviewOutputSchema.safeParse(value);
+  if (!parsed.success) {
+    return rejected("schema_invalid", parsed.error.issues.map((issue) => issue.message).join("; "));
+  }
+
+  return parsed.data;
+};
+
+const isValidationFailure = (
+  value: PostmortemReviewWorkerOutput | HybridValidationFailure
+): value is HybridValidationFailure => "status" in value;
+
 export const classifyHybridApproval = (
   value: ExplainDecisionWorkerOutput | PostmortemReviewWorkerOutput
 ): HybridApprovalClass => {
@@ -86,12 +101,12 @@ export const validateExplainDecisionOutput = (
 export const validatePostmortemReviewOutput = (
   value: unknown
 ): HybridValidationSuccess<PostmortemReviewWorkerOutput> | HybridValidationFailure => {
-  const parsed = postmortemReviewOutputSchema.safeParse(value);
-  if (!parsed.success) {
-    return rejected("schema_invalid", parsed.error.issues.map((issue) => issue.message).join("; "));
+  const parsed = parsePostmortemReviewOutput(value);
+  if (isValidationFailure(parsed)) {
+    return parsed;
   }
 
-  const approvalClass = classifyHybridApproval(parsed.data);
+  const approvalClass = classifyHybridApproval(parsed);
   if (approvalClass === "blocked") {
     return rejected(
       "approval_blocked",
@@ -102,6 +117,6 @@ export const validatePostmortemReviewOutput = (
   return {
     status: "accepted",
     approvalClass,
-    value: parsed.data
+    value: parsed
   };
 };

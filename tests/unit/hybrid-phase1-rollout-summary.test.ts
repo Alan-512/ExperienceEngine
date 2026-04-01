@@ -201,4 +201,49 @@ describe("buildHybridPhase1RolloutSummary", () => {
       recommendation: "blocked"
     });
   });
+
+  it("includes phase 3 postmortem gate metrics from a dedicated metrics input", () => {
+    const summary = buildHybridPhase1RolloutSummary({
+      traces: [
+        {
+          id: "trace_phase3_stored",
+          surface: "runtime",
+          route: "ESCALATE_ASYNC_POSTMORTEM",
+          route_policy_version: "hybrid-phase1-v1",
+          capsule_schema_version: "hybrid-capsule-v1",
+          worker_profile_version: "hybrid-postmortem-llm-v1",
+          rollout_mode: "canary",
+          rollout_reason: "canary_selected",
+          worker_task: "postmortem_review",
+          worker_ran: true,
+          validation_status: "accepted",
+          output_action: "stored",
+          created_at: "2026-03-30T00:00:00.000Z"
+        }
+      ],
+      artifacts: [],
+      releaseGate: {
+        stage: "canary",
+        routeGatePassed: true,
+        explainGatePassed: true,
+        postmortemGatePassed: true,
+        runtimeGuardrailsPassed: true
+      },
+      phase3PostmortemGate: {
+        stage: "canary",
+        schemaValidOutputRatePassed: true,
+        timeoutFallbackRatePassed: true,
+        providerUnavailableFallbackRatePassed: true,
+        blockedClassificationStabilityPassed: true,
+        artifactSpamRatePassed: true,
+        backlogGrowthPassed: true
+      }
+    });
+
+    expect(summary.phase3PostmortemSummary).toEqual({
+      llmBackedAttempts: 1,
+      llmBackedFallbacks: 0,
+      recommendation: "live_ready"
+    });
+  });
 });

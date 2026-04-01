@@ -5,13 +5,7 @@
       "command": "/mnt/d/ExperienceEngineData/.experienceengine/bin/experienceengine-mcp-server",
       "args": [],
       "env": {
-        "EXPERIENCE_ENGINE_HOME": "/home/seed/.experienceengine",
-        "EXPERIENCE_ENGINE_ADAPTER": "claude-code",
-        "EXPERIENCE_ENGINE_HYBRID_ENABLED": "true",
-        "EXPERIENCE_ENGINE_HYBRID_SYNC_EXPLAIN_ENABLED": "true",
-        "EXPERIENCE_ENGINE_HYBRID_EXPLAIN_LLM_ENABLED": "true",
-        "EXPERIENCE_ENGINE_DISTILLER_PROVIDER": "gemini",
-        "EXPERIENCE_ENGINE_DISTILLER_MODEL": "gemini-3.1-flash-lite-preview"
+        "EXPERIENCE_ENGINE_HOME": "/home/seed/.experienceengine"
       }
     }
   }

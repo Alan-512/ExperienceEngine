@@ -39,5 +39,8 @@ export const defaultConfig: ExperienceEngineConfig = {
   hybridPostmortemReviewProfileVersion: "hybrid-postmortem-v1",
   hybridExplainLlmEnabled: false,
   hybridExplainProviderMode: "shared_distiller",
-  hybridExplainModelProfileVersion: "hybrid-explain-llm-v1"
+  hybridExplainModelProfileVersion: "hybrid-explain-llm-v1",
+  hybridAsyncPostmortemLlmEnabled: false,
+  hybridPostmortemProviderMode: "shared_distiller",
+  hybridPostmortemModelProfileVersion: "hybrid-postmortem-llm-v1"
 };

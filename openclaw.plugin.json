@@ -61,6 +61,10 @@
         "type": "boolean",
         "description": "Allow bounded async postmortem review for eligible completed runs."
       },
+      "hybridAsyncPostmortemLlmEnabled": {
+        "type": "boolean",
+        "description": "Enable provider-backed postmortem_review in phase 3."
+      },
       "hybridExplainLlmEnabled": {
         "type": "boolean",
         "description": "Enable provider-backed explain_decision in phase 2."
@@ -73,6 +77,15 @@
       "hybridExplainModelProfileVersion": {
         "type": "string",
         "description": "Version label for the provider-backed explain_decision model profile."
+      },
+      "hybridPostmortemProviderMode": {
+        "type": "string",
+        "enum": ["shared_distiller"],
+        "description": "Provider resolution mode for phase 3 postmortem_review."
+      },
+      "hybridPostmortemModelProfileVersion": {
+        "type": "string",
+        "description": "Version label for the provider-backed postmortem_review model profile."
       }
     }
   },
@@ -116,6 +129,9 @@
     "hybridAsyncPostmortemEnabled": {
       "label": "Hybrid Async Postmortem Enabled"
     },
+    "hybridAsyncPostmortemLlmEnabled": {
+      "label": "Hybrid Async Postmortem LLM Enabled"
+    },
     "hybridExplainLlmEnabled": {
       "label": "Hybrid Explain LLM Enabled"
     },
@@ -124,6 +140,12 @@
     },
     "hybridExplainModelProfileVersion": {
       "label": "Hybrid Explain Model Profile Version"
+    },
+    "hybridPostmortemProviderMode": {
+      "label": "Hybrid Postmortem Provider Mode"
+    },
+    "hybridPostmortemModelProfileVersion": {
+      "label": "Hybrid Postmortem Model Profile Version"
     }
   }
 }

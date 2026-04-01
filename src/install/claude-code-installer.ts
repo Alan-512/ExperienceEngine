@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import {
   resolveExperienceEnginePaths,
@@ -35,6 +36,11 @@ type ClaudeHookMatcher = {
 
 type ClaudeSettings = {
   hooks?: Record<string, ClaudeHookMatcher[]>;
+  [key: string]: unknown;
+};
+
+type ClaudeGlobalSettings = {
+  enabledPlugins?: Record<string, boolean>;
   [key: string]: unknown;
 };
 
@@ -78,6 +84,28 @@ const readJsonFile = <T>(filePath: string): T | null => {
   }
 
   return JSON.parse(readFileSync(filePath, "utf8")) as T;
+};
+
+const readClaudeGlobalSettings = (homeDir?: string): { path: string; settings: ClaudeGlobalSettings } => {
+  const root = resolve(homeDir ?? homedir());
+  const path = join(root, ".claude", "settings.json");
+  return {
+    path,
+    settings: readJsonFile<ClaudeGlobalSettings>(path) ?? {}
+  };
+};
+
+const disableMarketplaceExperienceEnginePlugin = (settings: ClaudeGlobalSettings): ClaudeGlobalSettings => {
+  const enabledPlugins = { ...(settings.enabledPlugins ?? {}) };
+  if (enabledPlugins["experienceengine@experienceengine"] !== true) {
+    return settings;
+  }
+
+  enabledPlugins["experienceengine@experienceengine"] = false;
+  return {
+    ...settings,
+    enabledPlugins
+  };
 };
 
 const isExperienceEngineHookCommand = (command: ClaudeHookCommand): boolean =>
@@ -187,14 +215,18 @@ export const installClaudeCodeAdapter = (options: InstallerOptions = {}): Claude
   const hookCommand = buildClaudeHookCommandForTarget(runtimeTarget, launcherPaths);
   const settings = readJsonFile<ClaudeSettings>(settingsPath) ?? {};
   const mergedSettings = mergeExperienceEngineHooks(settings, hookCommand);
+  const globalSettings = disableMarketplaceExperienceEnginePlugin(readClaudeGlobalSettings(options.homeDir).settings);
+  const globalSettingsPath = readClaudeGlobalSettings(options.homeDir).path;
   const existingHost = inspectClaudeHost(runner, options.cliEnv);
 
   mkdirSync(paths.dataDir, { recursive: true });
   mkdirSync(resolveProductStateDir(paths), { recursive: true });
   mkdirSync(paths.captureDir, { recursive: true });
   mkdirSync(dirname(settingsPath), { recursive: true });
+  mkdirSync(dirname(globalSettingsPath), { recursive: true });
 
   writeFileSync(settingsPath, `${JSON.stringify(mergedSettings, null, 2)}\n`, "utf8");
+  writeFileSync(globalSettingsPath, `${JSON.stringify(globalSettings, null, 2)}\n`, "utf8");
 
   if (existingHost?.name === "experienceengine") {
     runClaudeCommand(buildClaudeRemoveCommand(options.cliEnv), runner);

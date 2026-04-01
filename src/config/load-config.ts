@@ -170,7 +170,19 @@ export const loadConfig = (
     hybridExplainModelProfileVersion:
       env.EXPERIENCE_ENGINE_HYBRID_EXPLAIN_MODEL_PROFILE_VERSION ??
       overrides.hybridExplainModelProfileVersion ??
-      defaultConfig.hybridExplainModelProfileVersion
+      defaultConfig.hybridExplainModelProfileVersion,
+    hybridAsyncPostmortemLlmEnabled:
+      env.EXPERIENCE_ENGINE_HYBRID_ASYNC_POSTMORTEM_LLM_ENABLED !== undefined
+        ? env.EXPERIENCE_ENGINE_HYBRID_ASYNC_POSTMORTEM_LLM_ENABLED === "true"
+        : overrides.hybridAsyncPostmortemLlmEnabled ?? defaultConfig.hybridAsyncPostmortemLlmEnabled,
+    hybridPostmortemProviderMode:
+      (env.EXPERIENCE_ENGINE_HYBRID_POSTMORTEM_PROVIDER_MODE as ExperienceEngineConfig["hybridPostmortemProviderMode"] | undefined) ??
+      overrides.hybridPostmortemProviderMode ??
+      defaultConfig.hybridPostmortemProviderMode,
+    hybridPostmortemModelProfileVersion:
+      env.EXPERIENCE_ENGINE_HYBRID_POSTMORTEM_MODEL_PROFILE_VERSION ??
+      overrides.hybridPostmortemModelProfileVersion ??
+      defaultConfig.hybridPostmortemModelProfileVersion
   });
 
   return parsed;

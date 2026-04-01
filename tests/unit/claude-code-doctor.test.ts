@@ -187,6 +187,19 @@ To remove this server, run: claude mcp remove "experienceengine"`;
     const marketplaceHome = join(projectDir, ".claude-plugin-home", "experienceengine-home");
 
     mkdirSync(marketplaceHome, { recursive: true });
+    mkdirSync(join(homeDir, ".claude"), { recursive: true });
+    writeFileSync(
+      join(homeDir, ".claude", "settings.json"),
+      JSON.stringify(
+        {
+          enabledPlugins: {
+            "experienceengine@experienceengine": true
+          }
+        },
+        null,
+        2
+      )
+    );
     writeFileSync(
       join(marketplaceHome, CLAUDE_MARKETPLACE_STATE_FILENAME),
       JSON.stringify(
@@ -229,5 +242,171 @@ To remove this server, run: claude mcp remove "experienceengine"`;
     expect(inspection.interactionReady).toBe(true);
     expect(inspection.marketplaceState?.install_mode).toBe("marketplace");
     expect(inspection.marketplaceState?.last_hook_seen_at).toBe("2026-03-27T08:10:00.000Z");
+  });
+
+  it("flags duplicate hook sources when project-local hooks and marketplace runtime are both active", () => {
+    const homeDir = makeTempDir();
+    const projectDir = makeTempDir();
+    const marketplaceHome = join(homeDir, ".experienceengine");
+
+    installClaudeCodeAdapter({
+      homeDir,
+      projectDir,
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        if (key === "claude mcp get experienceengine") {
+          return `experienceengine:
+  Scope: Plugin config
+  Status: ✓ Connected
+  Type: stdio
+  Command: node
+  Args: /tmp/claude-plugin/node_modules/@alan512/experienceengine/dist/cli/index.js mcp-server
+  Environment:
+    EXPERIENCE_ENGINE_HOME=${marketplaceHome}
+    EXPERIENCE_ENGINE_CLAUDE_HOOK_SOURCE=marketplace
+
+To remove this server, run: claude mcp remove "experienceengine"`;
+        }
+        return "";
+      }
+    });
+
+    mkdirSync(marketplaceHome, { recursive: true });
+    mkdirSync(join(homeDir, ".claude"), { recursive: true });
+    writeFileSync(
+      join(homeDir, ".claude", "settings.json"),
+      JSON.stringify(
+        {
+          enabledPlugins: {
+            "experienceengine@experienceengine": true
+          }
+        },
+        null,
+        2
+      )
+    );
+    writeFileSync(
+      join(marketplaceHome, CLAUDE_MARKETPLACE_STATE_FILENAME),
+      JSON.stringify(
+        {
+          adapter: "claude-code",
+          install_mode: "marketplace",
+          hook_source: "marketplace",
+          package_version: currentVersion,
+          written_at: "2026-03-31T00:00:00.000Z",
+          last_hook_seen_at: "2026-03-31T00:10:00.000Z"
+        },
+        null,
+        2
+      )
+    );
+
+    const inspection = inspectClaudeCodeInstall({
+      homeDir,
+      projectDir,
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        if (key === "claude mcp get experienceengine") {
+          return `experienceengine:
+  Scope: Plugin config
+  Status: ✓ Connected
+  Type: stdio
+  Command: node
+  Args: /tmp/claude-plugin/node_modules/@alan512/experienceengine/dist/cli/index.js mcp-server
+  Environment:
+    EXPERIENCE_ENGINE_HOME=${marketplaceHome}
+    EXPERIENCE_ENGINE_CLAUDE_HOOK_SOURCE=marketplace
+
+To remove this server, run: claude mcp remove "experienceengine"`;
+        }
+        return "";
+      }
+    });
+
+    expect(inspection.hookSource).toBe("project-local");
+    expect(inspection.duplicateHookSources).toBe(true);
+    expect(inspection.interactionReady).toBe(false);
+  });
+
+  it("does not treat a disabled marketplace plugin plus stale marketplace marker as a duplicate source", () => {
+    const homeDir = makeTempDir();
+    const projectDir = makeTempDir();
+    const marketplaceHome = join(homeDir, ".experienceengine");
+
+    installClaudeCodeAdapter({
+      homeDir,
+      projectDir,
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        if (key === "claude mcp get experienceengine") {
+          return `experienceengine:
+  Scope: Project config (shared via .mcp.json)
+  Status: ✓ Connected
+  Type: stdio
+  Command: node
+  Args: --no-warnings /tmp/experienceengine/dist/cli/index.js mcp-server
+  Environment:
+    EXPERIENCE_ENGINE_HOME=${marketplaceHome}
+
+To remove this server, run: claude mcp remove "experienceengine" -s project`;
+        }
+        return "";
+      }
+    });
+
+    mkdirSync(marketplaceHome, { recursive: true });
+    mkdirSync(join(homeDir, ".claude"), { recursive: true });
+    writeFileSync(
+      join(homeDir, ".claude", "settings.json"),
+      JSON.stringify(
+        {
+          enabledPlugins: {
+            "experienceengine@experienceengine": false
+          }
+        },
+        null,
+        2
+      )
+    );
+    writeFileSync(
+      join(marketplaceHome, CLAUDE_MARKETPLACE_STATE_FILENAME),
+      JSON.stringify(
+        {
+          adapter: "claude-code",
+          install_mode: "marketplace",
+          hook_source: "marketplace",
+          package_version: currentVersion,
+          written_at: "2026-03-31T00:00:00.000Z",
+          last_hook_seen_at: "2026-03-31T00:10:00.000Z"
+        },
+        null,
+        2
+      )
+    );
+
+    const inspection = inspectClaudeCodeInstall({
+      homeDir,
+      projectDir,
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        if (key === "claude mcp get experienceengine") {
+          return `experienceengine:
+  Scope: Project config (shared via .mcp.json)
+  Status: ✓ Connected
+  Type: stdio
+  Command: node
+  Args: --no-warnings /tmp/experienceengine/dist/cli/index.js mcp-server
+  Environment:
+    EXPERIENCE_ENGINE_HOME=${marketplaceHome}
+
+To remove this server, run: claude mcp remove "experienceengine" -s project`;
+        }
+        return "";
+      }
+    });
+
+    expect(inspection.hookSource).toBe("project-local");
+    expect(inspection.duplicateHookSources).toBe(false);
+    expect(inspection.interactionReady).toBe(true);
   });
 });

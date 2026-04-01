@@ -173,6 +173,88 @@ describe("HybridWorkerClient", () => {
     });
   });
 
+  it("classifies policy-gated postmortem output without treating it as blocked", async () => {
+    const client = new HybridWorkerClient({
+      postmortemReviewExecutor: async () => ({
+        task: "postmortem_review",
+        review_verdict: "policy_gated",
+        candidate_recommendation: "observe",
+        feedback_followup_recommendation: "review",
+        confidence: "medium",
+        reason: "Requires later governance review.",
+        review_artifact: {
+          summary: "Requires later governance review.",
+          notes: ["Bounded but not directly actionable."]
+        }
+      })
+    });
+
+    const result = await client.runPostmortemReview(buildPostmortemCapsule());
+
+    expect(result).toMatchObject({
+      status: "accepted",
+      approvalClass: "policy_gated"
+    });
+  });
+
+  it("uses the provider-backed postmortem executor only when provider mode is explicitly selected", async () => {
+    const client = new HybridWorkerClient({
+      postmortemReviewExecutor: async () => ({
+        task: "postmortem_review",
+        review_verdict: "review_artifact",
+        candidate_recommendation: "observe",
+        feedback_followup_recommendation: "none",
+        confidence: "low",
+        reason: "deterministic postmortem",
+        review_artifact: {
+          summary: "deterministic postmortem",
+          notes: ["deterministic"]
+        }
+      }),
+      postmortemReviewLlmEnabled: true,
+      postmortemReviewLlmExecutor: async () => ({
+        task: "postmortem_review",
+        review_verdict: "review_artifact",
+        candidate_recommendation: "capture",
+        feedback_followup_recommendation: "none",
+        confidence: "high",
+        reason: "provider postmortem",
+        review_artifact: {
+          summary: "provider postmortem",
+          notes: ["provider"]
+        }
+      })
+    });
+
+    const deterministic = await client.runPostmortemReview(buildPostmortemCapsule());
+    const provider = await client.runPostmortemReview(buildPostmortemCapsule(), {
+      mode: "provider",
+      endpoint: {
+        kind: "openai",
+        provider: "openai",
+        model: "gpt-5.4-mini",
+        baseUrl: "https://api.openai.com/v1/chat/completions",
+        headers: {
+          Authorization: "Bearer test-key"
+        },
+        source: "explicit"
+      }
+    });
+
+    expect(deterministic).toMatchObject({
+      status: "accepted",
+      value: expect.objectContaining({
+        reason: "deterministic postmortem"
+      })
+    });
+    expect(provider).toMatchObject({
+      status: "accepted",
+      value: expect.objectContaining({
+        reason: "provider postmortem"
+      })
+    });
+  });
+
   it("does not open the timeout circuit after repeated postmortem validation failures", async () => {
     const client = new HybridWorkerClient({
       timeoutCircuitThreshold: 2,

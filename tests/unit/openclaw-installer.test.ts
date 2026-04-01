@@ -111,7 +111,10 @@ describe("OpenClaw installer", () => {
       sqlitePath: string;
       hybridEnabled: boolean;
       hybridSyncExplainEnabled: boolean;
+      hybridAsyncPostmortemLlmEnabled: boolean;
       hybridExplainLlmEnabled: boolean;
+      hybridPostmortemProviderMode: string;
+      hybridPostmortemModelProfileVersion: string;
       distillerProvider: string;
       distillerModel: string;
       packageRoot: string;
@@ -125,7 +128,10 @@ describe("OpenClaw installer", () => {
     expect(payload.sqlitePath).toBe(report.pluginConfig.sqlitePath);
     expect(payload.hybridEnabled).toBe(true);
     expect(payload.hybridSyncExplainEnabled).toBe(true);
+    expect(payload.hybridAsyncPostmortemLlmEnabled).toBe(false);
     expect(payload.hybridExplainLlmEnabled).toBe(true);
+    expect(payload.hybridPostmortemProviderMode).toBe("shared_distiller");
+    expect(payload.hybridPostmortemModelProfileVersion).toBe("hybrid-postmortem-llm-v1");
     expect(payload.distillerProvider).toBe("gemini");
     expect(payload.distillerModel).toBe("gemini-3.1-flash-lite-preview");
     expect(payload.packageRoot).toBe(report.packageRoot);
@@ -219,9 +225,12 @@ Recorded version: 0.1.3`;
     "hybridEnabled": true,
     "hybridSyncExplainEnabled": true,
     "hybridAsyncPostmortemEnabled": false,
+    "hybridAsyncPostmortemLlmEnabled": false,
     "hybridExplainLlmEnabled": true,
     "hybridExplainProviderMode": "shared_distiller",
-    "hybridExplainModelProfileVersion": "hybrid-explain-llm-v1"
+    "hybridExplainModelProfileVersion": "hybrid-explain-llm-v1",
+    "hybridPostmortemProviderMode": "shared_distiller",
+    "hybridPostmortemModelProfileVersion": "hybrid-postmortem-llm-v1"
   }
 }`;
         }
@@ -247,6 +256,7 @@ Recorded version: 0.1.3`;
     expect(commands[4]).toContain('"hybridEnabled":true');
     expect(report.pluginConfig.hybridEnabled).toBe(true);
     expect(report.pluginConfig.hybridExplainLlmEnabled).toBe(true);
+    expect(report.pluginConfig.hybridPostmortemProviderMode).toBe("shared_distiller");
     expect(report.pluginConfig.distillerProvider).toBe("gemini");
   });
 
@@ -277,9 +287,12 @@ Recorded version: 0.1.3`;
     "hybridEnabled": false,
     "hybridSyncExplainEnabled": false,
     "hybridAsyncPostmortemEnabled": false,
+    "hybridAsyncPostmortemLlmEnabled": false,
     "hybridExplainLlmEnabled": false,
     "hybridExplainProviderMode": "shared_distiller",
-    "hybridExplainModelProfileVersion": "hybrid-explain-llm-v0"
+    "hybridExplainModelProfileVersion": "hybrid-explain-llm-v0",
+    "hybridPostmortemProviderMode": "shared_distiller",
+    "hybridPostmortemModelProfileVersion": "hybrid-postmortem-llm-v0"
   }
 }`;
         }
@@ -305,6 +318,7 @@ Recorded version: 0.1.3`;
     expect(report.pluginConfig.hybridExplainLlmEnabled).toBe(true);
     expect(report.pluginConfig.distillerModel).toBe("gemini-3.1-flash-lite-preview");
     expect(report.pluginConfig.hybridExplainModelProfileVersion).toBe("hybrid-explain-llm-v0");
+    expect(report.pluginConfig.hybridPostmortemModelProfileVersion).toBe("hybrid-postmortem-llm-v0");
   });
 
   it("packages the runtime dependencies required by the OpenClaw plugin install", () => {

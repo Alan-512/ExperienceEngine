@@ -10,6 +10,7 @@ import { resolveScope } from "../input/scope-resolver.js";
 import { decideIntervention } from "../controller/intervention-controller.js";
 import { renderInlineNotice } from "../controller/inline-notice.js";
 import { buildPostmortemReviewCapsule } from "../hybrid/capsule-builder.js";
+import { resolveHybridPostmortemProviderEndpoint } from "../hybrid/postmortem-provider-client.js";
 import { resolveHybridRolloutState } from "../hybrid/rollout.js";
 import { selectHybridRoute, type HybridRouteDecision, type HybridRouteSignals } from "../hybrid/router.js";
 import { HybridWorkerClient } from "../hybrid/worker-client.js";
@@ -439,6 +440,8 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     this.hybridWorkerClient = new HybridWorkerClient({
       explainDecisionEnabled: config.hybridEnabled && config.hybridSyncExplainEnabled,
       postmortemReviewEnabled: config.hybridEnabled && config.hybridAsyncPostmortemEnabled,
+      postmortemReviewLlmEnabled:
+        config.hybridEnabled && config.hybridAsyncPostmortemEnabled && config.hybridAsyncPostmortemLlmEnabled,
       ...runtimeOptions.hybridWorkerClientOptions
     });
   }
@@ -599,8 +602,29 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       toolEvents: input.toolEvents
     });
 
-    const result = await this.hybridWorkerClient.runPostmortemReview(capsule);
+    const providerResolution = this.config.hybridAsyncPostmortemLlmEnabled
+      ? resolveHybridPostmortemProviderEndpoint(this.config)
+      : { status: "disabled" as const, reason: "Phase 3 provider-backed postmortem review is disabled." };
+    const result =
+      this.config.hybridAsyncPostmortemLlmEnabled && providerResolution.status === "unavailable"
+        ? ({
+            status: "fallback",
+            reason: "provider_unavailable"
+          } as const)
+        : await this.hybridWorkerClient.runPostmortemReview(
+            capsule,
+            providerResolution.status === "configured"
+              ? {
+                  mode: "provider",
+                  endpoint: providerResolution.endpoint
+                }
+              : undefined
+          );
     const timestamp = nowIso();
+    const persistAcceptedArtifact =
+      result.status === "accepted"
+      && input.rolloutMode !== "shadow"
+      && (result.approvalClass === "review_artifact" || result.approvalClass === "policy_gated");
     this.hybridTraceRepo.upsert({
       id: createId("hybridtrace"),
       surface: "runtime",
@@ -610,12 +634,14 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       route: input.routeDecision.route,
       route_policy_version: input.routeDecision.policyVersion,
       capsule_schema_version: this.config.hybridCapsuleSchemaVersion,
-      worker_profile_version: this.config.hybridPostmortemReviewProfileVersion,
+      worker_profile_version: this.config.hybridAsyncPostmortemLlmEnabled
+        ? this.config.hybridPostmortemModelProfileVersion
+        : this.config.hybridPostmortemReviewProfileVersion,
       rollout_mode: input.rolloutMode,
       rollout_reason: input.rolloutReason,
-      worker_ran: true,
+      worker_ran: result.status !== "fallback" || result.reason !== "provider_unavailable",
       validation_status: result.status === "accepted" ? "accepted" : "fallback",
-      output_action: result.status === "accepted" ? "stored" : "rejected",
+      output_action: persistAcceptedArtifact ? "stored" : "rejected",
       fallback_reason: result.status === "accepted" ? undefined : result.reason,
       created_at: timestamp
     });
@@ -627,13 +653,15 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       return;
     }
 
-    this.hybridReviewArtifactRepo.upsert(
-      this.buildPostmortemArtifact({
-        taskRun: input.taskRun,
-        result,
-        routeDecision: input.routeDecision
-      })
-    );
+    if (persistAcceptedArtifact) {
+      this.hybridReviewArtifactRepo.upsert(
+        this.buildPostmortemArtifact({
+          taskRun: input.taskRun,
+          result,
+          routeDecision: input.routeDecision
+        })
+      );
+    }
   }
 
   private async persistCandidatesAsync(

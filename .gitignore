@@ -17,6 +17,8 @@ artifacts/
 .worktrees/
 docs/superpowers/specs/
 docs/superpowers/plans/
+.claude-plugin/
+.codex/skills/
 scripts/tmp-*
 AGENTS.md
 CODEX.md

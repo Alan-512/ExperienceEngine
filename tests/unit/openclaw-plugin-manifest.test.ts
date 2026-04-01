@@ -19,7 +19,7 @@ describe("OpenClaw plugin manifest", () => {
     expect(manifest.version).toBe("0.1.3");
   });
 
-  it("declares hybrid phase1 and phase2 config fields for OpenClaw runtime wiring", () => {
+  it("declares hybrid phase1, phase2, and phase3 config fields for OpenClaw runtime wiring", () => {
     const manifest = JSON.parse(
       readFileSync(join(repoRoot, "openclaw.plugin.json"), "utf8")
     ) as {
@@ -33,9 +33,12 @@ describe("OpenClaw plugin manifest", () => {
     expect(properties).toHaveProperty("hybridEnabled");
     expect(properties).toHaveProperty("hybridSyncExplainEnabled");
     expect(properties).toHaveProperty("hybridAsyncPostmortemEnabled");
+    expect(properties).toHaveProperty("hybridAsyncPostmortemLlmEnabled");
     expect(properties).toHaveProperty("hybridExplainLlmEnabled");
     expect(properties).toHaveProperty("hybridExplainProviderMode");
     expect(properties).toHaveProperty("hybridExplainModelProfileVersion");
+    expect(properties).toHaveProperty("hybridPostmortemProviderMode");
+    expect(properties).toHaveProperty("hybridPostmortemModelProfileVersion");
     expect(properties).toHaveProperty("distillerProvider");
     expect(properties).toHaveProperty("distillerModel");
   });

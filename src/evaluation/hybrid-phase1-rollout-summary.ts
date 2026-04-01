@@ -23,6 +23,11 @@ export type HybridPhase1RolloutSummary = {
     llmBackedFallbacks: number;
     recommendation: "blocked" | "shadow_only" | "canary_ready" | "live_ready";
   };
+  phase3PostmortemSummary?: {
+    llmBackedAttempts: number;
+    llmBackedFallbacks: number;
+    recommendation: "blocked" | "shadow_only" | "canary_ready" | "live_ready";
+  };
   releaseGate?: {
     stage: "offline" | "shadow" | "canary";
     routeGatePassed: boolean;
@@ -51,6 +56,15 @@ export const buildHybridPhase1RolloutSummary = (input: {
     explainFaithfulnessPassed: boolean;
     explainFallbackRatePassed: boolean;
     explainTimeoutRatePassed: boolean;
+  };
+  phase3PostmortemGate?: {
+    stage: "offline" | "shadow" | "canary";
+    schemaValidOutputRatePassed: boolean;
+    timeoutFallbackRatePassed: boolean;
+    providerUnavailableFallbackRatePassed: boolean;
+    blockedClassificationStabilityPassed: boolean;
+    artifactSpamRatePassed: boolean;
+    backlogGrowthPassed: boolean;
   };
 }): HybridPhase1RolloutSummary => {
   const routeDistribution = input.traces.reduce<Record<string, number>>((acc, trace) => {
@@ -104,6 +118,36 @@ export const buildHybridPhase1RolloutSummary = (input: {
     };
   }
 
+  const llmPostmortemTraces = postmortemTraces.filter((trace) =>
+    trace.worker_profile_version?.startsWith("hybrid-postmortem-llm")
+  );
+  const phase3PostmortemGate = input.phase3PostmortemGate;
+  let phase3PostmortemSummary: HybridPhase1RolloutSummary["phase3PostmortemSummary"];
+  if (phase3PostmortemGate) {
+    const postmortemGatesPassed =
+      phase3PostmortemGate.schemaValidOutputRatePassed
+      && phase3PostmortemGate.timeoutFallbackRatePassed
+      && phase3PostmortemGate.providerUnavailableFallbackRatePassed
+      && phase3PostmortemGate.blockedClassificationStabilityPassed
+      && phase3PostmortemGate.artifactSpamRatePassed
+      && phase3PostmortemGate.backlogGrowthPassed;
+    let recommendation: HybridPhase1ReleaseRecommendation = "blocked";
+    if (postmortemGatesPassed) {
+      if (phase3PostmortemGate.stage === "offline") {
+        recommendation = "shadow_only";
+      } else if (phase3PostmortemGate.stage === "shadow") {
+        recommendation = "canary_ready";
+      } else if (phase3PostmortemGate.stage === "canary") {
+        recommendation = "live_ready";
+      }
+    }
+    phase3PostmortemSummary = {
+      llmBackedAttempts: llmPostmortemTraces.length,
+      llmBackedFallbacks: llmPostmortemTraces.filter((trace) => trace.validation_status === "fallback").length,
+      recommendation
+    };
+  }
+
   const gate = input.releaseGate;
   let recommendation: HybridPhase1ReleaseRecommendation = "blocked";
   const gatesPassed =
@@ -130,6 +174,7 @@ export const buildHybridPhase1RolloutSummary = (input: {
     explanationQualitySummary,
     postmortemQualitySummary,
     phase2ExplainSummary,
+    phase3PostmortemSummary,
     releaseGate: gate,
     recommendation
   };

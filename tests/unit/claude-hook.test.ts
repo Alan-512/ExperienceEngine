@@ -245,6 +245,136 @@ describe("Claude hook capture", () => {
     expect(JSON.parse(row?.injected_node_ids_json ?? "[]")).toEqual(["node_claude_prompt_injection"]);
   });
 
+  it("waits for async hybrid postmortem work before returning from SessionEnd", async () => {
+    const homeDir = makeTempDir();
+    const env = {
+      EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine"),
+      EXPERIENCE_ENGINE_HYBRID_ENABLED: "true",
+      EXPERIENCE_ENGINE_HYBRID_ASYNC_POSTMORTEM_ENABLED: "true",
+      EXPERIENCE_ENGINE_HYBRID_ASYNC_POSTMORTEM_LLM_ENABLED: "true"
+    };
+    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME }, { env, homeDir });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    const scope = resolveScope("/repo");
+    const timestamp = nowIso();
+
+    nodeRepo.upsert({
+      id: "node_claude_postmortem_injection",
+      node_type: "strategy",
+      scope_id: scope.scope_id,
+      task_type: "bug_fix",
+      trigger_pattern: "diagnose a real bug",
+      applicability_notes: "Same repo and diagnostic workflow",
+      env_signature: undefined,
+      compact_hint: "Inspect the installer flow before changing config state.",
+      goal: "Diagnose the stale OpenClaw plugin entry issue",
+      recommended_steps: ["Inspect installer flow", "Inspect plugin manifest", "Summarize root cause"],
+      avoid_steps: [],
+      fallback_steps: [],
+      success_signal: "A root cause and remediation are identified",
+      stop_condition: undefined,
+      escalation_condition: undefined,
+      evidence_summary: "A prior diagnostic run in the same repo produced a reusable path.",
+      retrieval_text: "diagnose a real bug\nInspect the installer flow before changing config state.",
+      source_kind: "system_derived",
+      origin_record_ids: [],
+      helped_record_ids: [],
+      harmed_record_ids: [],
+      state: "candidate",
+      usage_count: 0,
+      helped_count: 0,
+      harmed_count: 0,
+      support_count: 1,
+      last_used_at: undefined,
+      last_helped_at: undefined,
+      last_harmed_at: undefined,
+      created_at: timestamp,
+      updated_at: timestamp
+    });
+
+    await processClaudeHookPayload(
+      JSON.stringify({
+        hook_event_name: "UserPromptSubmit",
+        session_id: "session-async-postmortem",
+        cwd: "/repo",
+        prompt: "Diagnose a real bug without editing files."
+      }),
+      { homeDir, env }
+    );
+
+    await processClaudeHookPayload(
+      JSON.stringify({
+        hook_event_name: "PostToolUse",
+        session_id: "session-async-postmortem",
+        cwd: "/repo",
+        tool_name: "Bash",
+        payload: {
+          tool_input: { command: "echo diagnosis complete" },
+          tool_response: { stdout: "diagnosis complete" }
+        },
+        status: "success"
+      }),
+      { homeDir, env }
+    );
+
+    await processClaudeHookPayload(
+      JSON.stringify({
+        hook_event_name: "SessionEnd",
+        session_id: "session-async-postmortem",
+        cwd: "/repo"
+      }),
+      { homeDir, env }
+    );
+
+    const trace = db
+      .prepare("SELECT worker_task, route, validation_status, fallback_reason FROM hybrid_invocation_traces WHERE session_id = ? ORDER BY created_at DESC LIMIT 1")
+      .get("session-async-postmortem") as
+      | {
+          worker_task: string;
+          route: string;
+          validation_status: string;
+          fallback_reason: string | null;
+        }
+      | undefined;
+
+    expect(trace?.worker_task).toBe("postmortem_review");
+    expect(trace?.route).toBe("ESCALATE_ASYNC_POSTMORTEM");
+    expect(trace?.validation_status).toBe("fallback");
+    expect(trace?.fallback_reason).toBe("provider_unavailable");
+  });
+
+  it("awaits runtime background learning during SessionEnd processing", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+    const { ExperienceRuntimeService } = await import("../../src/runtime/service.js");
+    const waitSpy = vi
+      .spyOn(ExperienceRuntimeService.prototype, "waitForBackgroundLearning")
+      .mockResolvedValue();
+
+    await processClaudeHookPayload(
+      JSON.stringify({
+        hook_event_name: "UserPromptSubmit",
+        session_id: "session-await-background",
+        cwd: "/repo",
+        prompt: "Inspect the current repo state."
+      }),
+      { homeDir, env }
+    );
+
+    await processClaudeHookPayload(
+      JSON.stringify({
+        hook_event_name: "SessionEnd",
+        session_id: "session-await-background",
+        cwd: "/repo"
+      }),
+      { homeDir, env }
+    );
+
+    expect(waitSpy).toHaveBeenCalledTimes(1);
+  });
+
   it("replays a real captured Claude tool-session fixture into evidence", async () => {
     const homeDir = makeTempDir();
     const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };

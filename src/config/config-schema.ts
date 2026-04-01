@@ -40,7 +40,10 @@ export const configSchema = z.object({
   hybridPostmortemReviewProfileVersion: z.string().default("hybrid-postmortem-v1"),
   hybridExplainLlmEnabled: z.boolean().default(false),
   hybridExplainProviderMode: z.enum(["shared_distiller"]).default("shared_distiller"),
-  hybridExplainModelProfileVersion: z.string().default("hybrid-explain-llm-v1")
+  hybridExplainModelProfileVersion: z.string().default("hybrid-explain-llm-v1"),
+  hybridAsyncPostmortemLlmEnabled: z.boolean().default(false),
+  hybridPostmortemProviderMode: z.enum(["shared_distiller"]).default("shared_distiller"),
+  hybridPostmortemModelProfileVersion: z.string().default("hybrid-postmortem-llm-v1")
 });
 
 export type ExperienceEngineConfig = z.infer<typeof configSchema>;
@@ -231,6 +234,19 @@ export const pluginConfigJsonSchema = {
     hybridExplainModelProfileVersion: {
       type: "string",
       description: "Version label for the provider-backed explain_decision model profile."
+    },
+    hybridAsyncPostmortemLlmEnabled: {
+      type: "boolean",
+      description: "Enable the provider-backed postmortem_review worker for phase 3."
+    },
+    hybridPostmortemProviderMode: {
+      type: "string",
+      enum: ["shared_distiller"],
+      description: "Provider resolution mode for phase 3 postmortem_review. `shared_distiller` reuses the existing EE distillation provider configuration."
+    },
+    hybridPostmortemModelProfileVersion: {
+      type: "string",
+      description: "Version label for the provider-backed postmortem_review model profile."
     }
   }
 } as const;

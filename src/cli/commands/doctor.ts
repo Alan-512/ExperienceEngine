@@ -451,12 +451,18 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
         post_tool_hook: status.hooksPresent.postToolUse,
         session_end_hook: status.hooksPresent.sessionEnd,
         hook_source: status.hookSource,
+        duplicate_hook_sources: status.duplicateHookSources ?? false,
         interaction_ready: status.interactionReady,
         capture_dir: status.captureDir
       }
     ]);
     logDistillationStatus(status.distillationStatus);
     logClaudeRuntimeStatus(status);
+    if (status.duplicateHookSources) {
+      console.log(
+        "Warning: duplicate Claude hook sources detected. Disable the ExperienceEngine marketplace plugin or remove the duplicate hook source so Claude uses only project-local hooks."
+      );
+    }
     if (status.versionStatus.updateAvailable) {
       console.log("Recommended next step: ee upgrade claude-code");
     }

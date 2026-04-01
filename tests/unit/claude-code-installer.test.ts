@@ -253,4 +253,45 @@ To remove this server, run: claude mcp remove "experienceengine" -s project`;
     expect(installState.launcherPaths?.mcpServer).toContain("experienceengine-mcp-server.cmd");
     expect(hookLauncher).toContain("wsl.exe bash -lc");
   });
+
+  it("disables the marketplace plugin when installing project-local Claude hooks", () => {
+    const homeDir = makeTempDir();
+    const projectDir = makeTempDir();
+    const globalSettingsPath = join(homeDir, ".claude", "settings.json");
+
+    mkdirSync(join(homeDir, ".claude"), { recursive: true });
+    writeFileSync(
+      globalSettingsPath,
+      `${JSON.stringify(
+        {
+          enabledPlugins: {
+            "experienceengine@experienceengine": true,
+            "other-plugin@example": true
+          }
+        },
+        null,
+        2
+      )}\n`,
+      "utf8"
+    );
+
+    installClaudeCodeAdapter({
+      homeDir,
+      projectDir,
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        if (key === "claude mcp get experienceengine") {
+          throw new Error("missing");
+        }
+        return "";
+      }
+    });
+
+    const globalSettings = JSON.parse(readFileSync(globalSettingsPath, "utf8")) as {
+      enabledPlugins?: Record<string, boolean>;
+    };
+
+    expect(globalSettings.enabledPlugins?.["experienceengine@experienceengine"]).toBe(false);
+    expect(globalSettings.enabledPlugins?.["other-plugin@example"]).toBe(true);
+  });
 });
