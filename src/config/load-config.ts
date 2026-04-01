@@ -122,66 +122,87 @@ export const loadConfig = (
     hybridEnabled:
       env.EXPERIENCE_ENGINE_HYBRID_ENABLED !== undefined
         ? env.EXPERIENCE_ENGINE_HYBRID_ENABLED === "true"
-        : overrides.hybridEnabled ?? defaultConfig.hybridEnabled,
+        : overrides.hybridEnabled ?? settings.hybrid?.enabled ?? defaultConfig.hybridEnabled,
     hybridSyncExplainEnabled:
       env.EXPERIENCE_ENGINE_HYBRID_SYNC_EXPLAIN_ENABLED !== undefined
         ? env.EXPERIENCE_ENGINE_HYBRID_SYNC_EXPLAIN_ENABLED === "true"
-        : overrides.hybridSyncExplainEnabled ?? defaultConfig.hybridSyncExplainEnabled,
+        : overrides.hybridSyncExplainEnabled ??
+          settings.hybrid?.sync_explain_enabled ??
+          defaultConfig.hybridSyncExplainEnabled,
     hybridAsyncPostmortemEnabled:
       env.EXPERIENCE_ENGINE_HYBRID_ASYNC_POSTMORTEM_ENABLED !== undefined
         ? env.EXPERIENCE_ENGINE_HYBRID_ASYNC_POSTMORTEM_ENABLED === "true"
-        : overrides.hybridAsyncPostmortemEnabled ?? defaultConfig.hybridAsyncPostmortemEnabled,
+        : overrides.hybridAsyncPostmortemEnabled ??
+          settings.hybrid?.async_postmortem_enabled ??
+          defaultConfig.hybridAsyncPostmortemEnabled,
     hybridRolloutMode:
       env.EXPERIENCE_ENGINE_HYBRID_ROLLOUT_MODE ??
       overrides.hybridRolloutMode ??
+      (settings.hybrid?.rollout_mode as ExperienceEngineConfig["hybridRolloutMode"] | undefined) ??
       defaultConfig.hybridRolloutMode,
     hybridCanaryRate:
       env.EXPERIENCE_ENGINE_HYBRID_CANARY_RATE !== undefined
         ? Number(env.EXPERIENCE_ENGINE_HYBRID_CANARY_RATE)
-        : overrides.hybridCanaryRate ?? defaultConfig.hybridCanaryRate,
+        : overrides.hybridCanaryRate ?? settings.hybrid?.canary_rate ?? defaultConfig.hybridCanaryRate,
     hybridKillSwitch:
       env.EXPERIENCE_ENGINE_HYBRID_KILL_SWITCH !== undefined
         ? env.EXPERIENCE_ENGINE_HYBRID_KILL_SWITCH === "true"
-        : overrides.hybridKillSwitch ?? defaultConfig.hybridKillSwitch,
+        : overrides.hybridKillSwitch ?? settings.hybrid?.kill_switch ?? defaultConfig.hybridKillSwitch,
     hybridRoutePolicyVersion:
       env.EXPERIENCE_ENGINE_HYBRID_ROUTE_POLICY_VERSION ??
       overrides.hybridRoutePolicyVersion ??
+      settings.hybrid?.route_policy_version ??
       defaultConfig.hybridRoutePolicyVersion,
     hybridCapsuleSchemaVersion:
       env.EXPERIENCE_ENGINE_HYBRID_CAPSULE_SCHEMA_VERSION ??
       overrides.hybridCapsuleSchemaVersion ??
+      settings.hybrid?.capsule_schema_version ??
       defaultConfig.hybridCapsuleSchemaVersion,
     hybridExplainDecisionProfileVersion:
       env.EXPERIENCE_ENGINE_HYBRID_EXPLAIN_PROFILE_VERSION ??
       overrides.hybridExplainDecisionProfileVersion ??
+      settings.hybrid?.explain_profile_version ??
       defaultConfig.hybridExplainDecisionProfileVersion,
     hybridPostmortemReviewProfileVersion:
       env.EXPERIENCE_ENGINE_HYBRID_POSTMORTEM_PROFILE_VERSION ??
       overrides.hybridPostmortemReviewProfileVersion ??
+      settings.hybrid?.postmortem_profile_version ??
       defaultConfig.hybridPostmortemReviewProfileVersion,
     hybridExplainLlmEnabled:
       env.EXPERIENCE_ENGINE_HYBRID_EXPLAIN_LLM_ENABLED !== undefined
         ? env.EXPERIENCE_ENGINE_HYBRID_EXPLAIN_LLM_ENABLED === "true"
-        : overrides.hybridExplainLlmEnabled ?? defaultConfig.hybridExplainLlmEnabled,
+        : overrides.hybridExplainLlmEnabled ??
+          settings.hybrid?.explain_llm_enabled ??
+          defaultConfig.hybridExplainLlmEnabled,
     hybridExplainProviderMode:
       (env.EXPERIENCE_ENGINE_HYBRID_EXPLAIN_PROVIDER_MODE as ExperienceEngineConfig["hybridExplainProviderMode"] | undefined) ??
       overrides.hybridExplainProviderMode ??
+      (settings.hybrid?.explain_provider_mode as
+        | ExperienceEngineConfig["hybridExplainProviderMode"]
+        | undefined) ??
       defaultConfig.hybridExplainProviderMode,
     hybridExplainModelProfileVersion:
       env.EXPERIENCE_ENGINE_HYBRID_EXPLAIN_MODEL_PROFILE_VERSION ??
       overrides.hybridExplainModelProfileVersion ??
+      settings.hybrid?.explain_model_profile_version ??
       defaultConfig.hybridExplainModelProfileVersion,
     hybridAsyncPostmortemLlmEnabled:
       env.EXPERIENCE_ENGINE_HYBRID_ASYNC_POSTMORTEM_LLM_ENABLED !== undefined
         ? env.EXPERIENCE_ENGINE_HYBRID_ASYNC_POSTMORTEM_LLM_ENABLED === "true"
-        : overrides.hybridAsyncPostmortemLlmEnabled ?? defaultConfig.hybridAsyncPostmortemLlmEnabled,
+        : overrides.hybridAsyncPostmortemLlmEnabled ??
+          settings.hybrid?.async_postmortem_llm_enabled ??
+          defaultConfig.hybridAsyncPostmortemLlmEnabled,
     hybridPostmortemProviderMode:
       (env.EXPERIENCE_ENGINE_HYBRID_POSTMORTEM_PROVIDER_MODE as ExperienceEngineConfig["hybridPostmortemProviderMode"] | undefined) ??
       overrides.hybridPostmortemProviderMode ??
+      (settings.hybrid?.postmortem_provider_mode as
+        | ExperienceEngineConfig["hybridPostmortemProviderMode"]
+        | undefined) ??
       defaultConfig.hybridPostmortemProviderMode,
     hybridPostmortemModelProfileVersion:
       env.EXPERIENCE_ENGINE_HYBRID_POSTMORTEM_MODEL_PROFILE_VERSION ??
       overrides.hybridPostmortemModelProfileVersion ??
+      settings.hybrid?.postmortem_model_profile_version ??
       defaultConfig.hybridPostmortemModelProfileVersion
   });
 

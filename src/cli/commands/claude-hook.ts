@@ -5,6 +5,7 @@ import { persistClaudeNormalizedEvent } from "../../adapters/claude-code/event-s
 import {
   appendClaudeToolResult,
   clearClaudeSession,
+  findClaudeSessionByCwd,
   loadClaudeSession,
   rememberClaudePromptContext
 } from "../../adapters/claude-code/session-store.js";
@@ -242,8 +243,11 @@ export const processClaudeHookPayload = async (
   }
 
   if (event.eventName === "SessionEnd" && event.sessionId) {
-    const stored = loadClaudeSession(event.sessionId, options);
-    const promptContext = stored?.promptContext ?? recoverClaudePromptContext(payload as ClaudeHookPayload | null, event.sessionId);
+    const payloadRecord = payload as ClaudeHookPayload | null;
+    const fallbackCwd = typeof payloadRecord?.cwd === "string" ? payloadRecord.cwd : undefined;
+    const stored = loadClaudeSession(event.sessionId, options) ?? (fallbackCwd ? findClaudeSessionByCwd(fallbackCwd, options) : null);
+    const resolvedSessionId = stored?.sessionId ?? event.sessionId;
+    const promptContext = stored?.promptContext ?? recoverClaudePromptContext(payloadRecord, resolvedSessionId);
     if (promptContext) {
       const runtime = await createClaudeRuntime(options);
       for (const pendingToolResult of stored?.toolResults ?? []) {
@@ -256,7 +260,10 @@ export const processClaudeHookPayload = async (
       await runtime.waitForBackgroundLearning();
     }
 
-    clearClaudeSession(event.sessionId, options);
+    clearClaudeSession(resolvedSessionId, options);
+    if (resolvedSessionId !== event.sessionId) {
+      clearClaudeSession(event.sessionId, options);
+    }
   }
 
   return { capturePath };

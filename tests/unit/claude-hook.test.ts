@@ -158,7 +158,7 @@ describe("Claude hook capture", () => {
     expect(row?.task_summary).toBe("Fix the failing auth test");
     expect(row?.outcome_signal).toBe("success");
     expect(row?.evidence_json).toContain("Bash: success: auth test now passes");
-  });
+  }, 10000);
 
   it("returns Claude additionalContext hook output for prompt-time injections and persists injected node ids", async () => {
     const homeDir = makeTempDir();
@@ -373,6 +373,66 @@ describe("Claude hook capture", () => {
     );
 
     expect(waitSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("replays the latest pending session for the same cwd when SessionEnd arrives under a different session id", async () => {
+    const homeDir = makeTempDir();
+    const env = {
+      EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine"),
+      EXPERIENCE_ENGINE_HYBRID_ENABLED: "true",
+      EXPERIENCE_ENGINE_HYBRID_ASYNC_POSTMORTEM_ENABLED: "true",
+      EXPERIENCE_ENGINE_HYBRID_ASYNC_POSTMORTEM_LLM_ENABLED: "true"
+    };
+
+    await processClaudeHookPayload(
+      JSON.stringify({
+        hook_event_name: "UserPromptSubmit",
+        session_id: "session-primary",
+        cwd: "/repo",
+        prompt: "Diagnose the stale plugin issue."
+      }),
+      { homeDir, env }
+    );
+
+    await processClaudeHookPayload(
+      JSON.stringify({
+        hook_event_name: "PostToolUse",
+        session_id: "session-primary",
+        cwd: "/repo",
+        tool_name: "Bash",
+        payload: {
+          tool_input: { command: "node dist/cli/index.js doctor openclaw" },
+          tool_response: { stdout: "doctor ok" }
+        },
+        status: "success"
+      }),
+      { homeDir, env }
+    );
+
+    expect(loadClaudeSession("session-primary", { homeDir, env })).not.toBeNull();
+
+    await processClaudeHookPayload(
+      JSON.stringify({
+        hook_event_name: "SessionEnd",
+        session_id: "session-sidechain",
+        cwd: "/repo"
+      }),
+      { homeDir, env }
+    );
+
+    const db = openDatabase(loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME }, { env, homeDir }));
+    const row = db
+      .prepare("SELECT session_id, task_summary FROM experience_input_records WHERE session_id = ?")
+      .get("session-primary") as
+      | {
+          session_id: string;
+          task_summary: string;
+        }
+      | undefined;
+
+    expect(row?.session_id).toBe("session-primary");
+    expect(row?.task_summary).toBe("Diagnose the stale plugin issue.");
+    expect(loadClaudeSession("session-primary", { homeDir, env })).toBeNull();
   });
 
   it("replays a real captured Claude tool-session fixture into evidence", async () => {

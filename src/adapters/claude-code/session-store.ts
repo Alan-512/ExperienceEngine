@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { resolveExperienceEnginePaths, resolveProductStateDir } from "../../config/path-resolver.js";
 import type { HostPromptContext, HostToolResult } from "../../types/plugin.js";
@@ -28,6 +28,17 @@ const resolveSessionDir = (options: SessionStoreOptions = {}): string => {
 
 const resolveSessionPath = (sessionId: string, options: SessionStoreOptions = {}): string =>
   join(resolveSessionDir(options), `${sanitizeSessionId(sessionId)}.json`);
+
+const listClaudeSessionPaths = (options: SessionStoreOptions = {}): string[] => {
+  const dir = resolveSessionDir(options);
+  if (!existsSync(dir)) {
+    return [];
+  }
+
+  return readdirSync(dir)
+    .filter((entry) => entry.endsWith(".json"))
+    .map((entry) => join(dir, entry));
+};
 
 export const loadClaudeSession = (
   sessionId: string,
@@ -91,4 +102,24 @@ export const appendClaudeToolResult = (
 export const clearClaudeSession = (sessionId: string, options: SessionStoreOptions = {}): void => {
   const filePath = resolveSessionPath(sessionId, options);
   rmSync(filePath, { force: true });
+};
+
+export const findClaudeSessionByCwd = (
+  cwd: string,
+  options: SessionStoreOptions = {}
+): ClaudeStoredSession | null => {
+  const matches = listClaudeSessionPaths(options)
+    .map((filePath) => ({
+      filePath,
+      mtimeMs: statSync(filePath).mtimeMs,
+      session: JSON.parse(readFileSync(filePath, "utf8")) as ClaudeStoredSession
+    }))
+    .filter((entry) => entry.session.promptContext?.cwd === cwd)
+    .sort((left, right) => right.mtimeMs - left.mtimeMs);
+
+  if (matches.length !== 1) {
+    return null;
+  }
+
+  return matches[0]?.session ?? null;
 };

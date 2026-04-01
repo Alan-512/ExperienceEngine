@@ -18,6 +18,24 @@ export type ExperienceEngineSettings = {
     model?: string;
     dtype?: string;
   };
+  hybrid?: {
+    enabled?: boolean;
+    sync_explain_enabled?: boolean;
+    async_postmortem_enabled?: boolean;
+    rollout_mode?: string;
+    canary_rate?: number;
+    kill_switch?: boolean;
+    route_policy_version?: string;
+    capsule_schema_version?: string;
+    explain_profile_version?: string;
+    postmortem_profile_version?: string;
+    explain_llm_enabled?: boolean;
+    explain_provider_mode?: string;
+    explain_model_profile_version?: string;
+    async_postmortem_llm_enabled?: boolean;
+    postmortem_provider_mode?: string;
+    postmortem_model_profile_version?: string;
+  };
 };
 
 type SettingsOptions = {
@@ -180,6 +198,22 @@ export const setEmbeddingDtype = (
     embedding: {
       ...(current.embedding ?? {}),
       dtype
+    }
+  };
+
+  return writeExperienceEngineSettings(next, options);
+};
+
+export const setHybridSettings = (
+  hybrid: NonNullable<ExperienceEngineSettings["hybrid"]>,
+  options: SettingsOptions = {}
+): ExperienceEngineSettings => {
+  const current = readExperienceEngineSettings(options);
+  const next: ExperienceEngineSettings = {
+    ...current,
+    hybrid: {
+      ...(current.hybrid ?? {}),
+      ...hybrid
     }
   };
 
