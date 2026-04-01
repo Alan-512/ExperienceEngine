@@ -1437,6 +1437,77 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     ]);
   });
 
+  it("runs async postmortem after learning status is finalized on the task run", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const seenLearningStatuses: Array<string | null | undefined> = [];
+    const service = new ExperienceRuntimeService(
+      loadConfig(
+        {
+          dataDir: join(runtimeDir, "data"),
+          sqlitePath,
+          captureDir: join(runtimeDir, "captures"),
+          hybridEnabled: true,
+          hybridAsyncPostmortemEnabled: true,
+          distillationMode: "disabled"
+        },
+        { homeDir: runtimeDir }
+      ),
+      undefined,
+      {
+        homeDir: runtimeDir,
+        env: {},
+        hybridWorkerClientOptions: {
+          postmortemReviewExecutor: async (capsule) => {
+            seenLearningStatuses.push(capsule.trusted.run.learningStatus);
+            return {
+              task: "postmortem_review",
+              review_verdict: "review_artifact",
+              candidate_recommendation: "observe",
+              feedback_followup_recommendation: "none",
+              confidence: "medium",
+              reason: "The run is only worth keeping as a bounded diagnostic artifact.",
+              review_artifact: {
+                summary: "bounded diagnostic artifact",
+                notes: ["learning status should already be finalized"]
+              }
+            };
+          }
+        }
+      }
+    );
+
+    await service.persistToolResult({
+      sessionId: "hybrid-postmortem-learning-status",
+      toolName: "user-feedback",
+      outputSummary: "The first approach was wrong; the fix belongs in the provider path.",
+      status: "success"
+    });
+    await service.persistToolResult({
+      sessionId: "hybrid-postmortem-learning-status",
+      toolName: "vitest",
+      outputSummary: "The focused auth test passed after the provider-path correction.",
+      status: "success"
+    });
+
+    await service.finalizeTask({
+      sessionId: "hybrid-postmortem-learning-status",
+      cwd: "/repo",
+      userMessage: "Fix the auth test by moving the fix into the provider path",
+      taskSummary: "Fix the auth test by moving the fix into the provider path",
+      contextSummary: "The first attempt was wrong until the provider-path correction passed the targeted auth test."
+    });
+    await service.waitForBackgroundLearning();
+
+    const db = new DatabaseSync(sqlitePath);
+    const taskRun = db
+      .prepare("SELECT learning_status FROM task_runs WHERE session_id = ? ORDER BY created_at DESC LIMIT 1")
+      .get("hybrid-postmortem-learning-status") as { learning_status: string | null } | undefined;
+
+    expect(seenLearningStatuses).toEqual([taskRun?.learning_status]);
+    expect(seenLearningStatuses[0]).toBeTruthy();
+  });
+
   it("does not create duplicate postmortem artifacts for the same completed run", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");

@@ -1001,25 +1001,29 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
 
     if (learningTaskContext) {
       this.trackLearningTask(
-        this.persistCandidatesAsync(
-          learningTaskContext.input,
-          learningTaskContext.originRecordId,
-          learningTaskContext.taskRunId,
-          learningTaskContext.sessionId
-        )
-      );
-      if (hybridPosttaskRoute.route === "ESCALATE_ASYNC_POSTMORTEM") {
-        this.trackLearningTask(
-          this.persistHybridPostmortemArtifactAsync({
-            taskRun: learningTaskContext.taskRun,
+        (async () => {
+          await this.persistCandidatesAsync(
+            learningTaskContext.input,
+            learningTaskContext.originRecordId,
+            learningTaskContext.taskRunId,
+            learningTaskContext.sessionId
+          );
+
+          if (hybridPosttaskRoute.route !== "ESCALATE_ASYNC_POSTMORTEM") {
+            return;
+          }
+
+          const refreshedTaskRun = this.taskRunRepo.getById(learningTaskContext.taskRun.id) ?? learningTaskContext.taskRun;
+          await this.persistHybridPostmortemArtifactAsync({
+            taskRun: refreshedTaskRun,
             experienceInput: learningTaskContext.input,
             routeDecision: hybridPosttaskRoute,
             toolEvents: learningTaskContext.toolEvents,
             rolloutMode: rollout.effectiveMode,
             rolloutReason: rollout.reason
-          })
-        );
-      }
+          });
+        })()
+      );
     }
 
     this.logger.info?.("experienceengine.finalize", {
