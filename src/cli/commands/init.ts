@@ -9,7 +9,8 @@ import {
   setEmbeddingApiProvider,
   setEmbeddingDtype,
   setEmbeddingModel,
-  setEmbeddingProvider
+  setEmbeddingProvider,
+  setHybridSettings
 } from "../../config/settings-store.js";
 import { resolveModelCatalog, type ProviderModelCatalog } from "../../distillation/model-catalog.js";
 import { DISTILLER_PROVIDERS, type DistillerProvider } from "../../distillation/providers/types.js";
@@ -99,6 +100,7 @@ export const runInitCommand = async (
     setDistillationProvider(provider);
     setDistillationAuthMode(authMode);
     setDistillationModel(provider, model);
+    applyDefaultHybridSettingsForNewInit();
     console.log(`[ExperienceEngine] Distillation initialized: provider=${provider} auth_mode=${authMode} model=${model}.`);
     return;
   }
@@ -211,6 +213,20 @@ const logInitGuide = (): void => {
   }
 };
 
+const applyDefaultHybridSettingsForNewInit = (): void => {
+  const settings = readExperienceEngineSettings();
+  const hybrid = settings.hybrid ?? {};
+
+  setHybridSettings({
+    ...hybrid,
+    enabled: hybrid.enabled ?? true,
+    sync_explain_enabled: hybrid.sync_explain_enabled ?? true,
+    async_postmortem_enabled: hybrid.async_postmortem_enabled ?? true,
+    explain_llm_enabled: hybrid.explain_llm_enabled ?? true,
+    async_postmortem_llm_enabled: hybrid.async_postmortem_llm_enabled ?? true
+  });
+};
+
 const runInitWizard = async (ui: InitWizardUI, deps: InitCommandDeps): Promise<void> => {
   const currentSettings = readExperienceEngineSettings();
   const currentSecrets = readExperienceEngineSecrets();
@@ -264,6 +280,7 @@ const runInitWizard = async (ui: InitWizardUI, deps: InitCommandDeps): Promise<v
   setDistillationProvider(provider);
   setDistillationAuthMode(authMode);
   setDistillationModel(provider, model);
+  applyDefaultHybridSettingsForNewInit();
 
   const embeddingSelection = await ui.choose({
     title: embeddingStepTitle,

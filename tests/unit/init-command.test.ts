@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -59,6 +59,13 @@ describe("init command", () => {
         provider: "gemini",
         auth_mode: "api_key",
         model: "gemini-3.1-flash-lite-preview"
+      },
+      hybrid: {
+        enabled: true,
+        sync_explain_enabled: true,
+        async_postmortem_enabled: true,
+        explain_llm_enabled: true,
+        async_postmortem_llm_enabled: true
       }
     });
     expect(consoleLogSpy).toHaveBeenCalledWith(
@@ -222,6 +229,13 @@ describe("init command", () => {
         api_provider: "gemini",
         model: "Xenova/multilingual-e5-small",
         dtype: "q8"
+      },
+      hybrid: {
+        enabled: true,
+        sync_explain_enabled: true,
+        async_postmortem_enabled: true,
+        explain_llm_enabled: true,
+        async_postmortem_llm_enabled: true
       }
     });
     expect(JSON.parse(readFileSync(join(productHome, "secrets.json"), "utf8"))).toEqual({
@@ -300,5 +314,61 @@ describe("init command", () => {
     expect(choose.mock.calls[1]?.[0]?.options).not.toEqual(
       expect.arrayContaining([expect.objectContaining({ value: "__all_providers__" })])
     );
+  });
+
+  it("preserves explicit existing hybrid settings instead of overriding them during init", async () => {
+    const home = makeTempDir();
+    const productHome = join(home, ".experienceengine");
+    process.env.EXPERIENCE_ENGINE_HOME = productHome;
+
+    mkdirSync(productHome, { recursive: true });
+    writeFileSync(
+      join(productHome, "settings.json"),
+      `${JSON.stringify(
+        {
+          hybrid: {
+            enabled: false,
+            sync_explain_enabled: false,
+            async_postmortem_enabled: false,
+            explain_llm_enabled: false,
+            async_postmortem_llm_enabled: false
+          }
+        },
+        null,
+        2
+      )}\n`
+    );
+
+    await runInitCommand(
+      "distillation",
+      ["--provider", "gemini", "--model", "gemini-3.1-flash-lite-preview", "--auth-mode", "api_key"],
+      {
+        resolveModelCatalog: async () => ({
+          provider: "gemini",
+          source: "static",
+          models: [
+            {
+              id: "gemini-3.1-flash-lite-preview",
+              name: "Gemini 3.1 Flash Lite Preview"
+            }
+          ]
+        })
+      }
+    );
+
+    expect(JSON.parse(readFileSync(join(productHome, "settings.json"), "utf8"))).toEqual({
+      distillation: {
+        provider: "gemini",
+        auth_mode: "api_key",
+        model: "gemini-3.1-flash-lite-preview"
+      },
+      hybrid: {
+        enabled: false,
+        sync_explain_enabled: false,
+        async_postmortem_enabled: false,
+        explain_llm_enabled: false,
+        async_postmortem_llm_enabled: false
+      }
+    });
   });
 });
