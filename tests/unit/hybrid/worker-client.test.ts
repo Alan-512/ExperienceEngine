@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { buildExplainDecisionCapsule, buildPostmortemReviewCapsule } from "../../../src/hybrid/capsule-builder.js";
 import { HybridWorkerClient } from "../../../src/hybrid/worker-client.js";
 
@@ -81,6 +81,10 @@ const buildPostmortemCapsule = () =>
   });
 
 describe("HybridWorkerClient", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("returns a validated advisory explain result", async () => {
     const client = new HybridWorkerClient();
     const result = await client.runExplainDecision(buildCapsule());
@@ -400,6 +404,72 @@ describe("HybridWorkerClient", () => {
       status: "accepted",
       value: expect.objectContaining({
         decision: "provider explain"
+      })
+    });
+  });
+
+  it("uses a wider default provider timeout budget for postmortem than explain", async () => {
+    vi.useFakeTimers();
+
+    const client = new HybridWorkerClient({
+      explainDecisionLlmEnabled: true,
+      explainDecisionLlmExecutor: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 6_000));
+        return {
+          task: "explain_decision",
+          decision: "provider explain",
+          reason: "provider reason",
+          confidence: "high"
+        };
+      },
+      postmortemReviewLlmEnabled: true,
+      postmortemReviewLlmExecutor: async () => {
+        await new Promise((resolve) => setTimeout(resolve, 6_000));
+        return {
+          task: "postmortem_review",
+          review_verdict: "review_artifact",
+          candidate_recommendation: "observe",
+          feedback_followup_recommendation: "review",
+          confidence: "high",
+          reason: "provider postmortem",
+          review_artifact: {
+            summary: "provider postmortem",
+            notes: ["provider"]
+          }
+        };
+      }
+    });
+
+    const endpoint = {
+      kind: "openai" as const,
+      provider: "openai_compatible" as const,
+      model: "gpt-5.4-mini",
+      baseUrl: "https://api.openai.com/v1/chat/completions",
+      headers: {
+        Authorization: "Bearer test-key"
+      },
+      source: "explicit" as const
+    };
+
+    const explainPromise = client.runExplainDecision(buildCapsule(), {
+      mode: "provider",
+      endpoint
+    });
+    const postmortemPromise = client.runPostmortemReview(buildPostmortemCapsule(), {
+      mode: "provider",
+      endpoint
+    });
+
+    await vi.advanceTimersByTimeAsync(6_000);
+
+    await expect(explainPromise).resolves.toMatchObject({
+      status: "fallback",
+      reason: "timeout"
+    });
+    await expect(postmortemPromise).resolves.toMatchObject({
+      status: "accepted",
+      value: expect.objectContaining({
+        reason: "provider postmortem"
       })
     });
   });

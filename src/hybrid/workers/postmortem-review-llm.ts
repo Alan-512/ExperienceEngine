@@ -174,7 +174,19 @@ const normalizeReviewVerdict = (value: unknown): unknown => {
   if (normalized === "approved" || normalized === "accepted") {
     return "review_artifact";
   }
+  if (
+    normalized === "rejected"
+    || normalized === "reject"
+    || normalized === "declined"
+    || normalized === "deny"
+    || normalized === "denied"
+  ) {
+    return "review_artifact";
+  }
   if (normalized === "governance_review" || normalized === "needs_review") {
+    return "policy_gated";
+  }
+  if (normalized === "inconclusive") {
     return "policy_gated";
   }
   return value;
@@ -189,12 +201,43 @@ const normalizeCandidateRecommendation = (value: unknown): unknown => {
   if (normalized === "capture" || normalized === "reject" || normalized === "observe") {
     return normalized;
   }
+  if (normalized === "none") {
+    return "observe";
+  }
   if (
     normalized === "proceed_to_validation"
+    || normalized === "proceed_with_validation"
+    || normalized === "proceed_to_staging"
     || normalized === "retain_for_validation"
     || normalized === "promote_for_review"
   ) {
     return "capture";
+  }
+  if (
+    normalized.startsWith("proceed to ")
+    || (
+      normalized.startsWith("proceed with ")
+      && (
+        normalized.includes("validation")
+        || normalized.includes("integration")
+        || normalized.includes("staging")
+        || normalized.includes("stabilization")
+        || normalized.includes("backlog")
+      )
+    )
+  ) {
+    return "capture";
+  }
+  if (
+    normalized === "terminate_task_run"
+    || normalized === "terminate"
+    || normalized === "stop_task_run"
+    || normalized === "terminate_replay"
+  ) {
+    return "reject";
+  }
+  if (normalized === "retry_with_diagnostic_trace") {
+    return "observe";
   }
   if (
     normalized === "retain_internal_only"
@@ -206,6 +249,7 @@ const normalizeCandidateRecommendation = (value: unknown): unknown => {
     || normalized === "maintain_current_state"
     || normalized === "keep_current_state"
     || normalized === "retain_current_state"
+    || normalized === "maintain_stabilization"
     || normalized === "maintain_current_trajectory"
     || normalized === "keep_current_trajectory"
     || normalized === "retain_current_trajectory"
@@ -247,6 +291,10 @@ const normalizeFeedbackFollowupRecommendation = (value: unknown): unknown => {
     || normalized === "needs_review"
     || normalized === "operator_review"
     || normalized === "required"
+    || normalized === "instruct_user_on_task_scope"
+    || normalized === "monitor_latency_and_throughput"
+    || normalized === "defer_fresh_probing"
+    || normalized === "investigate_plugin_registry_initialization"
   ) {
     return "review";
   }
@@ -263,6 +311,9 @@ const normalizeFeedbackFollowupRecommendation = (value: unknown): unknown => {
     || normalized.includes("follow up")
     || normalized.includes("follow-up")
     || normalized.includes("validate ")
+    || normalized.includes("verify ")
+    || normalized.includes("ensure ")
+    || normalized.includes("defer ")
   ) {
     return "review";
   }
@@ -318,6 +369,21 @@ const normalizeReviewArtifact = (value: unknown): unknown => {
   };
 };
 
+const normalizeOptionalStringArray = (value: unknown): unknown => {
+  if (typeof value === "string") {
+    const text = value.trim();
+    return text ? [text] : [];
+  }
+
+  if (!Array.isArray(value)) {
+    return value;
+  }
+
+  return value
+    .filter((entry): entry is string => typeof entry === "string" && entry.trim().length > 0)
+    .map((entry) => entry.trim());
+};
+
 const isValidationFailure = (
   value: PostmortemReviewWorkerOutput | { status: "rejected"; detail: string }
 ): value is { status: "rejected"; detail: string } => "status" in value;
@@ -352,11 +418,11 @@ export const runPostmortemReviewLlmWorker = async (
     confidence: normalizeConfidence(parsed.confidence),
     reason: parsed.reason,
     review_artifact: normalizeReviewArtifact(parsed.review_artifact),
-    suggestedFollowUps: parsed.suggestedFollowUps,
-    candidateShapingSuggestions: parsed.candidateShapingSuggestions,
-    governanceRecommendations: parsed.governanceRecommendations,
-    lifecycleSuggestions: parsed.lifecycleSuggestions,
-    writeBackSuggestions: parsed.writeBackSuggestions
+    suggestedFollowUps: normalizeOptionalStringArray(parsed.suggestedFollowUps),
+    candidateShapingSuggestions: normalizeOptionalStringArray(parsed.candidateShapingSuggestions),
+    governanceRecommendations: normalizeOptionalStringArray(parsed.governanceRecommendations),
+    lifecycleSuggestions: normalizeOptionalStringArray(parsed.lifecycleSuggestions),
+    writeBackSuggestions: normalizeOptionalStringArray(parsed.writeBackSuggestions)
   });
 
   if (isValidationFailure(validated)) {

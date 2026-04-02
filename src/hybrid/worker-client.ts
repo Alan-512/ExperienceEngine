@@ -67,6 +67,7 @@ type HybridWorkerClientOptions = {
 
 const DEFAULT_TIMEOUT_MS = 150;
 const DEFAULT_PROVIDER_TIMEOUT_MS = 5000;
+const DEFAULT_POSTMORTEM_PROVIDER_TIMEOUT_MS = 15000;
 const DEFAULT_CIRCUIT_THRESHOLD = 3;
 
 export class HybridWorkerClient {
@@ -109,7 +110,7 @@ export class HybridWorkerClient {
     this.postmortemReviewEnabled = options.postmortemReviewEnabled ?? true;
     this.postmortemReviewTimeoutMs = options.postmortemReviewTimeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.postmortemReviewProviderTimeoutMs =
-      options.postmortemReviewProviderTimeoutMs ?? DEFAULT_PROVIDER_TIMEOUT_MS;
+      options.postmortemReviewProviderTimeoutMs ?? DEFAULT_POSTMORTEM_PROVIDER_TIMEOUT_MS;
     this.postmortemReviewExecutor = options.postmortemReviewExecutor ?? runPostmortemReviewWorker;
     this.postmortemReviewLlmEnabled = options.postmortemReviewLlmEnabled ?? false;
     this.postmortemReviewLlmExecutor =

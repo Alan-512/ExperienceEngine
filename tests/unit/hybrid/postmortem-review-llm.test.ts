@@ -338,4 +338,304 @@ describe("runPostmortemReviewLlmWorker", () => {
       confidence: "high"
     });
   });
+
+  it("normalizes rejected-style review verdicts into the bounded phase 3 contract", async () => {
+    const fixture = phase3PostmortemFixtures[0];
+    const result = await runPostmortemReviewLlmWorker(fixture.capsule, {
+      endpoint: openAiEndpoint,
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    review_verdict: "REJECTED",
+                    candidate_recommendation: "REJECT",
+                    feedback_followup_recommendation: "NONE",
+                    confidence: "HIGH",
+                    reason: "The bounded artifact should be retained only as a rejected review outcome.",
+                    review_artifact: "taskrun_rejected_review_summary"
+                  })
+                }
+              }
+            ]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+    });
+
+    expect(result).toMatchObject({
+      task: "postmortem_review",
+      review_verdict: "review_artifact",
+      candidate_recommendation: "reject",
+      feedback_followup_recommendation: "none",
+      confidence: "high",
+      review_artifact: {
+        summary: "taskrun_rejected_review_summary",
+        notes: ["taskrun_rejected_review_summary"]
+      }
+    });
+  });
+
+  it("normalizes terminate-task and task-scope followup drift into bounded enums", async () => {
+    const fixture = phase3PostmortemFixtures[0];
+    const result = await runPostmortemReviewLlmWorker(fixture.capsule, {
+      endpoint: openAiEndpoint,
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    review_verdict: "REJECTED",
+                    candidate_recommendation: "TERMINATE_TASK_RUN",
+                    feedback_followup_recommendation: "INSTRUCT_USER_ON_TASK_SCOPE",
+                    confidence: "HIGH",
+                    reason: "The run should be rejected as a trivial task and redirected into clearer scope guidance.",
+                    review_artifact: "taskrun_terminate_scope_summary"
+                  })
+                }
+              }
+            ]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+    });
+
+    expect(result).toMatchObject({
+      task: "postmortem_review",
+      review_verdict: "review_artifact",
+      candidate_recommendation: "reject",
+      feedback_followup_recommendation: "review",
+      confidence: "high",
+      review_artifact: {
+        summary: "taskrun_terminate_scope_summary",
+        notes: ["taskrun_terminate_scope_summary"]
+      }
+    });
+  });
+
+  it("normalizes single-string shaping and governance fields into arrays", async () => {
+    const fixture = phase3PostmortemFixtures[0];
+    const result = await runPostmortemReviewLlmWorker(fixture.capsule, {
+      endpoint: openAiEndpoint,
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    review_verdict: "REJECTED",
+                    candidate_recommendation: "DISCARD",
+                    feedback_followup_recommendation: "NONE",
+                    confidence: "HIGH",
+                    reason:
+                      "The task summary contains trivial instructions and should not be retained as a substantive technical artifact.",
+                    review_artifact: "taskrun_fbace93c435a_null_artifact",
+                    suggestedFollowUps: [],
+                    candidateShapingSuggestions:
+                      "Ensure task inputs contain substantive postmortem documentation rather than conversational filler.",
+                    governanceRecommendations: "Flag task for low-quality input filtering."
+                  })
+                }
+              }
+            ]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+    });
+
+    expect(result).toMatchObject({
+      task: "postmortem_review",
+      review_verdict: "review_artifact",
+      candidate_recommendation: "reject",
+      feedback_followup_recommendation: "none",
+      confidence: "high",
+      candidateShapingSuggestions: [
+        "Ensure task inputs contain substantive postmortem documentation rather than conversational filler."
+      ],
+      governanceRecommendations: ["Flag task for low-quality input filtering."]
+    });
+  });
+
+  it("normalizes staging and monitor-throughput drift into bounded enums", async () => {
+    const fixture = phase3PostmortemFixtures[0];
+    const result = await runPostmortemReviewLlmWorker(fixture.capsule, {
+      endpoint: openAiEndpoint,
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    review_verdict: "APPROVED",
+                    candidate_recommendation: "PROCEED_WITH_VALIDATION",
+                    feedback_followup_recommendation: "MONITOR_LATENCY_AND_THROUGHPUT",
+                    confidence: "HIGH",
+                    reason: "The bounded diagnostic result should be retained for later validation and operational review.",
+                    review_artifact: "taskrun_stage_validation_summary"
+                  })
+                }
+              }
+            ]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+    });
+
+    expect(result).toMatchObject({
+      task: "postmortem_review",
+      review_verdict: "review_artifact",
+      candidate_recommendation: "capture",
+      feedback_followup_recommendation: "review",
+      confidence: "high",
+      review_artifact: {
+        summary: "taskrun_stage_validation_summary",
+        notes: ["taskrun_stage_validation_summary"]
+      }
+    });
+  });
+
+  it("normalizes stabilization and free-text followup drift into bounded enums", async () => {
+    const fixture = phase3PostmortemFixtures[0];
+    const result = await runPostmortemReviewLlmWorker(fixture.capsule, {
+      endpoint: openAiEndpoint,
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    review_verdict: "APPROVED",
+                    candidate_recommendation: "MAINTAIN_STABILIZATION",
+                    feedback_followup_recommendation: "DEFER_FRESH_PROBING",
+                    confidence: "HIGH",
+                    reason: "Hold the current stabilization posture until fresher samples are available.",
+                    review_artifact: "taskrun_stabilization_summary"
+                  })
+                }
+              }
+            ]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+    });
+
+    expect(result).toMatchObject({
+      task: "postmortem_review",
+      review_verdict: "review_artifact",
+      candidate_recommendation: "observe",
+      feedback_followup_recommendation: "review",
+      confidence: "high",
+      review_artifact: {
+        summary: "taskrun_stabilization_summary",
+        notes: ["taskrun_stabilization_summary"]
+      }
+    });
+  });
+
+  it("normalizes none and terminate-replay candidate drift into bounded enums", async () => {
+    const fixture = phase3PostmortemFixtures[0];
+    const first = await runPostmortemReviewLlmWorker(fixture.capsule, {
+      endpoint: openAiEndpoint,
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    review_verdict: "APPROVED",
+                    candidate_recommendation: "NONE",
+                    feedback_followup_recommendation: "NONE",
+                    confidence: "HIGH",
+                    reason: "No additional candidate promotion should occur for this bounded probe artifact.",
+                    review_artifact: "taskrun_none_summary"
+                  })
+                }
+              }
+            ]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+    });
+
+    expect(first).toMatchObject({
+      task: "postmortem_review",
+      candidate_recommendation: "observe",
+      feedback_followup_recommendation: "none",
+      confidence: "high"
+    });
+
+    const second = await runPostmortemReviewLlmWorker(fixture.capsule, {
+      endpoint: openAiEndpoint,
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    review_verdict: "REJECTED",
+                    candidate_recommendation: "TERMINATE_REPLAY",
+                    feedback_followup_recommendation: "NONE",
+                    confidence: "HIGH",
+                    reason: "The replay should be terminated as a trivial non-learning artifact.",
+                    review_artifact: "taskrun_terminate_replay_summary"
+                  })
+                }
+              }
+            ]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+    });
+
+    expect(second).toMatchObject({
+      task: "postmortem_review",
+      candidate_recommendation: "reject",
+      feedback_followup_recommendation: "none",
+      confidence: "high"
+    });
+  });
+
+  it("normalizes inconclusive verdicts and retry-investigate followup drift conservatively", async () => {
+    const fixture = phase3PostmortemFixtures[0];
+    const result = await runPostmortemReviewLlmWorker(fixture.capsule, {
+      endpoint: openAiEndpoint,
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    review_verdict: "INCONCLUSIVE",
+                    candidate_recommendation: "RETRY_WITH_DIAGNOSTIC_TRACE",
+                    feedback_followup_recommendation: "INVESTIGATE_PLUGIN_REGISTRY_INITIALIZATION",
+                    confidence: "HIGH",
+                    reason: "The current bounded evidence is inconclusive and should be reviewed before any stronger action.",
+                    review_artifact: "taskrun_inconclusive_summary"
+                  })
+                }
+              }
+            ]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+    });
+
+    expect(result).toMatchObject({
+      task: "postmortem_review",
+      review_verdict: "policy_gated",
+      candidate_recommendation: "observe",
+      feedback_followup_recommendation: "review",
+      confidence: "high"
+    });
+  });
 });
