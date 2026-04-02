@@ -316,7 +316,7 @@ describe("init command", () => {
     );
   });
 
-  it("preserves explicit existing hybrid settings instead of overriding them during init", async () => {
+  it("rewrites hybrid settings to the default-on profile during init", async () => {
     const home = makeTempDir();
     const productHome = join(home, ".experienceengine");
     process.env.EXPERIENCE_ENGINE_HOME = productHome;
@@ -363,11 +363,11 @@ describe("init command", () => {
         model: "gemini-3.1-flash-lite-preview"
       },
       hybrid: {
-        enabled: false,
-        sync_explain_enabled: false,
-        async_postmortem_enabled: false,
-        explain_llm_enabled: false,
-        async_postmortem_llm_enabled: false
+        enabled: true,
+        sync_explain_enabled: true,
+        async_postmortem_enabled: true,
+        explain_llm_enabled: true,
+        async_postmortem_llm_enabled: true
       }
     });
   });

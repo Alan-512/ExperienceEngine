@@ -215,15 +215,14 @@ const logInitGuide = (): void => {
 
 const applyDefaultHybridSettingsForNewInit = (): void => {
   const settings = readExperienceEngineSettings();
-  const hybrid = settings.hybrid ?? {};
 
   setHybridSettings({
-    ...hybrid,
-    enabled: hybrid.enabled ?? true,
-    sync_explain_enabled: hybrid.sync_explain_enabled ?? true,
-    async_postmortem_enabled: hybrid.async_postmortem_enabled ?? true,
-    explain_llm_enabled: hybrid.explain_llm_enabled ?? true,
-    async_postmortem_llm_enabled: hybrid.async_postmortem_llm_enabled ?? true
+    ...(settings.hybrid ?? {}),
+    enabled: true,
+    sync_explain_enabled: true,
+    async_postmortem_enabled: true,
+    explain_llm_enabled: true,
+    async_postmortem_llm_enabled: true
   });
 };
 
