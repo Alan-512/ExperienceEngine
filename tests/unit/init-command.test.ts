@@ -166,22 +166,22 @@ describe("init command", () => {
     expect(consoleLogSpy.mock.calls).toEqual(
       expect.arrayContaining([
         ["ExperienceEngine initialization guide:"],
-        ["Step 1. Configure distillation provider and model."],
+        ["Step 1. Choose the shared reasoning model ExperienceEngine should use."],
         ["- Current distillation provider: <unset>"],
         ["- Current distillation model: <unset>"],
         ["- Next command: ee init distillation --provider <provider> --model <modelId> [--auth-mode api_key|google_adc]"],
-        ["Step 2. Configure embedding mode and provider."],
+        ["Step 2. Choose how ExperienceEngine should build and search shared memory."],
         ["- Current embedding mode: api"],
         ["- Current embedding API provider: auto"],
         ["- Current embedding model: Xenova/multilingual-e5-small"],
         ["- Next command: ee init embedding --mode <api|local|legacy> [--api-provider auto|openai|gemini|jina] [--model <modelId>] [--dtype q8|fp32]"],
-        ["Step 3. Store any shared provider secrets once for all hosts."],
+        ["Step 3. Store provider credentials once so every host can reuse them."],
         ["- Shared secrets: none"],
         ["- Next command: ee init secret <ENV_KEY> <value>"],
-        ["Step 4. Move shared ExperienceEngine state to Initialized, then verify each host can become Ready."],
+        ["Step 4. Finish initialization, then verify each host can move from Installed to Ready."],
         ["- Validation commands: ee doctor openclaw | ee doctor claude-code | ee doctor codex"],
         ["- Product language: Installed -> Initialized -> Ready"],
-        ["- Next step after initialization: use `ee status` for day-to-day progress and `ee doctor <host>` for explicit validation."]
+        ["- After initialization, use `ee status` for day-to-day progress and `ee doctor <host>` for explicit host checks."]
       ])
     );
   });

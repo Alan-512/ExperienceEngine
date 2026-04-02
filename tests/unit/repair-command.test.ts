@@ -14,9 +14,9 @@ describe("repair command", () => {
     expect(consoleLogSpy.mock.calls).toEqual(
       expect.arrayContaining([
         ["Repair summary:"],
-        ["- OpenClaw: run `ee repair openclaw` when doctor reports host drift."],
-        ["- Codex: re-run the Codex-specific ExperienceEngine installation command if MCP wiring is missing."],
-        ["- Claude Code: re-run the Claude Code-specific ExperienceEngine installation command if hooks or MCP wiring are missing."]
+        ["- OpenClaw: automated repair is available with `ee repair openclaw` when doctor reports host drift."],
+        ["- Codex: re-run `ee install codex` if MCP wiring is missing or stale."],
+        ["- Claude Code: re-run the marketplace install flow if hooks or MCP wiring are missing."]
       ])
     );
   });

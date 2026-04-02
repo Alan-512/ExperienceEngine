@@ -181,22 +181,22 @@ const logInitGuide = (): void => {
   const distillationReady = Boolean(settings.distillation?.provider && settings.distillation?.model);
 
   console.log("ExperienceEngine initialization guide:");
-  console.log("Step 1. Configure distillation provider and model.");
+  console.log("Step 1. Choose the shared reasoning model ExperienceEngine should use.");
   console.log(`- Current distillation provider: ${settings.distillation?.provider ?? "<unset>"}`);
   console.log(`- Current distillation model: ${settings.distillation?.model ?? "<unset>"}`);
   if (!distillationReady) {
     console.log(`- Next command: ${DISTILLATION_USAGE.replace("Usage: ", "")}`);
   } else {
-    console.log("- Distillation is configured.");
+    console.log("- Shared reasoning model is configured.");
   }
 
-  console.log("Step 2. Configure embedding mode and provider.");
+  console.log("Step 2. Choose how ExperienceEngine should build and search shared memory.");
   console.log(`- Current embedding mode: ${settings.embedding?.provider ?? defaultConfig.embeddingProvider}`);
   console.log(`- Current embedding API provider: ${settings.embedding?.api_provider ?? defaultConfig.embeddingApiProvider}`);
   console.log(`- Current embedding model: ${settings.embedding?.model ?? defaultConfig.embeddingModel}`);
   console.log(`- Next command: ${EMBEDDING_USAGE.replace("Usage: ", "")}`);
 
-  console.log("Step 3. Store any shared provider secrets once for all hosts.");
+  console.log("Step 3. Store provider credentials once so every host can reuse them.");
   if (secretKeys.length === 0) {
     console.log("- Shared secrets: none");
     console.log(`- Next command: ${SECRET_USAGE.replace("Usage: ", "")}`);
@@ -204,12 +204,12 @@ const logInitGuide = (): void => {
     console.log(`- Shared secrets already configured: ${secretKeys.join(", ")}`);
   }
 
-  console.log("Step 4. Move shared ExperienceEngine state to Initialized, then verify each host can become Ready.");
+  console.log("Step 4. Finish initialization, then verify each host can move from Installed to Ready.");
   console.log("- Validation commands: ee doctor openclaw | ee doctor claude-code | ee doctor codex");
   console.log("- Product language: Installed -> Initialized -> Ready");
-  console.log("- Next step after initialization: use `ee status` for day-to-day progress and `ee doctor <host>` for explicit validation.");
+  console.log("- After initialization, use `ee status` for day-to-day progress and `ee doctor <host>` for explicit host checks.");
   if (distillationReady && secretKeys.length > 0) {
-    console.log("- Next step: install another host if needed, then run `ee doctor <host>` to verify it reuses this shared state.");
+    console.log("- Next step: install another host if needed, then run `ee doctor <host>` to confirm it reuses this shared state.");
   }
 };
 

@@ -1,3 +1,10 @@
+import {
+  buildClaudeMarketplaceAddCommand,
+  buildClaudePluginInstallCommand,
+  buildCodexPublicInstallCommand,
+  buildOpenClawPublicInstallCommand
+} from "../install/public-install.js";
+
 const usageText =
   "Usage: ee <install openclaw|claude-code|codex|upgrade openclaw|claude-code|codex|repair [openclaw]|claude-hook|codex-mcp-server|doctor [openclaw|claude-code|codex]|status|stats|inspect|feedback|disable|enable|cool|retire>"
   + " | helped|harmed"
@@ -13,15 +20,20 @@ const usageText =
 export const printCliUsage = (): void => {
   console.log("ExperienceEngine CLI");
   console.log("Get started:");
-  console.log("- Install your host integration: ee install <openclaw|claude-code|codex>");
+  console.log(`- OpenClaw (host-native plugin): ${buildOpenClawPublicInstallCommand()}`);
+  console.log(`- Claude Code (host-native marketplace): ${buildClaudeMarketplaceAddCommand()}`);
+  console.log(`- Then install the plugin: ${buildClaudePluginInstallCommand()}`);
+  console.log(`- Codex (EE-managed wiring): ${buildCodexPublicInstallCommand()}`);
   console.log("- Initialize shared state: ee init");
-  console.log("- Verify current host wiring: ee doctor <openclaw|claude-code|codex>");
+  console.log("- Check shared ExperienceEngine state: ee status");
+  console.log("- Verify host wiring explicitly: ee doctor <openclaw|claude-code|codex>");
   console.log("See what ExperienceEngine is doing:");
   console.log("- Check current state: ee status");
   console.log("- Inspect the latest persisted intervention: ee inspect --last");
   console.log("Fix a problem:");
   console.log("- Validate the current host: ee doctor <openclaw|claude-code|codex>");
   console.log("- Refresh host wiring when needed: ee upgrade <openclaw|claude-code|codex>");
+  console.log("- Only OpenClaw currently supports automated `ee repair`.");
   console.log("- Routine review/feedback stays in the host first for OpenClaw, Codex, and Claude Code.");
   console.log("- CLI/operator fallback remains the path for deeper inspection, repair, and advanced management.");
   console.log("- CLI fallback/operator path: ee inspect --last | ee helped | ee harmed");
