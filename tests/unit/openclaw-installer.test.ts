@@ -332,9 +332,29 @@ Recorded version: 0.1.3`;
     };
 
     expect(packagedManifest.dependencies).toEqual({
+      "@modelcontextprotocol/sdk": "^1.27.1",
       "@huggingface/transformers": "^3.8.1",
       zod: "^3.25.76"
     });
+  });
+
+  it("packages the OpenClaw compatibility metadata required by ClawHub publishing", () => {
+    const homeDir = makeTempDir();
+    const paths = resolveExperienceEnginePaths({ homeDir });
+    mkdirSync(join(paths.productHome, "adapters", "openclaw"), { recursive: true });
+    const tarballPath = createOpenClawInstallTarball(process.cwd(), paths);
+    const manifestPath = join(dirname(tarballPath), "experienceengine-openclaw", "package.json");
+    const packagedManifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+      openclaw?: {
+        compat?: { pluginApi?: string; minGatewayVersion?: string };
+        build?: { openclawVersion?: string; pluginSdkVersion?: string };
+      };
+    };
+
+    expect(packagedManifest.openclaw?.compat?.pluginApi).toBe(">=2026.4.1");
+    expect(packagedManifest.openclaw?.compat?.minGatewayVersion).toBe("2026.4.1");
+    expect(packagedManifest.openclaw?.build?.openclawVersion).toBe("2026.4.1");
+    expect(packagedManifest.openclaw?.build?.pluginSdkVersion).toBe("2026.4.1");
   });
 
   it("reports install status and resolved paths for doctor output", () => {

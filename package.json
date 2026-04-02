@@ -11,7 +11,15 @@
   "openclaw": {
     "extensions": [
       "./dist/plugin/openclaw-plugin.js"
-    ]
+    ],
+    "compat": {
+      "pluginApi": ">=2026.4.1",
+      "minGatewayVersion": "2026.4.1"
+    },
+    "build": {
+      "openclawVersion": "2026.4.1",
+      "pluginSdkVersion": "2026.4.1"
+    }
   },
   "engines": {
     "node": ">=20.0.0"
