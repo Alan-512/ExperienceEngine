@@ -1,5 +1,13 @@
+import { existsSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import type { DistillerProviderAdapter, ProviderResolution } from "./types.js";
-import { hasGoogleAdcCredentials, resolveGoogleAdcPath } from "./google-adc.js";
+
+const resolveGoogleAdcPath = (env: NodeJS.ProcessEnv = process.env): string =>
+  env.GOOGLE_APPLICATION_CREDENTIALS?.trim() || join(homedir(), ".config", "gcloud", "application_default_credentials.json");
+
+const hasGoogleAdcCredentials = (env: NodeJS.ProcessEnv = process.env): boolean =>
+  existsSync(resolveGoogleAdcPath(env));
 
 export const geminiDistillerProvider: DistillerProviderAdapter = {
   provider: "gemini",

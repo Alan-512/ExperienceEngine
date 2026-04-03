@@ -1,4 +1,3 @@
-import { LlmLearningGate } from "../analyzer/llm-learning-gate.js";
 import { buildCandidateSignals } from "../analyzer/candidate-signals.js";
 import { buildInjectionScorecard } from "../controller/injection-scorecard.js";
 import { classifyFailureAttributionReason } from "../feedback/automatic-attribution.js";
@@ -10,11 +9,8 @@ import { buildRetrievalContext } from "../controller/retrieval-context.js";
 import { resolveScope } from "../input/scope-resolver.js";
 import { decideIntervention } from "../controller/intervention-controller.js";
 import { renderInlineNotice } from "../controller/inline-notice.js";
-import { buildPostmortemReviewCapsule } from "../hybrid/capsule-builder.js";
-import { resolveHybridPostmortemProviderEndpoint } from "../hybrid/postmortem-provider-client.js";
 import { resolveHybridRolloutState } from "../hybrid/rollout.js";
 import { selectHybridRoute, type HybridRouteDecision, type HybridRouteSignals } from "../hybrid/router.js";
-import { HybridWorkerClient } from "../hybrid/worker-client.js";
 import { nowIso } from "../utils/clock.js";
 import { createId, stableId } from "../utils/ids.js";
 import type {
@@ -40,7 +36,6 @@ import type {
 } from "../types/plugin.js";
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import { bootstrapDatabase, openDatabase, withTransaction } from "../store/sqlite/db.js";
-import { DistillationQueueWorker } from "../distillation/queue-worker.js";
 import { CandidateRepository } from "../store/sqlite/repositories/candidate-repo.js";
 import { DistillationJobRepository } from "../store/sqlite/repositories/distillation-job-repo.js";
 import { InputRecordRepository } from "../store/sqlite/repositories/input-record-repo.js";
@@ -56,6 +51,50 @@ import { RuntimeCaptureWriter } from "../plugin/runtime-capture.js";
 import { normalizeToolResult } from "../plugin/hooks/tool-result-persist.js";
 import { extractToolResultsFromPayload } from "../plugin/runtime-helpers.js";
 import { HybridReviewArtifactRepository } from "../store/sqlite/repositories/hybrid-review-artifact-repo.js";
+import type { LlmLearningGate } from "../analyzer/llm-learning-gate.js";
+import type { DistillationQueueWorker } from "../distillation/queue-worker.js";
+import type { DistillerEndpoint } from "../distillation/providers/types.js";
+import type { PostmortemReviewCapsule } from "../hybrid/types.js";
+import type { HybridPostmortemResult, HybridWorkerClient } from "../hybrid/worker-client.js";
+
+type LearningRuntimeOptions = {
+  env?: NodeJS.ProcessEnv;
+  homeDir?: string;
+  fetchImpl?: typeof fetch;
+};
+
+type HybridWorkerClientOptions = {
+  explainDecisionEnabled?: boolean;
+  explainDecisionTimeoutMs?: number;
+  explainDecisionProviderTimeoutMs?: number;
+  explainDecisionLlmEnabled?: boolean;
+  postmortemReviewEnabled?: boolean;
+  postmortemReviewTimeoutMs?: number;
+  postmortemReviewProviderTimeoutMs?: number;
+  postmortemReviewLlmEnabled?: boolean;
+  timeoutCircuitThreshold?: number;
+};
+
+type ExperienceRuntimeServiceOptions = LearningRuntimeOptions & {
+  hybridWorkerClientOptions?: HybridWorkerClientOptions;
+  disableBackgroundLearning?: boolean;
+  disableHybridPosttask?: boolean;
+};
+
+const loadLlmLearningGate = async (): Promise<typeof import("../analyzer/llm-learning-gate.js")> =>
+  import("../analyzer/llm-learning-gate.js");
+
+const loadDistillationQueueWorker = async (): Promise<typeof import("../distillation/queue-worker.js")> =>
+  import("../distillation/queue-worker.js");
+
+const loadHybridWorkerClientModule = async (): Promise<typeof import("../hybrid/worker-client.js")> =>
+  import("../hybrid/worker-client.js");
+
+const loadHybridCapsuleBuilder = async (): Promise<typeof import("../hybrid/capsule-builder.js")> =>
+  import("../hybrid/capsule-builder.js");
+
+const loadHybridPostmortemProviderClient = async (): Promise<typeof import("../hybrid/postmortem-provider-client.js")> =>
+  import("../hybrid/postmortem-provider-client.js");
 
 type SessionState = {
   context?: HostPromptContext;
@@ -402,19 +441,23 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly injectionRepo;
   private readonly hybridReviewArtifactRepo;
   private readonly hybridTraceRepo;
-  private readonly distillationWorker;
-  private readonly learningGate;
-  private readonly hybridWorkerClient;
+  private readonly runtimeOptions: ExperienceRuntimeServiceOptions;
+  private readonly backgroundLearningEnabled: boolean;
+  private readonly hybridPosttaskEnabled: boolean;
+  private distillationWorkerPromise: Promise<DistillationQueueWorker> | undefined;
+  private learningGatePromise: Promise<LlmLearningGate> | undefined;
+  private hybridWorkerClientPromise: Promise<HybridWorkerClient> | undefined;
   private readonly pendingLearningTasks = new Set<Promise<void>>();
   readonly captureWriter;
 
   constructor(
     readonly config: ExperienceEngineConfig,
     logger?: OpenClawLogger,
-    runtimeOptions: ConstructorParameters<typeof LlmLearningGate>[1] & {
-      hybridWorkerClientOptions?: ConstructorParameters<typeof HybridWorkerClient>[0];
-    } = {}
+    runtimeOptions: ExperienceRuntimeServiceOptions = {}
   ) {
+    this.runtimeOptions = runtimeOptions;
+    this.backgroundLearningEnabled = !runtimeOptions.disableBackgroundLearning;
+    this.hybridPosttaskEnabled = !runtimeOptions.disableHybridPosttask;
     this.logger = logger ?? {};
     this.db = openDatabase(config);
     bootstrapDatabase(this.db);
@@ -430,22 +473,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     this.injectionRepo = new InjectionRepository(this.db);
     this.hybridReviewArtifactRepo = new HybridReviewArtifactRepository(this.db);
     this.hybridTraceRepo = new HybridInvocationTraceRepository(this.db);
-    this.distillationWorker = new DistillationQueueWorker(
-      config,
-      this.candidateRepo,
-      this.jobRepo,
-      this.nodeRepo,
-      runtimeOptions
-    );
-    this.learningGate = new LlmLearningGate(config, runtimeOptions);
     this.captureWriter = new RuntimeCaptureWriter(config, this.logger);
-    this.hybridWorkerClient = new HybridWorkerClient({
-      explainDecisionEnabled: config.hybridEnabled && config.hybridSyncExplainEnabled,
-      postmortemReviewEnabled: config.hybridEnabled && config.hybridAsyncPostmortemEnabled,
-      postmortemReviewLlmEnabled:
-        config.hybridEnabled && config.hybridAsyncPostmortemEnabled && config.hybridAsyncPostmortemLlmEnabled,
-      ...runtimeOptions.hybridWorkerClientOptions
-    });
   }
 
   private getSession(sessionId: string): SessionState {
@@ -549,9 +577,55 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     await Promise.allSettled([...this.pendingLearningTasks]);
   }
 
+  private async getLearningGate(): Promise<LlmLearningGate | undefined> {
+    if (!this.backgroundLearningEnabled) {
+      return undefined;
+    }
+    this.learningGatePromise ??= loadLlmLearningGate().then(
+      ({ LlmLearningGate: LoadedLlmLearningGate }) => new LoadedLlmLearningGate(this.config, this.runtimeOptions)
+    );
+    return this.learningGatePromise;
+  }
+
+  private async getDistillationWorker(): Promise<DistillationQueueWorker | undefined> {
+    if (!this.backgroundLearningEnabled) {
+      return undefined;
+    }
+    this.distillationWorkerPromise ??= loadDistillationQueueWorker().then(
+      ({ DistillationQueueWorker: LoadedDistillationQueueWorker }) =>
+        new LoadedDistillationQueueWorker(
+          this.config,
+          this.candidateRepo,
+          this.jobRepo,
+          this.nodeRepo,
+          this.runtimeOptions
+        )
+    );
+    return this.distillationWorkerPromise;
+  }
+
+  private async getHybridWorkerClient(): Promise<HybridWorkerClient | undefined> {
+    if (!this.hybridPosttaskEnabled) {
+      return undefined;
+    }
+    this.hybridWorkerClientPromise ??= loadHybridWorkerClientModule().then(
+      ({ HybridWorkerClient: LoadedHybridWorkerClient }) =>
+        new LoadedHybridWorkerClient({
+          explainDecisionEnabled: this.config.hybridEnabled && this.config.hybridSyncExplainEnabled,
+          postmortemReviewEnabled: this.config.hybridEnabled && this.config.hybridAsyncPostmortemEnabled,
+          postmortemReviewLlmEnabled:
+            this.config.hybridEnabled
+            && this.config.hybridAsyncPostmortemEnabled
+            && this.config.hybridAsyncPostmortemLlmEnabled,
+          ...this.runtimeOptions.hybridWorkerClientOptions
+        })
+    );
+    return this.hybridWorkerClientPromise;
+  }
+
   private buildPostmortemArtifact(input: {
     taskRun: TaskRun;
-    result: Extract<Awaited<ReturnType<HybridWorkerClient["runPostmortemReview"]>>, { status: "accepted" }>;
+    result: Extract<HybridPostmortemResult, { status: "accepted" }>;
     routeDecision: HybridRouteDecision;
   }): HybridReviewArtifact {
     const timestamp = nowIso();
@@ -581,12 +655,24 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     rolloutMode: string;
     rolloutReason: string;
   }): Promise<void> {
+    if (!this.hybridPosttaskEnabled) {
+      return;
+    }
     if (this.hybridReviewArtifactRepo.getByTaskRunId(input.taskRun.id)) {
       return;
     }
 
+    const hybridWorkerClient = await this.getHybridWorkerClient();
+    if (!hybridWorkerClient) {
+      return;
+    }
+
     const candidateSignals = buildCandidateSignals(input.experienceInput);
-    const capsule = buildPostmortemReviewCapsule({
+    const [{ buildPostmortemReviewCapsule }, { resolveHybridPostmortemProviderEndpoint }] = await Promise.all([
+      loadHybridCapsuleBuilder(),
+      loadHybridPostmortemProviderClient()
+    ]);
+    const capsule: PostmortemReviewCapsule = buildPostmortemReviewCapsule({
       schemaVersion: this.config.hybridCapsuleSchemaVersion,
       routeDecision: input.routeDecision,
       taskRun: input.taskRun,
@@ -614,7 +700,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
             status: "fallback",
             reason: "provider_unavailable"
           } as const)
-        : await this.hybridWorkerClient.runPostmortemReview(
+        : await hybridWorkerClient.runPostmortemReview(
             capsule,
             providerResolution.status === "configured"
               ? {
@@ -673,7 +759,23 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     taskRunId?: string,
     sessionId?: string
   ): Promise<void> {
-    const result = await this.learningGate.generateCandidateDrafts(input);
+    const learningGate = await this.getLearningGate();
+    if (!learningGate) {
+      if (taskRunId) {
+        const taskRun = this.taskRunRepo.getById(taskRunId);
+        if (taskRun) {
+          this.taskRunRepo.upsert({
+            ...taskRun,
+            learning_status: "not_applicable",
+            learning_reason: "background learning disabled",
+            updated_at: nowIso()
+          });
+        }
+      }
+      return;
+    }
+
+    const result = await learningGate.generateCandidateDrafts(input);
     if (taskRunId) {
       const taskRun = this.taskRunRepo.getById(taskRunId);
       if (taskRun) {
@@ -725,7 +827,12 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     });
 
     if (this.config.distillationAutoDrain) {
-      await this.distillationWorker.drain().catch((error) => {
+      const distillationWorker = await this.getDistillationWorker();
+      if (!distillationWorker) {
+        return;
+      }
+
+      await distillationWorker.drain().catch((error) => {
         this.logger.error?.("experienceengine.distillation_drain_failed", {
           sessionId,
           error: error instanceof Error ? error.message : String(error)
@@ -978,35 +1085,42 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     this.sessions.delete(sessionId);
 
     const rollout = resolveHybridRolloutState(this.config, `${sessionId}:${input.task_summary}`);
-    const hybridPosttaskRoute = decidePosttaskHybridRoute(this.config, input, {
-      taskStage: "posttask",
-      completedRun: true,
-      terminalOutcomeRecorded: true,
-      boundedPosttaskCapsuleAvailable: Boolean(input.task_summary),
-      postmortemAlreadyRecorded: learningTaskContext
-        ? Boolean(this.hybridReviewArtifactRepo.getByTaskRunId(learningTaskContext.taskRun.id))
-        : false,
-      lightweightOrExcludedTask: false,
-      directionalCorrectionPresent: Boolean(
-        learningTaskContext
-          ? buildCandidateSignals(learningTaskContext.input).directional_correction?.detected
-            || buildCandidateSignals(learningTaskContext.input).evidence_driven_reversal?.detected
-          : false
-      ),
-      injectedNodeInteractionPresent: input.injected_node_ids.length > 0,
-      retryOrInvalidationSignaturePresent: Boolean(
-        learningTaskContext
-          ? buildCandidateSignals(learningTaskContext.input).retry_count > 0
-            || buildCandidateSignals(learningTaskContext.input).evidence_driven_reversal?.invalidating_evidence
-          : false
-      ),
-      meaningfulFailureSignaturePresent: Boolean(
-        learningTaskContext ? buildCandidateSignals(learningTaskContext.input).failure_signature : input.outcome_signal === "failure"
-      ),
-      conservativeTransitionReviewWorthy: false
-    }, `${sessionId}:${input.task_summary}`);
+    const hybridPosttaskRoute = decidePosttaskHybridRoute(
+      this.config,
+      input,
+      {
+        taskStage: "posttask",
+        completedRun: true,
+        terminalOutcomeRecorded: true,
+        boundedPosttaskCapsuleAvailable: Boolean(input.task_summary),
+        postmortemAlreadyRecorded: learningTaskContext
+          ? Boolean(this.hybridReviewArtifactRepo.getByTaskRunId(learningTaskContext.taskRun.id))
+          : false,
+        lightweightOrExcludedTask: false,
+        directionalCorrectionPresent: Boolean(
+          learningTaskContext
+            ? buildCandidateSignals(learningTaskContext.input).directional_correction?.detected
+              || buildCandidateSignals(learningTaskContext.input).evidence_driven_reversal?.detected
+            : false
+        ),
+        injectedNodeInteractionPresent: input.injected_node_ids.length > 0,
+        retryOrInvalidationSignaturePresent: Boolean(
+          learningTaskContext
+            ? buildCandidateSignals(learningTaskContext.input).retry_count > 0
+              || buildCandidateSignals(learningTaskContext.input).evidence_driven_reversal?.invalidating_evidence
+            : false
+        ),
+        meaningfulFailureSignaturePresent: Boolean(
+          learningTaskContext
+            ? buildCandidateSignals(learningTaskContext.input).failure_signature
+            : input.outcome_signal === "failure"
+        ),
+        conservativeTransitionReviewWorthy: false
+      },
+      `${sessionId}:${input.task_summary}`
+    );
 
-    if (learningTaskContext) {
+    if (learningTaskContext && this.backgroundLearningEnabled) {
       this.trackLearningTask(
         (async () => {
           await this.persistCandidatesAsync(
@@ -1048,6 +1162,10 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   }
 
   async drainDistillationQueue(limit?: number): Promise<number> {
-    return this.distillationWorker.drain(limit);
+    const distillationWorker = await this.getDistillationWorker();
+    if (!distillationWorker) {
+      return 0;
+    }
+    return distillationWorker.drain(limit);
   }
 }

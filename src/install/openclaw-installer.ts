@@ -195,6 +195,82 @@ export const buildOpenClawPackagedDependencies = (rawPackageJson: Record<string,
   };
 };
 
+const OPENCLAW_PLUGIN_ENTRYPOINT = "plugin/openclaw-plugin.js";
+const OPENCLAW_REQUIRED_DIST_ASSETS = ["store/sqlite/schema.sql"] as const;
+const OPENCLAW_RELATIVE_IMPORT_PATTERN =
+  /\b(?:import|export)\s+(?:[^"'()]*?\s+from\s+)?["'](\.[^"']+)["']/g;
+
+const normalizeOpenClawPackagedRuntimePath = (value: string): string => value.replaceAll("\\", "/");
+
+const isOpenClawPackagedRuntimeFile = (relativePath: string): boolean =>
+  relativePath.endsWith(".js") || relativePath.endsWith(".json");
+
+const resolveOpenClawPackagedRuntimeImport = (fromFile: string, specifier: string): string | null => {
+  const normalizedFromFile = normalizeOpenClawPackagedRuntimePath(fromFile);
+  const baseDir = dirname(normalizedFromFile);
+  const resolvedPath = normalizeOpenClawPackagedRuntimePath(resolve("/", baseDir, specifier));
+  const relativePath = resolvedPath.startsWith("/") ? resolvedPath.slice(1) : resolvedPath;
+  return isOpenClawPackagedRuntimeFile(relativePath) ? relativePath : null;
+};
+
+const collectOpenClawRuntimeClosure = (packageRoot: string): string[] => {
+  const distRoot = join(packageRoot, "dist");
+  const pending = [OPENCLAW_PLUGIN_ENTRYPOINT];
+  const collected = new Set<string>();
+
+  while (pending.length > 0) {
+    const next = pending.pop();
+    if (!next || collected.has(next)) {
+      continue;
+    }
+
+    const sourcePath = join(distRoot, next);
+    if (!existsSync(sourcePath)) {
+      continue;
+    }
+
+    collected.add(next);
+    if (!next.endsWith(".js")) {
+      continue;
+    }
+
+    const source = readFileSync(sourcePath, "utf8");
+    for (const match of source.matchAll(OPENCLAW_RELATIVE_IMPORT_PATTERN)) {
+      const specifier = match[1];
+      if (!specifier) {
+        continue;
+      }
+
+      const resolvedImport = resolveOpenClawPackagedRuntimeImport(next, specifier);
+      if (!resolvedImport || collected.has(resolvedImport)) {
+        continue;
+      }
+
+      pending.push(resolvedImport);
+    }
+  }
+
+  for (const requiredAsset of OPENCLAW_REQUIRED_DIST_ASSETS) {
+    if (existsSync(join(distRoot, requiredAsset))) {
+      collected.add(requiredAsset);
+    }
+  }
+
+  return [...collected].sort();
+};
+
+const copyOpenClawRuntimeClosure = (packageRoot: string, stageDir: string): void => {
+  const distRoot = join(packageRoot, "dist");
+  const stageDistRoot = join(stageDir, "dist");
+
+  for (const relativePath of collectOpenClawRuntimeClosure(packageRoot)) {
+    const sourcePath = join(distRoot, relativePath);
+    const destinationPath = join(stageDistRoot, relativePath);
+    mkdirSync(dirname(destinationPath), { recursive: true });
+    cpSync(sourcePath, destinationPath);
+  }
+};
+
 const protectOpenClawReinstallPath = (installPath: string, packageRoot: string, homeDir?: string): void => {
   const normalizedInstallPath = resolve(expandHomePath(installPath, homeDir));
   const normalizedPackageRoot = resolve(expandHomePath(packageRoot, homeDir));
@@ -225,7 +301,7 @@ export const createOpenClawInstallTarball = (packageRoot: string, paths: Resolve
   const stageDir = join(tempRoot, "experienceengine-openclaw");
   mkdirSync(stageDir, { recursive: true });
 
-  cpSync(join(packageRoot, "dist"), join(stageDir, "dist"), { recursive: true });
+  copyOpenClawRuntimeClosure(packageRoot, stageDir);
 
   const rawPackageJson = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8")) as Record<string, unknown>;
   const packagedManifest = {

@@ -22,10 +22,8 @@ import {
   extractSessionKey,
   mergeHookPayload
 } from "./runtime-helpers.js";
-import {
-  buildOpenClawRoutineInteractionContext,
-  detectOpenClawRoutineIntent
-} from "./openclaw-routine-interaction.js";
+
+const loadOpenClawRoutineInteractionModule = () => import("./openclaw-routine-interaction.js");
 
 const buildFinalizeDedupKey = (source: unknown, context: HostPromptContext): string | null => {
   if (!context.sessionId) {
@@ -98,15 +96,16 @@ class OpenClawExperiencePlugin implements ExperiencePlugin {
       this.runtime.captureWriter.capture("before_prompt_build", extractSessionKey(source), { payload, context: hookContext });
       const context = normalizePromptPayload(source);
       clearSessionFinalizeState(context.sessionId);
-      const routineIntent = detectOpenClawRoutineIntent(context.userMessage);
-      if (routineIntent) {
+      const routineInteraction = await loadOpenClawRoutineInteractionModule().catch(() => null);
+      const routineIntent = routineInteraction?.detectOpenClawRoutineIntent(context.userMessage);
+      if (routineIntent && routineInteraction) {
         this.runtime.captureWriter.capture("openclaw_routine_interaction", extractSessionKey(source), {
           intent: routineIntent,
           cwd: context.cwd
         });
         return applyInjectionToPayload(
           payload,
-          await buildOpenClawRoutineInteractionContext(this.runtime.config, routineIntent, context.cwd, {
+          await routineInteraction.buildOpenClawRoutineInteractionContext(this.runtime.config, routineIntent, context.cwd, {
             runtimeActive: true,
             userMessage: context.userMessage
           })
@@ -149,7 +148,8 @@ class OpenClawExperiencePlugin implements ExperiencePlugin {
       const source = mergeHookPayload(payload, hookContext);
       this.runtime.captureWriter.capture("finalize", extractSessionKey(source), { payload, context: hookContext });
       const context = normalizePromptPayload(source);
-      if (detectOpenClawRoutineIntent(context.userMessage)) {
+      const routineInteraction = await loadOpenClawRoutineInteractionModule().catch(() => null);
+      if (routineInteraction?.detectOpenClawRoutineIntent(context.userMessage)) {
         return payload;
       }
       if (!context.userMessage && !context.taskSummary) {
@@ -205,7 +205,13 @@ export const createExperiencePlugin = (
   logger?: OpenClawLogger,
   runtimeOptions: ConstructorParameters<typeof ExperienceRuntimeService>[2] = {}
 ): OpenClawExperiencePlugin =>
-  new OpenClawExperiencePlugin(new ExperienceRuntimeService(loadConfig(configOverrides), logger, runtimeOptions));
+  new OpenClawExperiencePlugin(
+    new ExperienceRuntimeService(loadConfig(configOverrides), logger, {
+      disableBackgroundLearning: true,
+      disableHybridPosttask: true,
+      ...runtimeOptions
+    })
+  );
 
 const resolvePluginConfig = (api: OpenClawPluginApi): Partial<ExperienceEngineConfig> => {
   const rawConfig = (api.pluginConfig ?? api.config ?? {}) as Partial<ExperienceEngineConfig>;

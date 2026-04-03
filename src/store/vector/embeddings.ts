@@ -1,8 +1,12 @@
 import { normalizeWhitespace, tokenize } from "../../utils/text.js";
 import type { ExperienceEngineConfig } from "../../config/config-schema.js";
-import { resolveApiEmbeddingProvider } from "./api-embedding-provider.js";
-import { getLocalEmbeddingProvider } from "./local-provider.js";
 import type { SemanticEmbeddingProvider } from "./provider-types.js";
+
+const loadApiEmbeddingProviderModule = async (): Promise<typeof import("./api-embedding-provider.js")> =>
+  import("./api-embedding-provider.js");
+
+const loadLocalEmbeddingProviderModule = async (): Promise<typeof import("./local-provider.js")> =>
+  import("./local-provider.js");
 
 export type EmbeddingSpace = {
   provider: string;
@@ -200,6 +204,11 @@ const warnLocalEmbeddingFallback = (message: string): void => {
   console.warn(`[ExperienceEngine] Local embedding provider unavailable, falling back to legacy retrieval: ${message}`);
 };
 
+const isMissingLocalEmbeddingModule = (error: unknown): boolean => {
+  const message = error instanceof Error ? error.message : String(error);
+  return message.includes("local-provider.js");
+};
+
 const tryLocalFallback = async (
   value: string,
   mode: "query" | "passage",
@@ -207,6 +216,7 @@ const tryLocalFallback = async (
   primaryFailureMessage?: string
 ): Promise<EmbeddingResult | null> => {
   try {
+    const { getLocalEmbeddingProvider } = await loadLocalEmbeddingProviderModule();
     const provider = await getLocalEmbeddingProvider({
       ...options,
       config: {
@@ -225,6 +235,9 @@ const tryLocalFallback = async (
       }
     };
   } catch (error) {
+    if (isMissingLocalEmbeddingModule(error)) {
+      return null;
+    }
     const message = error instanceof Error ? error.message : String(error);
     warnLocalEmbeddingFallback(
       primaryFailureMessage
@@ -259,19 +272,28 @@ const resolveProvider = async (options: EmbeddingOptions = {}): Promise<Semantic
   }
 
   if (options.config?.embeddingProvider === "api" || options.config?.embeddingProvider === undefined) {
-    const apiProvider = resolveApiEmbeddingProvider({
-      env: options.env,
-      explicitProvider: options.config?.embeddingApiProvider
-    });
-    if (apiProvider) {
-      return apiProvider;
+    try {
+      const { resolveApiEmbeddingProvider } = await loadApiEmbeddingProviderModule();
+      const apiProvider = resolveApiEmbeddingProvider({
+        env: options.env,
+        explicitProvider: options.config?.embeddingApiProvider
+      });
+      if (apiProvider) {
+        return apiProvider;
+      }
+    } catch {
+      // Packaged OpenClaw installs may omit provider-backed embeddings and fall back to local/legacy retrieval.
     }
   }
 
   if (options.config?.embeddingProvider === "local" || options.config?.embeddingProvider === "api" || options.config?.embeddingProvider === undefined) {
     try {
+      const { getLocalEmbeddingProvider } = await loadLocalEmbeddingProviderModule();
       return await getLocalEmbeddingProvider(options);
     } catch (error) {
+      if (isMissingLocalEmbeddingModule(error)) {
+        return null;
+      }
       const message = error instanceof Error ? error.message : String(error);
       warnLocalEmbeddingFallback(message);
       return null;
