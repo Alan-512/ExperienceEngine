@@ -81,6 +81,21 @@ export type ExperienceInput = {
   injected_node_ids: string[];
 };
 
+export type RetrievalContext = {
+  scopeId: string;
+  host: TaskRun["host"];
+  taskType: ResolvedTaskType;
+  taskSummary: string;
+  contextSummary?: string;
+  toolNames: string[];
+  failureSignature?: string;
+  outcomeSignal: OutcomeSignal;
+  injectedNodeIds: string[];
+  isReadOnly?: boolean;
+  modulePaths?: string[];
+  expectationCorrectionIntent?: boolean;
+};
+
 export type ExperienceInputRecord = {
   record_id: string;
   scope_id: string;

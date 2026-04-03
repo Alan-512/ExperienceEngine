@@ -439,6 +439,43 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     expect(prompt.input.injected_node_ids).toEqual([]);
   });
 
+  it("builds retrieval context on the prompt-time runtime path before any tool events exist", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const service = new ExperienceRuntimeService(
+      loadConfig({
+        dataDir: join(runtimeDir, "data"),
+        sqlitePath,
+        captureDir: join(runtimeDir, "captures"),
+        distillationAutoDrain: false
+      }, { homeDir: runtimeDir }),
+      undefined,
+      { homeDir: runtimeDir, env: {} }
+    );
+
+    const prompt = await service.beforePromptBuild({
+      host: "codex",
+      sessionId: "retrieval-context-session",
+      cwd: "/repo",
+      userMessage: "Read-only analysis only. Inspect src/runtime/service.ts before editing.",
+      taskSummary: "Read-only analysis only. Inspect src/runtime/service.ts before editing."
+    });
+
+    expect(prompt.mode).toBe("skip");
+    expect(prompt.retrievalContext).toMatchObject({
+      scopeId: expect.any(String),
+      host: "codex",
+      taskType: "integration_fix",
+      taskSummary: "Read-only analysis only. Inspect src/runtime/service.ts before editing.",
+      toolNames: [],
+      outcomeSignal: "unknown",
+      injectedNodeIds: [],
+      isReadOnly: true,
+      modulePaths: ["src/runtime/service.ts"]
+    });
+    expect(prompt.retrievalContext?.failureSignature).toBeUndefined();
+  });
+
   it("learns an expectation correction in one run and conservatively injects it on the next similar run", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");

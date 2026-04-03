@@ -6,6 +6,7 @@ import { applyFeedback } from "../feedback/feedback-manager.js";
 import { detectHarm } from "../feedback/harm-detector.js";
 import { createEmptyStats, updateStats } from "../feedback/stats-updater.js";
 import { buildExperienceInput } from "../input/input-adapter.js";
+import { buildRetrievalContext } from "../controller/retrieval-context.js";
 import { resolveScope } from "../input/scope-resolver.js";
 import { decideIntervention } from "../controller/intervention-controller.js";
 import { renderInlineNotice } from "../controller/inline-notice.js";
@@ -286,6 +287,7 @@ const candidateToInitialJob = (
 };
 
 const mergeContext = (existing: HostPromptContext | undefined, incoming: HostPromptContext): HostPromptContext => ({
+  host: incoming.host ?? existing?.host,
   sessionId: incoming.sessionId ?? existing?.sessionId,
   cwd: incoming.cwd ?? existing?.cwd,
   userMessage: incoming.userMessage || existing?.userMessage || "",
@@ -789,6 +791,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     const session = this.getSession(sessionId);
     session.context = mergeContext(session.context, context);
     const input = buildExperienceInput(session.context, session.toolEvents);
+    const retrievalContext = buildRetrievalContext(input, session.context);
     const resolvedScope = resolveScope(session.context.cwd);
     const existingScope = this.scopeRepo.getById(resolvedScope.scope_id);
 
@@ -809,6 +812,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
         mode: "skip" as const,
         text: undefined,
         notice: undefined,
+        retrievalContext,
         input: {
           ...input,
           scope_id: existingScope.scope_id,
@@ -890,6 +894,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       scorecard: decision.mode !== "skip" ? session.lastInjectionEvent?.scorecard : undefined,
       deliveryMode: decision.mode !== "skip" ? delivery.deliveryMode : undefined,
       delivered: decision.mode !== "skip" ? delivery.delivered : undefined,
+      retrievalContext,
       input: {
         ...input,
         injected_node_ids: session.injectedNodeIds
