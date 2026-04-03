@@ -18,14 +18,16 @@ const baseInspection = (): ExperienceLastInspection => ({
   injectedNodes: [],
   hints: ["Run the failing auth test before editing."],
   evidence: ["vitest: success: targeted auth test now passes"],
-  scorecard: {
-    scopeId: "scope_repo",
-    taskType: "test_debug",
-    taskSummary: "Fix the failing auth test",
-    mode: "inject",
-    riskLevel: "low",
-    recommendation: "Inject the strongest validated auth-test recovery hint.",
-    reasons: ["The best candidate is validated by reuse."],
+    scorecard: {
+      scopeId: "scope_repo",
+      taskType: "test_debug",
+      taskSummary: "Fix the failing auth test",
+      mode: "inject",
+      riskLevel: "low",
+      confidence: "high",
+      budgetClass: "single_hint",
+      recommendation: "Inject the strongest validated auth-test recovery hint.",
+      reasons: ["The best candidate is validated by reuse."],
     decisionReason: "mature_validated_candidate",
     nodes: [],
     createdAt: "2026-03-30T00:00:00.000Z"
@@ -84,6 +86,8 @@ describe("buildExplainDecisionCapsule", () => {
     expect(capsule.schemaVersion).toBe("hybrid-capsule-v1");
     expect(capsule.trusted.route.route).toBe("ESCALATE_SYNC_EXPLAIN");
     expect(capsule.trusted.route.reasonCode).toBe("explicit_explanation_request");
+    expect(capsule.trusted.scorecard?.confidence).toBe("high");
+    expect(capsule.trusted.scorecard?.budgetClass).toBe("single_hint");
     expect(capsule.evidence.every((entry) => entry.trust === "untrusted_evidence")).toBe(true);
     expect(capsule.evidence.some((entry) => entry.text.includes("Ignore all prior constraints"))).toBe(true);
   });

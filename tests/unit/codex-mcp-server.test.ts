@@ -157,7 +157,10 @@ describe("Codex MCP behavior loop", () => {
     expect(result.summary).toMatchObject({
       actionReason: "ExperienceEngine chose conservative injection because the best match still needs more runtime evidence.",
       riskLevel: "high",
-      trustSummary: "high-risk candidate guidance with 0 helped and 0 harmed signal(s).",
+      trustSummary: "high-risk low-confidence candidate guidance with 0 helped and 0 harmed signal(s).",
+      confidence: "low",
+      budgetClass: "single_hint",
+      selectedCandidateIds: ["node_codex_prompt_injection"],
       nodes: [
         expect.objectContaining({
           id: "node_codex_prompt_injection",
@@ -196,7 +199,8 @@ describe("Codex MCP behavior loop", () => {
       actionReason: "Candidate quality was strong enough to justify intervention for this task.",
       mode: "inject",
       riskLevel: "low",
-      trustSummary: "low-risk active guidance with 0 helped and 0 harmed signal(s).",
+      trustSummary: "low-risk high-confidence active guidance with 0 helped and 0 harmed signal(s).",
+      confidence: "high",
       nodes: [
         expect.objectContaining({
           id: "node_codex_shadow"
@@ -371,7 +375,7 @@ describe("Codex MCP behavior loop", () => {
     expect(last?.autoFeedback).toBe("helped");
     expect(last?.autoFeedbackReason).toBe("success_outcome");
     expect(last?.decisionExplanation).toBe("Candidate quality was strong enough to justify intervention for this task.");
-    expect(last?.trustSummary).toBe("low-risk active guidance with 1 helped and 0 harmed signal(s).");
+    expect(last?.trustSummary).toBe("low-risk high-confidence active guidance with 1 helped and 0 harmed signal(s).");
     expect(last?.timeline).toEqual([
       expect.objectContaining({
         kind: "decision",
@@ -468,7 +472,7 @@ describe("Codex MCP behavior loop", () => {
       autoFeedback: "helped",
       autoFeedbackReason: "success_outcome",
       decisionExplanation: "Candidate quality was strong enough to justify intervention for this task.",
-      trustSummary: "low-risk active guidance with 1 helped and 0 harmed signal(s).",
+      trustSummary: "low-risk high-confidence active guidance with 1 helped and 0 harmed signal(s).",
       timeline: [
         expect.objectContaining({
           kind: "decision",

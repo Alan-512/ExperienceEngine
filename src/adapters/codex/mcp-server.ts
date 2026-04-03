@@ -268,6 +268,7 @@ const summarizeActionReason = (scorecard: {
 
 const summarizeTrust = (scorecard: {
   riskLevel?: string;
+  confidence?: string;
   nodes?: Array<{ state?: string; helped?: number; harmed?: number }>;
 }): string | undefined => {
   const primaryNode = scorecard.nodes?.[0];
@@ -275,13 +276,15 @@ const summarizeTrust = (scorecard: {
     return undefined;
   }
 
-  return `${scorecard.riskLevel}-risk ${primaryNode.state} guidance with ${primaryNode.helped ?? 0} helped and ${primaryNode.harmed ?? 0} harmed signal(s).`;
+  const confidence = scorecard.confidence ? ` ${scorecard.confidence}-confidence` : "";
+  return `${scorecard.riskLevel}-risk${confidence} ${primaryNode.state} guidance with ${primaryNode.helped ?? 0} helped and ${primaryNode.harmed ?? 0} harmed signal(s).`;
 };
 
 const summarizeRetrievalNotes = (scorecard: {
   queryRewriteApplied?: boolean;
   fastPathApplied?: boolean;
-  topCandidates?: Array<{ rerankSource?: string }>;
+  topCandidates?: Array<{ rerankSource?: string; retrievalReasons?: string[]; policyReasons?: string[] }>;
+  rejectedCandidates?: Array<{ id: string }>;
 }): string[] => {
   const notes: string[] = [];
   if (scorecard.queryRewriteApplied) {
@@ -297,6 +300,17 @@ const summarizeRetrievalNotes = (scorecard: {
     notes.push("A strong candidate fast path was used.");
   }
 
+  const topCandidate = scorecard.topCandidates?.[0];
+  if (topCandidate?.retrievalReasons?.length) {
+    notes.push(`Top retrieval signals: ${topCandidate.retrievalReasons.slice(0, 2).join(", ")}.`);
+  }
+  if (topCandidate?.policyReasons?.length) {
+    notes.push(`Top policy signals: ${topCandidate.policyReasons.slice(0, 2).join(", ")}.`);
+  }
+  if (scorecard.rejectedCandidates?.length) {
+    notes.push(`Runner-up candidates withheld: ${scorecard.rejectedCandidates.map((candidate) => candidate.id).join(", ")}.`);
+  }
+
   return notes;
 };
 
@@ -309,7 +323,11 @@ const summarizeScorecard = (
     decisionReason?: string;
     queryRewriteApplied?: boolean;
     fastPathApplied?: boolean;
-    topCandidates?: Array<{ rerankSource?: string }>;
+    confidence?: string;
+    budgetClass?: string;
+    topCandidates?: Array<{ rerankSource?: string; retrievalReasons?: string[]; policyReasons?: string[] }>;
+    selectedCandidateIds?: string[];
+    rejectedCandidates?: Array<{ id: string; reasonCodes?: string[] }>;
     nodes?: Array<{ id: string; state?: string; riskLevel?: string; helped?: number; harmed?: number }>;
   } | undefined
 ) =>
@@ -321,6 +339,14 @@ const summarizeScorecard = (
         actionReason: summarizeActionReason(scorecard),
         trustSummary: summarizeTrust(scorecard),
         retrievalNotes: summarizeRetrievalNotes(scorecard),
+        confidence: scorecard.confidence,
+        budgetClass: scorecard.budgetClass,
+        selectedCandidateIds: scorecard.selectedCandidateIds,
+        rejectedCandidates:
+          scorecard.rejectedCandidates?.slice(0, 3).map((candidate) => ({
+            id: candidate.id,
+            reasonCodes: candidate.reasonCodes
+          })) ?? [],
         reasons: scorecard.reasons?.slice(0, 2),
         nodes:
           scorecard.nodes?.slice(0, 3).map((node) => ({

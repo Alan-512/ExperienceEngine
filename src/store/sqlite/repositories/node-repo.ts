@@ -278,7 +278,7 @@ export class NodeRepository {
       .map((row) => this.mapNode(row as Parameters<typeof this.mapNode>[0]));
   }
 
-  listInjectableByScope(scopeId: string): ExperienceNode[] {
+  listInjectableByExactScope(scopeId: string): ExperienceNode[] {
     return this.db
       .prepare(
         `SELECT * FROM experience_nodes
@@ -288,6 +288,10 @@ export class NodeRepository {
       )
       .all(scopeId)
       .map((row) => this.mapNode(row as Parameters<typeof this.mapNode>[0]));
+  }
+
+  listInjectableByScope(scopeId: string): ExperienceNode[] {
+    return this.listInjectableByExactScope(scopeId);
   }
 
   listByScope(scopeId: string): ExperienceNode[] {

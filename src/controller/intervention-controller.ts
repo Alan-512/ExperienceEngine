@@ -1,16 +1,25 @@
 import type {
   ExperienceInput,
   ExperienceNode,
+  InterventionBudgetClass,
+  InterventionConfidence,
+  InterventionDecisionDiagnostics,
+  InterventionRejectedCandidate,
   InjectionScorecardCandidate,
   InjectionMode,
+  RetrievalContext,
   ResolvedTaskType,
   ScopeTaskStats,
   ValidationState
 } from "../types/domain.js";
-import { retrieveCandidates, retrieveScoredCandidates, type RetrievedCandidate } from "./candidate-retriever.js";
+import {
+  retrieveCandidateBundle,
+  retrieveCandidates,
+  retrieveScoredCandidates,
+  type RetrievedCandidate
+} from "./candidate-retriever.js";
 import { renderInjection } from "./injection-renderer.js";
 import { rankNodes } from "./node-ranker.js";
-import { buildRetrievalQuery } from "./query-rewrite.js";
 import { evaluateTriggerRoute, type TriggerCandidateQuality } from "./trigger-evaluator.js";
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
 
@@ -18,19 +27,7 @@ export type InterventionDecision = {
   mode: InjectionMode;
   selected: ExperienceNode[];
   text?: string;
-  diagnostics?: {
-    topCandidates: InjectionScorecardCandidate[];
-    topCandidateScore?: number;
-    scoreMargin?: number;
-    fastPathApplied: boolean;
-    queryRewriteApplied?: boolean;
-    mergeDecision?: ExperienceNode["merge_decision"];
-    mergeReason?: ExperienceNode["merge_reason"];
-    promotionSignal?: ExperienceNode["promotion_signal"];
-    priorityPromotionApplied?: boolean;
-    gateReason: string;
-    decisionReason: string;
-  };
+  diagnostics?: InterventionDecisionDiagnostics;
 };
 
 const isTrustedSameFamilyCluster = (
@@ -85,6 +82,10 @@ const toCandidateQuality = (
 
   return {
     semanticScore: candidate.semanticScore,
+    retrievalScore: candidate.retrievalScore,
+    policyAdjustment: candidate.policyAdjustment,
+    retrievalReasons: candidate.retrievalReasons,
+    policyReasons: candidate.policyReasons,
     totalScore: candidate.totalScore,
     familyScore: candidate.familyScore,
     scopeMatch: candidate.scopeMatch,
@@ -102,10 +103,77 @@ const toScorecardCandidate = (candidate: RetrievedCandidate): InjectionScorecard
   semanticScore: Number(candidate.semanticScore.toFixed(4)),
   lexicalScore: Number(candidate.lexicalScore.toFixed(4)),
   fusedScore: Number(candidate.fusedScore.toFixed(4)),
+  retrievalScore: Number(candidate.retrievalScore.toFixed(4)),
+  policyAdjustment: Number(candidate.policyAdjustment.toFixed(4)),
+  policyScore: Number(candidate.policyScore.toFixed(4)),
+  totalScore: Number(candidate.totalScore.toFixed(4)),
   rerankScore: typeof candidate.rerankScore === "number" ? Number(candidate.rerankScore.toFixed(4)) : undefined,
   rerankSource: candidate.rerankSource,
+  retrievalReasons: candidate.retrievalReasons,
+  policyReasons: candidate.policyReasons,
   taskFamilyMatch: candidate.taskFamilyMatch
 });
+
+const deriveDecisionConfidence = (
+  mode: InjectionMode,
+  quality?: TriggerCandidateQuality,
+  fastPathApplied = false
+): InterventionConfidence => {
+  if (mode === "skip") {
+    return "low";
+  }
+  if (mode === "inject_conservative") {
+    return "low";
+  }
+  if (fastPathApplied || (quality && quality.totalScore >= 1.1 && quality.scoreMargin >= 0.08)) {
+    return "high";
+  }
+  return "medium";
+};
+
+const deriveBudgetClass = (mode: InjectionMode, selectedCount: number): InterventionBudgetClass => {
+  if (mode === "skip" || selectedCount === 0) {
+    return "none";
+  }
+  return selectedCount > 1 ? "multi_hint" : "single_hint";
+};
+
+const buildRejectedCandidateBriefs = (
+  candidates: RetrievedCandidate[],
+  selectedIds: Set<string>
+): InterventionRejectedCandidate[] =>
+  candidates
+    .filter((candidate) => !selectedIds.has(candidate.node.id))
+    .slice(0, 3)
+    .map((candidate) => ({
+      id: candidate.node.id,
+      reasonCodes: [
+        candidate.taskFamilyMatch ? "same_family_runner_up" : "adjacent_family_runner_up",
+        candidate.node.state === "candidate" || candidate.node.state === "priority_candidate"
+          ? "state_requires_conservative_handling"
+          : "lower_total_score"
+      ],
+      retrievalScore: Number(candidate.retrievalScore.toFixed(4)),
+      policyAdjustment: Number(candidate.policyAdjustment.toFixed(4)),
+      totalScore: Number(candidate.totalScore.toFixed(4))
+    }));
+
+const withDecisionEnvelope = (input: {
+  diagnostics: Omit<InterventionDecisionDiagnostics, "confidence" | "budgetClass" | "selectedCandidateIds" | "rejectedCandidates">;
+  mode: InjectionMode;
+  selected: ExperienceNode[];
+  scoredCandidates: RetrievedCandidate[];
+  topCandidateQuality?: TriggerCandidateQuality;
+}): InterventionDecisionDiagnostics => {
+  const selectedCandidateIds = input.selected.map((node) => node.id);
+  return {
+    ...input.diagnostics,
+    confidence: deriveDecisionConfidence(input.mode, input.topCandidateQuality, input.diagnostics.fastPathApplied),
+    budgetClass: deriveBudgetClass(input.mode, input.selected.length),
+    selectedCandidateIds,
+    rejectedCandidates: buildRejectedCandidateBriefs(input.scoredCandidates, new Set(selectedCandidateIds))
+  };
+};
 
 const CORRECTION_INTENT_PATTERNS = [
   /\bcorrection\b/i,
@@ -190,8 +258,10 @@ export const decideIntervention = (
     | "distillerModel"
     | "retrievalRerankerMode"
     | "retrievalRerankerModel"
-  >
-): Promise<InterventionDecision> => decideInterventionInternal(input, nodes, stats, threshold, maxHints, config);
+  >,
+  retrievalContext?: RetrievalContext
+): Promise<InterventionDecision> =>
+  decideInterventionInternal(input, nodes, stats, threshold, maxHints, config, retrievalContext);
 
 const decideInterventionInternal = async (
   input: ExperienceInput,
@@ -210,10 +280,11 @@ const decideInterventionInternal = async (
     | "distillerModel"
     | "retrievalRerankerMode"
     | "retrievalRerankerModel"
-  >
+  >,
+  retrievalContext?: RetrievalContext
 ): Promise<InterventionDecision> => {
-  const scoredCandidates = await retrieveScoredCandidates(input, nodes, { config });
-  const retrievalQuery = buildRetrievalQuery(input.task_summary, input.context_summary);
+  const retrievalBundle = await retrieveCandidateBundle(input, nodes, { config, retrievalContext });
+  const scoredCandidates = retrievalBundle.candidates;
   const rankingSummary = [input.task_summary, input.context_summary].filter(Boolean).join("\n");
   const rankTieBreakOrder = new Map(
     rankNodes(
@@ -245,12 +316,18 @@ const decideInterventionInternal = async (
     return {
       mode: "skip",
       selected: [],
-      diagnostics: {
+      diagnostics: withDecisionEnvelope({
+        mode: "skip",
+        selected: [],
+        scoredCandidates,
+        topCandidateQuality: undefined,
+        diagnostics: {
         topCandidates: [],
         fastPathApplied: false,
         gateReason: "no_candidates",
         decisionReason: "no_matching_candidates"
-      }
+        }
+      })
     };
   }
 
@@ -267,12 +344,12 @@ const decideInterventionInternal = async (
   const runnerUpQuality = toCandidateQuality(input, selected[1], selected[1] ? candidateById.get(selected[1].id) : undefined);
   const candidateRiskSummary = buildCandidateRiskSummary(selected[0]);
   const triggerThreshold = resolveTriggerThreshold(selected[0], threshold);
-  const diagnostics = {
+  const diagnosticsBase = {
     topCandidates: scoredCandidates.slice(0, 3).map(toScorecardCandidate),
     topCandidateScore: topCandidateQuality ? Number(topCandidateQuality.totalScore.toFixed(4)) : undefined,
     scoreMargin: topCandidateQuality ? Number(topCandidateQuality.scoreMargin.toFixed(4)) : undefined,
     fastPathApplied: false,
-    queryRewriteApplied: retrievalQuery.rewriteApplied,
+    queryRewriteApplied: retrievalBundle.retrievalQuery.rewriteApplied,
     mergeDecision: selected[0]?.merge_decision,
     mergeReason: selected[0]?.merge_reason,
     promotionSignal: selected[0]?.promotion_signal,
@@ -292,12 +369,18 @@ const decideInterventionInternal = async (
       mode,
       selected: fastPathSelection,
       text: renderInjection(mode, fastPathSelection, maxHints),
-      diagnostics: {
-        ...diagnostics,
-        fastPathApplied: true,
-        gateReason: "strong_candidate_fast_path",
-        decisionReason: "mature_validated_candidate"
-      }
+      diagnostics: withDecisionEnvelope({
+        mode,
+        selected: fastPathSelection,
+        scoredCandidates,
+        topCandidateQuality,
+        diagnostics: {
+          ...diagnosticsBase,
+          fastPathApplied: true,
+          gateReason: "strong_candidate_fast_path",
+          decisionReason: "mature_validated_candidate"
+        }
+      })
     };
   }
 
@@ -315,11 +398,17 @@ const decideInterventionInternal = async (
     return {
       mode: "skip",
       selected: [],
-      diagnostics: {
-        ...diagnostics,
-        gateReason: "uncertainty_aware_routing",
-        decisionReason: route.reason
-      }
+      diagnostics: withDecisionEnvelope({
+        mode: "skip",
+        selected: [],
+        scoredCandidates,
+        topCandidateQuality,
+        diagnostics: {
+          ...diagnosticsBase,
+          gateReason: "uncertainty_aware_routing",
+          decisionReason: route.reason
+        }
+      })
     };
   }
 
@@ -329,11 +418,17 @@ const decideInterventionInternal = async (
       return {
         mode: "skip",
         selected: [],
-        diagnostics: {
-          ...diagnostics,
-          gateReason: "no_selected_nodes",
-          decisionReason: "selection_empty"
-        }
+        diagnostics: withDecisionEnvelope({
+          mode: "skip",
+          selected: [],
+          scoredCandidates,
+          topCandidateQuality,
+          diagnostics: {
+            ...diagnosticsBase,
+            gateReason: "no_selected_nodes",
+            decisionReason: "selection_empty"
+          }
+        })
       };
     }
 
@@ -341,11 +436,17 @@ const decideInterventionInternal = async (
       mode: "inject_conservative",
       selected: conservativeSelection,
       text: renderInjection("inject_conservative", conservativeSelection, 1),
-      diagnostics: {
-        ...diagnostics,
-        gateReason: "uncertainty_aware_routing",
-        decisionReason: route.reason
-      }
+      diagnostics: withDecisionEnvelope({
+        mode: "inject_conservative",
+        selected: conservativeSelection,
+        scoredCandidates,
+        topCandidateQuality,
+        diagnostics: {
+          ...diagnosticsBase,
+          gateReason: "uncertainty_aware_routing",
+          decisionReason: route.reason
+        }
+      })
     };
   }
 
@@ -353,11 +454,17 @@ const decideInterventionInternal = async (
     return {
       mode: "skip",
       selected: [],
-      diagnostics: {
-        ...diagnostics,
-        gateReason: "no_selected_nodes",
-        decisionReason: "selection_empty"
-      }
+      diagnostics: withDecisionEnvelope({
+        mode: "skip",
+        selected: [],
+        scoredCandidates,
+        topCandidateQuality,
+        diagnostics: {
+          ...diagnosticsBase,
+          gateReason: "no_selected_nodes",
+          decisionReason: "selection_empty"
+        }
+      })
     };
   }
 
@@ -365,6 +472,12 @@ const decideInterventionInternal = async (
     mode,
     selected,
     text: renderInjection(mode, selected, maxHints),
-    diagnostics
+    diagnostics: withDecisionEnvelope({
+      mode,
+      selected,
+      scoredCandidates,
+      topCandidateQuality,
+      diagnostics: diagnosticsBase
+    })
   };
 };

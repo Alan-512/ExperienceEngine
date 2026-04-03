@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
@@ -355,6 +356,31 @@ Recorded version: 0.1.3`;
     expect(packagedManifest.openclaw?.compat?.minGatewayVersion).toBe("2026.4.1");
     expect(packagedManifest.openclaw?.build?.openclawVersion).toBe("2026.4.1");
     expect(packagedManifest.openclaw?.build?.pluginSdkVersion).toBe("2026.4.1");
+  });
+
+  it("packages only the OpenClaw hook runtime closure needed by the installed plugin", () => {
+    const homeDir = makeTempDir();
+    const paths = resolveExperienceEnginePaths({ homeDir });
+    mkdirSync(join(paths.productHome, "adapters", "openclaw"), { recursive: true });
+    const tarballPath = createOpenClawInstallTarball(process.cwd(), paths);
+    const entries = execFileSync("tar", ["-tzf", tarballPath], {
+      encoding: "utf8"
+    })
+      .split(/\r?\n/)
+      .filter(Boolean);
+
+    expect(entries).toContain("package/dist/plugin/openclaw-plugin.js");
+    expect(entries).toContain("package/dist/runtime/service.js");
+    expect(entries).toContain("package/dist/store/sqlite/db.js");
+    expect(entries).toContain("package/dist/store/sqlite/schema.sql");
+
+    expect(entries).not.toContain("package/dist/cli/index.js");
+    expect(entries).not.toContain("package/dist/install/openclaw-installer.js");
+    expect(entries).not.toContain("package/dist/install/codex-installer.js");
+    expect(entries).not.toContain("package/dist/evaluation/openclaw-scenarios.js");
+    expect(entries).not.toContain("package/dist/maintenance/claude-validate-print.js");
+    expect(entries).not.toContain("package/dist/store/vector/api-embedding-provider.js");
+    expect(entries).not.toContain("package/dist/adapters/codex/mcp-server.js");
   });
 
   it("reports install status and resolved paths for doctor output", () => {

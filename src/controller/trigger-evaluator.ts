@@ -3,6 +3,10 @@ import { tokenize } from "../utils/text.js";
 
 export type TriggerCandidateQuality = {
   semanticScore: number;
+  retrievalScore?: number;
+  policyAdjustment?: number;
+  retrievalReasons?: string[];
+  policyReasons?: string[];
   totalScore: number;
   familyScore: number;
   scopeMatch: boolean;
@@ -74,6 +78,13 @@ export const evaluateTriggerRoute = (
     candidateQuality.scoreMargin >= 0.08 &&
     (candidateQuality.helpedCount > candidateQuality.harmedCount || candidateQuality.validationState === "validated_by_reuse") &&
     (candidateQuality.helpedCount >= 2 || candidateQuality.validationState === "validated_by_reuse");
+  const hasPolicySupport =
+    candidateQuality &&
+    (
+      (candidateQuality.policyAdjustment ?? 0) >= 0.12 ||
+      candidateQuality.validationState === "validated_by_reuse" ||
+      (candidateQuality.policyReasons?.some((reason) => !reason.endsWith(":0.0000")) ?? false)
+    );
   const ambiguousSameFamilyCandidate =
     candidateQuality &&
     candidateQuality.scopeMatch &&
@@ -87,7 +98,8 @@ export const evaluateTriggerRoute = (
       candidateQuality.validationState === "validated_by_reuse" ||
       candidateQuality.state === "candidate" ||
       candidateQuality.state === "priority_candidate"
-    );
+    ) &&
+    hasPolicySupport;
   const promisingCandidate =
     candidateQuality &&
     candidateQuality.scopeMatch &&
@@ -98,7 +110,8 @@ export const evaluateTriggerRoute = (
     (
       candidateQuality.helpedCount >= 1 ||
       candidateQuality.validationState === "validated_by_reuse"
-    );
+    ) &&
+    hasPolicySupport;
 
   if (explicitFailure) {
     return { decision: "allow", reason: "explicit_failure_signal" };

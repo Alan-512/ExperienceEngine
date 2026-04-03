@@ -32,6 +32,8 @@ export type CorrectionCategory =
   | "style_constraint";
 export type InjectionMode = "skip" | "inject_conservative" | "inject";
 export type InjectionRiskLevel = "low" | "medium" | "high";
+export type InterventionConfidence = "low" | "medium" | "high";
+export type InterventionBudgetClass = "none" | "single_hint" | "multi_hint";
 export type EvaluationMode = "live" | "shadow" | "holdout";
 export type OutcomeSignal = "success" | "failure" | "unknown";
 export type ToolEventStatus = "success" | "failure" | "unknown";
@@ -79,6 +81,21 @@ export type ExperienceInput = {
   outcome_signal: OutcomeSignal;
   context_summary?: string;
   injected_node_ids: string[];
+};
+
+export type RetrievalContext = {
+  scopeId: string;
+  host: TaskRun["host"];
+  taskType: ResolvedTaskType;
+  taskSummary: string;
+  contextSummary?: string;
+  toolNames: string[];
+  failureSignature?: string;
+  outcomeSignal: OutcomeSignal;
+  injectedNodeIds: string[];
+  isReadOnly?: boolean;
+  modulePaths?: string[];
+  expectationCorrectionIntent?: boolean;
 };
 
 export type ExperienceInputRecord = {
@@ -259,9 +276,41 @@ export type InjectionScorecardCandidate = {
   semanticScore?: number;
   lexicalScore?: number;
   fusedScore?: number;
+  retrievalScore?: number;
+  policyAdjustment?: number;
+  policyScore?: number;
+  totalScore?: number;
   rerankScore?: number;
   rerankSource?: "heuristic" | "model";
+  retrievalReasons?: string[];
+  policyReasons?: string[];
   taskFamilyMatch: boolean;
+};
+
+export type InterventionRejectedCandidate = {
+  id: string;
+  reasonCodes: string[];
+  retrievalScore?: number;
+  policyAdjustment?: number;
+  totalScore?: number;
+};
+
+export type InterventionDecisionDiagnostics = {
+  topCandidates: InjectionScorecardCandidate[];
+  topCandidateScore?: number;
+  scoreMargin?: number;
+  fastPathApplied: boolean;
+  queryRewriteApplied?: boolean;
+  mergeDecision?: ExperienceNode["merge_decision"];
+  mergeReason?: ExperienceNode["merge_reason"];
+  promotionSignal?: ExperienceNode["promotion_signal"];
+  priorityPromotionApplied?: boolean;
+  gateReason: string;
+  decisionReason: string;
+  confidence: InterventionConfidence;
+  budgetClass: InterventionBudgetClass;
+  selectedCandidateIds: string[];
+  rejectedCandidates: InterventionRejectedCandidate[];
 };
 
 export type InjectionScorecard = {
@@ -284,6 +333,10 @@ export type InjectionScorecard = {
   priorityPromotionApplied?: boolean;
   gateReason?: string;
   decisionReason?: string;
+  confidence?: InterventionConfidence;
+  budgetClass?: InterventionBudgetClass;
+  selectedCandidateIds?: string[];
+  rejectedCandidates?: InterventionRejectedCandidate[];
   nodes: InjectionScorecardNode[];
   createdAt: string;
 };

@@ -194,13 +194,19 @@ const makeInjectionEvent = (overrides: Partial<InjectionEvent> = {}): InjectionE
         semanticScore: 0.42,
         lexicalScore: 0.99,
         fusedScore: 0.88,
+        retrievalScore: 0.6,
+        policyAdjustment: 0.28,
         rerankScore: 1,
         rerankSource: "model",
+        retrievalReasons: ["lexical:0.9900", "family:exact"],
+        policyReasons: ["family:1.0000", "maturity:0.0950"],
         taskFamilyMatch: true
       }
     ],
     topCandidateScore: 0.88,
     scoreMargin: 0.02,
+    confidence: "high",
+    budgetClass: "single_hint",
     fastPathApplied: true,
     queryRewriteApplied: true,
     mergeDecision: "UPDATE",
@@ -209,6 +215,8 @@ const makeInjectionEvent = (overrides: Partial<InjectionEvent> = {}): InjectionE
     priorityPromotionApplied: true,
     gateReason: "strong_candidate_fast_path",
     decisionReason: "mature_validated_candidate",
+    selectedCandidateIds: ["node_inspect"],
+    rejectedCandidates: [{ id: "node_runner_up", reasonCodes: ["same_family_runner_up"] }],
     createdAt: "2026-03-14T01:00:00.000Z",
     nodes: []
   },
@@ -353,16 +361,23 @@ describe("inspect command", () => {
         ["Route mode: inject"],
         ["- Top candidate score: 0.88"],
         ["- Score margin: 0.02"],
+        ["- Confidence: high"],
+        ["- Budget class: single_hint"],
         ["- Fast path applied: yes"],
         ["- Query rewrite applied: yes"],
         ["- Promotion signal: high_value"],
         ["- Priority promotion applied: yes"],
         ["- Merge decision: UPDATE"],
         ["- Merge reason: A same-family auth-test lesson already existed and this run strengthened it."],
+        ["- Top candidate retrieval score: 0.6"],
+        ["- Top candidate policy adjustment: 0.28"],
         ["- Top candidate rerank score: 1"],
         ["- Top candidate rerank source: model"],
         ["- Gate reason: strong_candidate_fast_path"],
-        ["- Decision reason: mature_validated_candidate"]
+        ["- Decision reason: mature_validated_candidate"],
+        ["- Selected candidates: node_inspect"],
+        ["- Top candidate retrieval reasons:"],
+        ["- Top candidate policy reasons:"]
       ])
     );
   });

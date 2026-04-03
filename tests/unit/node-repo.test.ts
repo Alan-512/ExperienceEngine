@@ -131,4 +131,18 @@ describe("NodeRepository", () => {
     expect(stored?.merge_reason).toContain("new enough");
     expect(stored?.priority_promotion_applied).toBe(true);
   });
+
+  it("lists injectable nodes only from the exact scope and excludes priority candidates", () => {
+    const repo = makeRepo();
+
+    repo.upsert(node({ id: "scope-active", scope_id: "scope_1", state: "active" }));
+    repo.upsert(node({ id: "scope-cooling", scope_id: "scope_1", state: "cooling" }));
+    repo.upsert(node({ id: "scope-candidate", scope_id: "scope_1", state: "candidate" }));
+    repo.upsert(node({ id: "scope-priority", scope_id: "scope_1", state: "priority_candidate" }));
+    repo.upsert(node({ id: "other-scope-active", scope_id: "scope_2", state: "active" }));
+
+    const injectable = repo.listInjectableByExactScope("scope_1");
+
+    expect(injectable.map((entry) => entry.id).sort()).toEqual(["scope-active", "scope-candidate", "scope-cooling"]);
+  });
 });

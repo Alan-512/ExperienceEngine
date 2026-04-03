@@ -114,6 +114,10 @@ describe("evaluateTrigger", () => {
         knownRiskSummary: "Fix the failing payments auth test in ExperienceEngine",
         candidateQuality: {
           semanticScore: 0.81,
+          retrievalScore: 0.54,
+          policyAdjustment: 0.39,
+          retrievalReasons: ["semantic:0.8100", "family:exact"],
+          policyReasons: ["family:1.0000", "maturity:0.1100"],
           totalScore: 0.93,
           familyScore: 1,
           scopeMatch: true,
@@ -134,6 +138,10 @@ describe("evaluateTrigger", () => {
         knownRiskSummary: "Fix the failing payments auth test in ExperienceEngine",
         candidateQuality: {
           semanticScore: 0.62,
+          retrievalScore: 0.44,
+          policyAdjustment: 0.28,
+          retrievalReasons: ["lexical:0.6200", "family:exact"],
+          policyReasons: ["family:1.0000", "maturity:0.0300"],
           totalScore: 0.72,
           familyScore: 1,
           scopeMatch: true,
@@ -164,6 +172,10 @@ describe("evaluateTrigger", () => {
           knownRiskSummary: "Repair the broken sqlite ledger migration in ExperienceEngine",
           candidateQuality: {
             semanticScore: 0.79,
+            retrievalScore: 0.5,
+            policyAdjustment: 0.34,
+            retrievalReasons: ["semantic:0.7900", "family:exact"],
+            policyReasons: ["family:1.0000", "specificity:0.1200"],
             totalScore: 0.84,
             familyScore: 1,
             scopeMatch: true,

@@ -3,6 +3,7 @@ import type {
   ExperienceInput,
   InjectionMode,
   InjectionScorecard,
+  RetrievalContext,
   TaskRun,
   ToolEvent
 } from "./domain.js";
@@ -38,6 +39,7 @@ export type PromptBuildResult = {
   scorecard?: InjectionScorecard;
   deliveryMode?: EvaluationMode;
   delivered?: boolean;
+  retrievalContext?: RetrievalContext;
   input: ExperienceInput;
 };
 

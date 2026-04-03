@@ -1,4 +1,4 @@
-import type { ExperienceInput, ExperienceNode, TaskType } from "../types/domain.js";
+import type { ExperienceInput, ExperienceNode, RetrievalContext, TaskType } from "../types/domain.js";
 import {
   buildLegacyEmbedding,
   embedQueryText,
@@ -8,16 +8,22 @@ import {
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import { openVectorStore } from "../store/vector/lancedb.js";
 import { tokenize } from "../utils/text.js";
-import { buildRetrievalQuery } from "./query-rewrite.js";
+import { buildRetrievalQuery, type RetrievalQuery } from "./query-rewrite.js";
 import { computeLexicalRetrievalScores } from "./lexical-retriever.js";
 import { rerankCandidatesWithModel } from "./model-reranker.js";
 import type { DistillerEndpoint } from "../distillation/providers/types.js";
+import { enrichPolicyForCandidate, textOverlapScore } from "./policy-enricher.js";
 
 export type RetrievedCandidate = {
   node: ExperienceNode;
   semanticScore: number;
   lexicalScore: number;
   fusedScore: number;
+  retrievalScore: number;
+  retrievalReasons: string[];
+  policyAdjustment: number;
+  policyScore: number;
+  policyReasons: string[];
   rerankScore?: number;
   rerankSource?: "heuristic" | "model";
   familyScore: number;
@@ -33,129 +39,21 @@ export type RerankResult = {
   score: number;
 };
 
+export type RetrievedCandidateBundle = {
+  candidates: RetrievedCandidate[];
+  retrievalQuery: RetrievalQuery;
+  queryText: string;
+  semanticSkipped: boolean;
+};
+
 const DEFAULT_RERANK_WINDOW = 5;
 const STRONG_GENERAL_ADJACENT_FAMILY_THRESHOLD = 0.7;
 const STRONG_GENERAL_ADJACENT_SIGNAL_THRESHOLD = 0.45;
 const GENERAL_DEBUG_LIKE_QUERY_PATTERN =
   /\b(fail|failed|failing|failure|regression|bug|broken|debug|diagnose|investigate|audit|inspect|fixture|handshake|routing|config|timeout|migration|schema)\b/i;
 
-const TASK_FAMILY_PROXIMITY: Record<TaskType, Partial<Record<TaskType, number>>> = {
-  bug_fix: {
-    bug_fix: 1,
-    test_debug: 0.92,
-    build_debug: 0.82,
-    integration_fix: 0.86,
-    general: 0.72
-  },
-  build_debug: {
-    build_debug: 1,
-    bug_fix: 0.82,
-    config_debug: 0.72,
-    integration_fix: 0.7,
-    general: 0.65
-  },
-  config_debug: {
-    config_debug: 1,
-    integration_fix: 0.84,
-    bug_fix: 0.8,
-    build_debug: 0.72,
-    general: 0.72
-  },
-  test_debug: {
-    test_debug: 1,
-    bug_fix: 0.92,
-    integration_fix: 0.78,
-    general: 0.7
-  },
-  integration_fix: {
-    integration_fix: 1,
-    config_debug: 0.84,
-    bug_fix: 0.86,
-    test_debug: 0.78,
-    build_debug: 0.7,
-    general: 0.68
-  },
-  feature_add: {
-    feature_add: 1,
-    refactor: 0.78,
-    performance: 0.7,
-    general: 0.75
-  },
-  refactor: {
-    refactor: 1,
-    feature_add: 0.78,
-    performance: 0.65,
-    general: 0.72
-  },
-  performance: {
-    performance: 1,
-    feature_add: 0.7,
-    refactor: 0.65,
-    general: 0.7
-  },
-  general: {
-    general: 1,
-    bug_fix: 0.72,
-    build_debug: 0.65,
-    config_debug: 0.72,
-    test_debug: 0.7,
-    integration_fix: 0.68,
-    feature_add: 0.75,
-    refactor: 0.72,
-    performance: 0.7
-  }
-};
-
 const isInjectableState = (node: ExperienceNode): boolean =>
   node.state === "active" || node.state === "cooling" || node.state === "candidate" || node.state === "priority_candidate";
-
-const LEGACY_GENERIC_HINT_PATTERNS = [
-  /^reproduce first, then validate the fix with /i,
-  /^do not keep iterating on the current debug path without narrowing the failing signature first\.?$/i
-];
-
-const isLegacyGenericNode = (node: ExperienceNode): boolean =>
-  LEGACY_GENERIC_HINT_PATTERNS.some((pattern) => pattern.test(node.compact_hint.trim()));
-
-const getSpecificityBonus = (node: ExperienceNode): number => {
-  const hintTokens = new Set(tokenize(node.compact_hint));
-  const triggerTokens = new Set(tokenize(node.trigger_pattern));
-  const lexicalBreadth = Math.min(12, hintTokens.size + Math.min(triggerTokens.size, 6));
-  const breadthScore = lexicalBreadth / 12;
-  const structuredBonus =
-    (node.recommended_steps?.length ?? 0) > 0 || (node.goal?.trim().length ?? 0) > 0 ? 0.08 : 0;
-
-  return breadthScore * 0.18 + structuredBonus;
-};
-
-const getFeedbackAdjustment = (node: ExperienceNode): number =>
-  Math.max(-0.12, Math.min(0.12, (node.helped_count - node.harmed_count) * 0.02));
-
-const getMaturityAdjustment = (node: ExperienceNode): number => {
-  const supportBonus = Math.min(0.12, node.support_count * 0.015);
-  const validationBonus = node.validation_state === "validated_by_reuse" ? 0.08 : 0;
-  return supportBonus + validationBonus;
-};
-
-const getGenericPenalty = (node: ExperienceNode): number => (isLegacyGenericNode(node) ? 0.22 : 0);
-
-const getFamilyScore = (inputTaskType: TaskType, nodeTaskType: TaskType): number =>
-  TASK_FAMILY_PROXIMITY[inputTaskType][nodeTaskType] ?? 0;
-
-const textOverlapScore = (left: string | undefined, right: string): number => {
-  if (!left?.trim()) {
-    return 0;
-  }
-
-  const lhs = new Set(tokenize(left));
-  const rhs = new Set(tokenize(right));
-  if (!lhs.size || !rhs.size) {
-    return 0;
-  }
-
-  const overlap = [...lhs].filter((token) => rhs.has(token)).length;
-  return overlap / Math.max(lhs.size, rhs.size);
-};
 
 const LOW_SIGNAL_QUERY_TOKENS = new Set([
   "ok",
@@ -192,10 +90,8 @@ const shouldSkipSemanticRetrieval = (input: ExperienceInput, queryText: string):
   return false;
 };
 
-const isExpectationCorrectionNode = (node: ExperienceNode): boolean => node.experience_kind === "expectation_correction";
-
 const passesCorrectionScopeGate = (input: ExperienceInput, node: ExperienceNode): boolean => {
-  if (!isExpectationCorrectionNode(node)) {
+  if (node.experience_kind !== "expectation_correction") {
     return true;
   }
 
@@ -217,27 +113,6 @@ const passesCorrectionScopeGate = (input: ExperienceInput, node: ExperienceNode)
 
   return true;
 };
-
-const getExpectationCorrectionAdjustment = (input: ExperienceInput, node: ExperienceNode): number => {
-  if (!isExpectationCorrectionNode(node)) {
-    return 0;
-  }
-
-  const queryText = [input.task_summary, input.context_summary].filter(Boolean).join("\n");
-  const categoryMatch = textOverlapScore(node.correction_category, queryText);
-  const deviationMatch = textOverlapScore(node.deviation_pattern, queryText);
-  const constraintMatch = textOverlapScore(node.corrected_constraint, queryText);
-  const confidenceBonus =
-    node.confidence_signal === "confirmed_by_user"
-      ? 0.06
-      : node.confidence_signal === "supported_by_objective_success"
-        ? 0.03
-        : 0;
-  const validationBonus = node.validation_state === "validated_by_reuse" ? 0.05 : 0;
-
-  return categoryMatch * 0.18 + deviationMatch * 0.1 + constraintMatch * 0.08 + confidenceBonus + validationBonus;
-};
-
 type RetrieveOptions = {
   config?: Pick<
     ExperienceEngineConfig,
@@ -254,6 +129,7 @@ type RetrieveOptions = {
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
   reranker?: (input: { queryText: string; taskType: TaskType; candidates: RerankCandidate[] }) => Promise<RerankResult[]>;
+  retrievalContext?: RetrievalContext;
   fetchImpl?: typeof fetch;
   resolveRerankerEndpoint?: (options?: {
     env?: NodeJS.ProcessEnv;
@@ -263,6 +139,14 @@ type RetrieveOptions = {
     configModel?: string;
   }) => DistillerEndpoint | null;
 };
+
+const resolveRetrievalSource = (
+  input: ExperienceInput,
+  retrievalContext?: RetrievalContext
+): Pick<RetrievalContext, "taskSummary" | "contextSummary"> => ({
+  taskSummary: retrievalContext?.taskSummary ?? input.task_summary,
+  contextSummary: retrievalContext?.contextSummary ?? input.context_summary
+});
 
 const buildRankMap = (entries: Array<{ id: string; score: number }>): Map<string, number> =>
   new Map(
@@ -364,32 +248,75 @@ const computeDefaultRerankScores = (
   );
 };
 
+const buildRetrievalReasons = (input: {
+  semanticScore: number;
+  lexicalScore: number;
+  fusedScore: number;
+  taskFamilyMatch: boolean;
+  familyScore: number;
+  queryRewriteApplied: boolean;
+}): string[] => {
+  const reasons: string[] = [];
+
+  if (input.semanticScore > 0) {
+    reasons.push(`semantic:${input.semanticScore.toFixed(4)}`);
+  }
+  if (input.lexicalScore > 0) {
+    reasons.push(`lexical:${input.lexicalScore.toFixed(4)}`);
+  }
+  if (input.semanticScore > 0 && input.lexicalScore > 0) {
+    reasons.push(`hybrid_fusion:${input.fusedScore.toFixed(4)}`);
+  } else {
+    reasons.push(`retrieval_score:${input.fusedScore.toFixed(4)}`);
+  }
+  reasons.push(input.taskFamilyMatch ? "family:exact" : `family:adjacent:${input.familyScore.toFixed(4)}`);
+  if (input.queryRewriteApplied) {
+    reasons.push("query_rewrite:applied");
+  }
+
+  return reasons;
+};
+
 export const retrieveCandidates = async (
   input: ExperienceInput,
   nodes: ExperienceNode[],
   options: RetrieveOptions = {}
 ): Promise<ExperienceNode[]> => {
-  const scored = await retrieveScoredCandidates(input, nodes, options);
-  return scored.map(({ node }) => node);
+  const bundle = await retrieveCandidateBundle(input, nodes, options);
+  return bundle.candidates.map(({ node }) => node);
 };
 
-export const retrieveScoredCandidates = async (
+export const retrieveCandidateBundle = async (
   input: ExperienceInput,
   nodes: ExperienceNode[],
   options: RetrieveOptions = {}
-): Promise<RetrievedCandidate[]> => {
+): Promise<RetrievedCandidateBundle> => {
+  const retrievalSource = resolveRetrievalSource(input, options.retrievalContext);
+  const retrievalQuery = buildRetrievalQuery(retrievalSource.taskSummary, retrievalSource.contextSummary);
+  const queryText = retrievalQuery.retrievalQueryText;
+
   if (input.task_type === "unknown") {
-    return [];
+    return {
+      candidates: [],
+      retrievalQuery,
+      queryText,
+      semanticSkipped: true
+    };
   }
 
   const inputTaskType = input.task_type;
-  const retrievalQuery = buildRetrievalQuery(input.task_summary, input.context_summary);
-  const queryText = retrievalQuery.retrievalQueryText;
-  const shouldUseSemanticRetrieval = !shouldSkipSemanticRetrieval(input, queryText || input.task_summary);
+  const semanticSkipped = shouldSkipSemanticRetrieval(
+    {
+      ...input,
+      context_summary: retrievalSource.contextSummary
+    },
+    queryText || retrievalSource.taskSummary
+  );
+  const shouldUseSemanticRetrieval = !semanticSkipped;
   const localQuery = shouldUseSemanticRetrieval
-    ? await embedQueryText(queryText || input.task_summary, options)
+    ? await embedQueryText(queryText || retrievalSource.taskSummary, options)
     : null;
-  const legacyQuery = buildLegacyEmbedding(queryText || input.task_summary);
+  const legacyQuery = buildLegacyEmbedding(queryText || retrievalSource.taskSummary);
   const vectorStore = openVectorStore();
   const scopeLocalNodes = nodes.filter((node) => isInjectableState(node) && passesCorrectionScopeGate(input, node));
   const localSemanticRecords = scopeLocalNodes
@@ -432,17 +359,28 @@ export const retrieveScoredCandidates = async (
       const semanticScore = scoreById.get(node.id) ?? 0;
       const lexicalScore = lexicalScoreById.get(node.id) ?? 0;
       const fusedScore = fusedScoreById.get(node.id) ?? Math.max(semanticScore, lexicalScore);
-      const familyScore = getFamilyScore(inputTaskType, node.task_type);
-      const qualityAdjustment =
-        getSpecificityBonus(node) + getFeedbackAdjustment(node) + getMaturityAdjustment(node) - getGenericPenalty(node);
-      const totalScore =
-        fusedScore * 0.68 + familyScore * 0.22 + qualityAdjustment + getExpectationCorrectionAdjustment(input, node);
+      const retrievalScore = fusedScore * 0.68;
+      const policy = enrichPolicyForCandidate(input, node, options.retrievalContext);
+      const retrievalReasons = buildRetrievalReasons({
+        semanticScore,
+        lexicalScore,
+        fusedScore,
+        taskFamilyMatch: node.task_type === input.task_type,
+        familyScore: policy.familyScore,
+        queryRewriteApplied: retrievalQuery.rewriteApplied
+      });
+      const totalScore = retrievalScore + policy.policyAdjustment;
       return {
         node,
         semanticScore,
         lexicalScore,
         fusedScore,
-        familyScore,
+        retrievalScore,
+        retrievalReasons,
+        policyAdjustment: policy.policyAdjustment,
+        policyScore: policy.policyScore,
+        policyReasons: policy.reasons,
+        familyScore: policy.familyScore,
         totalScore,
         scopeMatch: node.scope_id === input.scope_id,
         taskFamilyMatch: node.task_type === input.task_type
@@ -468,7 +406,7 @@ export const retrieveScoredCandidates = async (
         (node.recommended_steps?.length ?? 0) > 0 ||
         Boolean(node.goal?.trim());
 
-      return GENERAL_DEBUG_LIKE_QUERY_PATTERN.test(queryText || input.task_summary) && (
+      return GENERAL_DEBUG_LIKE_QUERY_PATTERN.test(queryText || retrievalSource.taskSummary) && (
         familyScore >= STRONG_GENERAL_ADJACENT_FAMILY_THRESHOLD &&
         strongestSignal >= STRONG_GENERAL_ADJACENT_SIGNAL_THRESHOLD &&
         hasMaturitySignal
@@ -482,14 +420,33 @@ export const retrieveScoredCandidates = async (
   const rerankSourceById = new Map<string, "heuristic" | "model">();
   if (rerankCandidates.length) {
     const rerankInput = {
-      queryText: queryText || input.task_summary,
+      queryText: queryText || retrievalSource.taskSummary,
       taskType: inputTaskType,
       candidates: rerankCandidates.map(
-        ({ node, semanticScore, lexicalScore, fusedScore, familyScore, totalScore, scopeMatch, taskFamilyMatch }) => ({
+        ({
           node,
           semanticScore,
           lexicalScore,
           fusedScore,
+          retrievalScore,
+          retrievalReasons,
+          policyAdjustment,
+          policyScore,
+          policyReasons,
+          familyScore,
+          totalScore,
+          scopeMatch,
+          taskFamilyMatch
+        }) => ({
+          node,
+          semanticScore,
+          lexicalScore,
+          fusedScore,
+          retrievalScore,
+          retrievalReasons,
+          policyAdjustment,
+          policyScore,
+          policyReasons,
           familyScore,
           totalScore,
           scopeMatch,
@@ -552,8 +509,22 @@ export const retrieveScoredCandidates = async (
     })
     .sort((left, right) => right.totalScore - left.totalScore);
 
-  return reranked.map((entry, index) => ({
-    ...entry,
-    scoreMargin: Math.max(0, entry.totalScore - (reranked[index + 1]?.totalScore ?? 0))
-  }));
+  return {
+    candidates: reranked.map((entry, index) => ({
+      ...entry,
+      scoreMargin: Math.max(0, entry.totalScore - (reranked[index + 1]?.totalScore ?? 0))
+    })),
+    retrievalQuery,
+    queryText,
+    semanticSkipped
+  };
+};
+
+export const retrieveScoredCandidates = async (
+  input: ExperienceInput,
+  nodes: ExperienceNode[],
+  options: RetrieveOptions = {}
+): Promise<RetrievedCandidate[]> => {
+  const bundle = await retrieveCandidateBundle(input, nodes, options);
+  return bundle.candidates;
 };

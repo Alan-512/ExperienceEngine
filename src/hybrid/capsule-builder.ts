@@ -77,6 +77,8 @@ export const buildExplainDecisionCapsule = (input: {
             mode: input.inspection.scorecard.mode,
             decisionReason: input.inspection.scorecard.decisionReason,
             riskLevel: input.inspection.scorecard.riskLevel,
+            confidence: input.inspection.scorecard.confidence,
+            budgetClass: input.inspection.scorecard.budgetClass,
             fastPathApplied: input.inspection.scorecard.fastPathApplied,
             queryRewriteApplied: input.inspection.scorecard.queryRewriteApplied
           }
