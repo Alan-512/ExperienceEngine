@@ -1046,9 +1046,17 @@ describe("ExperienceRuntimeService finalize transaction", () => {
         expect.objectContaining({
           semanticScore: expect.any(Number),
           lexicalScore: expect.any(Number),
-          fusedScore: expect.any(Number)
+          fusedScore: expect.any(Number),
+          retrievalScore: expect.any(Number),
+          policyAdjustment: expect.any(Number),
+          retrievalReasons: expect.any(Array),
+          policyReasons: expect.any(Array)
         })
       ],
+      confidence: expect.any(String),
+      budgetClass: expect.any(String),
+      selectedCandidateIds: expect.any(Array),
+      rejectedCandidates: expect.any(Array),
       nodes: [
         expect.objectContaining({
           riskLevel: "low",

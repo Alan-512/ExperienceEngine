@@ -531,6 +531,21 @@ describe("decideIntervention", () => {
 
     expect(decision.mode).toBe("inject");
     expect(decision.diagnostics?.topCandidates[0]?.id).toBe("payments-mature-top");
+    expect(decision.diagnostics?.topCandidates[0]).toMatchObject({
+      retrievalScore: expect.any(Number),
+      policyAdjustment: expect.any(Number),
+      retrievalReasons: expect.arrayContaining([expect.stringContaining("family:")]),
+      policyReasons: expect.arrayContaining([expect.stringContaining("family:")])
+    });
+    expect(decision.diagnostics?.confidence).toBe("high");
+    expect(decision.diagnostics?.budgetClass).toBe("single_hint");
+    expect(decision.diagnostics?.selectedCandidateIds).toEqual(["payments-mature-top"]);
+    expect(decision.diagnostics?.rejectedCandidates).toEqual([
+      expect.objectContaining({
+        id: "workspace-paraphrase-runner-up",
+        reasonCodes: expect.arrayContaining([expect.any(String)])
+      })
+    ]);
     expect(decision.selected.map((entry) => entry.id)).toEqual(["payments-mature-top"]);
   });
 
@@ -578,6 +593,8 @@ describe("decideIntervention", () => {
     expect(decision.selected.map((entry) => entry.id)).toEqual(["payments-close-top"]);
     expect(decision.diagnostics?.gateReason).toBe("uncertainty_aware_routing");
     expect(decision.diagnostics?.decisionReason).toBe("ambiguous_same_family_candidate");
+    expect(decision.diagnostics?.confidence).toBe("low");
+    expect(decision.diagnostics?.budgetClass).toBe("single_hint");
   });
 
   it("does not append related-family strategies when an exact-family strategy already matches", async () => {

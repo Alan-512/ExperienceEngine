@@ -398,6 +398,11 @@ describe("retrieveCandidates", () => {
     expect(candidates[0]).toMatchObject({
       node: expect.objectContaining({ id: "strong-match" }),
       semanticScore: expect.any(Number),
+      retrievalScore: expect.any(Number),
+      retrievalReasons: expect.arrayContaining([expect.stringContaining("family:")]),
+      policyAdjustment: expect.any(Number),
+      policyScore: expect.any(Number),
+      policyReasons: expect.arrayContaining([expect.stringContaining("family:")]),
       totalScore: expect.any(Number),
       familyScore: expect.any(Number)
     });
