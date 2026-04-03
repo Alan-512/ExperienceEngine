@@ -473,8 +473,9 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     session.toolEvents.push(toolEvent);
   }
 
-  private resolveScopedNodes(scopeId: string): ExperienceNode[] {
-    return this.nodeRepo.listInjectableByScope(scopeId);
+  // The shipped runtime path stays exact-scope-only in this rollout.
+  private resolveExactScopeInjectableNodes(scopeId: string): ExperienceNode[] {
+    return this.nodeRepo.listInjectableByExactScope(scopeId);
   }
 
   recoverToolEvents(sessionId: string, payload: unknown): void {
@@ -818,7 +819,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
 
     const stats =
       input.task_type !== "unknown" ? this.statsRepo.get(input.scope_id, input.task_type) : undefined;
-    const nodes = input.task_type !== "unknown" ? this.resolveScopedNodes(input.scope_id) : [];
+    const nodes = input.task_type !== "unknown" ? this.resolveExactScopeInjectableNodes(input.scope_id) : [];
     const decision = await decideIntervention(
       input,
       nodes,

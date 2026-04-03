@@ -275,6 +275,27 @@ describe("decideIntervention", () => {
     expect(decision.selected[0]?.id).toBe("exact-test-node");
   });
 
+  it("keeps direct priority-candidate handling conservative when invoked outside the shipped runtime pool", async () => {
+    const decision = await decideIntervention(
+      input,
+      [
+        node({
+          id: "priority-direct",
+          state: "priority_candidate",
+          task_type: "test_debug",
+          compact_hint: "Start with the focused failing test before wider edits.",
+          support_count: 1
+        })
+      ],
+      stats,
+      0.6,
+      3
+    );
+
+    expect(decision.mode).toBe("inject_conservative");
+    expect(decision.selected.map((entry) => entry.id)).toEqual(["priority-direct"]);
+  });
+
   it("keeps an exact candidate-family match ahead of unrelated active cross-family nodes", async () => {
     const decision = await decideIntervention(
       {

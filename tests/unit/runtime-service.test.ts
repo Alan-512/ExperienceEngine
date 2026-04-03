@@ -362,6 +362,83 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     });
   });
 
+  it("keeps beforePromptBuild on the exact-scope shipped pool and excludes priority candidates", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const db = openDatabase(loadConfig({ sqlitePath }));
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    const timestamp = nowIso();
+
+    nodeRepo.upsert({
+      id: "scope-priority",
+      node_type: "strategy",
+      scope_id: "scope_repo",
+      task_type: "test_debug",
+      trigger_pattern: "Fix the failing vitest auth test",
+      compact_hint: "This should stay in learning-only state.",
+      success_signal: "The focused test passes.",
+      evidence_summary: "Recovered from a prior scoped run.",
+      retrieval_text: "Fix the failing vitest auth test\nThis should stay in learning-only state.",
+      source_kind: "system_derived",
+      origin_record_ids: [],
+      helped_record_ids: [],
+      harmed_record_ids: [],
+      state: "priority_candidate",
+      usage_count: 0,
+      helped_count: 0,
+      harmed_count: 0,
+      support_count: 1,
+      created_at: timestamp,
+      updated_at: timestamp
+    });
+    nodeRepo.upsert({
+      id: "other-scope-active",
+      node_type: "strategy",
+      scope_id: "scope_other",
+      task_type: "test_debug",
+      trigger_pattern: "Fix the failing vitest auth test",
+      compact_hint: "This should stay outside the exact scope.",
+      success_signal: "The focused test passes.",
+      evidence_summary: "Recovered from a prior scoped run.",
+      retrieval_text: "Fix the failing vitest auth test\nThis should stay outside the exact scope.",
+      source_kind: "system_derived",
+      origin_record_ids: [],
+      helped_record_ids: [],
+      harmed_record_ids: [],
+      state: "active",
+      usage_count: 0,
+      helped_count: 0,
+      harmed_count: 0,
+      support_count: 1,
+      created_at: timestamp,
+      updated_at: timestamp
+    });
+
+    const service = new ExperienceRuntimeService(
+      loadConfig({
+        dataDir: join(runtimeDir, "data"),
+        sqlitePath,
+        captureDir: join(runtimeDir, "captures"),
+        distillationAutoDrain: false,
+        distillationAllowPassthrough: true
+      }, { homeDir: runtimeDir }),
+      undefined,
+      { homeDir: runtimeDir, env: {} }
+    );
+
+    const prompt = await service.beforePromptBuild({
+      sessionId: "exact-scope-session",
+      cwd: "/repo",
+      userMessage: "Fix the failing vitest auth test",
+      taskSummary: "Fix the failing vitest auth test"
+    });
+
+    expect(prompt.mode).toBe("skip");
+    expect(prompt.text).toBeUndefined();
+    expect(prompt.input.injected_node_ids).toEqual([]);
+  });
+
   it("learns an expectation correction in one run and conservatively injects it on the next similar run", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
