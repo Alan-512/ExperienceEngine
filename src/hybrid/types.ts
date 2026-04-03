@@ -75,6 +75,8 @@ export type ExplainDecisionCapsule = {
       mode?: "inject" | "inject_conservative" | "skip";
       decisionReason?: string;
       riskLevel?: "low" | "medium" | "high";
+      confidence?: "low" | "medium" | "high";
+      budgetClass?: "none" | "single_hint" | "multi_hint";
       fastPathApplied?: boolean;
       queryRewriteApplied?: boolean;
     };

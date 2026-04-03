@@ -82,6 +82,10 @@ const toCandidateQuality = (
 
   return {
     semanticScore: candidate.semanticScore,
+    retrievalScore: candidate.retrievalScore,
+    policyAdjustment: candidate.policyAdjustment,
+    retrievalReasons: candidate.retrievalReasons,
+    policyReasons: candidate.policyReasons,
     totalScore: candidate.totalScore,
     familyScore: candidate.familyScore,
     scopeMatch: candidate.scopeMatch,
@@ -118,11 +122,11 @@ const deriveDecisionConfidence = (
   if (mode === "skip") {
     return "low";
   }
-  if (fastPathApplied || (quality && quality.totalScore >= 1.1 && quality.scoreMargin >= 0.08)) {
-    return "high";
-  }
   if (mode === "inject_conservative") {
     return "low";
+  }
+  if (fastPathApplied || (quality && quality.totalScore >= 1.1 && quality.scoreMargin >= 0.08)) {
+    return "high";
   }
   return "medium";
 };

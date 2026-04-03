@@ -55,7 +55,8 @@ const describeTrustSummary = (record: ExperienceLastInspection): string | undefi
     return undefined;
   }
 
-  return `${scorecard.riskLevel}-risk ${primaryNode.state} guidance with ${primaryNode.helped} helped and ${primaryNode.harmed} harmed signal(s).`;
+  const confidence = scorecard.confidence ? ` ${scorecard.confidence}-confidence` : "";
+  return `${scorecard.riskLevel}-risk${confidence} ${primaryNode.state} guidance with ${primaryNode.helped} helped and ${primaryNode.harmed} harmed signal(s).`;
 };
 
 const buildRetrievalNotes = (record: ExperienceLastInspection): string[] => {
@@ -228,6 +229,12 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
         if (typeof record.scorecard.scoreMargin === "number") {
           console.log(`- Score margin: ${record.scorecard.scoreMargin}`);
         }
+        if (record.scorecard.confidence) {
+          console.log(`- Confidence: ${record.scorecard.confidence}`);
+        }
+        if (record.scorecard.budgetClass) {
+          console.log(`- Budget class: ${record.scorecard.budgetClass}`);
+        }
         if (typeof record.scorecard.fastPathApplied === "boolean") {
           console.log(`- Fast path applied: ${record.scorecard.fastPathApplied ? "yes" : "no"}`);
         }
@@ -256,6 +263,12 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
         if (typeof topCandidate?.fusedScore === "number") {
           console.log(`- Top candidate fused score: ${topCandidate.fusedScore}`);
         }
+        if (typeof topCandidate?.retrievalScore === "number") {
+          console.log(`- Top candidate retrieval score: ${topCandidate.retrievalScore}`);
+        }
+        if (typeof topCandidate?.policyAdjustment === "number") {
+          console.log(`- Top candidate policy adjustment: ${topCandidate.policyAdjustment}`);
+        }
         if (typeof topCandidate?.rerankScore === "number") {
           console.log(`- Top candidate rerank score: ${topCandidate.rerankScore}`);
         }
@@ -267,6 +280,27 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
         }
         if (record.scorecard.decisionReason) {
           console.log(`- Decision reason: ${record.scorecard.decisionReason}`);
+        }
+        if (record.scorecard.selectedCandidateIds?.length) {
+          console.log(`- Selected candidates: ${record.scorecard.selectedCandidateIds.join(", ")}`);
+        }
+        if (record.scorecard.rejectedCandidates?.length) {
+          console.log("- Rejected candidates:");
+          for (const candidate of record.scorecard.rejectedCandidates) {
+            console.log(`  - ${candidate.id}: ${candidate.reasonCodes.join(", ")}`);
+          }
+        }
+        if (topCandidate?.retrievalReasons?.length) {
+          console.log("- Top candidate retrieval reasons:");
+          for (const reason of topCandidate.retrievalReasons) {
+            console.log(`  - ${reason}`);
+          }
+        }
+        if (topCandidate?.policyReasons?.length) {
+          console.log("- Top candidate policy reasons:");
+          for (const reason of topCandidate.policyReasons) {
+            console.log(`  - ${reason}`);
+          }
         }
         const retrievalNotes = buildRetrievalNotes(record);
         if (retrievalNotes.length) {
