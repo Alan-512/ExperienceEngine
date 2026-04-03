@@ -1,4 +1,4 @@
-import type { ExperienceInput, ExperienceNode, TaskType } from "../types/domain.js";
+import type { ExperienceInput, ExperienceNode, RetrievalContext, TaskType } from "../types/domain.js";
 import {
   buildLegacyEmbedding,
   embedQueryText,
@@ -8,7 +8,7 @@ import {
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import { openVectorStore } from "../store/vector/lancedb.js";
 import { tokenize } from "../utils/text.js";
-import { buildRetrievalQuery } from "./query-rewrite.js";
+import { buildRetrievalQuery, type RetrievalQuery } from "./query-rewrite.js";
 import { computeLexicalRetrievalScores } from "./lexical-retriever.js";
 import { rerankCandidatesWithModel } from "./model-reranker.js";
 import type { DistillerEndpoint } from "../distillation/providers/types.js";
@@ -31,6 +31,13 @@ export type RerankCandidate = Omit<RetrievedCandidate, "scoreMargin" | "rerankSc
 export type RerankResult = {
   id: string;
   score: number;
+};
+
+export type RetrievedCandidateBundle = {
+  candidates: RetrievedCandidate[];
+  retrievalQuery: RetrievalQuery;
+  queryText: string;
+  semanticSkipped: boolean;
 };
 
 const DEFAULT_RERANK_WINDOW = 5;
@@ -254,6 +261,7 @@ type RetrieveOptions = {
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
   reranker?: (input: { queryText: string; taskType: TaskType; candidates: RerankCandidate[] }) => Promise<RerankResult[]>;
+  retrievalContext?: RetrievalContext;
   fetchImpl?: typeof fetch;
   resolveRerankerEndpoint?: (options?: {
     env?: NodeJS.ProcessEnv;
@@ -263,6 +271,14 @@ type RetrieveOptions = {
     configModel?: string;
   }) => DistillerEndpoint | null;
 };
+
+const resolveRetrievalSource = (
+  input: ExperienceInput,
+  retrievalContext?: RetrievalContext
+): Pick<RetrievalContext, "taskSummary" | "contextSummary"> => ({
+  taskSummary: retrievalContext?.taskSummary ?? input.task_summary,
+  contextSummary: retrievalContext?.contextSummary ?? input.context_summary
+});
 
 const buildRankMap = (entries: Array<{ id: string; score: number }>): Map<string, number> =>
   new Map(
@@ -369,27 +385,41 @@ export const retrieveCandidates = async (
   nodes: ExperienceNode[],
   options: RetrieveOptions = {}
 ): Promise<ExperienceNode[]> => {
-  const scored = await retrieveScoredCandidates(input, nodes, options);
-  return scored.map(({ node }) => node);
+  const bundle = await retrieveCandidateBundle(input, nodes, options);
+  return bundle.candidates.map(({ node }) => node);
 };
 
-export const retrieveScoredCandidates = async (
+export const retrieveCandidateBundle = async (
   input: ExperienceInput,
   nodes: ExperienceNode[],
   options: RetrieveOptions = {}
-): Promise<RetrievedCandidate[]> => {
+): Promise<RetrievedCandidateBundle> => {
+  const retrievalSource = resolveRetrievalSource(input, options.retrievalContext);
+  const retrievalQuery = buildRetrievalQuery(retrievalSource.taskSummary, retrievalSource.contextSummary);
+  const queryText = retrievalQuery.retrievalQueryText;
+
   if (input.task_type === "unknown") {
-    return [];
+    return {
+      candidates: [],
+      retrievalQuery,
+      queryText,
+      semanticSkipped: true
+    };
   }
 
   const inputTaskType = input.task_type;
-  const retrievalQuery = buildRetrievalQuery(input.task_summary, input.context_summary);
-  const queryText = retrievalQuery.retrievalQueryText;
-  const shouldUseSemanticRetrieval = !shouldSkipSemanticRetrieval(input, queryText || input.task_summary);
+  const semanticSkipped = shouldSkipSemanticRetrieval(
+    {
+      ...input,
+      context_summary: retrievalSource.contextSummary
+    },
+    queryText || retrievalSource.taskSummary
+  );
+  const shouldUseSemanticRetrieval = !semanticSkipped;
   const localQuery = shouldUseSemanticRetrieval
-    ? await embedQueryText(queryText || input.task_summary, options)
+    ? await embedQueryText(queryText || retrievalSource.taskSummary, options)
     : null;
-  const legacyQuery = buildLegacyEmbedding(queryText || input.task_summary);
+  const legacyQuery = buildLegacyEmbedding(queryText || retrievalSource.taskSummary);
   const vectorStore = openVectorStore();
   const scopeLocalNodes = nodes.filter((node) => isInjectableState(node) && passesCorrectionScopeGate(input, node));
   const localSemanticRecords = scopeLocalNodes
@@ -468,7 +498,7 @@ export const retrieveScoredCandidates = async (
         (node.recommended_steps?.length ?? 0) > 0 ||
         Boolean(node.goal?.trim());
 
-      return GENERAL_DEBUG_LIKE_QUERY_PATTERN.test(queryText || input.task_summary) && (
+      return GENERAL_DEBUG_LIKE_QUERY_PATTERN.test(queryText || retrievalSource.taskSummary) && (
         familyScore >= STRONG_GENERAL_ADJACENT_FAMILY_THRESHOLD &&
         strongestSignal >= STRONG_GENERAL_ADJACENT_SIGNAL_THRESHOLD &&
         hasMaturitySignal
@@ -482,7 +512,7 @@ export const retrieveScoredCandidates = async (
   const rerankSourceById = new Map<string, "heuristic" | "model">();
   if (rerankCandidates.length) {
     const rerankInput = {
-      queryText: queryText || input.task_summary,
+      queryText: queryText || retrievalSource.taskSummary,
       taskType: inputTaskType,
       candidates: rerankCandidates.map(
         ({ node, semanticScore, lexicalScore, fusedScore, familyScore, totalScore, scopeMatch, taskFamilyMatch }) => ({
@@ -552,8 +582,22 @@ export const retrieveScoredCandidates = async (
     })
     .sort((left, right) => right.totalScore - left.totalScore);
 
-  return reranked.map((entry, index) => ({
-    ...entry,
-    scoreMargin: Math.max(0, entry.totalScore - (reranked[index + 1]?.totalScore ?? 0))
-  }));
+  return {
+    candidates: reranked.map((entry, index) => ({
+      ...entry,
+      scoreMargin: Math.max(0, entry.totalScore - (reranked[index + 1]?.totalScore ?? 0))
+    })),
+    retrievalQuery,
+    queryText,
+    semanticSkipped
+  };
+};
+
+export const retrieveScoredCandidates = async (
+  input: ExperienceInput,
+  nodes: ExperienceNode[],
+  options: RetrieveOptions = {}
+): Promise<RetrievedCandidate[]> => {
+  const bundle = await retrieveCandidateBundle(input, nodes, options);
+  return bundle.candidates;
 };

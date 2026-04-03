@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { retrieveCandidates, retrieveScoredCandidates } from "../../src/controller/candidate-retriever.js";
-import type { ExperienceInput, ExperienceNode } from "../../src/types/domain.js";
+import { retrieveCandidateBundle, retrieveCandidates, retrieveScoredCandidates } from "../../src/controller/candidate-retriever.js";
+import type { ExperienceInput, ExperienceNode, RetrievalContext } from "../../src/types/domain.js";
 import {
   clearEmbeddingProviderForTests,
   embedText,
@@ -55,6 +55,18 @@ const input = (overrides: Partial<ExperienceInput> = {}): ExperienceInput => ({
   tool_events: [],
   outcome_signal: "unknown",
   injected_node_ids: [],
+  ...overrides
+});
+
+const retrievalContext = (overrides: Partial<RetrievalContext> = {}): RetrievalContext => ({
+  scopeId: "scope-a",
+  host: "codex",
+  taskType: "test_debug",
+  taskSummary: "Fix the failing auth test in this repo",
+  contextSummary: undefined,
+  toolNames: [],
+  outcomeSignal: "unknown",
+  injectedNodeIds: [],
   ...overrides
 });
 
@@ -799,5 +811,52 @@ describe("retrieveCandidates", () => {
     expect(embedQuerySpy).toHaveBeenCalledWith(expect.not.stringContaining("do not modify files"));
     expect(embedQuerySpy).toHaveBeenCalledWith(expect.stringContaining("failing test"));
     expect(candidates[0]?.node.id).toBe("payments-mature-top");
+  });
+
+  it("uses retrieval context as the retrieval-facing query source when provided", async () => {
+    const embedQuerySpy = vi.fn(async () => [1, 0, 0]);
+    setEmbeddingProviderForTests({
+      provider: "local",
+      model: "Xenova/multilingual-e5-small",
+      version: "local-e5-v1",
+      dimensions: 3,
+      embedQuery: embedQuerySpy,
+      async embedPassage() {
+        return [1, 0, 0];
+      }
+    });
+
+    const result = await retrieveCandidateBundle(
+      input({
+        task_type: "test_debug",
+        task_summary: "continue"
+      }),
+      [
+        node({
+          id: "payments-mature-top",
+          task_type: "test_debug",
+          trigger_pattern: "Fix the failing payments auth test in ExperienceEngine",
+          compact_hint: "Check the auth fixture handshake before changing the payments auth code path.",
+          retrieval_text:
+            "Fix the failing payments auth test in ExperienceEngine\nCheck the auth fixture handshake before changing the payments auth code path.",
+          helped_count: 9,
+          support_count: 7,
+          validation_state: "validated_by_reuse"
+        })
+      ],
+      {
+        retrievalContext: retrievalContext({
+          taskSummary:
+            "Investigate the payments auth test regression in this workspace by checking the auth fixture handshake first. Read-only analysis only; do not modify files.",
+          contextSummary: "The auth fixture handshake keeps failing before the code path changes."
+        })
+      }
+    );
+
+    expect(embedQuerySpy).toHaveBeenCalledWith(
+      expect.stringContaining("Investigate the payments auth test regression by checking the auth fixture handshake first")
+    );
+    expect(result.retrievalQuery.rewriteApplied).toBe(true);
+    expect(result.candidates[0]?.node.id).toBe("payments-mature-top");
   });
 });

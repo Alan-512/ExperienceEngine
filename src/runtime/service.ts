@@ -830,7 +830,8 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       stats,
       this.config.triggerThreshold,
       this.config.maxHints,
-      this.config
+      this.config,
+      retrievalContext
     );
 
     const selectedNodeIds = decision.selected.map((node) => node.id);

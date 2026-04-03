@@ -19,7 +19,7 @@ const handleBeforePromptBuildInternal = async (
 ) => {
   const input = buildExperienceInput(context, toolEvents);
   const retrievalContext = buildRetrievalContext(input, context);
-  const decision = await decideIntervention(input, nodes, stats);
+  const decision = await decideIntervention(input, nodes, stats, undefined, undefined, undefined, retrievalContext);
 
   return {
     mode: decision.mode,

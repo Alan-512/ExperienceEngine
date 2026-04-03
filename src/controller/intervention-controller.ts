@@ -3,14 +3,19 @@ import type {
   ExperienceNode,
   InjectionScorecardCandidate,
   InjectionMode,
+  RetrievalContext,
   ResolvedTaskType,
   ScopeTaskStats,
   ValidationState
 } from "../types/domain.js";
-import { retrieveCandidates, retrieveScoredCandidates, type RetrievedCandidate } from "./candidate-retriever.js";
+import {
+  retrieveCandidateBundle,
+  retrieveCandidates,
+  retrieveScoredCandidates,
+  type RetrievedCandidate
+} from "./candidate-retriever.js";
 import { renderInjection } from "./injection-renderer.js";
 import { rankNodes } from "./node-ranker.js";
-import { buildRetrievalQuery } from "./query-rewrite.js";
 import { evaluateTriggerRoute, type TriggerCandidateQuality } from "./trigger-evaluator.js";
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
 
@@ -190,8 +195,10 @@ export const decideIntervention = (
     | "distillerModel"
     | "retrievalRerankerMode"
     | "retrievalRerankerModel"
-  >
-): Promise<InterventionDecision> => decideInterventionInternal(input, nodes, stats, threshold, maxHints, config);
+  >,
+  retrievalContext?: RetrievalContext
+): Promise<InterventionDecision> =>
+  decideInterventionInternal(input, nodes, stats, threshold, maxHints, config, retrievalContext);
 
 const decideInterventionInternal = async (
   input: ExperienceInput,
@@ -210,10 +217,11 @@ const decideInterventionInternal = async (
     | "distillerModel"
     | "retrievalRerankerMode"
     | "retrievalRerankerModel"
-  >
+  >,
+  retrievalContext?: RetrievalContext
 ): Promise<InterventionDecision> => {
-  const scoredCandidates = await retrieveScoredCandidates(input, nodes, { config });
-  const retrievalQuery = buildRetrievalQuery(input.task_summary, input.context_summary);
+  const retrievalBundle = await retrieveCandidateBundle(input, nodes, { config, retrievalContext });
+  const scoredCandidates = retrievalBundle.candidates;
   const rankingSummary = [input.task_summary, input.context_summary].filter(Boolean).join("\n");
   const rankTieBreakOrder = new Map(
     rankNodes(
@@ -272,7 +280,7 @@ const decideInterventionInternal = async (
     topCandidateScore: topCandidateQuality ? Number(topCandidateQuality.totalScore.toFixed(4)) : undefined,
     scoreMargin: topCandidateQuality ? Number(topCandidateQuality.scoreMargin.toFixed(4)) : undefined,
     fastPathApplied: false,
-    queryRewriteApplied: retrievalQuery.rewriteApplied,
+    queryRewriteApplied: retrievalBundle.retrievalQuery.rewriteApplied,
     mergeDecision: selected[0]?.merge_decision,
     mergeReason: selected[0]?.merge_reason,
     promotionSignal: selected[0]?.promotion_signal,
