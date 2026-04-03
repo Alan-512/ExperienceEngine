@@ -361,12 +361,13 @@ These are operator-facing controls, not the preferred public onboarding path.
 
 ## Embedding Retrieval
 
-ExperienceEngine now supports a multi-provider embedding stack for semantic retrieval.
+ExperienceEngine now supports a multi-provider embedding stack inside a staged hybrid retrieval pipeline.
 
 Retrieval is now hybrid by default:
 
-- semantic retrieval remains the main recall path
-- lexical retrieval and query normalization help preserve engineering intent when the prompt wording shifts
+- query normalization and rewrite happen first so retrieval keeps engineering intent when prompt wording shifts
+- lexical and semantic retrieval are fused into one candidate shortlist instead of treating semantic retrieval as the unquestioned main path
+- policy enrichment stays separate from retrieval scoring, so maturity and governance signals do not replace retrieval evidence
 - reranking can promote a better-matching candidate above older score advantages, especially when an external reranker is configured
 
 Default behavior (`embeddingProvider = "api"`):
@@ -377,6 +378,12 @@ Default behavior (`embeddingProvider = "api"`):
 - otherwise it tries Jina `jina-embeddings-v3` when `JINA_API_KEY` is present
 - if the API provider fails, ExperienceEngine falls back to the managed local model
 - if the local model fails, ExperienceEngine falls back to legacy hash-based retrieval
+
+Prompt-time behavior:
+
+- first-turn or prompt-only retrieval may not have any tool names or failure signatures yet
+- ExperienceEngine treats those fields as opportunistic evidence, not required retrieval inputs
+- when prompt-only evidence is sparse, lexical, semantic, and policy stages still run with the task summary and context summary alone
 
 Offline behavior (`embeddingProvider = "local"`):
 
