@@ -119,30 +119,60 @@ const registerPluginRuntime = (
 ): {
   sqlitePath: string;
   handlers: Map<string, Handler>;
+  waitForBackgroundLearning: () => Promise<void>;
 } => {
   const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
   const handlers = new Map<string, Handler>();
 
-  plugin.register({
-    pluginConfig: {
+  const pluginInstance = createExperiencePlugin(
+    {
       dataDir: join(runtimeDir, "data"),
       sqlitePath,
       triggerThreshold: 0.6,
       maxHints: 3,
+      distillationMode: "rule",
+      distillationAllowPassthrough: true,
+      distillationAutoDrain: true,
       ...pluginConfigOverrides
     },
+    undefined,
+    {
+      disableBackgroundLearning: false,
+      disableHybridPosttask: true,
+      homeDir: runtimeDir
+    }
+  );
+
+  pluginInstance.register({
     on(event, handler) {
+      if (event === "message_sent" || event === "session_end" || event === "agent_end") {
+        handlers.set(event, async (payload, context) => {
+          const result = await handler(payload, context);
+          await (pluginInstance as unknown as {
+            runtime: { waitForBackgroundLearning: () => Promise<void> };
+          }).runtime.waitForBackgroundLearning();
+          return result;
+        });
+        return;
+      }
+
       handlers.set(event, handler);
     }
   });
 
-  return { sqlitePath, handlers };
+  return {
+    sqlitePath,
+    handlers,
+    waitForBackgroundLearning: () =>
+      (pluginInstance as unknown as { runtime: { waitForBackgroundLearning: () => Promise<void> } }).runtime.waitForBackgroundLearning()
+  };
 };
 
 const seedInjectedOpenClawTurn = async (
   handlers: Map<string, Handler>,
   sqlitePath: string,
-  cwd = "/tmp/repo"
+  cwd = "/tmp/repo",
+  waitForBackgroundLearning?: () => Promise<void>
 ): Promise<void> => {
   const beforePromptBuild = handlers.get("before_prompt_build");
   const persistToolResult = handlers.get("tool_result_persist");
@@ -171,6 +201,7 @@ const seedInjectedOpenClawTurn = async (
     workspace: { cwd },
     message: { content: "Fix the failing vitest auth test" }
   });
+  await waitForBackgroundLearning?.();
 
   const db = new DatabaseSync(sqlitePath);
   await waitFor(() => {
@@ -298,7 +329,7 @@ afterEach(() => {
 describe("OpenClaw plugin runtime", () => {
   it("replays a minimal task cycle and persists records, stats, and nodes", async () => {
     const runtimeDir = makeTempDir();
-    const { sqlitePath, handlers } = registerPluginRuntime(runtimeDir);
+    const { sqlitePath, handlers, waitForBackgroundLearning } = registerPluginRuntime(runtimeDir);
 
     const beforePromptBuild = handlers.get("before_prompt_build");
     const persistToolResult = handlers.get("tool_result_persist");
@@ -341,6 +372,7 @@ describe("OpenClaw plugin runtime", () => {
       workspace: { cwd: "/tmp/repo" },
       message: { content: "Fix the failing vitest auth test" }
     });
+    await waitForBackgroundLearning();
 
     const db = new DatabaseSync(sqlitePath);
     await waitFor(() => {
@@ -655,8 +687,8 @@ describe("OpenClaw plugin runtime", () => {
 
   it("answers last-intervention review inside OpenClaw without persisting a new task run", async () => {
     const runtimeDir = makeTempDir();
-    const { sqlitePath, handlers } = registerPluginRuntime(runtimeDir);
-    await seedInjectedOpenClawTurn(handlers, sqlitePath);
+    const { sqlitePath, handlers, waitForBackgroundLearning } = registerPluginRuntime(runtimeDir);
+    await seedInjectedOpenClawTurn(handlers, sqlitePath, "/tmp/repo", waitForBackgroundLearning);
 
     const db = new DatabaseSync(sqlitePath);
     const countsBefore = db.prepare("SELECT COUNT(*) AS count FROM task_runs").get() as { count: number };
@@ -1226,20 +1258,7 @@ describe("OpenClaw plugin runtime", () => {
 
   it("injects on a later similar turn even when the host payload lacks context summary", async () => {
     const runtimeDir = makeTempDir();
-    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
-    const handlers = new Map<string, Handler>();
-
-    plugin.register({
-      pluginConfig: {
-        dataDir: join(runtimeDir, "data"),
-        sqlitePath,
-        triggerThreshold: 0.6,
-        maxHints: 3
-      },
-      on(event, handler) {
-        handlers.set(event, handler);
-      }
-    });
+    const { sqlitePath, handlers } = registerPluginRuntime(runtimeDir);
 
     const beforePromptBuild = handlers.get("before_prompt_build");
     const persistToolResult = handlers.get("tool_result_persist");
@@ -1286,20 +1305,7 @@ describe("OpenClaw plugin runtime", () => {
 
   it("does not persist injected hint blocks back into follow-up task summaries", async () => {
     const runtimeDir = makeTempDir();
-    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
-    const handlers = new Map<string, Handler>();
-
-    plugin.register({
-      pluginConfig: {
-        dataDir: join(runtimeDir, "data"),
-        sqlitePath,
-        triggerThreshold: 0.6,
-        maxHints: 3
-      },
-      on(event, handler) {
-        handlers.set(event, handler);
-      }
-    });
+    const { sqlitePath, handlers } = registerPluginRuntime(runtimeDir);
 
     const beforePromptBuild = handlers.get("before_prompt_build");
     const persistToolResult = handlers.get("tool_result_persist");
@@ -1378,20 +1384,7 @@ describe("OpenClaw plugin runtime", () => {
 
   it.each(replayScenarios)("replays fixture corpus: $name", async (scenario: ReplayScenario) => {
     const runtimeDir = makeTempDir();
-    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
-    const handlers = new Map<string, Handler>();
-
-    plugin.register({
-      pluginConfig: {
-        dataDir: join(runtimeDir, "data"),
-        sqlitePath,
-        triggerThreshold: 0.6,
-        maxHints: 3
-      },
-      on(event, handler) {
-        handlers.set(event, handler);
-      }
-    });
+    const { sqlitePath, handlers } = registerPluginRuntime(runtimeDir);
 
     const beforePromptBuild = handlers.get("before_prompt_build");
     const persistToolResult = handlers.get("tool_result_persist");
@@ -1519,20 +1512,7 @@ describe("OpenClaw plugin runtime", () => {
 
   it("recovers tool evidence from finalize payloads when tool_result_persist lacks session context", async () => {
     const runtimeDir = makeTempDir();
-    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
-    const handlers = new Map<string, Handler>();
-
-    plugin.register({
-      pluginConfig: {
-        dataDir: join(runtimeDir, "data"),
-        sqlitePath,
-        triggerThreshold: 0.6,
-        maxHints: 3
-      },
-      on(event, handler) {
-        handlers.set(event, handler);
-      }
-    });
+    const { sqlitePath, handlers } = registerPluginRuntime(runtimeDir);
 
     await handlers.get("before_prompt_build")?.(
       {
@@ -1743,7 +1723,7 @@ describe("OpenClaw plugin runtime", () => {
         })
       );
 
-    createExperiencePlugin(
+    const pluginInstance = createExperiencePlugin(
       {
         dataDir: join(runtimeDir, "data"),
         sqlitePath,
@@ -1762,9 +1742,13 @@ describe("OpenClaw plugin runtime", () => {
         env: {
           GEMINI_API_KEY: "secret"
         },
-        fetchImpl: fetchImpl as unknown as typeof fetch
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+        disableBackgroundLearning: false,
+        disableHybridPosttask: true
       }
-    ).register({
+    );
+
+    pluginInstance.register({
       on(event, handler) {
         handlers.set(event, handler);
       }
@@ -1839,6 +1823,9 @@ describe("OpenClaw plugin runtime", () => {
         workspaceDir: "/tmp/repo"
       }
     );
+    await (pluginInstance as unknown as {
+      runtime: { waitForBackgroundLearning: () => Promise<void> };
+    }).runtime.waitForBackgroundLearning();
 
     const db = new DatabaseSync(sqlitePath);
     await waitFor(() => {
@@ -1935,6 +1922,9 @@ describe("OpenClaw plugin runtime", () => {
         workspaceDir: "/tmp/repo"
       }
     );
+    await (pluginInstance as unknown as {
+      runtime: { waitForBackgroundLearning: () => Promise<void> };
+    }).runtime.waitForBackgroundLearning();
     await waitFor(() => {
       const nodeRow = db
         .prepare(
@@ -2064,7 +2054,7 @@ describe("OpenClaw plugin runtime", () => {
       });
     });
 
-    createExperiencePlugin(
+    const pluginInstance = createExperiencePlugin(
       {
         dataDir: join(runtimeDir, "data"),
         sqlitePath,
@@ -2083,9 +2073,13 @@ describe("OpenClaw plugin runtime", () => {
         env: {
           GEMINI_API_KEY: "secret"
         },
-        fetchImpl: fetchImpl as unknown as typeof fetch
+        fetchImpl: fetchImpl as unknown as typeof fetch,
+        disableBackgroundLearning: false,
+        disableHybridPosttask: true
       }
-    ).register({
+    );
+
+    pluginInstance.register({
       on(event, handler) {
         handlers.set(event, handler);
       }
@@ -2124,6 +2118,9 @@ describe("OpenClaw plugin runtime", () => {
         workspaceDir: "/tmp/repo"
       }
     );
+    await (pluginInstance as unknown as {
+      runtime: { waitForBackgroundLearning: () => Promise<void> };
+    }).runtime.waitForBackgroundLearning();
 
     await finalize?.(
       {
@@ -2155,6 +2152,9 @@ describe("OpenClaw plugin runtime", () => {
         workspaceDir: "/tmp/repo"
       }
     );
+    await (pluginInstance as unknown as {
+      runtime: { waitForBackgroundLearning: () => Promise<void> };
+    }).runtime.waitForBackgroundLearning();
 
     const db = new DatabaseSync(sqlitePath);
     await waitFor(() => {
@@ -2256,20 +2256,7 @@ describe("OpenClaw plugin runtime", () => {
 
   it("persists feedback timestamps when injected turns succeed or fail", async () => {
     const runtimeDir = makeTempDir();
-    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
-    const handlers = new Map<string, Handler>();
-
-    plugin.register({
-      pluginConfig: {
-        dataDir: join(runtimeDir, "data"),
-        sqlitePath,
-        triggerThreshold: 0.6,
-        maxHints: 3
-      },
-      on(event, handler) {
-        handlers.set(event, handler);
-      }
-    });
+    const { sqlitePath, handlers } = registerPluginRuntime(runtimeDir);
 
     const beforePromptBuild = handlers.get("before_prompt_build");
     const persistToolResult = handlers.get("tool_result_persist");
@@ -2373,20 +2360,7 @@ describe("OpenClaw plugin runtime", () => {
 
   it("preserves prior feedback counters when a matching candidate is stored again", async () => {
     const runtimeDir = makeTempDir();
-    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
-    const handlers = new Map<string, Handler>();
-
-    plugin.register({
-      pluginConfig: {
-        dataDir: join(runtimeDir, "data"),
-        sqlitePath,
-        triggerThreshold: 0.6,
-        maxHints: 3
-      },
-      on(event, handler) {
-        handlers.set(event, handler);
-      }
-    });
+    const { sqlitePath, handlers } = registerPluginRuntime(runtimeDir);
 
     const beforePromptBuild = handlers.get("before_prompt_build");
     const persistToolResult = handlers.get("tool_result_persist");
@@ -2496,20 +2470,7 @@ describe("OpenClaw plugin runtime", () => {
 
   it("ignores exploratory warning noise but stores terminal failure warnings", async () => {
     const runtimeDir = makeTempDir();
-    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
-    const handlers = new Map<string, Handler>();
-
-    plugin.register({
-      pluginConfig: {
-        dataDir: join(runtimeDir, "data"),
-        sqlitePath,
-        triggerThreshold: 0.6,
-        maxHints: 3
-      },
-      on(event, handler) {
-        handlers.set(event, handler);
-      }
-    });
+    const { sqlitePath, handlers } = registerPluginRuntime(runtimeDir);
 
     const beforePromptBuild = handlers.get("before_prompt_build");
     const persistToolResult = handlers.get("tool_result_persist");
