@@ -1,12 +1,21 @@
 import type { ExperienceNode } from "../types/domain.js";
+import type { NodeOriginProfile } from "../experience-management/task-management-signals.js";
 
-export const transitionState = (node: ExperienceNode): ExperienceNode["state"] => {
+type TransitionContext = {
+  originProfile?: NodeOriginProfile;
+};
+
+export const transitionState = (node: ExperienceNode, context: TransitionContext = {}): ExperienceNode["state"] => {
+  const strictPromotion = context.originProfile?.strictPromotion ?? false;
+  const activationHelpedThreshold = strictPromotion ? 2 : 1;
+  const activationSupportThreshold = strictPromotion ? 3 : 2;
+
   if (node.harmed_count >= 3 && node.helped_count === 0) {
     return "retired";
   }
 
   if (node.state === "priority_candidate") {
-    if (node.helped_count >= 1 || node.support_count >= 2) {
+    if (node.helped_count >= activationHelpedThreshold || node.support_count >= activationSupportThreshold) {
       return "active";
     }
     if (node.harmed_count > 0) {
@@ -20,7 +29,7 @@ export const transitionState = (node: ExperienceNode): ExperienceNode["state"] =
   }
 
   if (node.state === "candidate") {
-    if (node.support_count >= 2 || node.helped_count >= 1) {
+    if (node.support_count >= activationSupportThreshold || node.helped_count >= activationHelpedThreshold) {
       return "active";
     }
     return "candidate";

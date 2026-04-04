@@ -33,7 +33,15 @@ import type {
   ReviewEvent,
   TaskRun
 } from "../types/domain.js";
-import { transitionState, transitionValidationState } from "../feedback/state-transition.js";
+import type { NodeOriginProfile } from "../experience-management/task-management-signals.js";
+import {
+  applyGovernedNodeFeedback,
+  deriveNodeOriginProfileForNode
+} from "../experience-management/node-lifecycle-governance.js";
+import {
+  deriveGovernanceSignals,
+  isPotentialMisfire
+} from "../experience-management/governance-observability.js";
 import { nowIso } from "../utils/clock.js";
 import { createId } from "../utils/ids.js";
 import {
@@ -205,6 +213,9 @@ export type ExperienceDecisionHealth = {
   recentInjects: number;
   recentConservativeInjects: number;
   recentSkips: number;
+  recentPotentialMisfires: number;
+  recentMetaDominantSelections: number;
+  recentRealDevAlignedSelections: number;
   recentFastPathActivations: number;
   recentRerankParticipations: number;
   recentQueryRewriteUsages: number;
@@ -434,25 +445,6 @@ const toNodeDetail = (node: ExperienceNode): ExperienceNodeDetail => ({
   helpedRecordIds: node.helped_record_ids,
   harmedRecordIds: node.harmed_record_ids
 });
-
-const applyNodeFeedback = (node: ExperienceNode, feedback: FeedbackValue): ExperienceNode => {
-  const timestamp = nowIso();
-
-  const next = {
-    ...node,
-    helped_count: feedback === "helped" ? node.helped_count + 1 : node.helped_count,
-    harmed_count: feedback === "harmed" ? node.harmed_count + 1 : node.harmed_count,
-    validation_state: transitionValidationState(node, feedback),
-    last_helped_at: feedback === "helped" ? timestamp : node.last_helped_at,
-    last_harmed_at: feedback === "harmed" ? timestamp : node.last_harmed_at,
-    updated_at: timestamp
-  };
-
-  return {
-    ...next,
-    state: node.state === "retired" ? "retired" : transitionState(next)
-  };
-};
 
 const summarizeAutomaticFeedback = (events: ReviewEvent[]): "helped" | "harmed" | "none" => {
   const automatic = events.filter((event) => event.source === "automatic");
@@ -707,6 +699,10 @@ export class ExperienceInteractionService {
       explainDecisionLlmEnabled:
         config.hybridEnabled && config.hybridSyncExplainEnabled && config.hybridExplainLlmEnabled
     });
+  }
+
+  private deriveOriginProfile(node: ExperienceNode): NodeOriginProfile | undefined {
+    return deriveNodeOriginProfileForNode(this.inputRepo, node);
   }
 
   decideExplainRoute(userMessage: string): HybridRouteDecision {
@@ -1147,6 +1143,9 @@ export class ExperienceInteractionService {
     let recentInjects = 0;
     let recentConservativeInjects = 0;
     let recentSkips = 0;
+    let recentPotentialMisfires = 0;
+    let recentMetaDominantSelections = 0;
+    let recentRealDevAlignedSelections = 0;
     let recentFastPathActivations = 0;
     let recentRerankParticipations = 0;
     let recentQueryRewriteUsages = 0;
@@ -1175,6 +1174,18 @@ export class ExperienceInteractionService {
         recentSkips += 1;
       }
 
+      if (isPotentialMisfire(injectionEvent)) {
+        recentPotentialMisfires += 1;
+      }
+
+      const governance = deriveGovernanceSignals(injectionEvent?.scorecard);
+      if (governance.metaDominant) {
+        recentMetaDominantSelections += 1;
+      }
+      if (governance.realDevAligned) {
+        recentRealDevAlignedSelections += 1;
+      }
+
       if (injectionEvent?.scorecard?.fastPathApplied) {
         recentFastPathActivations += 1;
       }
@@ -1192,6 +1203,9 @@ export class ExperienceInteractionService {
       recentInjects,
       recentConservativeInjects,
       recentSkips,
+      recentPotentialMisfires,
+      recentMetaDominantSelections,
+      recentRealDevAlignedSelections,
       recentFastPathActivations,
       recentRerankParticipations,
       recentQueryRewriteUsages,
@@ -1227,7 +1241,7 @@ export class ExperienceInteractionService {
       : undefined;
 
     for (const node of nodes) {
-      this.nodeRepo.upsert(applyNodeFeedback(node, feedback));
+      this.nodeRepo.upsert(applyGovernedNodeFeedback(node, feedback, this.deriveOriginProfile(node)));
       this.reviewEventRepo.upsert(
         toReviewEvent(node.id, feedback === "helped" ? "mark_helped" : "mark_harmed", "user", taskRunId)
       );
@@ -1250,7 +1264,7 @@ export class ExperienceInteractionService {
       };
     }
 
-    this.nodeRepo.upsert(applyNodeFeedback(node, feedback));
+    this.nodeRepo.upsert(applyGovernedNodeFeedback(node, feedback, this.deriveOriginProfile(node)));
     this.reviewEventRepo.upsert(
       toReviewEvent(nodeId, feedback === "helped" ? "mark_helped" : "mark_harmed", "user")
     );

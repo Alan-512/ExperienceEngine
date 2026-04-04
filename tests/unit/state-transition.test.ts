@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { transitionState } from "../../src/feedback/state-transition.js";
+import type { NodeOriginProfile } from "../../src/experience-management/task-management-signals.js";
 import type { ExperienceNode } from "../../src/types/domain.js";
 
 const node = (overrides: Partial<ExperienceNode> = {}): ExperienceNode => ({
@@ -25,6 +26,17 @@ const node = (overrides: Partial<ExperienceNode> = {}): ExperienceNode => ({
   ...overrides
 });
 
+const metaOriginProfile = (overrides: Partial<NodeOriginProfile> = {}): NodeOriginProfile => ({
+  sampleCount: 2,
+  metaCount: 2,
+  validationCount: 1,
+  realDevCount: 0,
+  bugFixCount: 0,
+  strictPromotion: true,
+  reasons: ["strict_promotion:yes"],
+  ...overrides
+});
+
 describe("transitionState", () => {
   it("keeps a fresh priority candidate in priority state until it validates", () => {
     expect(transitionState(node({ state: "priority_candidate", promotion_signal: "high_value" }))).toBe(
@@ -42,5 +54,23 @@ describe("transitionState", () => {
     expect(
       transitionState(node({ state: "priority_candidate", promotion_signal: "high_value", harmed_count: 1 }))
     ).toBe("candidate");
+  });
+
+  it("keeps a meta-like candidate in candidate state after the first helped reuse", () => {
+    expect(
+      transitionState(
+        node({ state: "candidate", helped_count: 1 }),
+        { originProfile: metaOriginProfile() }
+      )
+    ).toBe("candidate");
+  });
+
+  it("keeps a meta-like priority candidate in priority state until stronger reuse evidence arrives", () => {
+    expect(
+      transitionState(
+        node({ state: "priority_candidate", promotion_signal: "high_value", helped_count: 1, support_count: 2 }),
+        { originProfile: metaOriginProfile() }
+      )
+    ).toBe("priority_candidate");
   });
 });

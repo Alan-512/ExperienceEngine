@@ -94,4 +94,51 @@ describe("enrichPolicyForCandidate", () => {
 
     expect(enrichment.reasons).toContain("generic_penalty:0.2200");
   });
+
+  it("penalizes meta-like guidance for a real bug-fix style task", () => {
+    const enrichment = enrichPolicyForCandidate(
+      input({
+        task_type: "bug_fix",
+        task_summary: "Fix the failing auth regression in the provider routing path",
+        context_summary: "The tests fail because the provider routing layer is broken."
+      }),
+      node({
+        task_type: "general",
+        experience_kind: undefined,
+        compact_hint: "Review the weekly audit and inspect the latest doctor output before changing retrieval policy.",
+        trigger_pattern: "Review the audit output before deciding the next retrieval-policy change.",
+        evidence_summary: "Useful during audit and validation passes.",
+        corrected_constraint: undefined,
+        correction_category: undefined,
+        deviation_pattern: undefined
+      })
+    );
+
+    expect(enrichment.reasons).toContain("meta_origin_penalty:0.0800");
+    expect(enrichment.policyAdjustment).toBeLessThan(0.4);
+  });
+
+  it("rewards real-dev bug-fix guidance on a real bug-fix style task", () => {
+    const enrichment = enrichPolicyForCandidate(
+      input({
+        task_type: "bug_fix",
+        task_summary: "Fix the failing auth regression in the provider routing path",
+        context_summary: "The tests fail because the provider routing layer is broken."
+      }),
+      node({
+        task_type: "test_debug",
+        experience_kind: undefined,
+        compact_hint: "Reproduce the failing auth test, narrow the provider routing error, then rerun the focused test.",
+        trigger_pattern: "Fix the failing auth test by narrowing provider routing before broader refactors.",
+        evidence_summary: "Recovered after reproducing the focused test and fixing the routing path.",
+        corrected_constraint: undefined,
+        correction_category: undefined,
+        deviation_pattern: undefined
+      })
+    );
+
+    expect(enrichment.reasons).toContain("real_dev_alignment:0.0600");
+    expect(enrichment.reasons).toContain("meta_origin_penalty:0.0000");
+    expect(enrichment.policyAdjustment).toBeGreaterThan(0);
+  });
 });

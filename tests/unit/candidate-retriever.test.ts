@@ -436,6 +436,41 @@ describe("retrieveCandidates", () => {
     expect(candidates.map((entry) => entry.node.id)).toContain("adjacent-config-node");
   });
 
+  it("prefers real bug-fix guidance over meta-like guidance for a real bug-fix task", async () => {
+    const candidates = await retrieveScoredCandidates(
+      input({
+        task_type: "bug_fix",
+        task_summary: "Fix the failing auth regression in the provider routing path",
+        context_summary: "The tests fail because the provider routing layer is broken."
+      }),
+      [
+        node({
+          id: "meta-guidance",
+          task_type: "general",
+          trigger_pattern: "Review the weekly audit before changing retrieval policy",
+          compact_hint: "Review the audit and inspect the latest doctor output before changing retrieval policy.",
+          evidence_summary: "Useful during audit and validation passes."
+        }),
+        node({
+          id: "real-bugfix-guidance",
+          task_type: "test_debug",
+          trigger_pattern: "Fix the failing auth test by narrowing provider routing before broader refactors",
+          compact_hint: "Reproduce the failing auth test, narrow the provider routing error, then rerun the focused test.",
+          evidence_summary: "Recovered after reproducing the focused test and fixing the routing path."
+        })
+      ]
+    );
+
+    expect(candidates[0]?.node.id).toBe("real-bugfix-guidance");
+    expect(candidates[1]?.node.id).toBe("meta-guidance");
+    expect(candidates[0]?.policyReasons).toEqual(
+      expect.arrayContaining([expect.stringContaining("real_dev_alignment:0.0600")])
+    );
+    expect(candidates[1]?.policyReasons).toEqual(
+      expect.arrayContaining([expect.stringContaining("meta_origin_penalty:0.0800")])
+    );
+  });
+
   it("recovers a same-family node from strong lexical overlap even when semantic similarity is weak", async () => {
     const candidates = await retrieveScoredCandidates(
       input({

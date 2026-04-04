@@ -191,6 +191,29 @@ describe("OpenClaw baseline evaluation", () => {
       delivered: true,
       injected_node_ids: ["node_1"],
       injection_count: 1,
+      scorecard: {
+        scopeId: "scope_1",
+        sessionId: "session_1",
+        taskType: "test_debug",
+        taskSummary: "Fix the failing auth test",
+        mode: "inject",
+        riskLevel: "low",
+        recommendation: "Apply the strongest bug-fix hint.",
+        reasons: ["A mature same-family candidate matched strongly."],
+        topCandidates: [
+          {
+            id: "node_1",
+            retrievalScore: 0.71,
+            policyAdjustment: 0.24,
+            totalScore: 0.95,
+            taskFamilyMatch: true,
+            policyReasons: ["real_dev_alignment:0.0600", "meta_origin_penalty:0.0000"],
+            retrievalReasons: ["family:exact"]
+          }
+        ],
+        nodes: [],
+        createdAt: "2026-03-16T08:01:00.000Z"
+      },
       created_at: "2026-03-16T08:01:00.000Z",
       resolved_at: "2026-03-16T08:05:00.000Z",
       was_successful: true,
@@ -219,6 +242,11 @@ describe("OpenClaw baseline evaluation", () => {
       suppressed: 0,
       automaticHelped: 1,
       automaticHarmed: 0
+    });
+    expect(summary.governance).toMatchObject({
+      harmfulOrMisfiredHints: 0,
+      metaDominantSelections: 0,
+      realDevAlignedSelections: 1
     });
     expect(summary.benchmark).toMatchObject({
       deliveryRate: 1,
@@ -283,6 +311,8 @@ describe("OpenClaw baseline evaluation", () => {
     expect(markdown).toContain("## Benchmark Summary");
     expect(markdown).toContain("- Verdict: warming_up");
     expect(markdown).toContain("- Suggested mode: shadow");
+    expect(markdown).toContain("## Governance");
+    expect(markdown).toContain("- Harmful or misfired hints: 0");
     expect(markdown).toContain("## Mode Comparison");
     expect(markdown).toContain("- live: decisions=0 delivered=0 suppressed=0 helpful=0 harmed=0 net=0 verdict=warming_up");
     expect(markdown).toContain("## Attribution Reasons");
@@ -403,6 +433,63 @@ describe("OpenClaw baseline evaluation", () => {
         caseStudyJson: result.caseStudyJsonPath,
         caseStudyIndexJson: result.caseStudyIndexJsonPath
       })
+    });
+  });
+
+  it("ignores malformed historical scorecards when deriving governance counters", () => {
+    const { db, config } = makeDb();
+    new InputRecordRepository(db).upsert(record());
+    new InjectionRepository(db).upsert({
+      injection_id: "inject_1",
+      session_id: "session_1",
+      scope_id: "scope_1",
+      task_type: "test_debug",
+      task_summary: "Fix the failing auth test",
+      mode: "inject",
+      delivery_mode: "live",
+      delivered: true,
+      injected_node_ids: ["node_1"],
+      injection_count: 1,
+      created_at: "2026-03-16T08:01:00.000Z",
+      resolved_at: "2026-03-16T08:05:00.000Z",
+      was_successful: true,
+      harm_observed: false,
+      attribution_reason: "success_outcome",
+      scorecard: {
+        scopeId: "scope_1",
+        sessionId: "session_1",
+        taskType: "test_debug",
+        taskSummary: "Fix the failing auth test",
+        mode: "inject",
+        riskLevel: "low",
+        recommendation: "Apply the strongest bug-fix hint.",
+        reasons: ["A mature same-family candidate matched strongly."],
+        topCandidates: [
+          {
+            id: "node_1",
+            retrievalScore: 0.71,
+            policyAdjustment: 0.24,
+            totalScore: 0.95,
+            taskFamilyMatch: true,
+            policyReasons: ["real_dev_alignment:0.0600"],
+            retrievalReasons: ["family:exact"]
+          }
+        ],
+        nodes: [],
+        createdAt: "2026-03-16T08:01:00.000Z"
+      }
+    });
+    db.prepare("UPDATE injection_events SET scorecard_json = ? WHERE injection_id = ?").run("{not-json", "inject_1");
+
+    const summary = collectOpenClawBaselineSummary(db, config, {
+      now: () => "2026-03-16T09:00:00.000Z"
+    });
+
+    expect(summary.effectiveness.decisions).toBe(1);
+    expect(summary.governance).toMatchObject({
+      harmfulOrMisfiredHints: 0,
+      metaDominantSelections: 0,
+      realDevAlignedSelections: 0
     });
   });
 });

@@ -155,6 +155,22 @@ const printTrendSummary = (trend?: {
   );
 };
 
+const printGovernanceSummary = (governance?: {
+  harmfulOrMisfiredHints: number;
+  metaDominantSelections: number;
+  realDevAlignedSelections: number;
+}): void => {
+  if (!governance) {
+    return;
+  }
+
+  console.log(
+    `Governance: misfires=${governance.harmfulOrMisfiredHints}`
+    + ` meta_dominant=${governance.metaDominantSelections}`
+    + ` real_dev_aligned=${governance.realDevAlignedSelections}`
+  );
+};
+
 export const runEvaluateCommand = (
   target?: string,
   args: string[] = [],
@@ -236,6 +252,7 @@ export const runEvaluateCommand = (
     effectiveness: result.summary.effectiveness,
     modeComparison: result.summary.modeComparison
   });
+  printGovernanceSummary(result.summary.governance);
   printTrendSummary(result.summary.trend, {
     verdict: result.summary.benchmark.verdict,
     suggestedMode: result.summary.benchmark.suggestedMode

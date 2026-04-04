@@ -9,6 +9,7 @@ import { buildRetrievalContext } from "../controller/retrieval-context.js";
 import { resolveScope } from "../input/scope-resolver.js";
 import { decideIntervention } from "../controller/intervention-controller.js";
 import { renderInlineNotice } from "../controller/inline-notice.js";
+import { deriveNodeOriginProfileForNode } from "../experience-management/node-lifecycle-governance.js";
 import { resolveHybridRolloutState } from "../hybrid/rollout.js";
 import { selectHybridRoute, type HybridRouteDecision, type HybridRouteSignals } from "../hybrid/router.js";
 import { nowIso } from "../utils/clock.js";
@@ -877,7 +878,13 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
         } => Boolean(value)
       );
 
-    for (const node of applyFeedback(input, touched, attributionRecordId)) {
+    const originProfilesByNodeId = Object.fromEntries(
+      touched.map((node) => {
+        return [node.id, deriveNodeOriginProfileForNode(this.inputRepo, node)];
+      })
+    );
+
+    for (const node of applyFeedback(input, touched, attributionRecordId, { originProfilesByNodeId })) {
       this.nodeRepo.upsert(node);
     }
 

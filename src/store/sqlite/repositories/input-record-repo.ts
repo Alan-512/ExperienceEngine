@@ -199,6 +199,38 @@ export class InputRecordRepository {
     return row ? this.mapRecord(row) : undefined;
   }
 
+  listByIds(recordIds: string[]): ExperienceInputRecord[] {
+    if (!recordIds.length) {
+      return [];
+    }
+
+    const placeholders = recordIds.map(() => "?").join(", ");
+    return this.db
+      .prepare(
+        `SELECT record_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary,
+                evidence_json, injected_node_ids_json, created_at
+         FROM experience_input_records
+         WHERE record_id IN (${placeholders})`
+      )
+      .all(...recordIds)
+      .map((row) =>
+        this.mapRecord(
+          row as {
+            record_id: string;
+            scope_id: string;
+            session_id: string | null;
+            task_type: ExperienceInputRecord["task_type"];
+            task_summary: string;
+            outcome_signal: ExperienceInputRecord["outcome_signal"];
+            context_summary: string | null;
+            evidence_json: string;
+            injected_node_ids_json: string;
+            created_at: string;
+          }
+        )
+      );
+  }
+
   listRecent(options: { limit?: number; injectedOnly?: boolean } = {}): ExperienceInputRecord[] {
     const limit = options.limit ?? 10;
     const whereClause = options.injectedOnly ? "WHERE injected_node_ids_json != '[]'" : "";
