@@ -41,7 +41,7 @@ export type HybridPostmortemResult =
   | HybridValidationSuccess<PostmortemReviewWorkerOutput>
   | HybridPostmortemFallback;
 
-type HybridWorkerClientOptions = {
+export type HybridWorkerClientOptions = {
   explainDecisionEnabled?: boolean;
   explainDecisionTimeoutMs?: number;
   explainDecisionProviderTimeoutMs?: number;

@@ -56,24 +56,16 @@ import type { LlmLearningGate } from "../analyzer/llm-learning-gate.js";
 import type { DistillationQueueWorker } from "../distillation/queue-worker.js";
 import type { DistillerEndpoint } from "../distillation/providers/types.js";
 import type { PostmortemReviewCapsule } from "../hybrid/types.js";
-import type { HybridPostmortemResult, HybridWorkerClient } from "../hybrid/worker-client.js";
+import type {
+  HybridPostmortemResult,
+  HybridWorkerClient,
+  HybridWorkerClientOptions
+} from "../hybrid/worker-client.js";
 
 type LearningRuntimeOptions = {
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
   fetchImpl?: typeof fetch;
-};
-
-type HybridWorkerClientOptions = {
-  explainDecisionEnabled?: boolean;
-  explainDecisionTimeoutMs?: number;
-  explainDecisionProviderTimeoutMs?: number;
-  explainDecisionLlmEnabled?: boolean;
-  postmortemReviewEnabled?: boolean;
-  postmortemReviewTimeoutMs?: number;
-  postmortemReviewProviderTimeoutMs?: number;
-  postmortemReviewLlmEnabled?: boolean;
-  timeoutCircuitThreshold?: number;
 };
 
 type ExperienceRuntimeServiceOptions = LearningRuntimeOptions & {
