@@ -295,6 +295,9 @@ const logDecisionHealth = (summary?: ExperienceDecisionHealth): void => {
   console.log(`- Standard hints (inject): ${summary.recentInjects}`);
   console.log(`- Cautious hints (inject_conservative): ${summary.recentConservativeInjects}`);
   console.log(`- No-hint decisions (skip): ${summary.recentSkips}`);
+  console.log(`- Harmful or misfired hints: ${summary.recentPotentialMisfires}`);
+  console.log(`- Meta-dominant selections: ${summary.recentMetaDominantSelections}`);
+  console.log(`- Real-dev-aligned selections: ${summary.recentRealDevAlignedSelections}`);
   console.log(`- Fast matches (fast path): ${summary.recentFastPathActivations}`);
   console.log(`- Rerank reviews (rerank): ${summary.recentRerankParticipations}`);
   console.log(`- Query normalizations (query rewrites): ${summary.recentQueryRewriteUsages}`);

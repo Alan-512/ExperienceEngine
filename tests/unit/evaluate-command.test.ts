@@ -412,6 +412,14 @@ describe("evaluate command", () => {
             recommendation: "Collect at least 3 decisions before treating benchmark numbers as stable."
           }
         },
+        governance: {
+          harmfulOrMisfiredHints: 0,
+          harmfulOrMisfiredRate: 0,
+          metaDominantSelections: 0,
+          metaDominantRate: 0,
+          realDevAlignedSelections: 1,
+          realDevAlignedRate: 1
+        },
         attributionReasons: {
           success_outcome: 1,
           relevant_failure: 0,
@@ -450,6 +458,9 @@ describe("evaluate command", () => {
     );
     expect(consoleLogSpy).toHaveBeenCalledWith(
       "Effectiveness: decisions=1 delivered=1 suppressed=0 live=1 shadow=0 holdout=0 auto_helped=1 auto_harmed=0"
+    );
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      "Governance: misfires=0 meta_dominant=0 real_dev_aligned=1"
     );
     expect(consoleLogSpy).toHaveBeenCalledWith(
       "Trend vs previous: net=+1.2500 verdict=failing->warming_up suggested=holdout->shadow"

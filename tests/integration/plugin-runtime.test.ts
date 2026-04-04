@@ -7,7 +7,9 @@ import { writeExperienceEngineSettings } from "../../src/config/settings-store.j
 import { resolveScope } from "../../src/input/scope-resolver.js";
 import plugin, { createExperiencePlugin } from "../../src/plugin/openclaw-plugin.js";
 import { installOpenClawAdapter } from "../../src/install/openclaw-installer.js";
+import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
 import { clearEmbeddingProviderForTests, setEmbeddingProviderForTests } from "../../src/store/vector/embeddings.js";
+import { nowIso } from "../../src/utils/clock.js";
 import { replayScenarios, type ReplayScenario } from "../fixtures/openclaw/index.js";
 
 type Handler = (payload: unknown, context?: unknown) => unknown | Promise<unknown>;
@@ -2368,6 +2370,126 @@ describe("OpenClaw plugin runtime", () => {
       expect(nodeRow.last_helped_at).toBeTruthy();
       expect(nodeRow.last_harmed_at).toBeTruthy();
       expect(nodeRow.state).toBe("active");
+    });
+  });
+
+  it("keeps a meta-origin injected candidate in candidate state after the first automatic helped signal", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const handlers = new Map<string, Handler>();
+
+    createExperiencePlugin(
+      {
+        dataDir: join(runtimeDir, "data"),
+        sqlitePath,
+        triggerThreshold: 0.6,
+        maxHints: 3
+      },
+      undefined,
+      { disableBackgroundLearning: false }
+    ).register({
+      pluginConfig: {
+        dataDir: join(runtimeDir, "data"),
+        sqlitePath,
+        triggerThreshold: 0.6,
+        maxHints: 3
+      },
+      on(event, handler) {
+        handlers.set(event, handler);
+      }
+    });
+
+    const beforePromptBuild = handlers.get("before_prompt_build");
+    const persistToolResult = handlers.get("tool_result_persist");
+    const finalize = handlers.get("message_sent");
+    const db = new DatabaseSync(sqlitePath);
+    const scope = resolveScope("/tmp/repo");
+    const nodeRepo = new NodeRepository(db);
+    db.prepare(
+      `INSERT INTO experience_input_records
+        (record_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary, evidence_json, injected_node_ids_json, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    ).run(
+      "input_meta_origin_runtime",
+      scope.scope_id,
+      "session_meta_origin_runtime",
+      "general",
+      "Review the weekly audit and inspect the latest doctor output before changing retrieval policy.",
+      "success",
+      "This is an audit of retrieval quality and host readiness.",
+      "[]",
+      "[]",
+      "2026-04-03T00:00:00.000Z"
+    );
+
+    const timestamp = nowIso();
+    nodeRepo.upsert({
+      id: "node_meta_runtime_feedback",
+      node_type: "strategy",
+      scope_id: scope.scope_id,
+      task_type: "test_debug",
+      trigger_pattern: "Fix the failing vitest auth test",
+      applicability_notes: "Use the same repo and test scope",
+      env_signature: undefined,
+      compact_hint: "Run the failing auth test before editing and verify after the fix.",
+      goal: "Stabilize the failing auth test",
+      recommended_steps: ["Run the failing test", "Apply the minimal fix", "Re-run the test"],
+      avoid_steps: [],
+      fallback_steps: [],
+      success_signal: "The targeted test passes",
+      stop_condition: undefined,
+      escalation_condition: undefined,
+      evidence_summary: "Recovered the same failing auth test in a prior task.",
+      retrieval_text: "Fix the failing vitest auth test\nRun the failing auth test before editing and verify after the fix.",
+      source_kind: "system_derived",
+      origin_record_ids: ["input_meta_origin_runtime"],
+      helped_record_ids: [],
+      harmed_record_ids: [],
+      state: "candidate",
+      usage_count: 0,
+      helped_count: 0,
+      harmed_count: 0,
+      support_count: 1,
+      last_used_at: undefined,
+      last_helped_at: undefined,
+      last_harmed_at: undefined,
+      created_at: timestamp,
+      updated_at: timestamp
+    });
+
+    await beforePromptBuild?.({
+      session: { key: "helped-meta-promotion" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Fix the failing vitest auth test" }
+    });
+    await persistToolResult?.({
+      sessionKey: "helped-meta-promotion",
+      tool: { name: "exec" },
+      result: { exitCode: 0, output: "/tmp/repo" },
+      success: true
+    });
+    await finalize?.({
+      session: { key: "helped-meta-promotion" },
+      workspace: { cwd: "/tmp/repo" },
+      message: { content: "Fix the failing vitest auth test" }
+    });
+
+    await waitFor(() => {
+      const nodeRow = db
+        .prepare(
+          "SELECT usage_count, helped_count, support_count, state FROM experience_nodes WHERE id = 'node_meta_runtime_feedback' LIMIT 1"
+        )
+        .get() as {
+          usage_count: number;
+          helped_count: number;
+          support_count: number;
+          state: string;
+        };
+
+      expect(nodeRow.usage_count).toBe(1);
+      expect(nodeRow.helped_count).toBe(1);
+      expect(nodeRow.support_count).toBe(1);
+      expect(nodeRow.state).toBe("candidate");
     });
   });
 

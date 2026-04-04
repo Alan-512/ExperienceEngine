@@ -30,6 +30,26 @@ const summarizeRetrievalPattern = (decisionHealth: ExperienceDecisionHealth): st
 
   return undefined;
 };
+
+const summarizeGovernancePattern = (decisionHealth: ExperienceDecisionHealth): string | undefined => {
+  if (decisionHealth.recentDecisions === 0) {
+    return undefined;
+  }
+
+  if (decisionHealth.recentPotentialMisfires > 0) {
+    return "Recent harmful outcomes suggest some hints still need tighter governance before broad reuse.";
+  }
+
+  if (decisionHealth.recentMetaDominantSelections > 0 && decisionHealth.recentRealDevAlignedSelections === 0) {
+    return "Recent selections are still leaning toward meta or validation guidance more than real coding-error guidance.";
+  }
+
+  if (decisionHealth.recentRealDevAlignedSelections > 0) {
+    return "Recent selections are mostly favoring real coding-error guidance when the task looks like real development work.";
+  }
+
+  return undefined;
+};
 export const runStatusCommand = (): void => {
   const config = loadConfig();
   const interaction = new ExperienceInteractionService(config);
@@ -79,6 +99,9 @@ export const runStatusCommand = (): void => {
   console.log(`- Recent standard hints (inject): ${decisionHealth.recentInjects}`);
   console.log(`- Recent cautious hints (inject_conservative): ${decisionHealth.recentConservativeInjects}`);
   console.log(`- Recent no-hint decisions (skip): ${decisionHealth.recentSkips}`);
+  console.log(`- Recent harmful or misfired hints: ${decisionHealth.recentPotentialMisfires}`);
+  console.log(`- Recent meta-dominant selections: ${decisionHealth.recentMetaDominantSelections}`);
+  console.log(`- Recent real-dev-aligned selections: ${decisionHealth.recentRealDevAlignedSelections}`);
   console.log(`- Recent fast matches (fast path): ${decisionHealth.recentFastPathActivations}`);
   console.log(`- Recent rerank reviews (rerank): ${decisionHealth.recentRerankParticipations}`);
   console.log(`- Recent query normalizations (query rewrites): ${decisionHealth.recentQueryRewriteUsages}`);
@@ -88,5 +111,9 @@ export const runStatusCommand = (): void => {
   const retrievalPattern = summarizeRetrievalPattern(decisionHealth);
   if (retrievalPattern) {
     console.log(`- Retrieval pattern: ${retrievalPattern}`);
+  }
+  const governancePattern = summarizeGovernancePattern(decisionHealth);
+  if (governancePattern) {
+    console.log(`- Governance pattern: ${governancePattern}`);
   }
 };

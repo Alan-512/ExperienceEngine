@@ -218,6 +218,63 @@ describe("LlmLearningGate", () => {
     });
   });
 
+  it("keeps meta-like tasks capturable but downgrades aggressive promotion signals", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        choices: [
+          {
+            message: {
+              content: JSON.stringify({
+                worth_capturing: true,
+                experience_kind: "verification_loop",
+                reason: "The audit exposed a reusable verification pattern.",
+                candidate: {
+                  node_type: "strategy",
+                  task_type: "general",
+                  trigger_pattern: "When running a weekly audit of host readiness and retrieval quality",
+                  compact_hint: "Check doctor, inspect, and baseline outputs before proposing a retrieval change.",
+                  success_signal: "The audit isolates the failing layer before implementation changes.",
+                  evidence_summary: "The audit clarified whether the issue was runtime wiring or retrieval policy.",
+                  promotion_signal: "high_value",
+                  promotion_reason: "This looked broadly reusable during the audit."
+                }
+              })
+            }
+          }
+        ]
+      })
+    });
+
+    const gate = new LlmLearningGate(
+      loadConfig({
+        distillerProvider: "openai",
+        distillerModel: "gpt-5.4-nano",
+        distillationMode: "llm"
+      }),
+      {
+        env: {
+          EXPERIENCE_ENGINE_DISTILLER_PROVIDER: "openai",
+          EXPERIENCE_ENGINE_DISTILLER_MODEL: "gpt-5.4-nano",
+          OPENAI_API_KEY: "secret"
+        },
+        fetchImpl: fetchImpl as unknown as typeof fetch
+      }
+    );
+
+    const result = await gate.generateCandidateDrafts(
+      makeInput({
+        task_type: "general",
+        task_summary: "Review the weekly audit and inspect the latest doctor output before changing retrieval policy.",
+        context_summary: "This is an audit of host readiness and retrieval quality."
+      })
+    );
+
+    expect(result.worthCapturing).toBe(true);
+    expect(result.drafts[0]?.promotion_signal).toBe("normal");
+    expect(result.drafts[0]?.promotion_reason).toContain("meta");
+  });
+
   it("upgrades a generic execution-pattern capture into expectation correction for evidence-driven reversal", async () => {
     const fetchImpl = vi
       .fn()

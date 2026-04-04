@@ -3,6 +3,11 @@ import { dirname, join, resolve } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import { loadConfig } from "../config/load-config.js";
 import { resolveExperienceEnginePaths } from "../config/path-resolver.js";
+import {
+  deriveGovernanceSignals,
+  isPotentialMisfire,
+  parseInjectionScorecard
+} from "../experience-management/governance-observability.js";
 import { openDatabase } from "../store/sqlite/db.js";
 import { InjectionRepository } from "../store/sqlite/repositories/injection-repo.js";
 import type { DistillationSource, FeedbackAttributionReason } from "../types/domain.js";
@@ -86,6 +91,14 @@ export type OpenClawBaselineSummary = {
     suppressed: number;
     automaticHelped: number;
     automaticHarmed: number;
+  };
+  governance: {
+    harmfulOrMisfiredHints: number;
+    harmfulOrMisfiredRate: number;
+    metaDominantSelections: number;
+    metaDominantRate: number;
+    realDevAlignedSelections: number;
+    realDevAlignedRate: number;
   };
   benchmark: BenchmarkSummary;
   trend?: OpenClawBaselineTrend;
@@ -411,6 +424,25 @@ export const collectOpenClawBaselineSummary = (
       automaticHarmed: injectionRepo.countAutomaticFeedbackByDeliveryMode("holdout", "mark_harmed")
     })
   };
+  const governanceRows = db.prepare(
+    `SELECT scorecard_json, harm_observed, attribution_reason
+     FROM injection_events ${recordFilter}`
+  ).all() as Array<{
+    scorecard_json: string | null;
+    harm_observed: number | null;
+    attribution_reason: FeedbackAttributionReason | null;
+  }>;
+  const harmfulOrMisfiredHints = governanceRows.filter((row) =>
+    isPotentialMisfire({
+      harm_observed: row.harm_observed == null ? null : Boolean(row.harm_observed),
+      attribution_reason: row.attribution_reason ?? undefined
+    })
+  ).length;
+  const governanceSignals = governanceRows.map((row) =>
+    deriveGovernanceSignals(parseInjectionScorecard(row.scorecard_json))
+  );
+  const metaDominantSelections = governanceSignals.filter((signal) => signal.metaDominant).length;
+  const realDevAlignedSelections = governanceSignals.filter((signal) => signal.realDevAligned).length;
   const attributionReasons: FeedbackAttributionReason[] = [
     "success_outcome",
     "relevant_failure",
@@ -485,6 +517,14 @@ export const collectOpenClawBaselineSummary = (
       suppressed: suppressedDecisions,
       automaticHelped,
       automaticHarmed
+    },
+    governance: {
+      harmfulOrMisfiredHints,
+      harmfulOrMisfiredRate: ratio(harmfulOrMisfiredHints, injectionTotal),
+      metaDominantSelections,
+      metaDominantRate: ratio(metaDominantSelections, injectionTotal),
+      realDevAlignedSelections,
+      realDevAlignedRate: ratio(realDevAlignedSelections, injectionTotal)
     },
     benchmark: buildBenchmarkSummary({
       decisions: injectionTotal,
@@ -591,6 +631,15 @@ export const renderOpenClawBaselineMarkdown = (
 - Suppressed: ${summary.effectiveness.suppressed}
 - Automatic helped: ${summary.effectiveness.automaticHelped}
 - Automatic harmed: ${summary.effectiveness.automaticHarmed}
+
+## Governance
+
+- Harmful or misfired hints: ${summary.governance.harmfulOrMisfiredHints}
+- Harmful or misfired rate: ${summary.governance.harmfulOrMisfiredRate}
+- Meta-dominant selections: ${summary.governance.metaDominantSelections}
+- Meta-dominant rate: ${summary.governance.metaDominantRate}
+- Real-dev-aligned selections: ${summary.governance.realDevAlignedSelections}
+- Real-dev-aligned rate: ${summary.governance.realDevAlignedRate}
 
 ## Benchmark Summary
 

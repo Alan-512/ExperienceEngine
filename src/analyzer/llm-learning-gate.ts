@@ -16,6 +16,7 @@ import { buildCandidateSignals } from "./candidate-signals.js";
 import { dedupeCandidates } from "./node-deduper.js";
 import { normalizeCandidate } from "./node-normalizer.js";
 import { isSubstantiveToolEvent } from "../input/tool-event-significance.js";
+import { deriveTaskManagementSignals } from "../experience-management/task-management-signals.js";
 import {
   resolveDistillationResolution,
   type DistillationResolution,
@@ -472,6 +473,38 @@ const normalizeDraft = (candidate: Record<string, unknown>, input: ExperienceInp
     promotion_reason: pickString(candidate.promotion_reason),
     source_kind: "system_derived"
   });
+};
+
+const applyTaskManagementPromotionPolicy = (
+  input: ExperienceInput,
+  draft: ExperienceCandidateDraft
+): ExperienceCandidateDraft => {
+  const signals = deriveTaskManagementSignals(input);
+  const preserveHighValue =
+    signals.realDevLikely &&
+    (
+      signals.bugFixLike ||
+      draft.experience_kind === "expectation_correction" ||
+      input.task_type === "bug_fix" ||
+      input.task_type === "config_debug" ||
+      input.task_type === "integration_fix"
+    );
+
+  if (draft.promotion_signal !== "high_value" || preserveHighValue) {
+    return draft;
+  }
+
+  const downgradeReason = signals.metaLike
+    ? "downgraded from high_value because the task looked meta-like and still needs real-dev reuse evidence"
+    : signals.validationLike
+      ? "downgraded from high_value because the task looked validation-heavy and still needs real-dev reuse evidence"
+      : draft.promotion_reason;
+
+  return {
+    ...draft,
+    promotion_signal: "normal",
+    promotion_reason: downgradeReason
+  };
 };
 
 export class LlmLearningGate {
@@ -1525,12 +1558,12 @@ export class LlmLearningGate {
 
     if (resolution.distillationMode !== "llm" || !resolution.endpoint) {
       const fallback = analyzeExperience(input);
-      return {
-        worthCapturing: fallback.accepted.length > 0,
-        reason: fallback.accepted.length > 0 ? "captured by rule fallback" : "rule fallback rejected candidate",
-        drafts: fallback.accepted,
-        source: "rule"
-      };
+        return {
+          worthCapturing: fallback.accepted.length > 0,
+          reason: fallback.accepted.length > 0 ? "captured by rule fallback" : "rule fallback rejected candidate",
+          drafts: fallback.accepted.map((draft) => applyTaskManagementPromotionPolicy(input, draft)),
+          source: "rule"
+        };
     }
 
     try {
@@ -1562,7 +1595,7 @@ export class LlmLearningGate {
           return {
             worthCapturing: true,
             reason: `rescued directional correction: ${reason}`,
-            drafts: dedupeCandidates([rescued.draft]),
+            drafts: dedupeCandidates([applyTaskManagementPromotionPolicy(input, rescued.draft)]),
             source: "llm",
             directionalCorrectionSignal: rescued.directionalCorrectionSignal
           };
@@ -1579,7 +1612,7 @@ export class LlmLearningGate {
           return {
             worthCapturing: true,
             reason: `rescued evidence-driven reversal: ${reason}`,
-            drafts: dedupeCandidates([rescuedReversal.draft]),
+            drafts: dedupeCandidates([applyTaskManagementPromotionPolicy(input, rescuedReversal.draft)]),
             source: "llm",
             evidenceDrivenReversalSignal: rescuedReversal.evidenceDrivenReversalSignal
           };
@@ -1621,7 +1654,7 @@ export class LlmLearningGate {
       return {
         worthCapturing: true,
         reason,
-        drafts: dedupeCandidates([reversalRepaired.draft]),
+        drafts: dedupeCandidates([applyTaskManagementPromotionPolicy(input, reversalRepaired.draft)]),
         source: "llm",
         directionalCorrectionSignal: repaired.directionalCorrectionSignal,
         evidenceDrivenReversalSignal: reversalRepaired.evidenceDrivenReversalSignal
@@ -1631,7 +1664,7 @@ export class LlmLearningGate {
       return {
         worthCapturing: fallback.accepted.length > 0,
         reason: `llm gate failed: ${error instanceof Error ? error.message : String(error)}`,
-        drafts: fallback.accepted,
+        drafts: fallback.accepted.map((draft) => applyTaskManagementPromotionPolicy(input, draft)),
         source: "rule"
       };
     }

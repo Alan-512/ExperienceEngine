@@ -1,4 +1,8 @@
 import type { ExperienceInput, ExperienceNode, RetrievalContext, TaskType } from "../types/domain.js";
+import {
+  deriveNodeManagementSignals,
+  deriveTaskManagementSignals
+} from "../experience-management/task-management-signals.js";
 import { tokenize } from "../utils/text.js";
 
 const TASK_FAMILY_PROXIMITY: Record<TaskType, Partial<Record<TaskType, number>>> = {
@@ -150,12 +154,32 @@ export const enrichPolicyForCandidate = (
   node: ExperienceNode,
   retrievalContext?: RetrievalContext
 ): PolicyEnrichment => {
+  const currentTaskSignals = deriveTaskManagementSignals(input);
+  const nodeSignals = deriveNodeManagementSignals(node);
   const familyScore = getFamilyScore(input.task_type === "unknown" ? "general" : input.task_type, node.task_type);
   const specificityBonus = getSpecificityBonus(node);
   const feedbackAdjustment = getFeedbackAdjustment(node);
   const maturityAdjustment = getMaturityAdjustment(node);
   const genericPenalty = getGenericPenalty(node);
   const expectationCorrectionAdjustment = getExpectationCorrectionAdjustment(input, node);
+  const realDevAlignmentBonus =
+    currentTaskSignals.realDevLikely && nodeSignals.realDevLikely
+      ? currentTaskSignals.bugFixLike && nodeSignals.bugFixLike
+        ? 0.06
+        : 0.03
+      : 0;
+  const metaTaskAlignmentBonus =
+    (currentTaskSignals.metaLike || currentTaskSignals.validationLike) &&
+    (nodeSignals.metaLike || nodeSignals.validationLike)
+      ? 0.03
+      : 0;
+  const metaOriginPenalty =
+    currentTaskSignals.realDevLikely &&
+    !currentTaskSignals.metaLike &&
+    (nodeSignals.metaLike || nodeSignals.validationLike) &&
+    !nodeSignals.bugFixLike
+      ? 0.08
+      : 0;
   const failureSignatureOverlap = retrievalContext?.failureSignature
     ? textOverlapScore(
         [node.trigger_pattern, node.compact_hint, node.deviation_pattern, node.corrected_constraint]
@@ -168,7 +192,15 @@ export const enrichPolicyForCandidate = (
   const correctionIntentBonus =
     retrievalContext?.expectationCorrectionIntent && isExpectationCorrectionNode(node) ? 0.03 : 0;
   const policyAdjustment =
-    familyScore * 0.22 + specificityBonus + feedbackAdjustment + maturityAdjustment - genericPenalty + expectationCorrectionAdjustment;
+    familyScore * 0.22 +
+    specificityBonus +
+    feedbackAdjustment +
+    maturityAdjustment -
+    genericPenalty +
+    expectationCorrectionAdjustment +
+    realDevAlignmentBonus +
+    metaTaskAlignmentBonus -
+    metaOriginPenalty;
   const enrichedPolicyAdjustment = policyAdjustment + failureSignatureBonus + correctionIntentBonus;
   const reasons = [
     `family:${familyScore.toFixed(4)}`,
@@ -177,6 +209,11 @@ export const enrichPolicyForCandidate = (
     `maturity:${maturityAdjustment.toFixed(4)}`,
     `generic_penalty:${genericPenalty.toFixed(4)}`,
     `expectation_correction:${expectationCorrectionAdjustment.toFixed(4)}`,
+    `real_dev_alignment:${realDevAlignmentBonus.toFixed(4)}`,
+    `meta_task_alignment:${metaTaskAlignmentBonus.toFixed(4)}`,
+    `meta_origin_penalty:${metaOriginPenalty.toFixed(4)}`,
+    `task_management_current:${currentTaskSignals.reasons.join("|") || "none"}`,
+    `task_management_node:${nodeSignals.reasons.join("|") || "none"}`,
     `host:${retrievalContext?.host ?? "unknown"}`,
     `tool_names:${retrievalContext?.toolNames.length ?? 0}`,
     `failure_signature:${failureSignatureBonus.toFixed(4)}`,

@@ -199,7 +199,12 @@ const makeInjectionEvent = (overrides: Partial<InjectionEvent> = {}): InjectionE
         rerankScore: 1,
         rerankSource: "model",
         retrievalReasons: ["lexical:0.9900", "family:exact"],
-        policyReasons: ["family:1.0000", "maturity:0.0950"],
+        policyReasons: [
+          "family:1.0000",
+          "maturity:0.0950",
+          "real_dev_alignment:0.0600",
+          "meta_origin_penalty:0.0000"
+        ],
         taskFamilyMatch: true
       }
     ],
@@ -377,7 +382,9 @@ describe("inspect command", () => {
         ["- Decision reason: mature_validated_candidate"],
         ["- Selected candidates: node_inspect"],
         ["- Top candidate retrieval reasons:"],
-        ["- Top candidate policy reasons:"]
+        ["- Top candidate policy reasons:"],
+        ["- Governance notes:"],
+        ["  - Governance favored real coding-error guidance for this task."]
       ])
     );
   });

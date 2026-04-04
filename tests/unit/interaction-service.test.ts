@@ -123,6 +123,23 @@ const seedLatestInspectionRecord = (homeDir: string, cwd: string): void => {
   });
 };
 
+const seedMetaOriginRecord = (db: ReturnType<typeof openDatabase>, cwd: string, recordId = "input_meta_origin"): void => {
+  const scope = resolveScope(cwd);
+  const inputRepo = new InputRecordRepository(db);
+  inputRepo.upsert({
+    record_id: recordId,
+    scope_id: scope.scope_id,
+    session_id: "session_meta_origin",
+    task_type: "general",
+    task_summary: "Review the weekly audit and inspect the latest doctor output before changing retrieval policy.",
+    outcome_signal: "success",
+    context_summary: "This is an audit of retrieval quality and host readiness.",
+    evidence: [],
+    injected_node_ids: [],
+    created_at: nowIso()
+  });
+};
+
 describe("ExperienceInteractionService", () => {
   it("routes explicit explanation questions into hybrid sync explain", () => {
     expect(decideHybridExplainRoute("Why did ExperienceEngine inject that hint here?")).toMatchObject({
@@ -514,6 +531,29 @@ describe("ExperienceInteractionService", () => {
 
     expect(nodeRepo.getById("node_interaction_retired_feedback")).toMatchObject({
       state: "retired",
+      helped_count: 1
+    });
+  });
+
+  it("keeps a meta-origin candidate in candidate state after the first explicit helped signal", () => {
+    const homeDir = makeTempDir();
+    const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    seedMetaOriginRecord(db, "/repo");
+    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_interaction_meta_feedback");
+    nodeRepo.upsert({
+      ...nodeRepo.getById("node_interaction_meta_feedback")!,
+      state: "candidate",
+      origin_record_ids: ["input_meta_origin"]
+    });
+
+    const service = new ExperienceInteractionService(config);
+    service.feedbackNode("node_interaction_meta_feedback", "helped");
+
+    expect(nodeRepo.getById("node_interaction_meta_feedback")).toMatchObject({
+      state: "candidate",
       helped_count: 1
     });
   });

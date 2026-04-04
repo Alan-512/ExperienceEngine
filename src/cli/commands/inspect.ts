@@ -1,4 +1,5 @@
 import { loadConfig } from "../../config/load-config.js";
+import { deriveGovernanceSignals } from "../../experience-management/governance-observability.js";
 import { ExperienceInteractionService } from "../../interaction/service.js";
 import { ExperienceStateArtifactService } from "../../interaction/state-artifact-service.js";
 import type { ExperienceNode } from "../../types/domain.js";
@@ -77,6 +78,25 @@ const buildRetrievalNotes = (record: ExperienceLastInspection): string[] => {
 
   if (scorecard.fastPathApplied) {
     notes.push("A strong candidate fast path was used.");
+  }
+
+  return notes;
+};
+
+const buildGovernanceNotes = (record: ExperienceLastInspection): string[] => {
+  const governance = deriveGovernanceSignals(record.scorecard);
+  const notes: string[] = [];
+
+  if (governance.realDevAligned) {
+    notes.push("Governance favored real coding-error guidance for this task.");
+  }
+
+  if (governance.metaDominant) {
+    notes.push("Governance penalized meta-like guidance, so this match needs caution outside validation-style work.");
+  }
+
+  if (governance.metaTaskAligned) {
+    notes.push("Governance recognized this turn as more validation- or meta-like than ordinary coding work.");
   }
 
   return notes;
@@ -306,6 +326,13 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
         if (retrievalNotes.length) {
           console.log("- Retrieval notes:");
           for (const note of retrievalNotes) {
+            console.log(`  - ${note}`);
+          }
+        }
+        const governanceNotes = buildGovernanceNotes(record);
+        if (governanceNotes.length) {
+          console.log("- Governance notes:");
+          for (const note of governanceNotes) {
             console.log(`  - ${note}`);
           }
         }
