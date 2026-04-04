@@ -1,39 +1,105 @@
 # ExperienceEngine
 
-[简体中文版 README](./README.zh-CN.md)
+English | [简体中文](./README.zh-CN.md)
 
-ExperienceEngine is a local experience-intervention layer for coding agents.
-
-It learns short, task-specific guidance from real coding work, injects that guidance into later similar tasks, and records whether the intervention helped or harmed the outcome.
-
-Supported hosts today:
-- `OpenClaw`
-- `Claude Code`
-- `Codex`
-
-OpenClaw compatibility:
-- requires a working OpenClaw installation with native plugin support
-- the documented OpenClaw path assumes `openclaw plugins install` and `openclaw gateway restart` are available
-- Node.js `>=20` is required for the published package
-
-## The Problem It Solves
-
-Coding agents repeat the same mistakes for a simple reason: most sessions do not accumulate reusable execution experience in a governed way.
-
-The usual failure modes are:
-- a fix worked yesterday, but the next similar session starts from zero again
-- memory systems keep adding facts and preferences, but they rarely retire low-value guidance
-- as recalled memory grows, context gets heavier and the agent's attention gets diluted
-
-ExperienceEngine is designed for that gap. It does not try to remember everything. It tries to decide:
-- when prior experience should intervene
-- which `strategy` or `warning` should be injected
-- whether that intervention actually helped
-- whether the experience should stay active, cool down, or retire
+ExperienceEngine is a governance layer for coding agents that reuses real execution experience without turning memory into noise. It injects short task-specific guidance only when relevant, then tracks whether that intervention helped or harmed.
 
 **Memory does addition. ExperienceEngine does governance.**
 
-## ExperienceEngine vs Memory
+Supported hosts today: `OpenClaw`, `Claude Code`, `Codex`
+
+## 10-Second Example
+
+Without ExperienceEngine:
+- the agent repeats the same SQLite migration mistake in a similar repo
+
+With ExperienceEngine:
+- it injects a hint like: `Run the migration before opening the DB connection`
+- later you mark that intervention `helpful` or `harmful`
+- the experience can then become active, cool down, or retire
+
+```text
+task signals -> distilled experience -> retrieval -> short intervention -> feedback -> governance
+```
+
+<details>
+<summary>Example host transcript</summary>
+
+```text
+User: Fix the SQLite startup failure in this repo.
+
+ExperienceEngine:
+  Hint: Run the migration before opening the DB connection.
+
+Host agent:
+  I’ll apply the migration first, then retry startup.
+
+User:
+  Why did that ExperienceEngine hint match?
+
+Host agent:
+  It matched a prior task in this repo with the same SQLite startup pattern and a successful migration-first fix.
+
+User:
+  Mark the last ExperienceEngine intervention as helpful.
+
+Host agent:
+  Recorded. That experience gets stronger for similar future tasks.
+```
+
+</details>
+
+![Example `ee inspect --last --verbose` output](./docs/assets/readme/inspect-last-example.svg)
+
+## Quick Start
+
+Fastest host-specific install paths:
+
+- `OpenClaw`
+  - `openclaw plugins install @alan512/experienceengine`
+  - `openclaw gateway restart`
+  - `ee init`
+- `Codex`
+  - `ee install codex`
+  - `ee init`
+- `Claude Code`
+  - `/plugin marketplace add https://github.com/Alan-512/ExperienceEngine.git`
+  - `/plugin install experienceengine@experienceengine`
+  - `ee init`
+
+`ee init` initializes shared ExperienceEngine state after the host-specific installation step.
+
+Need detailed per-host setup instructions, fallback paths, readiness states, or operator workflows? Jump to [Full Setup and Operator Details](#full-setup-and-operator-details).
+
+## Who It's For
+
+Use ExperienceEngine if:
+- you use coding agents repeatedly in similar repos or workflows
+- you want **small, intervention-focused guidance**, not general memory recall
+- you want to know whether reused experience actually **helped or harmed**
+- you want stale guidance to cool down or retire instead of accumulating forever
+
+Do not use ExperienceEngine if:
+- you only want a personal note-taking memory
+- you want generic document RAG
+- you rarely repeat workflows
+- you want the system to remember everything by default
+
+## Host Support Matrix
+
+| Host | Install path | Routine interaction | Maturity |
+|---|---|---|---|
+| `OpenClaw` | native plugin install | host-native | most complete today |
+| `Claude Code` | marketplace plugin, with `ee install claude-code` fallback | MCP + plugin hooks | supported |
+| `Codex` | `ee install codex`, with native MCP fallback | MCP-native | supported |
+
+## Why It Exists
+
+Coding agents often repeat the same mistakes because prior execution experience is not reused in a governed way.
+
+ExperienceEngine is designed for intervention governance, not general memory accumulation.
+
+## Why Not Memory / RAG
 
 | Question | Memory Systems | ExperienceEngine |
 |---|---|---|
@@ -42,8 +108,11 @@ ExperienceEngine is designed for that gap. It does not try to remember everythin
 | Track whether a recalled item helped or harmed | Usually no | Yes, per intervention |
 | Retire stale or harmful guidance automatically | Usually no | Yes, cooling and retirement are built in |
 | Keep context small and intervention-focused | Not the main goal | Yes, it injects short task-specific guidance |
+| Generic document lookup | Common fit | Not the primary job |
 
 ## Where It Sits In The Agent Loop
+
+At a high level, ExperienceEngine operates around the agent loop like this:
 
 ```text
 User task
@@ -67,26 +136,62 @@ task signals
 
 Each node moves through that lifecycle using real task outcomes, not just time-based cleanup. Helpful experience gets reinforced; harmful experience gets cooled or retired.
 
-## What You Can Use Today
+## What You Can Do Today
 
-Already available in the repository:
-- host integration for `OpenClaw`, `Claude Code`, and `Codex`
+- reuse short guidance from similar coding work
+- review why a hint matched
+- mark interventions helpful or harmful
+- inspect active, cooling, and retired experience
+- run across `OpenClaw`, `Claude Code`, and `Codex`
+
+### Under The Hood
+
 - MCP-native interaction surfaces plus CLI/operator fallback
-- API-first semantic retrieval with graceful fallback:
-  - OpenAI `text-embedding-3-small`
-  - Gemini `gemini-embedding-001`
-  - Jina `jina-embeddings-v3`
-  - managed local embedding fallback
-  - legacy hash-based fallback
+- semantic retrieval with API and local fallback
 - host-agent driven inspection and feedback, with CLI fallback commands such as `ee inspect --last`, `ee helped`, and `ee harmed`
 
 For a more detailed explanation of what ExperienceEngine records and how an experience node is structured, see:
 
 - [Experience Model Overview](./docs/development/experience-model.md)
 
-## Quick Start
+## Current Status
 
-ExperienceEngine no longer treats the `ee` CLI as the first-install entrypoint.
+- Stable: core experience lifecycle, inspect/helped/harmed loop, host integrations, CLI/operator fallback
+- Good path today: `OpenClaw` native plugin install
+- Evolving: retrieval tuning, provider strategy, advanced host UX
+- If you want the smoothest first experience today, start with `OpenClaw`.
+
+## What First Success Looks Like
+
+After installation and initialization, the first visible signs of value are:
+
+- ExperienceEngine injects a short hint during a real task
+- the host can explain why that hint matched
+- feedback on the last intervention affects future reuse
+- `ee inspect --last` shows the recent intervention and related node state
+
+## Prerequisites
+
+Before installing an adapter, make sure the host CLI already works on this machine:
+
+- `openclaw` for the OpenClaw plugin/runtime integration
+- `claude` for the Claude Code adapter
+- `codex` for the Codex adapter
+
+**ExperienceEngine does not install those host CLIs for you.** It wires itself into an already working host environment.
+
+OpenClaw notes:
+- requires a working OpenClaw installation with native plugin support
+- the documented OpenClaw path assumes `openclaw plugins install` and `openclaw gateway restart` are available
+
+General package requirement:
+- Node.js `>=20` is required for the published package
+
+## Full Setup and Operator Details
+
+### Full Setup by Host
+
+ExperienceEngine no longer treats the `ee` CLI as the universal first-install entrypoint across all hosts.
 
 Install ExperienceEngine through the host setup flow for the host you want to use:
 
@@ -99,7 +204,7 @@ Install ExperienceEngine through the host setup flow for the host you want to us
   - EE-managed Codex setup:
     - `ee install codex`
   - native/manual fallback:
-    - `codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y @alan512/experienceengine codex-mcp-server`
+    - see the advanced example below if you need direct MCP wiring
   - after either path, start a new Codex session in the repo so the MCP wiring and `AGENTS.md` instruction block are picked up
 - `Claude Code`
   - host-native marketplace install:
@@ -110,56 +215,15 @@ Install ExperienceEngine through the host setup flow for the host you want to us
   - `ee install claude-code` remains the operator fallback when you need direct hooks + MCP wiring outside the marketplace flow
   - after installation, start a new Claude Code session so the plugin hooks and bundled MCP config are loaded
 
-Across all three hosts, the intended product journey is the same:
+Across all three hosts, the intended flow is the same:
 
 1. install ExperienceEngine through the host-specific setup path
 2. initialize shared ExperienceEngine state with `ee init`
 3. restart or open a fresh host session until the repo is `Ready`
-4. keep routine review and feedback inside the host agent when the host supports it cleanly
+4. keep routine inspection and feedback inside the host when supported
 5. use `ee` as the operator fallback for validation, repair, and deeper inspection
 
-The host-specific differences are real, but they sit underneath one shared model:
-
-- installation mechanics differ by host
-- routine interaction should feel similar wherever the host supports it
-- CLI remains the explicit fallback and operator surface
-
-ExperienceEngine now treats onboarding and value as two separate layers:
-
-- `Setup state`
-  - `Installed`
-  - `Initialized`
-  - `Ready`
-- `Value state`
-  - `Warming up`
-  - `First value reached`
-
-These are not one linear ladder. A repo can already be `Ready` while still `Warming up`.
-
-For routine use, ask the host agent naturally for ExperienceEngine state or feedback actions, for example:
-
-- "What did ExperienceEngine just inject?"
-- "Why did that ExperienceEngine hint match?"
-- "Mark the last ExperienceEngine intervention as helpful or harmful."
-
-OpenClaw now also supports these additional phase-2 routine questions in-session:
-
-- "Is ExperienceEngine ready here?"
-- "Is ExperienceEngine still warming up in this repo?"
-- "Why didn't ExperienceEngine inject anything just now?"
-
-For `OpenClaw`, `Codex`, and `Claude Code`, the common review-and-feedback follow-ups should stay in the host session first.
-For the extra readiness, warm-up, and recent-silence questions above, only `OpenClaw` supports the in-session phase-2 path today.
-Use CLI fallback whenever the host-side path is unavailable or you need explicit operator control.
-
-Use the `ee` CLI only when you need explicit operator validation or troubleshooting:
-
-```bash
-ee init
-ee doctor <openclaw|claude-code|codex>
-ee status
-ee maintenance embedding-smoke
-```
+### Shared Initialization
 
 `ee init` is shared-product initialization, not host-specific setup.
 
@@ -175,8 +239,6 @@ After installation, ExperienceEngine should orient the user toward the next setu
 - after shared state is configured with `ee init`, the product is `Initialized`
 - once the host or repo has reloaded correctly for real work, the product is `Ready`
 
-`First value reached` should only be claimed after visible output from a real task run. A generic warm-up message or static onboarding text does not count as first value.
-
 Minimal shared initialization example:
 
 ```bash
@@ -188,49 +250,61 @@ ee init show
 
 If you prefer Gemini or Jina for embeddings, use the same `ee init embedding` flow with the matching provider and model.
 
-## Prerequisites
+### Routine Use vs Operator Use
 
-Before installing an adapter, make sure the host CLI already works on this machine:
+For routine use, ask the host agent naturally for ExperienceEngine state or feedback actions, for example:
 
-- `openclaw` for the OpenClaw plugin/runtime integration
-- `claude` for the Claude Code adapter
-- `codex` for the Codex adapter
+- "What did ExperienceEngine just inject?"
+- "Why did that ExperienceEngine hint match?"
+- "Mark the last ExperienceEngine intervention as helpful or harmful."
 
-ExperienceEngine does not install those host CLIs for you. It wires itself into an already working host environment.
+OpenClaw also supports these additional readiness and recent-silence questions in-session:
+
+- "Is ExperienceEngine ready here?"
+- "Is ExperienceEngine still warming up in this repo?"
+- "Why didn't ExperienceEngine inject anything just now?"
+
+For `OpenClaw`, `Codex`, and `Claude Code`, the common review-and-feedback follow-ups should stay in the host session first.
+Use CLI fallback whenever the host-side path is unavailable or you need explicit operator control.
+
+Use the `ee` CLI when you need explicit operator validation or troubleshooting:
+
+```bash
+ee init
+ee doctor <openclaw|claude-code|codex>
+ee status
+ee maintenance embedding-smoke
+```
+
+### Readiness and Value States
+
+ExperienceEngine treats onboarding and value as two separate layers:
+
+- `Setup state`
+  - `Installed`
+  - `Initialized`
+  - `Ready`
+- `Value state`
+  - `Warming up`
+  - `First value reached`
+
+These are not one linear ladder. A repo can already be `Ready` while still `Warming up`.
+
+`First value reached` should only be claimed after visible output from a real task run. A generic warm-up message or static onboarding text does not count as first value.
 
 ## Installation Model
 
-ExperienceEngine now treats installation and operations as separate concerns:
+ExperienceEngine separates:
+- host installation
+- shared initialization
+- operator workflows
 
-- installation belongs to the host
-- validation and maintenance belong to `ee`
+The host remains the primary interaction surface.
+`ee` remains the explicit operator surface for setup, validation, repair, status, and maintenance.
 
-That means the user-facing concepts stay stable even though the host integrations differ:
+## Advanced Per-Host Commands (Operator / Development Only)
 
-- `OpenClaw`
-  - installs through plugin/runtime integration
-  - keeps stronger CLI/operator support today
-- `Claude Code`
-  - installs through Claude-native marketplace/plugin assets
-  - prefers MCP-native routine interaction inside the host session
-- `Codex`
-  - uses the shared ExperienceEngine MCP server
-  - prefers MCP-native routine interaction inside the host session
-
-Once installation is complete, the host agent remains the primary interaction surface.
-
-`ee` is the operational surface for:
-
-- shared provider/model initialization
-- health checks
-- repair guidance
-- status inspection
-- learning and intervention feedback
-
-`ee status` is the daily product-progress view.
-`ee doctor <host>` is the explicit validation and troubleshooting view.
-
-## Advanced Per-Host Commands
+Most users can ignore this section and use the host-specific setup flow above.
 
 If you need explicit per-host control as an operator or while developing the product, these commands still exist:
 
@@ -239,6 +313,15 @@ ee install openclaw
 ee install claude-code
 ee install codex
 ```
+
+<details>
+<summary>Native/manual Codex MCP fallback example</summary>
+
+```bash
+codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y @alan512/experienceengine codex-mcp-server
+```
+
+</details>
 
 Notes:
 - `OpenClaw` uses plugin/runtime integration (not `src/adapters/`) and CLI fallback for management.
@@ -269,10 +352,7 @@ That managed state includes:
 Current default behavior:
 
 - `embeddingProvider = "api"`
-- provider priority:
-  - OpenAI when `OPENAI_API_KEY` is present
-  - Gemini when `GEMINI_API_KEY` is present
-  - Jina when `JINA_API_KEY` is present
+- provider priority: OpenAI -> Gemini -> Jina
 - if no API provider is available, ExperienceEngine falls back to the managed local embedding model
 
 Useful environment variables:
