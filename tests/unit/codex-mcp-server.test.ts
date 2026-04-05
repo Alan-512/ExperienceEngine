@@ -51,8 +51,10 @@ afterEach(() => {
   }
 });
 
-const parseTextPayload = <T>(result: { content: Array<{ type: string; text?: string }> }): T =>
-  JSON.parse(result.content[0]?.text ?? "null") as T;
+const parseTextPayload = <T>(result: { content: Array<{ type: string; text?: string }> }): T => {
+  const textEntry = [...result.content].reverse().find((entry) => typeof entry.text === "string");
+  return JSON.parse(textEntry?.text ?? "null") as T;
+};
 
 const getRegisteredTool = (server: ReturnType<typeof createCodexMcpServer>, name: string) =>
   (
@@ -655,6 +657,45 @@ describe("Codex MCP behavior loop", () => {
     expect(finalizeTool.description).toContain("persist the learning loop");
     expect(feedbackTool.description).toContain("after injected guidance");
     expect(feedbackTool.description).toContain("helped or harmed");
+  });
+
+  it("surfaces inline notice text separately for lookup_hints while preserving the JSON payload", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_codex_notice_surface", "candidate");
+
+    const server = createCodexMcpServer({ homeDir, env });
+    const lookupTool = getRegisteredTool(server, "experienceengine_lookup_hints");
+    const toolResult = (await lookupTool.handler({
+      cwd: "/repo",
+      prompt: "Fix the failing auth test",
+      sessionId: "codex-notice-surface"
+    })) as {
+      content: Array<{ type: string; text?: string }>;
+      structuredContent?: {
+        mode: string;
+        notice?: string;
+        injectedNodeIds: string[];
+      };
+    };
+
+    expect(toolResult.content[0]?.text).toBe(
+      "[ExperienceEngine] Injected 1 strategy hint for this task (risk: high). Run ee inspect --last to review why it matched."
+    );
+    expect(parseTextPayload<{ mode: string; injectedNodeIds: string[] }>(toolResult)).toMatchObject({
+      mode: "inject_conservative",
+      injectedNodeIds: ["node_codex_notice_surface"]
+    });
+    expect(toolResult.structuredContent).toMatchObject({
+      mode: "inject_conservative",
+      notice:
+        "[ExperienceEngine] Injected 1 strategy hint for this task (risk: high). Run ee inspect --last to review why it matched.",
+      injectedNodeIds: ["node_codex_notice_surface"]
+    });
   });
 
   it("does not expose public prompts after broker migration", () => {

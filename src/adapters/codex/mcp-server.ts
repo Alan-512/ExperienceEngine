@@ -183,6 +183,24 @@ const toTextToolResult = (result: unknown) => ({
   ]
 });
 
+const toNoticeAwareToolResult = <T extends { notice?: string }>(result: T) => ({
+  content: [
+    ...(result.notice
+      ? [
+          {
+            type: "text" as const,
+            text: result.notice
+          }
+        ]
+      : []),
+    {
+      type: "text" as const,
+      text: JSON.stringify(result ?? null, null, 2)
+    }
+  ],
+  structuredContent: result
+});
+
 const toStructuredToolResult = <T>(result: T) => ({
   content: [
     {
@@ -669,7 +687,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
       })
     },
     async ({ cwd, prompt, sessionId }) =>
-      toTextToolResult(await behaviorLoop.lookupHints({ cwd, prompt, sessionId }))
+      toNoticeAwareToolResult(await behaviorLoop.lookupHints({ cwd, prompt, sessionId }))
   );
 
   server.registerTool(
