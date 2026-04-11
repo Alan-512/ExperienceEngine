@@ -579,7 +579,7 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     expect(prompt.retrievalContext?.failureSignature).toBeUndefined();
   });
 
-  it("learns an expectation correction in one run but keeps an ordinary candidate shadow-only on the next similar run", async () => {
+  it("learns an expectation correction in one run and conservatively injects it on the next similar run", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
     const geminiJsonResponse = (payload: unknown) =>
@@ -736,7 +736,7 @@ describe("ExperienceRuntimeService finalize transaction", () => {
 
     expect(storedNode).toMatchObject({
       experience_kind: "expectation_correction",
-      state: "candidate",
+      state: "priority_candidate",
       validation_state: "pending_reuse_validation",
       correction_category: "implementation_boundary",
       deviation_pattern: "implementation solves the wrong layer of the problem",
@@ -770,9 +770,9 @@ describe("ExperienceRuntimeService finalize transaction", () => {
         "A similar task is drifting into the UI layer even though the real correction belongs in provider routing behavior."
     });
 
-    expect(secondLookup.mode).toBe("skip");
-    expect(secondLookup.input.injected_node_ids).toEqual([]);
-    expect(secondLookup.text).toBeUndefined();
+    expect(secondLookup.mode).toBe("inject_conservative");
+    expect(secondLookup.input.injected_node_ids).toHaveLength(1);
+    expect(secondLookup.text).toContain("provider routing");
   });
 
   it("persists evidence-driven reversal semantics into candidate source signals", async () => {
@@ -1130,7 +1130,7 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     expect(jobRow.extractor_profile).toBe("balanced");
     expect(reviewRows).toEqual([
       expect.objectContaining({
-        event_type: "mark_helped",
+        event_type: "mark_uncertain",
         source: "automatic"
       })
     ]);
@@ -1415,6 +1415,89 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     ]);
   });
 
+  it("quarantines a priority candidate after harmful automatic feedback", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const db = openDatabase(loadConfig({ sqlitePath }));
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    const scope = resolveScope("/repo");
+    const timestamp = nowIso();
+
+    nodeRepo.upsert({
+      id: "priority-harm",
+      node_type: "strategy",
+      scope_id: scope.scope_id,
+      task_type: "test_debug",
+      trigger_pattern: "Fix the failing vitest auth test",
+      compact_hint: "Start with the focused failing test before wider edits.",
+      success_signal: "The focused test passes.",
+      evidence_summary: "Recovered from a prior scoped run.",
+      retrieval_text: "Fix the failing vitest auth test\nStart with the focused failing test before wider edits.",
+      source_kind: "system_derived",
+      origin_record_ids: [],
+      helped_record_ids: [],
+      harmed_record_ids: [],
+      state: "priority_candidate",
+      delivery_state: "conservative_only",
+      usage_count: 0,
+      helped_count: 0,
+      harmed_count: 0,
+      support_count: 1,
+      created_at: timestamp,
+      updated_at: timestamp
+    });
+
+    const service = new ExperienceRuntimeService(
+      loadConfig({
+        dataDir: join(runtimeDir, "data"),
+        sqlitePath,
+        captureDir: join(runtimeDir, "captures"),
+        distillationAutoDrain: false
+      }, { homeDir: runtimeDir }),
+      undefined,
+      { homeDir: runtimeDir, env: {} }
+    );
+
+    const prompt = await service.beforePromptBuild({
+      sessionId: "priority-harm-session",
+      cwd: "/repo",
+      userMessage: "Fix the failing vitest auth test",
+      taskSummary: "Fix the failing vitest auth test"
+    });
+
+    expect(prompt.mode).toBe("inject_conservative");
+    await service.persistToolResult({
+      sessionId: "priority-harm-session",
+      toolName: "vitest",
+      outputSummary: "Fix the failing vitest auth test still fails with the same assertion",
+      errorSignature: "Fix the failing vitest auth test still fails with the same assertion",
+      status: "failure"
+    });
+    await service.finalizeTask({
+      sessionId: "priority-harm-session",
+      cwd: "/repo",
+      userMessage: "Fix the failing vitest auth test",
+      taskSummary: "Fix the failing vitest auth test"
+    });
+
+    const storedNode = new DatabaseSync(sqlitePath).prepare(
+      "SELECT state, delivery_state, harmed_count, consecutive_harmed_count FROM experience_nodes WHERE id = 'priority-harm' LIMIT 1"
+    ).get() as {
+      state: string;
+      delivery_state: string;
+      harmed_count: number;
+      consecutive_harmed_count: number;
+    };
+
+    expect(storedNode).toMatchObject({
+      state: "candidate",
+      delivery_state: "quarantined",
+      harmed_count: 1,
+      consecutive_harmed_count: 1
+    });
+  });
+
   it("schedules an async postmortem review and stores only a non-authoritative artifact", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
@@ -1514,6 +1597,106 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     ]);
     expect(nodeCount).toBe(0);
     expect(candidateCount).toBe(0);
+  });
+
+  it("applies accepted high-confidence per-node postmortem writeback deterministically", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    seedStrategyNode(sqlitePath, "/repo", "postmortem-writeback-node");
+
+    const service = new ExperienceRuntimeService(
+      loadConfig(
+        {
+          dataDir: join(runtimeDir, "data"),
+          sqlitePath,
+          captureDir: join(runtimeDir, "captures"),
+          hybridEnabled: true,
+          hybridAsyncPostmortemEnabled: true
+        },
+        { homeDir: runtimeDir }
+      ),
+      undefined,
+      {
+        homeDir: runtimeDir,
+        env: {},
+        hybridWorkerClientOptions: {
+          postmortemReviewExecutor: async () => ({
+            task: "postmortem_review",
+            review_verdict: "policy_gated",
+            candidate_recommendation: "observe",
+            feedback_followup_recommendation: "none",
+            confidence: "high",
+            reason: "The injected node materially contributed to the successful run.",
+            review_artifact: {
+              summary: "The injected node materially contributed to the successful run.",
+              notes: ["Apply bounded helped writeback for the injected node."]
+            },
+            injected_node_reviews: [
+              {
+                node_id: "postmortem-writeback-node",
+                feedback_verdict: "helped",
+                confidence: "high",
+                delivery_recommendation: "keep",
+                reason: "The provider-path hint materially changed the successful execution path."
+              }
+            ]
+          })
+        }
+      }
+    );
+
+    const lookup = await service.beforePromptBuild({
+      sessionId: "hybrid-postmortem-writeback",
+      cwd: "/repo",
+      userMessage: "Fix the failing vitest auth test",
+      taskSummary: "Fix the failing vitest auth test"
+    });
+    expect(lookup.mode).toBe("inject");
+    expect(lookup.input.injected_node_ids).toEqual(["postmortem-writeback-node"]);
+
+    await service.persistToolResult({
+      sessionId: "hybrid-postmortem-writeback",
+      toolName: "vitest",
+      outputSummary: "The targeted auth test passed after following the injected hint.",
+      status: "success"
+    });
+    await service.finalizeTask({
+      sessionId: "hybrid-postmortem-writeback",
+      cwd: "/repo",
+      userMessage: "Fix the failing vitest auth test",
+      taskSummary: "Fix the failing vitest auth test"
+    });
+    await service.waitForBackgroundLearning();
+
+    const db = new DatabaseSync(sqlitePath);
+    const nodeRow = db.prepare(
+      "SELECT usage_count, helped_count, harmed_count, last_feedback_verdict, delivery_state FROM experience_nodes WHERE id = 'postmortem-writeback-node' LIMIT 1"
+    ).get() as {
+      usage_count: number;
+      helped_count: number;
+      harmed_count: number;
+      last_feedback_verdict: string | null;
+      delivery_state: string;
+    };
+    const reviewEvents = db.prepare(
+      "SELECT event_type, source FROM review_events WHERE node_id = 'postmortem-writeback-node' ORDER BY created_at ASC"
+    ).all() as Array<{ event_type: string; source: string }>;
+    const artifactRow = db.prepare(
+      "SELECT approval_class FROM hybrid_review_artifacts ORDER BY created_at DESC LIMIT 1"
+    ).get() as { approval_class: string } | undefined;
+
+    expect(nodeRow).toMatchObject({
+      usage_count: 1,
+      helped_count: 1,
+      harmed_count: 0,
+      last_feedback_verdict: "helped",
+      delivery_state: "eligible"
+    });
+    expect(reviewEvents).toEqual([
+      expect.objectContaining({ event_type: "mark_uncertain", source: "automatic" }),
+      expect.objectContaining({ event_type: "mark_helped", source: "automatic" })
+    ]);
+    expect(artifactRow?.approval_class).toBe("policy_gated");
   });
 
   it("records a rejected postmortem trace when repeated timeouts force safe fallback", async () => {

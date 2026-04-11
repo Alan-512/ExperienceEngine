@@ -1,5 +1,5 @@
 import type { ExperienceLastInspection } from "../interaction/service.js";
-import type { OutcomeSignal, TaskRun, ToolEvent } from "../types/domain.js";
+import type { ExperienceNode, OutcomeSignal, TaskRun, ToolEvent } from "../types/domain.js";
 import { normalizeWhitespace, stripShellLikeTaskCommands, truncate } from "../utils/text.js";
 import type {
   ExplainDecisionCapsule,
@@ -42,6 +42,22 @@ const toEvidence = (
     trust: "untrusted_evidence",
     truncated
   };
+};
+
+const defaultDeliveryStateForState = (state: ExperienceNode["state"]): NonNullable<ExperienceNode["delivery_state"]> => {
+  switch (state) {
+    case "priority_candidate":
+      return "conservative_only";
+    case "active":
+      return "eligible";
+    case "cooling":
+      return "conservative_only";
+    case "retired":
+      return "quarantined";
+    case "candidate":
+    default:
+      return "shadow_only";
+  }
 };
 
 export const buildExplainDecisionCapsule = (input: {
@@ -100,6 +116,7 @@ export const buildPostmortemReviewCapsule = (input: {
     meaningfulFailureSignaturePresent: boolean;
     conservativeTransitionReviewWorthy: boolean;
   };
+  injectedNodes?: ExperienceNode[];
   toolEvents?: ToolEvent[];
 }): PostmortemReviewCapsule => {
   const evidence = [
@@ -123,6 +140,16 @@ export const buildPostmortemReviewCapsule = (input: {
         learningStatus: input.taskRun.learning_status,
         outcomeSignal: input.outcomeSignal
       },
+      injectedNodes: (input.injectedNodes ?? []).map((node) => ({
+        nodeId: node.id,
+        nodeType: node.node_type,
+        state: node.state,
+        deliveryState: node.delivery_state ?? defaultDeliveryStateForState(node.state),
+        taskType: node.task_type,
+        helpedCount: node.helped_count,
+        harmedCount: node.harmed_count,
+        compactHint: node.compact_hint
+      })),
       reviewTriggers: input.triggers
     },
     evidence

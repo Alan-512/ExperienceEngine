@@ -1,3 +1,11 @@
+import type {
+  DeliveryState,
+  ExperienceNodeType,
+  ExperienceState,
+  FeedbackVerdict,
+  TaskType
+} from "../types/domain.js";
+
 export type HybridRoute =
   | "FAST_PATH"
   | "FAST_PATH_CONSERVATIVE"
@@ -97,6 +105,16 @@ export type PostmortemReviewCapsule = {
       learningStatus?: "captured" | "rejected" | "not_applicable";
       outcomeSignal: "success" | "failure" | "unknown";
     };
+    injectedNodes?: Array<{
+      nodeId: string;
+      nodeType: ExperienceNodeType;
+      state: ExperienceState;
+      deliveryState: DeliveryState;
+      taskType: TaskType;
+      helpedCount: number;
+      harmedCount: number;
+      compactHint: string;
+    }>;
     reviewTriggers: {
       directionalCorrectionPresent: boolean;
       injectedNodeInteractionPresent: boolean;
@@ -129,6 +147,14 @@ export type PostmortemReviewWorkerOutput = {
   feedback_followup_recommendation: "none" | "mark_helped" | "mark_harmed" | "review";
   confidence: "high" | "medium" | "low";
   reason: string;
+  injected_node_reviews?: Array<{
+    node_id: string;
+    feedback_verdict: FeedbackVerdict;
+    confidence: "high" | "medium" | "low";
+    delivery_recommendation: "keep" | "conservative_only" | "quarantine" | "review";
+    reason: string;
+    evidence_summary?: string;
+  }>;
   review_artifact?: {
     summary: string;
     notes: string[];

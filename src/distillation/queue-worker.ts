@@ -34,6 +34,40 @@ const hasStructuredGuidance = (candidate: ExperienceCandidateDraft): boolean =>
   (candidate.avoid_steps?.length ?? 0) > 0 ||
   (candidate.fallback_steps?.length ?? 0) > 0;
 
+const shouldInferHighValuePromotion = (
+  candidate: ExperienceCandidate,
+  distilled: ExperienceCandidateDraft
+): boolean =>
+  candidate.source_outcome_signal === "success" &&
+  Boolean(distilled.success_signal?.trim()) &&
+  hasStructuredGuidance(distilled) &&
+  (
+    distilled.experience_kind === "expectation_correction" ||
+    (
+      resolveExperienceFamily(candidate.task_type) !== "general" &&
+      Boolean(distilled.goal?.trim()) &&
+      (distilled.recommended_steps?.length ?? 0) > 0
+    )
+  );
+
+const applyPriorityPromotionInference = (
+  candidate: ExperienceCandidate,
+  distilled: ExperienceCandidateDraft,
+  existing?: ExperienceNode
+): ExperienceCandidateDraft => {
+  if (existing || distilled.promotion_signal === "high_value" || !shouldInferHighValuePromotion(candidate, distilled)) {
+    return distilled;
+  }
+
+  return {
+    ...distilled,
+    promotion_signal: "high_value",
+    promotion_reason:
+      distilled.promotion_reason ??
+      "Inferred high-value reusable guidance from a successful structured lesson with bounded execution steps."
+  };
+};
+
 const shouldEnterPriorityCandidate = (
   candidate: ExperienceCandidate,
   distilled: ExperienceCandidateDraft
@@ -193,14 +227,15 @@ const distilledDraftToNode = (
             source_kind: existing.source_kind
           } satisfies ExperienceCandidateDraft)
         : distilled;
+  const effectiveDraft = applyPriorityPromotionInference(candidate, baseDraft, existing);
 
-  const retrievalText = buildRetrievalText(baseDraft);
+  const retrievalText = buildRetrievalText(effectiveDraft);
   const legacyEmbedding = buildLegacyEmbedding(retrievalText);
-  const priorityPromotionApplied = !existing && shouldEnterPriorityCandidate(candidate, baseDraft);
+  const priorityPromotionApplied = !existing && shouldEnterPriorityCandidate(candidate, effectiveDraft);
 
   return {
     id,
-    ...baseDraft,
+    ...effectiveDraft,
     retrieval_text: retrievalText,
     ...withEmbeddingMetadata(legacyEmbedding),
     distillation_mode_used:

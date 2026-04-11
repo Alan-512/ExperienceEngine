@@ -120,6 +120,8 @@ const seedStrategyNode = (
     origin_record_ids: ["input_origin"],
     helped_record_ids: ["input_helped"],
     harmed_record_ids: ["input_harmed"],
+    promotion_signal: state === "priority_candidate" ? "high_value" : undefined,
+    priority_promotion_applied: state === "priority_candidate",
     state,
     usage_count: 0,
     helped_count: 0,
@@ -141,7 +143,7 @@ describe("Codex MCP behavior loop", () => {
     const db = openDatabase(config);
     bootstrapDatabase(db);
     const nodeRepo = new NodeRepository(db);
-    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_codex_prompt_injection", "candidate");
+    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_codex_prompt_injection", "priority_candidate");
 
     const loop = createCodexBehaviorLoop({ homeDir, env });
     const result = await loop.lookupHints({
@@ -153,20 +155,20 @@ describe("Codex MCP behavior loop", () => {
     expect(result.mode).toBe("inject_conservative");
     expect(result.text).toContain("Run the failing auth test before editing and verify after the fix.");
     expect(result.notice).toBe(
-      "[ExperienceEngine] Injected 1 strategy hint for this task (risk: high). Run ee inspect --last to review why it matched."
+      "[ExperienceEngine] Injected 1 strategy hint for this task (risk: medium). Run ee inspect --last to review why it matched."
     );
     expect(result.injectedNodeIds).toEqual(["node_codex_prompt_injection"]);
     expect(result.summary).toMatchObject({
       actionReason: "ExperienceEngine chose conservative injection because the best match still needs more runtime evidence.",
-      riskLevel: "high",
-      trustSummary: "high-risk low-confidence candidate guidance with 0 helped and 0 harmed signal(s).",
+      riskLevel: "medium",
+      trustSummary: "medium-risk low-confidence priority_candidate guidance with 0 helped and 0 harmed signal(s).",
       confidence: "low",
       budgetClass: "single_hint",
       selectedCandidateIds: ["node_codex_prompt_injection"],
       nodes: [
         expect.objectContaining({
           id: "node_codex_prompt_injection",
-          riskLevel: "high"
+          riskLevel: "medium"
         })
       ]
     });
@@ -211,7 +213,7 @@ describe("Codex MCP behavior loop", () => {
     });
   });
 
-  it("records a successful tool result and finalizes helped feedback", async () => {
+  it("records a successful tool result and finalizes uncertain feedback", async () => {
     const homeDir = makeTempDir();
     const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
     const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
@@ -256,7 +258,7 @@ describe("Codex MCP behavior loop", () => {
     const node = nodeRepo.getById("node_codex_helped");
     const taskRun = taskRunRepo.getLatestBySessionId("codex-helped-session");
     expect(node?.usage_count).toBe(1);
-    expect(node?.helped_count).toBe(1);
+    expect(node?.helped_count).toBe(0);
     expect(node?.harmed_count).toBe(0);
     expect(taskRun?.host).toBe("codex");
   });
@@ -374,10 +376,10 @@ describe("Codex MCP behavior loop", () => {
 
     expect(last?.sessionId).toBe("codex-surface-view");
     expect(last?.intervention).toBe("inject");
-    expect(last?.autoFeedback).toBe("helped");
+    expect(last?.autoFeedback).toBe("none");
     expect(last?.autoFeedbackReason).toBe("success_outcome");
     expect(last?.decisionExplanation).toBe("Candidate quality was strong enough to justify intervention for this task.");
-    expect(last?.trustSummary).toBe("low-risk high-confidence active guidance with 1 helped and 0 harmed signal(s).");
+    expect(last?.trustSummary).toBe("low-risk high-confidence active guidance with 0 helped and 0 harmed signal(s).");
     expect(last?.timeline).toEqual([
       expect.objectContaining({
         kind: "decision",
@@ -386,10 +388,6 @@ describe("Codex MCP behavior loop", () => {
       expect.objectContaining({
         kind: "outcome",
         summary: "success: Fix the failing auth test"
-      }),
-      expect.objectContaining({
-        kind: "feedback",
-        summary: "helped: Automatic attribution marked the injection as helpful."
       })
     ]);
     expect(last?.injectedNodes[0]?.sourceKind).toBe("system_derived");
@@ -471,10 +469,10 @@ describe("Codex MCP behavior loop", () => {
     expect(JSON.parse((lastPayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({
       sessionId: "codex-resource-view",
       intervention: "inject",
-      autoFeedback: "helped",
+      autoFeedback: "none",
       autoFeedbackReason: "success_outcome",
       decisionExplanation: "Candidate quality was strong enough to justify intervention for this task.",
-      trustSummary: "low-risk high-confidence active guidance with 1 helped and 0 harmed signal(s).",
+      trustSummary: "low-risk high-confidence active guidance with 0 helped and 0 harmed signal(s).",
       timeline: [
         expect.objectContaining({
           kind: "decision",
@@ -483,10 +481,6 @@ describe("Codex MCP behavior loop", () => {
         expect.objectContaining({
           kind: "outcome",
           summary: "success: Fix the failing auth test"
-        }),
-        expect.objectContaining({
-          kind: "feedback",
-          summary: "helped: Automatic attribution marked the injection as helpful."
         })
       ],
       scorecard: expect.objectContaining({
@@ -666,7 +660,7 @@ describe("Codex MCP behavior loop", () => {
     const db = openDatabase(config);
     bootstrapDatabase(db);
     const nodeRepo = new NodeRepository(db);
-    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_codex_notice_surface", "candidate");
+    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_codex_notice_surface", "priority_candidate");
 
     const server = createCodexMcpServer({ homeDir, env });
     const lookupTool = getRegisteredTool(server, "experienceengine_lookup_hints");
@@ -684,7 +678,7 @@ describe("Codex MCP behavior loop", () => {
     };
 
     expect(toolResult.content[0]?.text).toBe(
-      "[ExperienceEngine] Injected 1 strategy hint for this task (risk: high). Run ee inspect --last to review why it matched."
+      "[ExperienceEngine] Injected 1 strategy hint for this task (risk: medium). Run ee inspect --last to review why it matched."
     );
     expect(parseTextPayload<{ mode: string; injectedNodeIds: string[] }>(toolResult)).toMatchObject({
       mode: "inject_conservative",
@@ -693,7 +687,7 @@ describe("Codex MCP behavior loop", () => {
     expect(toolResult.structuredContent).toMatchObject({
       mode: "inject_conservative",
       notice:
-        "[ExperienceEngine] Injected 1 strategy hint for this task (risk: high). Run ee inspect --last to review why it matched.",
+        "[ExperienceEngine] Injected 1 strategy hint for this task (risk: medium). Run ee inspect --last to review why it matched.",
       injectedNodeIds: ["node_codex_notice_surface"]
     });
   });

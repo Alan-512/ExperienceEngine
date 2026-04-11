@@ -100,7 +100,7 @@ describe("renderInlineNotice", () => {
         })
       ])
     ).toBe(
-      "[ExperienceEngine] Injected 2 strategy hints for this task (risk: medium). Run ee inspect --last to review why it matched."
+      "[ExperienceEngine] Injected 2 strategy hints for this task (risk: high). Run ee inspect --last to review why it matched."
     );
   });
 });

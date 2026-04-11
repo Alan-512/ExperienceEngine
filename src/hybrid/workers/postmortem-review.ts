@@ -24,6 +24,28 @@ export const runPostmortemReviewWorker = async (
   capsule: PostmortemReviewCapsule
 ): Promise<PostmortemReviewWorkerOutput> => {
   const signals = summarizeSignals(capsule);
+  const injectedNodeReviews: NonNullable<PostmortemReviewWorkerOutput["injected_node_reviews"]> = (
+    capsule.trusted.injectedNodes ?? []
+  ).map((node) => {
+    const harmfulFailure =
+      capsule.trusted.run.outcomeSignal === "failure"
+      && capsule.trusted.reviewTriggers.injectedNodeInteractionPresent
+      && capsule.trusted.reviewTriggers.meaningfulFailureSignaturePresent;
+
+    return {
+      node_id: node.nodeId,
+      feedback_verdict: harmfulFailure ? "harmed" : "uncertain",
+      confidence: harmfulFailure ? "medium" as const : "low" as const,
+      delivery_recommendation:
+        harmfulFailure
+          ? (node.state === "priority_candidate" || node.harmedCount > 0 ? "quarantine" : "conservative_only")
+          : "keep",
+      reason: harmfulFailure
+        ? "Bounded failure evidence suggests the injected node contributed to the unsuccessful path."
+        : "The completed run does not provide bounded causal evidence strong enough to mark the injected node as helped.",
+      evidence_summary: signals.length > 0 ? `Review signal: ${signals.join(", ")}.` : undefined
+    };
+  });
   const candidateRecommendation: PostmortemReviewWorkerOutput["candidate_recommendation"] =
     capsule.trusted.run.outcomeSignal === "failure" && capsule.trusted.reviewTriggers.meaningfulFailureSignaturePresent
       ? "reject"
@@ -43,12 +65,13 @@ export const runPostmortemReviewWorker = async (
 
   return {
     task: "postmortem_review",
-    review_verdict: "review_artifact",
+    review_verdict: injectedNodeReviews.length > 0 ? "policy_gated" : "review_artifact",
     candidate_recommendation: candidateRecommendation,
     feedback_followup_recommendation: "none",
     confidence:
       candidateRecommendation === "capture" ? "high" : candidateRecommendation === "reject" ? "medium" : "low",
     reason,
+    injected_node_reviews: injectedNodeReviews.length > 0 ? injectedNodeReviews : undefined,
     review_artifact: {
       summary,
       notes: [reason, "Keep the result as a non-authoritative postmortem artifact in phase 1."]

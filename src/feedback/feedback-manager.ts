@@ -26,19 +26,22 @@ export const applyFeedback = (
     }
 
     const harmed = detectHarm(input, node);
+    const verdict =
+      input.outcome_signal === "success"
+        ? "uncertain"
+        : harmed
+          ? "harmed"
+          : "none";
 
     return applyGovernedNodeFeedback(
       {
         ...node,
         usage_count: node.usage_count + 1,
-        helped_record_ids:
-          input.outcome_signal === "success"
-            ? appendUniqueId(node.helped_record_ids, attributionRecordId)
-            : node.helped_record_ids,
+        helped_record_ids: node.helped_record_ids,
         harmed_record_ids: harmed ? appendUniqueId(node.harmed_record_ids, attributionRecordId) : node.harmed_record_ids,
         last_used_at: timestamp
       },
-      input.outcome_signal === "success" ? "helped" : harmed ? "harmed" : "none",
+      verdict,
       options.originProfilesByNodeId?.[node.id]
     );
   });

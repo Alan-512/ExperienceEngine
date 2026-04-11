@@ -12,7 +12,7 @@ const SYSTEM_PROMPT = [
   "Use only the supplied route metadata, trusted run metadata, and bounded evidence.",
   "Do not invent evidence or lifecycle facts.",
   "Do not recommend direct lifecycle mutation, write-back, promotion, or retirement.",
-  "Return only JSON with keys: review_verdict, candidate_recommendation, feedback_followup_recommendation, confidence, reason, review_artifact, suggestedFollowUps, candidateShapingSuggestions, governanceRecommendations.",
+  "Return only JSON with keys: review_verdict, candidate_recommendation, feedback_followup_recommendation, confidence, reason, injected_node_reviews, review_artifact, suggestedFollowUps, candidateShapingSuggestions, governanceRecommendations.",
   "Keep the result concise and artifact-oriented."
 ].join(" ");
 
@@ -21,6 +21,7 @@ const buildUserPayload = (capsule: PostmortemReviewCapsule): string =>
     {
       route: capsule.trusted.route,
       run: capsule.trusted.run,
+      injectedNodes: capsule.trusted.injectedNodes ?? [],
       reviewTriggers: capsule.trusted.reviewTriggers,
       evidence: capsule.evidence.map((entry) => ({
         source: entry.source,
@@ -384,6 +385,71 @@ const normalizeOptionalStringArray = (value: unknown): unknown => {
     .map((entry) => entry.trim());
 };
 
+const normalizeFeedbackVerdict = (value: unknown): unknown => {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (normalized === "helped" || normalized === "harmed" || normalized === "uncertain") {
+    return normalized;
+  }
+  if (normalized === "none" || normalized === "unknown") {
+    return "uncertain";
+  }
+  return value;
+};
+
+const normalizeDeliveryRecommendation = (value: unknown): unknown => {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const normalized = value.trim().toLowerCase();
+  if (
+    normalized === "keep"
+    || normalized === "conservative_only"
+    || normalized === "quarantine"
+    || normalized === "review"
+  ) {
+    return normalized;
+  }
+  if (
+    normalized === "maintain"
+    || normalized === "preserve"
+    || normalized === "retain"
+    || normalized === "eligible"
+  ) {
+    return "keep";
+  }
+  if (normalized === "conservative" || normalized === "limited") {
+    return "conservative_only";
+  }
+  if (normalized === "hold" || normalized === "holdout" || normalized === "pause") {
+    return "review";
+  }
+  return value;
+};
+
+const normalizeInjectedNodeReviews = (value: unknown): unknown => {
+  if (!Array.isArray(value)) {
+    return value;
+  }
+
+  return value
+    .filter((entry): entry is Record<string, unknown> => Boolean(entry) && typeof entry === "object")
+    .map((entry) => ({
+      node_id: entry.node_id ?? entry.nodeId,
+      feedback_verdict: normalizeFeedbackVerdict(entry.feedback_verdict ?? entry.feedbackVerdict),
+      confidence: normalizeConfidence(entry.confidence),
+      delivery_recommendation: normalizeDeliveryRecommendation(
+        entry.delivery_recommendation ?? entry.deliveryRecommendation
+      ),
+      reason: entry.reason,
+      evidence_summary: entry.evidence_summary ?? entry.evidenceSummary
+    }));
+};
+
 const isValidationFailure = (
   value: PostmortemReviewWorkerOutput | { status: "rejected"; detail: string }
 ): value is { status: "rejected"; detail: string } => "status" in value;
@@ -417,6 +483,9 @@ export const runPostmortemReviewLlmWorker = async (
     ),
     confidence: normalizeConfidence(parsed.confidence),
     reason: parsed.reason,
+    injected_node_reviews: normalizeInjectedNodeReviews(
+      parsed.injected_node_reviews ?? parsed.injectedNodeReviews
+    ),
     review_artifact: normalizeReviewArtifact(parsed.review_artifact),
     suggestedFollowUps: normalizeOptionalStringArray(parsed.suggestedFollowUps),
     candidateShapingSuggestions: normalizeOptionalStringArray(parsed.candidateShapingSuggestions),

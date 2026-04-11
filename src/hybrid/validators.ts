@@ -22,6 +22,18 @@ const postmortemReviewOutputSchema = z.object({
   feedback_followup_recommendation: z.enum(["none", "mark_helped", "mark_harmed", "review"]),
   confidence: z.enum(["high", "medium", "low"]),
   reason: z.string().min(1),
+  injected_node_reviews: z
+    .array(
+      z.object({
+        node_id: z.string().min(1),
+        feedback_verdict: z.enum(["helped", "harmed", "uncertain"]),
+        confidence: z.enum(["high", "medium", "low"]),
+        delivery_recommendation: z.enum(["keep", "conservative_only", "quarantine", "review"]),
+        reason: z.string().min(1),
+        evidence_summary: z.string().min(1).optional()
+      })
+    )
+    .optional(),
   review_artifact: z
     .object({
       summary: z.string().min(1),
@@ -64,6 +76,7 @@ export const classifyHybridApproval = (
   if (
     value.review_verdict === "policy_gated"
     || value.feedback_followup_recommendation !== "none"
+    || (value.injected_node_reviews?.length ?? 0) > 0
     || (value.candidateShapingSuggestions?.length ?? 0) > 0
     || (value.suggestedFollowUps?.length ?? 0) > 0
     || (value.governanceRecommendations?.length ?? 0) > 0
