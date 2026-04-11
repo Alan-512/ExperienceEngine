@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runEvaluateCommand } from "../../src/cli/commands/evaluate.js";
+import type { CodexLifecycleValidationRunResult } from "../../src/evaluation/codex-lifecycle-validation.js";
 
 const consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 
@@ -8,16 +9,86 @@ afterEach(() => {
 });
 
 describe("evaluate command", () => {
-  it("prints usage for unsupported targets", () => {
-    runEvaluateCommand("unknown");
+  it("prints usage for unsupported targets", async () => {
+    await runEvaluateCommand("unknown");
 
     expect(consoleLogSpy).toHaveBeenCalledWith(
       "Usage: ee evaluate openclaw-baseline [--lookback-hours N] [--output-dir PATH]"
       + " | openclaw-scenarios --pack high-confidence [--repo-root PATH] [--output-dir PATH] [--dry-run]"
+      + " | codex-lifecycle [--repo-root PATH] [--output-dir PATH]"
     );
   });
 
-  it("routes the scenario target with parsed flags", () => {
+  it("routes the codex lifecycle target with parsed flags", async () => {
+    const runCodexLifecycle = vi.fn<
+      (options: { repoRoot?: string; outputDir?: string }) => CodexLifecycleValidationRunResult
+    >(() => ({
+      outputDir: "/tmp/codex-out",
+      jsonPath: "/tmp/codex-out/codex-lifecycle.json",
+      markdownPath: "/tmp/codex-out/codex-lifecycle.md",
+      report: {
+        generatedAt: "2026-04-11T10:00:00.000Z",
+        repoRoot: "/repo",
+        prompt: "Fix the failing auth test",
+        sessionId: "codex-lifecycle-validation",
+        outputDir: "/tmp/codex-out",
+        runtimeHome: "/tmp/codex-out/runtime-home",
+        sqlitePath: "/tmp/codex-out/runtime-home/.experienceengine/sqlite/experienceengine.db",
+        captureDir: "/tmp/codex-out/runtime-home/.experienceengine/captures",
+        seededNodeId: "node_codex_lifecycle_validation",
+        lookup: {
+          mode: "inject" as const,
+          injectedNodeIds: ["node_codex_lifecycle_validation"],
+          deliveryMode: "live" as const,
+          delivered: true
+        },
+        toolResult: {
+          status: "recorded",
+          eventStatus: "success" as const,
+          toolName: "vitest"
+        },
+        finalize: {
+          status: "finalized",
+          outcomeSignal: "success" as const,
+          recordedToolEvents: 1
+        },
+        persistence: {
+          taskRunCount: 1,
+          injectionEventCount: 1,
+          reviewEventCount: 2,
+          hybridArtifactCount: 1,
+          hybridTraceCount: 1,
+          reviewEventTypes: ["mark_uncertain", "mark_helped"]
+        },
+        node: {
+          id: "node_codex_lifecycle_validation",
+          state: "active",
+          deliveryState: "eligible",
+          usageCount: 1,
+          helpedCount: 1,
+          harmedCount: 0,
+          lastFeedbackVerdict: "helped"
+        }
+      }
+    }));
+
+    await runEvaluateCommand(
+      "codex-lifecycle",
+      ["--repo-root", "/repo", "--output-dir", "/tmp/codex-out"],
+      { runCodexLifecycle }
+    );
+
+    expect(runCodexLifecycle).toHaveBeenCalledWith({
+      repoRoot: "/repo",
+      outputDir: "/tmp/codex-out"
+    });
+    expect(consoleLogSpy).toHaveBeenCalledWith("Codex lifecycle: lookup=inject outcome=success reviews=2 artifacts=1");
+    expect(consoleLogSpy).toHaveBeenCalledWith("Output directory: /tmp/codex-out");
+    expect(consoleLogSpy).toHaveBeenCalledWith("JSON: /tmp/codex-out/codex-lifecycle.json");
+    expect(consoleLogSpy).toHaveBeenCalledWith("Markdown: /tmp/codex-out/codex-lifecycle.md");
+  });
+
+  it("routes the scenario target with parsed flags", async () => {
     const runScenarios = vi.fn(() => ({
       outputDir: "/tmp/out",
       jsonPath: "/tmp/out/scenario-results.json",
@@ -221,7 +292,7 @@ describe("evaluate command", () => {
       }
     }));
 
-    runEvaluateCommand(
+    await runEvaluateCommand(
       "openclaw-scenarios",
       ["--pack", "high-confidence", "--repo-root", "/repo", "--dry-run"],
       { runScenarios }
@@ -267,7 +338,7 @@ describe("evaluate command", () => {
     );
   });
 
-  it("prints concise benchmark summaries for baseline snapshots", () => {
+  it("prints concise benchmark summaries for baseline snapshots", async () => {
     const runBaseline = vi.fn(() => ({
       outputDir: "/tmp/baseline",
       jsonPath: "/tmp/baseline/baseline.json",
@@ -438,7 +509,7 @@ describe("evaluate command", () => {
       }
     }));
 
-    runEvaluateCommand("openclaw-baseline", [], { runBaseline });
+    await runEvaluateCommand("openclaw-baseline", [], { runBaseline });
 
     expect(runBaseline).toHaveBeenCalledWith({
       lookbackHours: undefined,

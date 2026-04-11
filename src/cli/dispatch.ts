@@ -12,6 +12,7 @@ const usageText =
   + " | maintenance embeddings-reset|embedding-smoke|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
   + " | evaluate openclaw-baseline [--lookback-hours N] [--output-dir PATH]"
   + " | evaluate openclaw-scenarios --pack high-confidence [--repo-root PATH] [--output-dir PATH] [--dry-run]"
+  + " | evaluate codex-lifecycle [--repo-root PATH] [--output-dir PATH]"
   + " | mcp-server"
   + " | init [distillation|embedding|secret|show]"
   + " | models list <provider> [query]"
@@ -75,7 +76,7 @@ export const runCliCommand = async (command: string | undefined, args: string[])
     }
     case "evaluate": {
       const { runEvaluateCommand } = await import("./commands/evaluate.js");
-      runEvaluateCommand(args[0], args.slice(1));
+      await runEvaluateCommand(args[0], args.slice(1));
       break;
     }
     case "config": {

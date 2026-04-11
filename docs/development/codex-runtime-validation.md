@@ -11,6 +11,7 @@ For the current product phase, governance and review are exercised through the s
 Included in this pass:
 
 - Codex MCP wiring and doctor checks
+- deterministic `ee evaluate codex-lifecycle` fallback for adapter-local lifecycle validation
 - real `codex exec` lookup, tool-result recording, and finalize flow
 - high-signal candidate creation from a real failure/correction/success task
 - async distillation job completion into a formal node
@@ -23,6 +24,24 @@ Excluded from this pass:
 - OpenClaw live-host rerun
 - Claude Code live-host rerun
 - product UX refinement outside the Codex runtime path
+
+## Deterministic Fallback Harness
+
+When real nested `codex exec` validation is blocked by host-side limits such as auth expiry, usage caps, billing state, or inconsistent MCP tool obedience, use the deterministic fallback harness:
+
+```bash
+pnpm evaluate:codex-lifecycle
+# or
+ee evaluate codex-lifecycle
+```
+
+This harness does not depend on a live nested Codex model turn. Instead, it seeds an isolated ExperienceEngine home, drives the existing Codex behavior loop in-process, waits for async posttask work to settle, and writes `codex-lifecycle.json` plus `codex-lifecycle.md` under `artifacts/evaluations/codex/...`.
+
+Acceptance meaning:
+
+- the Codex adapter can persist lookup, tool-result, and finalize evidence deterministically
+- the bounded async postmortem path can write review events and policy-gated artifacts
+- PR-level lifecycle regressions can be caught even when the external Codex host is unavailable
 
 ## Environment Used
 

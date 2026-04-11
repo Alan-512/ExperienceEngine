@@ -13,6 +13,11 @@ import {
   runOpenClawScenarioEvaluation,
   type OpenClawScenarioRunResult
 } from "../../evaluation/openclaw-scenarios.js";
+import {
+  renderCodexLifecycleValidationMarkdown,
+  runCodexLifecycleValidation,
+  type CodexLifecycleValidationRunResult
+} from "../../evaluation/codex-lifecycle-validation.js";
 
 type EvaluateFlags = {
   lookbackHours?: number;
@@ -21,6 +26,8 @@ type EvaluateFlags = {
   repoRoot?: string;
   dryRun?: boolean;
 };
+
+type MaybePromise<T> = T | Promise<T>;
 
 const parseFlags = (args: string[]): EvaluateFlags => {
   const flags: EvaluateFlags = {};
@@ -75,13 +82,17 @@ type EvaluateDependencies = {
   runBaseline?: (options: {
     lookbackHours?: number;
     outputDir?: string;
-  }) => ReturnType<typeof runOpenClawBaselineEvaluation>;
+  }) => MaybePromise<ReturnType<typeof runOpenClawBaselineEvaluation>>;
   runScenarios?: (options: {
     pack?: "high-confidence";
     repoRoot?: string;
     outputDir?: string;
     dryRun?: boolean;
-  }) => OpenClawScenarioRunResult;
+  }) => MaybePromise<OpenClawScenarioRunResult>;
+  runCodexLifecycle?: (options: {
+    repoRoot?: string;
+    outputDir?: string;
+  }) => MaybePromise<CodexLifecycleValidationRunResult>;
 };
 
 const formatRate = (value: number): string => value.toFixed(4);
@@ -171,22 +182,42 @@ const printGovernanceSummary = (governance?: {
   );
 };
 
-export const runEvaluateCommand = (
+export const runEvaluateCommand = async (
   target?: string,
   args: string[] = [],
   deps: EvaluateDependencies = {}
-): void => {
-  if (!target || !["openclaw-baseline", "openclaw-scenarios"].includes(target)) {
+): Promise<void> => {
+  if (!target || !["openclaw-baseline", "openclaw-scenarios", "codex-lifecycle"].includes(target)) {
     console.log(
       "Usage: ee evaluate openclaw-baseline [--lookback-hours N] [--output-dir PATH]"
       + " | openclaw-scenarios --pack high-confidence [--repo-root PATH] [--output-dir PATH] [--dry-run]"
+      + " | codex-lifecycle [--repo-root PATH] [--output-dir PATH]"
     );
     return;
   }
 
   const flags = parseFlags(args);
+  if (target === "codex-lifecycle") {
+    const result = await (deps.runCodexLifecycle ?? runCodexLifecycleValidation)({
+      repoRoot: flags.repoRoot,
+      outputDir: flags.outputDir
+    });
+
+    console.log(renderCodexLifecycleValidationMarkdown(result.report));
+    console.log(
+      `Codex lifecycle: lookup=${result.report.lookup.mode}`
+      + ` outcome=${result.report.finalize.outcomeSignal}`
+      + ` reviews=${result.report.persistence.reviewEventCount}`
+      + ` artifacts=${result.report.persistence.hybridArtifactCount}`
+    );
+    console.log(`Output directory: ${result.outputDir}`);
+    console.log(`JSON: ${result.jsonPath}`);
+    console.log(`Markdown: ${result.markdownPath}`);
+    return;
+  }
+
   if (target === "openclaw-scenarios") {
-    const result = (deps.runScenarios ?? runOpenClawScenarioEvaluation)({
+    const result = await (deps.runScenarios ?? runOpenClawScenarioEvaluation)({
       pack: flags.pack ?? "high-confidence",
       repoRoot: flags.repoRoot,
       outputDir: flags.outputDir,
@@ -241,7 +272,7 @@ export const runEvaluateCommand = (
     return;
   }
 
-  const result = (deps.runBaseline ?? runOpenClawBaselineEvaluation)({
+  const result = await (deps.runBaseline ?? runOpenClawBaselineEvaluation)({
     lookbackHours: flags.lookbackHours,
     outputDir: flags.outputDir
   });
