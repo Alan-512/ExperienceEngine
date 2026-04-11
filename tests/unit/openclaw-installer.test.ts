@@ -362,7 +362,6 @@ Recorded version: 0.1.3`;
 
     expect(packagedManifest.dependencies).toEqual({
       "@modelcontextprotocol/sdk": "^1.27.1",
-      "@huggingface/transformers": "^3.8.1",
       zod: "^3.25.76"
     });
   }, 15000);
@@ -395,13 +394,19 @@ Recorded version: 0.1.3`;
     expect(entries).toContain("package/dist/runtime/service.js");
     expect(entries).toContain("package/dist/store/sqlite/db.js");
     expect(entries).toContain("package/dist/store/sqlite/schema.sql");
+    expect(entries).toContain("package/dist/plugin/openclaw-install-state.js");
 
     expect(entries).not.toContain("package/dist/cli/index.js");
+    expect(entries).not.toContain("package/dist/analyzer/llm-learning-gate.js");
+    expect(entries).not.toContain("package/dist/distillation/queue-worker.js");
+    expect(entries).not.toContain("package/dist/hybrid/worker-client.js");
     expect(entries).not.toContain("package/dist/install/openclaw-installer.js");
+    expect(entries).not.toContain("package/dist/install/openclaw-cli.js");
+    expect(entries).not.toContain("package/dist/store/vector/api-embedding-provider.js");
+    expect(entries).not.toContain("package/dist/store/vector/local-provider.js");
     expect(entries).not.toContain("package/dist/install/codex-installer.js");
     expect(entries).not.toContain("package/dist/evaluation/openclaw-scenarios.js");
     expect(entries).not.toContain("package/dist/maintenance/claude-validate-print.js");
-    expect(entries).not.toContain("package/dist/store/vector/api-embedding-provider.js");
     expect(entries).not.toContain("package/dist/adapters/codex/mcp-server.js");
   }, 15000);
 

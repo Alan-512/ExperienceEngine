@@ -3,10 +3,10 @@ import { createExperiencePlugin } from "../../src/plugin/openclaw-plugin.js";
 import { getOpenClawRuntimeDefaults } from "../../src/plugin/openclaw-runtime-defaults.js";
 
 describe("OpenClaw runtime defaults", () => {
-  it("keeps background learning enabled while leaving async posttask disabled by default", () => {
+  it("keeps the packaged OpenClaw runtime interaction-only by default", () => {
     expect(getOpenClawRuntimeDefaults()).toEqual({
-      learningLoopState: "learning_loop_active",
-      backgroundLearningEnabled: true,
+      learningLoopState: "interaction_only",
+      backgroundLearningEnabled: false,
       hybridPosttaskEnabled: false
     });
 
@@ -18,7 +18,7 @@ describe("OpenClaw runtime defaults", () => {
       };
     }).runtime;
 
-    expect(runtime.backgroundLearningEnabled).toBe(true);
+    expect(runtime.backgroundLearningEnabled).toBe(false);
     expect(runtime.hybridPosttaskEnabled).toBe(false);
   });
 

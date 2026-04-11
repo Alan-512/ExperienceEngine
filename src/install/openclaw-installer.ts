@@ -35,6 +35,11 @@ import {
   type OpenClawCommandRunner
 } from "./openclaw-cli.js";
 import { buildVersionStatus, readCurrentPackageVersion } from "../version/package-version.js";
+import {
+  inspectRecordedOpenClawInstallState,
+  readPersistedOpenClawInstallState,
+  type PersistedOpenClawInstallState
+} from "../plugin/openclaw-install-state.js";
 import { getOpenClawRuntimeDefaults } from "../plugin/openclaw-runtime-defaults.js";
 
 export type OpenClawInstallReport = {
@@ -192,7 +197,6 @@ export const buildOpenClawPackagedDependencies = (rawPackageJson: Record<string,
       : {};
 
   return {
-    "@huggingface/transformers": dependencies["@huggingface/transformers"],
     "@modelcontextprotocol/sdk": dependencies["@modelcontextprotocol/sdk"],
     zod: dependencies.zod
   };
@@ -221,11 +225,26 @@ const OPENCLAW_PLUGIN_ENTRYPOINT = "plugin/openclaw-plugin.js";
 const OPENCLAW_REQUIRED_DIST_ASSETS = ["store/sqlite/schema.sql"] as const;
 const OPENCLAW_RELATIVE_IMPORT_PATTERN =
   /\b(?:import|export)\s+(?:[^"'()]*?\s+from\s+)?["'](\.[^"']+)["']/g;
+const OPENCLAW_DYNAMIC_IMPORT_PATTERN = /\bimport\(\s*["'](\.[^"']+)["']\s*\)/g;
+const OPENCLAW_EXCLUDED_RUNTIME_PATHS = new Set([
+  "analyzer/llm-learning-gate.js",
+  "distillation/queue-worker.js",
+  "hybrid/worker-client.js",
+  "hybrid/capsule-builder.js",
+  "hybrid/postmortem-provider-client.js",
+  "install/openclaw-installer.js",
+  "install/openclaw-cli.js",
+  "store/vector/api-embedding-provider.js",
+  "store/vector/local-provider.js"
+]);
 
 const normalizeOpenClawPackagedRuntimePath = (value: string): string => value.replaceAll("\\", "/");
 
 const isOpenClawPackagedRuntimeFile = (relativePath: string): boolean =>
   relativePath.endsWith(".js") || relativePath.endsWith(".json");
+
+const isOpenClawExcludedRuntimePath = (relativePath: string): boolean =>
+  OPENCLAW_EXCLUDED_RUNTIME_PATHS.has(normalizeOpenClawPackagedRuntimePath(relativePath));
 
 const resolveOpenClawPackagedRuntimeImport = (fromFile: string, specifier: string): string | null => {
   const normalizedFromFile = normalizeOpenClawPackagedRuntimePath(fromFile);
@@ -242,7 +261,7 @@ const collectOpenClawRuntimeClosure = (packageRoot: string): string[] => {
 
   while (pending.length > 0) {
     const next = pending.pop();
-    if (!next || collected.has(next)) {
+    if (!next || collected.has(next) || isOpenClawExcludedRuntimePath(next)) {
       continue;
     }
 
@@ -257,18 +276,20 @@ const collectOpenClawRuntimeClosure = (packageRoot: string): string[] => {
     }
 
     const source = readFileSync(sourcePath, "utf8");
-    for (const match of source.matchAll(OPENCLAW_RELATIVE_IMPORT_PATTERN)) {
-      const specifier = match[1];
-      if (!specifier) {
-        continue;
-      }
+    for (const pattern of [OPENCLAW_RELATIVE_IMPORT_PATTERN, OPENCLAW_DYNAMIC_IMPORT_PATTERN]) {
+      for (const match of source.matchAll(pattern)) {
+        const specifier = match[1];
+        if (!specifier) {
+          continue;
+        }
 
-      const resolvedImport = resolveOpenClawPackagedRuntimeImport(next, specifier);
-      if (!resolvedImport || collected.has(resolvedImport)) {
-        continue;
-      }
+        const resolvedImport = resolveOpenClawPackagedRuntimeImport(next, specifier);
+        if (!resolvedImport || collected.has(resolvedImport) || isOpenClawExcludedRuntimePath(resolvedImport)) {
+          continue;
+        }
 
-      pending.push(resolvedImport);
+        pending.push(resolvedImport);
+      }
     }
   }
 
@@ -662,42 +683,6 @@ export const installOpenClawAdapter = (options: InstallerOptions = {}): OpenClaw
   };
 };
 
-type PersistedInstallState = {
-  adapter: string;
-  installedAt: string;
-  installedVersion?: string;
-  packageRoot?: string;
-  installSource?: string;
-  installMode?: string;
-  hostWiring?: {
-    wired?: boolean;
-    restartRecommended?: boolean;
-  };
-  dataDir?: string;
-  sqlitePath?: string;
-  captureDir?: string;
-  distillerProvider?: string;
-  distillerModel?: string;
-  hybridEnabled?: boolean;
-  hybridSyncExplainEnabled?: boolean;
-  hybridAsyncPostmortemEnabled?: boolean;
-  hybridAsyncPostmortemLlmEnabled?: boolean;
-  hybridExplainLlmEnabled?: boolean;
-  hybridExplainProviderMode?: string;
-  hybridExplainModelProfileVersion?: string;
-  hybridPostmortemProviderMode?: string;
-  hybridPostmortemModelProfileVersion?: string;
-};
-
-const readInstallState = (installStatePath: string): PersistedInstallState | null => {
-  if (!existsSync(installStatePath)) {
-    return null;
-  }
-
-  const raw = readFileSync(installStatePath, "utf8");
-  return JSON.parse(raw) as PersistedInstallState;
-};
-
 const isLiveConfigValueMissingButDefault = <K extends keyof OpenClawComparableConfig>(
   key: K,
   expectedValue: OpenClawComparableConfig[K]
@@ -723,30 +708,13 @@ const configsMatch = (
     return liveValue === expectedValue;
   });
 
-export const inspectRecordedOpenClawInstallState = (options: InstallerOptions = {}) => {
-  const paths = resolveExperienceEnginePaths({
-    adapter: "openclaw",
-    env: options.env,
-    homeDir: options.homeDir
-  });
-  const state = readInstallState(paths.installStatePath);
-
-  return {
-    installed: paths.usedInstallState,
-    hostWiring: {
-      wired: state?.hostWiring?.wired ?? false,
-      restartRecommended: state?.hostWiring?.restartRecommended ?? false
-    }
-  };
-};
-
 export const inspectOpenClawInstall = (options: InstallerOptions = {}) => {
   const paths = resolveExperienceEnginePaths({
     adapter: "openclaw",
     env: options.env,
     homeDir: options.homeDir
   });
-  const state = readInstallState(paths.installStatePath);
+  const state = readPersistedOpenClawInstallState(paths.installStatePath);
   const expectedConfig = state
     ? {
         dataDir: state.dataDir,

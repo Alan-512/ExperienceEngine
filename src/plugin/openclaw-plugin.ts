@@ -17,7 +17,8 @@ import {
 import { ExperienceRuntimeService } from "../runtime/service.js";
 import {
   OPENCLAW_BACKGROUND_LEARNING_ENABLED,
-  OPENCLAW_HYBRID_POSTTASK_ENABLED
+  OPENCLAW_HYBRID_POSTTASK_ENABLED,
+  OPENCLAW_SAFE_CONFIG_OVERRIDES
 } from "./openclaw-runtime-defaults.js";
 import {
   normalizePromptPayload,
@@ -210,7 +211,10 @@ export const createExperiencePlugin = (
   runtimeOptions: ConstructorParameters<typeof ExperienceRuntimeService>[2] = {}
 ): OpenClawExperiencePlugin =>
   new OpenClawExperiencePlugin(
-    new ExperienceRuntimeService(loadConfig(configOverrides), logger, {
+    new ExperienceRuntimeService(loadConfig({
+      ...configOverrides,
+      ...OPENCLAW_SAFE_CONFIG_OVERRIDES
+    }), logger, {
       disableBackgroundLearning: !OPENCLAW_BACKGROUND_LEARNING_ENABLED,
       disableHybridPosttask: !OPENCLAW_HYBRID_POSTTASK_ENABLED,
       ...runtimeOptions

@@ -93,8 +93,8 @@ describe("doctor command", () => {
           adapter: "openclaw",
           installed: true,
           runtimeDefaults: {
-            learningLoopState: "learning_loop_active",
-            backgroundLearningEnabled: true,
+            learningLoopState: "interaction_only",
+            backgroundLearningEnabled: false,
             hybridPosttaskEnabled: false
           },
           versionStatus: {
@@ -129,8 +129,8 @@ describe("doctor command", () => {
         ["  2. /plugin install experienceengine@experienceengine"],
         ["- Codex learning loop: instruction_installed"],
         ["- Codex instruction block: present"],
-        ["- OpenClaw learning loop: learning_loop_active"],
-        ["- OpenClaw background learning default: enabled"],
+        ["- OpenClaw learning loop: interaction_only"],
+        ["- OpenClaw background learning default: disabled"],
         ["- OpenClaw async posttask default: disabled"],
         ["- Host health details: ee doctor <codex|claude-code|openclaw>"],
         ["Distillation summary:"],
@@ -168,8 +168,8 @@ describe("doctor command", () => {
           adapter: "openclaw",
           installed: true,
           runtimeDefaults: {
-            learningLoopState: "learning_loop_active",
-            backgroundLearningEnabled: true,
+            learningLoopState: "interaction_only",
+            backgroundLearningEnabled: false,
             hybridPosttaskEnabled: false
           },
           versionStatus: {

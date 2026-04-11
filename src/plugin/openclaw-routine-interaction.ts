@@ -4,7 +4,7 @@ import {
   inspectSharedSetupState
 } from "../cli/state-model.js";
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
-import { inspectRecordedOpenClawInstallState } from "../install/openclaw-installer.js";
+import { inspectRecordedOpenClawInstallState } from "./openclaw-install-state.js";
 import {
   deriveStructuredSilenceReason,
   ExperienceInteractionService,
