@@ -110,6 +110,11 @@ describe("bootstrapDatabase", () => {
     expect(columnNames).toContain("correction_category");
     expect(columnNames).toContain("deviation_pattern");
     expect(columnNames).toContain("corrected_constraint");
+    expect(columnNames).toContain("delivery_state");
+    expect(columnNames).toContain("consecutive_harmed_count");
+    expect(columnNames).toContain("last_feedback_verdict");
+    expect(columnNames).toContain("quarantined_at");
+    expect(columnNames).toContain("quarantine_reason");
   });
 
   it("adds expectation-correction columns to an existing experience_candidates table", () => {

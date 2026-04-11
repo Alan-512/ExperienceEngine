@@ -11,6 +11,7 @@ export type TaskType =
 export type ResolvedTaskType = TaskType | "unknown";
 
 export type ExperienceState = "candidate" | "priority_candidate" | "active" | "cooling" | "retired";
+export type DeliveryState = "shadow_only" | "conservative_only" | "eligible" | "quarantined";
 export type ExperienceNodeType = "strategy" | "warning";
 export type PromotionSignal = "normal" | "high_value";
 export type MergeAction = "ADD" | "UPDATE" | "NONE";
@@ -42,6 +43,7 @@ export type DistillationJobState = "pending" | "processing" | "succeeded" | "fai
 export type DistillationMode = "auto" | "llm" | "rule" | "disabled";
 export type ResolvedDistillationMode = Exclude<DistillationMode, "auto">;
 export type DistillationSource = "explicit_provider" | "rule" | "disabled";
+export type FeedbackVerdict = "helped" | "harmed" | "uncertain";
 export type FeedbackAttributionReason =
   | "success_outcome"
   | "relevant_failure"
@@ -143,7 +145,15 @@ export type ReviewEvent = {
   id: string;
   node_id: string;
   task_run_id?: string;
-  event_type: "mark_helped" | "mark_harmed" | "cool" | "retire";
+  event_type:
+    | "mark_helped"
+    | "mark_harmed"
+    | "mark_uncertain"
+    | "cool"
+    | "retire"
+    | "quarantine"
+    | "restore_conservative"
+    | "restore_eligible";
   source: "automatic" | "user";
   created_at: string;
 };
@@ -226,13 +236,18 @@ export type ExperienceNode = {
   helped_record_ids: string[];
   harmed_record_ids: string[];
   state: ExperienceState;
+  delivery_state?: DeliveryState;
   usage_count: number;
   helped_count: number;
   harmed_count: number;
+  consecutive_harmed_count?: number;
+  last_feedback_verdict?: FeedbackVerdict;
   support_count: number;
   last_used_at?: string;
   last_helped_at?: string;
   last_harmed_at?: string;
+  quarantined_at?: string;
+  quarantine_reason?: string;
   created_at: string;
   updated_at: string;
 };

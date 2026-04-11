@@ -1,6 +1,18 @@
 import type { DatabaseSync } from "node:sqlite";
 import type { ExperienceNode } from "../../../types/domain.js";
 
+const DEFAULT_DELIVERY_STATE_BY_LIFECYCLE: Record<ExperienceNode["state"], NonNullable<ExperienceNode["delivery_state"]>> = {
+  candidate: "shadow_only",
+  priority_candidate: "conservative_only",
+  active: "eligible",
+  cooling: "conservative_only",
+  retired: "quarantined"
+};
+
+const resolveDeliveryState = (
+  node: Pick<ExperienceNode, "state" | "delivery_state">
+): NonNullable<ExperienceNode["delivery_state"]> => node.delivery_state ?? DEFAULT_DELIVERY_STATE_BY_LIFECYCLE[node.state];
+
 export class NodeRepository {
   constructor(private readonly db: DatabaseSync) {}
 
@@ -47,13 +59,18 @@ export class NodeRepository {
     helped_record_ids_json: string;
     harmed_record_ids_json: string;
     state: ExperienceNode["state"];
+    delivery_state: ExperienceNode["delivery_state"] | null;
     usage_count: number;
     helped_count: number;
     harmed_count: number;
+    consecutive_harmed_count: number | null;
+    last_feedback_verdict: ExperienceNode["last_feedback_verdict"] | null;
     support_count: number;
     last_used_at: string | null;
     last_helped_at: string | null;
     last_harmed_at: string | null;
+    quarantined_at: string | null;
+    quarantine_reason: string | null;
     created_at: string;
     updated_at: string;
   }): ExperienceNode {
@@ -100,13 +117,18 @@ export class NodeRepository {
       helped_record_ids: JSON.parse(row.helped_record_ids_json) as string[],
       harmed_record_ids: JSON.parse(row.harmed_record_ids_json) as string[],
       state: row.state,
+      delivery_state: row.delivery_state ?? DEFAULT_DELIVERY_STATE_BY_LIFECYCLE[row.state],
       usage_count: row.usage_count,
       helped_count: row.helped_count,
       harmed_count: row.harmed_count,
+      consecutive_harmed_count: row.consecutive_harmed_count ?? 0,
+      last_feedback_verdict: row.last_feedback_verdict ?? undefined,
       support_count: row.support_count,
       last_used_at: row.last_used_at ?? undefined,
       last_helped_at: row.last_helped_at ?? undefined,
       last_harmed_at: row.last_harmed_at ?? undefined,
+      quarantined_at: row.quarantined_at ?? undefined,
+      quarantine_reason: row.quarantine_reason ?? undefined,
       created_at: row.created_at,
       updated_at: row.updated_at
     };
@@ -156,13 +178,18 @@ export class NodeRepository {
       helped_record_ids_json: JSON.stringify(node.helped_record_ids ?? []),
       harmed_record_ids_json: JSON.stringify(node.harmed_record_ids ?? []),
       state: node.state,
+      delivery_state: resolveDeliveryState(node),
       usage_count: node.usage_count,
       helped_count: node.helped_count,
       harmed_count: node.harmed_count,
+      consecutive_harmed_count: node.consecutive_harmed_count ?? 0,
+      last_feedback_verdict: node.last_feedback_verdict ?? null,
       support_count: node.support_count,
       last_used_at: node.last_used_at ?? null,
       last_helped_at: node.last_helped_at ?? null,
       last_harmed_at: node.last_harmed_at ?? null,
+      quarantined_at: node.quarantined_at ?? null,
+      quarantine_reason: node.quarantine_reason ?? null,
       created_at: node.created_at,
       updated_at: node.updated_at
     };
@@ -172,13 +199,13 @@ export class NodeRepository {
         `INSERT INTO experience_nodes
           (id, node_type, scope_id, task_type, experience_kind, confidence_signal, validation_state, correction_scope, correction_category, deviation_pattern, corrected_constraint, trigger_pattern, applicability_notes, env_signature, compact_hint, goal, recommended_steps_json,
            avoid_steps_json, fallback_steps_json, success_signal, stop_condition, escalation_condition, evidence_summary, retrieval_text, embedding_json, embedding_provider, embedding_model, embedding_version, embedding_dimensions, distillation_mode_used, distillation_source, redistilled_from, promotion_signal, promotion_reason, merge_decision, merge_reason, priority_promotion_applied, source_kind,
-           origin_record_ids_json, helped_record_ids_json, harmed_record_ids_json, state,
-           usage_count, helped_count, harmed_count, support_count, last_used_at, last_helped_at, last_harmed_at, created_at, updated_at)
+           origin_record_ids_json, helped_record_ids_json, harmed_record_ids_json, state, delivery_state,
+           usage_count, helped_count, harmed_count, consecutive_harmed_count, last_feedback_verdict, support_count, last_used_at, last_helped_at, last_harmed_at, quarantined_at, quarantine_reason, created_at, updated_at)
          VALUES
          (@id, @node_type, @scope_id, @task_type, @experience_kind, @confidence_signal, @validation_state, @correction_scope, @correction_category, @deviation_pattern, @corrected_constraint, @trigger_pattern, @applicability_notes, @env_signature, @compact_hint, @goal, @recommended_steps_json,
            @avoid_steps_json, @fallback_steps_json, @success_signal, @stop_condition, @escalation_condition, @evidence_summary, @retrieval_text, @embedding_json, @embedding_provider, @embedding_model, @embedding_version, @embedding_dimensions, @distillation_mode_used, @distillation_source, @redistilled_from, @promotion_signal, @promotion_reason, @merge_decision, @merge_reason, @priority_promotion_applied, @source_kind,
-           @origin_record_ids_json, @helped_record_ids_json, @harmed_record_ids_json, @state,
-           @usage_count, @helped_count, @harmed_count, @support_count, @last_used_at, @last_helped_at, @last_harmed_at, @created_at, @updated_at)
+           @origin_record_ids_json, @helped_record_ids_json, @harmed_record_ids_json, @state, @delivery_state,
+           @usage_count, @helped_count, @harmed_count, @consecutive_harmed_count, @last_feedback_verdict, @support_count, @last_used_at, @last_helped_at, @last_harmed_at, @quarantined_at, @quarantine_reason, @created_at, @updated_at)
          ON CONFLICT(id) DO UPDATE SET
           experience_kind = excluded.experience_kind,
           confidence_signal = excluded.confidence_signal,
@@ -218,13 +245,18 @@ export class NodeRepository {
           helped_record_ids_json = excluded.helped_record_ids_json,
           harmed_record_ids_json = excluded.harmed_record_ids_json,
           state = excluded.state,
+          delivery_state = excluded.delivery_state,
           usage_count = excluded.usage_count,
           helped_count = excluded.helped_count,
           harmed_count = excluded.harmed_count,
+          consecutive_harmed_count = excluded.consecutive_harmed_count,
+          last_feedback_verdict = excluded.last_feedback_verdict,
           support_count = excluded.support_count,
           last_used_at = excluded.last_used_at,
           last_helped_at = excluded.last_helped_at,
           last_harmed_at = excluded.last_harmed_at,
+          quarantined_at = excluded.quarantined_at,
+          quarantine_reason = excluded.quarantine_reason,
           updated_at = excluded.updated_at`
       )
       .run(payload);
@@ -278,20 +310,36 @@ export class NodeRepository {
       .map((row) => this.mapNode(row as Parameters<typeof this.mapNode>[0]));
   }
 
-  listInjectableByExactScope(scopeId: string): ExperienceNode[] {
+  listLiveInjectableByExactScope(scopeId: string): ExperienceNode[] {
     return this.db
       .prepare(
         `SELECT * FROM experience_nodes
          WHERE scope_id = ?
-           AND state IN ('active', 'cooling', 'candidate')
+           AND delivery_state IN ('eligible', 'conservative_only')
          ORDER BY updated_at DESC`
       )
       .all(scopeId)
       .map((row) => this.mapNode(row as Parameters<typeof this.mapNode>[0]));
   }
 
+  listShadowEligibleByExactScope(scopeId: string): ExperienceNode[] {
+    return this.db
+      .prepare(
+        `SELECT * FROM experience_nodes
+         WHERE scope_id = ?
+           AND delivery_state IN ('eligible', 'conservative_only', 'shadow_only')
+         ORDER BY updated_at DESC`
+      )
+      .all(scopeId)
+      .map((row) => this.mapNode(row as Parameters<typeof this.mapNode>[0]));
+  }
+
+  listInjectableByExactScope(scopeId: string): ExperienceNode[] {
+    return this.listLiveInjectableByExactScope(scopeId);
+  }
+
   listInjectableByScope(scopeId: string): ExperienceNode[] {
-    return this.listInjectableByExactScope(scopeId);
+    return this.listLiveInjectableByExactScope(scopeId);
   }
 
   listByScope(scopeId: string): ExperienceNode[] {
@@ -310,6 +358,7 @@ export class NodeRepository {
     return this.upsert({
       ...node,
       state,
+      delivery_state: DEFAULT_DELIVERY_STATE_BY_LIFECYCLE[state],
       updated_at: new Date().toISOString()
     });
   }

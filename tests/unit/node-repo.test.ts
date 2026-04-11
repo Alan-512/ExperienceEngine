@@ -20,7 +20,10 @@ const makeRepo = () => {
     })
   );
   bootstrapDatabase(db);
-  return new NodeRepository(db);
+  return {
+    db,
+    repo: new NodeRepository(db)
+  };
 };
 
 afterEach(() => {
@@ -68,7 +71,7 @@ const node = (overrides: Partial<ExperienceNode>): ExperienceNode => ({
 
 describe("NodeRepository", () => {
   it("refreshes candidate-derived metadata while preserving counters and timestamps", () => {
-    const repo = makeRepo();
+    const { repo, db } = makeRepo();
 
     repo.upsert(node({}));
     repo.upsert(
@@ -106,10 +109,14 @@ describe("NodeRepository", () => {
     expect(stored?.last_used_at).toBe("2026-03-12T02:00:00.000Z");
     expect(stored?.last_helped_at).toBe("2026-03-12T01:59:00.000Z");
     expect(stored?.last_harmed_at).toBe("2026-03-12T01:58:00.000Z");
+    const deliveryState = db.prepare("SELECT delivery_state FROM experience_nodes WHERE id = ?").get("node_warning") as
+      | { delivery_state?: string }
+      | undefined;
+    expect(deliveryState?.delivery_state).toBe("eligible");
   });
 
   it("round-trips priority candidate state and promotion metadata", () => {
-    const repo = makeRepo();
+    const { db, repo } = makeRepo();
 
     repo.upsert(
       node({
@@ -130,10 +137,14 @@ describe("NodeRepository", () => {
     expect(stored?.merge_decision).toBe("ADD");
     expect(stored?.merge_reason).toContain("new enough");
     expect(stored?.priority_promotion_applied).toBe(true);
+    const deliveryState = db.prepare("SELECT delivery_state FROM experience_nodes WHERE id = ?").get("node_priority") as
+      | { delivery_state?: string }
+      | undefined;
+    expect(deliveryState?.delivery_state).toBe("conservative_only");
   });
 
-  it("lists injectable nodes only from the exact scope and excludes priority candidates", () => {
-    const repo = makeRepo();
+  it("lists live-injectable nodes by exact scope using delivery-state gating", () => {
+    const { repo } = makeRepo();
 
     repo.upsert(node({ id: "scope-active", scope_id: "scope_1", state: "active" }));
     repo.upsert(node({ id: "scope-cooling", scope_id: "scope_1", state: "cooling" }));
@@ -141,8 +152,27 @@ describe("NodeRepository", () => {
     repo.upsert(node({ id: "scope-priority", scope_id: "scope_1", state: "priority_candidate" }));
     repo.upsert(node({ id: "other-scope-active", scope_id: "scope_2", state: "active" }));
 
-    const injectable = repo.listInjectableByExactScope("scope_1");
+    const injectable = (repo as unknown as { listLiveInjectableByExactScope: (scopeId: string) => ExperienceNode[] })
+      .listLiveInjectableByExactScope("scope_1");
 
-    expect(injectable.map((entry) => entry.id).sort()).toEqual(["scope-active", "scope-candidate", "scope-cooling"]);
+    expect(injectable.map((entry) => entry.id).sort()).toEqual(["scope-active", "scope-cooling", "scope-priority"]);
+  });
+
+  it("lists shadow-visible nodes by exact scope for non-live evaluation", () => {
+    const { repo } = makeRepo();
+
+    repo.upsert(node({ id: "scope-active", scope_id: "scope_1", state: "active" }));
+    repo.upsert(node({ id: "scope-candidate", scope_id: "scope_1", state: "candidate" }));
+    repo.upsert(node({ id: "scope-priority", scope_id: "scope_1", state: "priority_candidate" }));
+    repo.upsert(node({ id: "scope-retired", scope_id: "scope_1", state: "retired" }));
+
+    const shadowVisible = (repo as unknown as { listShadowEligibleByExactScope: (scopeId: string) => ExperienceNode[] })
+      .listShadowEligibleByExactScope("scope_1");
+
+    expect(shadowVisible.map((entry) => entry.id).sort()).toEqual([
+      "scope-active",
+      "scope-candidate",
+      "scope-priority"
+    ]);
   });
 });

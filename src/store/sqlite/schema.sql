@@ -136,13 +136,18 @@ CREATE TABLE IF NOT EXISTS experience_nodes (
   helped_record_ids_json TEXT NOT NULL DEFAULT '[]',
   harmed_record_ids_json TEXT NOT NULL DEFAULT '[]',
   state TEXT NOT NULL,
+  delivery_state TEXT NOT NULL DEFAULT 'shadow_only',
   usage_count INTEGER NOT NULL DEFAULT 0,
   helped_count INTEGER NOT NULL DEFAULT 0,
   harmed_count INTEGER NOT NULL DEFAULT 0,
+  consecutive_harmed_count INTEGER NOT NULL DEFAULT 0,
+  last_feedback_verdict TEXT,
   support_count INTEGER NOT NULL DEFAULT 1,
   last_used_at TEXT,
   last_helped_at TEXT,
   last_harmed_at TEXT,
+  quarantined_at TEXT,
+  quarantine_reason TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
