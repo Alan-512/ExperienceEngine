@@ -16,6 +16,10 @@ import {
 } from "../config/config-schema.js";
 import { ExperienceRuntimeService } from "../runtime/service.js";
 import {
+  OPENCLAW_BACKGROUND_LEARNING_ENABLED,
+  OPENCLAW_HYBRID_POSTTASK_ENABLED
+} from "./openclaw-runtime-defaults.js";
+import {
   normalizePromptPayload,
   normalizeToolPayload,
   applyInjectionToPayload,
@@ -207,8 +211,8 @@ export const createExperiencePlugin = (
 ): OpenClawExperiencePlugin =>
   new OpenClawExperiencePlugin(
     new ExperienceRuntimeService(loadConfig(configOverrides), logger, {
-      disableBackgroundLearning: true,
-      disableHybridPosttask: true,
+      disableBackgroundLearning: !OPENCLAW_BACKGROUND_LEARNING_ENABLED,
+      disableHybridPosttask: !OPENCLAW_HYBRID_POSTTASK_ENABLED,
       ...runtimeOptions
     })
   );

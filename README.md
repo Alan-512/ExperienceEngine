@@ -183,6 +183,8 @@ Before installing an adapter, make sure the host CLI already works on this machi
 OpenClaw notes:
 - requires a working OpenClaw installation with native plugin support
 - the documented OpenClaw path assumes `openclaw plugins install` and `openclaw gateway restart` are available
+- OpenClaw now uses the shared background learning loop by default
+- OpenClaw still keeps async hybrid posttask review disabled by default; `ee status` and `ee doctor openclaw` show that explicitly
 
 General package requirement:
 - Node.js `>=20` is required for the published package

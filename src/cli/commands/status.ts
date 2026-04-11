@@ -95,6 +95,15 @@ export const runStatusCommand = (): void => {
     console.log(`- Codex instruction block: ${codex.learningLoop.instructionState}`);
     console.log(`- Codex task runs in current repo: ${codex.learningLoop.recentTaskRuns}`);
   }
+  if (openclaw.runtimeDefaults) {
+    console.log(`- OpenClaw learning loop: ${openclaw.runtimeDefaults.learningLoopState}`);
+    console.log(
+      `- OpenClaw background learning default: ${openclaw.runtimeDefaults.backgroundLearningEnabled ? "enabled" : "disabled"}`
+    );
+    console.log(
+      `- OpenClaw async posttask default: ${openclaw.runtimeDefaults.hybridPosttaskEnabled ? "enabled" : "disabled"}`
+    );
+  }
   console.log(`- Recent retrieval decisions in current repo: ${decisionHealth.recentDecisions}`);
   console.log(`- Recent standard hints (inject): ${decisionHealth.recentInjects}`);
   console.log(`- Recent cautious hints (inject_conservative): ${decisionHealth.recentConservativeInjects}`);

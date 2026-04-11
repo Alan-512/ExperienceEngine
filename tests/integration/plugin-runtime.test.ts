@@ -604,6 +604,9 @@ describe("OpenClaw plugin runtime", () => {
     process.env.HOME = homeDir;
     const installReport = installOpenClawAdapter({
       homeDir,
+      packageSourceBuilder() {
+        return join(homeDir, "tmp", "experienceengine-openclaw.tgz");
+      },
       runner() {
         return;
       }

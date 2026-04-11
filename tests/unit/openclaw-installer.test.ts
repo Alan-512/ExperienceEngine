@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { resolveExperienceEnginePaths } from "../../src/config/path-resolver.js";
 import {
   createOpenClawInstallTarball,
@@ -12,6 +12,12 @@ import {
 import { readCurrentPackageVersion } from "../../src/version/package-version.js";
 
 const tempDirs: string[] = [];
+let cachedPackagedTarball:
+  | {
+      tarballPath: string;
+      stageDir: string;
+    }
+  | undefined;
 const originalHybridEnv = {
   EXPERIENCE_ENGINE_HYBRID_ENABLED: process.env.EXPERIENCE_ENGINE_HYBRID_ENABLED,
   EXPERIENCE_ENGINE_HYBRID_SYNC_EXPLAIN_ENABLED: process.env.EXPERIENCE_ENGINE_HYBRID_SYNC_EXPLAIN_ENABLED,
@@ -41,6 +47,29 @@ afterEach(() => {
     }
   }
 });
+
+afterAll(() => {
+  if (cachedPackagedTarball) {
+    rmSync(dirname(cachedPackagedTarball.tarballPath), { recursive: true, force: true });
+    cachedPackagedTarball = undefined;
+  }
+});
+
+const getCachedPackagedTarball = (): { tarballPath: string; stageDir: string } => {
+  if (cachedPackagedTarball) {
+    return cachedPackagedTarball;
+  }
+
+  const homeDir = mkdtempSync(join(tmpdir(), "experienceengine-packaged-openclaw-"));
+  const paths = resolveExperienceEnginePaths({ homeDir });
+  mkdirSync(join(paths.productHome, "adapters", "openclaw"), { recursive: true });
+  const tarballPath = createOpenClawInstallTarball(process.cwd(), paths);
+  cachedPackagedTarball = {
+    tarballPath,
+    stageDir: join(dirname(tarballPath), "experienceengine-openclaw")
+  };
+  return cachedPackagedTarball;
+};
 
 describe("OpenClaw installer", () => {
   const currentVersion = readCurrentPackageVersion();
@@ -97,13 +126,12 @@ describe("OpenClaw installer", () => {
     expect(report.installed).toBe(true);
     expect(report.paths.mode).toBe("product");
     expect(existsSync(report.paths.installStatePath)).toBe(true);
-    expect(commands).toHaveLength(7);
+    expect(commands).toHaveLength(6);
     expect(commands[0]).toBe("openclaw config get plugins.entries.experienceengine");
     expect(commands[1]).toBe(`openclaw config get plugins`);
     expect(commands[2]).toBe(`openclaw plugins install ${report.installSource}`);
     expect(report.installSource).toMatch(/experienceengine-openclaw\.tgz$/);
-    expect(commands[5]).toBe("openclaw config get plugins");
-    expect(commands[6]).toBe('openclaw config set plugins.load.paths ["/tmp/other-plugin"] --json');
+    expect(commands[5]).toBe('openclaw config set plugins.load.paths ["/tmp/other-plugin"] --json');
 
     const payload = JSON.parse(readFileSync(report.paths.installStatePath, "utf8")) as {
       adapter: string;
@@ -150,6 +178,9 @@ describe("OpenClaw installer", () => {
 
     installOpenClawAdapter({
       homeDir,
+      packageSourceBuilder() {
+        return join(homeDir, "tmp", "experienceengine-openclaw.tgz");
+      },
       runner(command) {
         const key = [command.bin, ...command.args].join(" ");
         if (key === "openclaw config get plugins") {
@@ -323,11 +354,8 @@ Recorded version: 0.1.3`;
   });
 
   it("packages the runtime dependencies required by the OpenClaw plugin install", () => {
-    const homeDir = makeTempDir();
-    const paths = resolveExperienceEnginePaths({ homeDir });
-    mkdirSync(join(paths.productHome, "adapters", "openclaw"), { recursive: true });
-    const tarballPath = createOpenClawInstallTarball(process.cwd(), paths);
-    const manifestPath = join(dirname(tarballPath), "experienceengine-openclaw", "package.json");
+    const { stageDir } = getCachedPackagedTarball();
+    const manifestPath = join(stageDir, "package.json");
     const packagedManifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
       dependencies: Record<string, string>;
     };
@@ -337,14 +365,11 @@ Recorded version: 0.1.3`;
       "@huggingface/transformers": "^3.8.1",
       zod: "^3.25.76"
     });
-  });
+  }, 15000);
 
   it("packages the OpenClaw compatibility metadata required by ClawHub publishing", () => {
-    const homeDir = makeTempDir();
-    const paths = resolveExperienceEnginePaths({ homeDir });
-    mkdirSync(join(paths.productHome, "adapters", "openclaw"), { recursive: true });
-    const tarballPath = createOpenClawInstallTarball(process.cwd(), paths);
-    const manifestPath = join(dirname(tarballPath), "experienceengine-openclaw", "package.json");
+    const { stageDir } = getCachedPackagedTarball();
+    const manifestPath = join(stageDir, "package.json");
     const packagedManifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
       openclaw?: {
         compat?: { pluginApi?: string; minGatewayVersion?: string };
@@ -356,13 +381,10 @@ Recorded version: 0.1.3`;
     expect(packagedManifest.openclaw?.compat?.minGatewayVersion).toBe("2026.4.1");
     expect(packagedManifest.openclaw?.build?.openclawVersion).toBe("2026.4.1");
     expect(packagedManifest.openclaw?.build?.pluginSdkVersion).toBe("2026.4.1");
-  });
+  }, 15000);
 
   it("packages only the OpenClaw hook runtime closure needed by the installed plugin", () => {
-    const homeDir = makeTempDir();
-    const paths = resolveExperienceEnginePaths({ homeDir });
-    mkdirSync(join(paths.productHome, "adapters", "openclaw"), { recursive: true });
-    const tarballPath = createOpenClawInstallTarball(process.cwd(), paths);
+    const { tarballPath } = getCachedPackagedTarball();
     const entries = execFileSync("tar", ["-tzf", tarballPath], {
       encoding: "utf8"
     })
@@ -381,12 +403,15 @@ Recorded version: 0.1.3`;
     expect(entries).not.toContain("package/dist/maintenance/claude-validate-print.js");
     expect(entries).not.toContain("package/dist/store/vector/api-embedding-provider.js");
     expect(entries).not.toContain("package/dist/adapters/codex/mcp-server.js");
-  });
+  }, 15000);
 
   it("reports install status and resolved paths for doctor output", () => {
     const homeDir = makeTempDir();
     installOpenClawAdapter({
       homeDir,
+      packageSourceBuilder() {
+        return join(homeDir, "tmp", "experienceengine-openclaw.tgz");
+      },
       runner(command) {
         const key = [command.bin, ...command.args].join(" ");
         if (key === "openclaw config get plugins") {

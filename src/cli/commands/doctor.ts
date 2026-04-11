@@ -412,6 +412,15 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
       console.log(`- Codex learning loop: ${codexStatus.learningLoop.state}`);
       console.log(`- Codex instruction block: ${codexStatus.learningLoop.instructionState}`);
     }
+    if (openclawStatus.runtimeDefaults) {
+      console.log(`- OpenClaw learning loop: ${openclawStatus.runtimeDefaults.learningLoopState}`);
+      console.log(
+        `- OpenClaw background learning default: ${openclawStatus.runtimeDefaults.backgroundLearningEnabled ? "enabled" : "disabled"}`
+      );
+      console.log(
+        `- OpenClaw async posttask default: ${openclawStatus.runtimeDefaults.hybridPosttaskEnabled ? "enabled" : "disabled"}`
+      );
+    }
     console.log("- Host health details: ee doctor <codex|claude-code|openclaw>");
     console.log("Distillation summary:");
     console.log(`- Provider: ${config.distillerProvider}`);
@@ -553,6 +562,9 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
       host_wired: status.hostWiring.wired,
       host_status: status.hostState.status ?? "",
       host_enabled: status.hostState.enabled ?? false,
+      learning_loop_default: status.runtimeDefaults?.learningLoopState ?? "",
+      background_learning_default: status.runtimeDefaults?.backgroundLearningEnabled ?? false,
+      async_posttask_default: status.runtimeDefaults?.hybridPosttaskEnabled ?? false,
       config_matches: status.hostState.configMatches,
       restart_recommended: status.hostWiring.restartRecommended,
       install_drift: status.hostState.driftDetected ?? false,

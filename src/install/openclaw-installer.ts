@@ -15,6 +15,8 @@ import {
 import { homedir } from "node:os";
 import { basename, dirname, join, resolve } from "node:path";
 import { loadConfig } from "../config/load-config.js";
+import { defaultConfig } from "../config/default-config.js";
+import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import { resolveExperienceEnginePaths, resolveProductStateDir, type ResolvedPathInfo } from "../config/path-resolver.js";
 import {
   buildOpenClawInstallCommands,
@@ -33,6 +35,7 @@ import {
   type OpenClawCommandRunner
 } from "./openclaw-cli.js";
 import { buildVersionStatus, readCurrentPackageVersion } from "../version/package-version.js";
+import { getOpenClawRuntimeDefaults } from "../plugin/openclaw-runtime-defaults.js";
 
 export type OpenClawInstallReport = {
   adapter: "openclaw";
@@ -195,6 +198,25 @@ export const buildOpenClawPackagedDependencies = (rawPackageJson: Record<string,
   };
 };
 
+const OPENCLAW_PLUGIN_CONFIG_KEYS = [
+  "dataDir",
+  "sqlitePath",
+  "captureDir",
+  "distillerProvider",
+  "distillerModel",
+  "hybridEnabled",
+  "hybridSyncExplainEnabled",
+  "hybridAsyncPostmortemEnabled",
+  "hybridAsyncPostmortemLlmEnabled",
+  "hybridExplainLlmEnabled",
+  "hybridExplainProviderMode",
+  "hybridExplainModelProfileVersion",
+  "hybridPostmortemProviderMode",
+  "hybridPostmortemModelProfileVersion"
+] as const satisfies readonly (keyof ExperienceEngineConfig)[];
+
+type OpenClawComparableConfig = Partial<Record<(typeof OPENCLAW_PLUGIN_CONFIG_KEYS)[number], unknown>>;
+
 const OPENCLAW_PLUGIN_ENTRYPOINT = "plugin/openclaw-plugin.js";
 const OPENCLAW_REQUIRED_DIST_ASSETS = ["store/sqlite/schema.sql"] as const;
 const OPENCLAW_RELATIVE_IMPORT_PATTERN =
@@ -327,16 +349,28 @@ export const createOpenClawInstallTarball = (packageRoot: string, paths: Resolve
     }
   }
 
-  const output = execFileSync("npm", ["pack", stageDir, "--pack-destination", tempRoot], {
-    stdio: "pipe",
-    encoding: "utf8"
-  }).trim();
-  const tarballName = output.split(/\r?\n/).filter(Boolean).at(-1);
-  if (!tarballName) {
-    throw new Error("npm pack did not return an OpenClaw install artifact");
-  }
+  const archiveRoot = join(tempRoot, "package");
+  const tarballPath = join(tempRoot, "experienceengine-openclaw.tgz");
 
-  return join(tempRoot, tarballName);
+  try {
+    cpSync(stageDir, archiveRoot, { recursive: true });
+    execFileSync("tar", ["-czf", tarballPath, "-C", tempRoot, "package"], {
+      stdio: "pipe",
+      encoding: "utf8"
+    });
+    return tarballPath;
+  } catch {
+    const output = execFileSync("npm", ["pack", stageDir, "--pack-destination", tempRoot], {
+      stdio: "pipe",
+      encoding: "utf8"
+    }).trim();
+    const tarballName = output.split(/\r?\n/).filter(Boolean).at(-1);
+    if (!tarballName) {
+      throw new Error("npm pack did not return an OpenClaw install artifact");
+    }
+
+    return join(tempRoot, tarballName);
+  }
 };
 
 export type OpenClawInspection = ReturnType<typeof inspectOpenClawInstall>;
@@ -482,21 +516,18 @@ const normalizeOpenClawPluginPermissions = (installPath: string): void => {
 };
 
 const cleanupOpenClawWarningSources = (
-  paths: ResolvedPathInfo,
+  existingPluginsConfig: ReturnType<typeof readOpenClawPluginsConfig>,
+  expectedInstallPath: string,
   runner?: OpenClawCommandRunner
 ): void => {
-  const pluginsOutput = runOpenClawCommand(buildOpenClawPluginsConfigGetCommand(), runner);
-  const parsed = parseOpenClawPluginsConfig(pluginsOutput);
-  const loadPaths = parsed.config?.load?.paths ?? [];
+  const loadPaths = existingPluginsConfig?.load?.paths ?? [];
   const filteredLoadPaths = filterExperienceEngineLoadPaths(loadPaths);
 
   if (filteredLoadPaths.length !== loadPaths.length) {
     runOpenClawCommand(buildOpenClawLoadPathsSetCommand(filteredLoadPaths), runner);
   }
 
-  const installPath =
-    parsed.config?.installs?.experienceengine?.installPath ??
-    join(dirname(paths.compatibilityHome), "extensions", "experienceengine");
+  const installPath = existingPluginsConfig?.installs?.experienceengine?.installPath ?? expectedInstallPath;
   normalizeOpenClawPluginPermissions(installPath);
 };
 
@@ -592,7 +623,7 @@ export const installOpenClawAdapter = (options: InstallerOptions = {}): OpenClaw
   const installSource = (options.packageSourceBuilder ?? createOpenClawInstallTarball)(packageRoot, paths);
   const commands = buildOpenClawInstallCommands(installSource, "experienceengine", installAction, pluginConfig);
   runOpenClawCommands(commands, options.runner);
-  cleanupOpenClawWarningSources(paths, options.runner);
+  cleanupOpenClawWarningSources(existingPluginsConfig, expectedInstallPath, options.runner);
 
   const payload = {
     adapter: "openclaw",
@@ -667,6 +698,31 @@ const readInstallState = (installStatePath: string): PersistedInstallState | nul
   return JSON.parse(raw) as PersistedInstallState;
 };
 
+const isLiveConfigValueMissingButDefault = <K extends keyof OpenClawComparableConfig>(
+  key: K,
+  expectedValue: OpenClawComparableConfig[K]
+): boolean => defaultConfig[key] === expectedValue;
+
+const configsMatch = (
+  liveConfig: Record<string, unknown> | undefined,
+  expectedConfig: OpenClawComparableConfig | undefined
+): boolean =>
+  Boolean(liveConfig) &&
+  Boolean(expectedConfig) &&
+  OPENCLAW_PLUGIN_CONFIG_KEYS.every((key) => {
+    const expectedValue = expectedConfig?.[key];
+    if (expectedValue === undefined) {
+      return true;
+    }
+
+    const liveValue = liveConfig?.[key];
+    if (liveValue === undefined) {
+      return isLiveConfigValueMissingButDefault(key, expectedValue);
+    }
+
+    return liveValue === expectedValue;
+  });
+
 export const inspectRecordedOpenClawInstallState = (options: InstallerOptions = {}) => {
   const paths = resolveExperienceEnginePaths({
     adapter: "openclaw",
@@ -709,6 +765,7 @@ export const inspectOpenClawInstall = (options: InstallerOptions = {}) => {
         hybridPostmortemModelProfileVersion: state.hybridPostmortemModelProfileVersion
       }
     : undefined;
+  const runtimeDefaults = getOpenClawRuntimeDefaults();
 
   let hostState: HostState = {
     warnings: [],
@@ -731,23 +788,7 @@ export const inspectOpenClawInstall = (options: InstallerOptions = {}) => {
       installPath: info.installPath,
       enabled: config.entry?.enabled,
       liveConfig,
-      configMatches:
-        Boolean(expected) &&
-        Boolean(liveConfig) &&
-        liveConfig?.dataDir === expected?.dataDir &&
-        liveConfig?.sqlitePath === expected?.sqlitePath &&
-        liveConfig?.captureDir === expected?.captureDir &&
-        liveConfig?.distillerProvider === expected?.distillerProvider &&
-        liveConfig?.distillerModel === expected?.distillerModel &&
-        liveConfig?.hybridEnabled === expected?.hybridEnabled &&
-        liveConfig?.hybridSyncExplainEnabled === expected?.hybridSyncExplainEnabled &&
-        liveConfig?.hybridAsyncPostmortemEnabled === expected?.hybridAsyncPostmortemEnabled &&
-        liveConfig?.hybridAsyncPostmortemLlmEnabled === expected?.hybridAsyncPostmortemLlmEnabled &&
-        liveConfig?.hybridExplainLlmEnabled === expected?.hybridExplainLlmEnabled &&
-        liveConfig?.hybridExplainProviderMode === expected?.hybridExplainProviderMode &&
-        liveConfig?.hybridExplainModelProfileVersion === expected?.hybridExplainModelProfileVersion &&
-        liveConfig?.hybridPostmortemProviderMode === expected?.hybridPostmortemProviderMode &&
-        liveConfig?.hybridPostmortemModelProfileVersion === expected?.hybridPostmortemModelProfileVersion
+      configMatches: configsMatch(liveConfig, expected)
     };
 
     const drift = inspectInstalledOpenClawBundleDrift(state?.packageRoot, info.installPath, options.homeDir);
@@ -777,6 +818,7 @@ export const inspectOpenClawInstall = (options: InstallerOptions = {}) => {
       wired: state?.hostWiring?.wired ?? false,
       restartRecommended: state?.hostWiring?.restartRecommended ?? false
     },
+    runtimeDefaults,
     hostState
   };
 };

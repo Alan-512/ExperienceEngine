@@ -430,6 +430,8 @@ ee install openclaw
 What happens:
 - ExperienceEngine installs as an OpenClaw plugin/runtime integration (not `src/adapters/`)
 - OpenClaw runtime events are used for intervention and persistence
+- OpenClaw uses the shared background learning loop by default
+- async hybrid posttask review stays disabled by default unless the runtime is explicitly overridden
 - management remains mostly through CLI fallback today
 - install ends with a short cold-start note so users know capture is active before the first formal hint appears
 

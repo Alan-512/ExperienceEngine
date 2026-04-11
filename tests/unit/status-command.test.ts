@@ -34,6 +34,11 @@ let mockClaudeStatus = {
 
 let mockOpenClawStatus = {
   installed: true,
+  runtimeDefaults: {
+    learningLoopState: "learning_loop_active",
+    backgroundLearningEnabled: true,
+    hybridPosttaskEnabled: false
+  },
   hostState: {
     enabled: true
   }
@@ -122,6 +127,11 @@ afterEach(() => {
   };
   mockOpenClawStatus = {
     installed: true,
+    runtimeDefaults: {
+      learningLoopState: "learning_loop_active",
+      backgroundLearningEnabled: true,
+      hybridPosttaskEnabled: false
+    },
     hostState: {
       enabled: true
     }
@@ -213,6 +223,9 @@ describe("status command", () => {
         ["- Codex learning loop: instruction_installed"],
         ["- Codex instruction block: present"],
         ["- Codex task runs in current repo: 0"],
+        ["- OpenClaw learning loop: learning_loop_active"],
+        ["- OpenClaw background learning default: enabled"],
+        ["- OpenClaw async posttask default: disabled"],
         ["- Recent retrieval decisions in current repo: 3"],
         ["- Recent standard hints (inject): 1"],
         ["- Recent cautious hints (inject_conservative): 1"],
