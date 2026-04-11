@@ -498,7 +498,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
 
   // The shipped runtime path stays exact-scope-only in this rollout.
   private resolveExactScopeInjectableNodes(scopeId: string): ExperienceNode[] {
-    return this.nodeRepo.listInjectableByExactScope(scopeId);
+    return this.nodeRepo.listLiveInjectableByExactScope(scopeId);
   }
 
   recoverToolEvents(sessionId: string, payload: unknown): void {

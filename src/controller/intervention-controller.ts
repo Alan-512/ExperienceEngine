@@ -30,6 +30,18 @@ export type InterventionDecision = {
   diagnostics?: InterventionDecisionDiagnostics;
 };
 
+const DEFAULT_DELIVERY_STATE_BY_LIFECYCLE: Record<ExperienceNode["state"], NonNullable<ExperienceNode["delivery_state"]>> = {
+  candidate: "shadow_only",
+  priority_candidate: "conservative_only",
+  active: "eligible",
+  cooling: "conservative_only",
+  retired: "quarantined"
+};
+
+const resolveDeliveryState = (
+  node: Pick<ExperienceNode, "state" | "delivery_state">
+): NonNullable<ExperienceNode["delivery_state"]> => node.delivery_state ?? DEFAULT_DELIVERY_STATE_BY_LIFECYCLE[node.state];
+
 const isTrustedSameFamilyCluster = (
   quality: TriggerCandidateQuality,
   runnerUpQuality?: TriggerCandidateQuality
@@ -214,6 +226,7 @@ const resolveTriggerThreshold = (selected: ExperienceNode | undefined, threshold
 
 const isMatureReusableNode = (node: ExperienceNode): boolean =>
   node.state === "active" &&
+  resolveDeliveryState(node) === "eligible" &&
   (node.helped_count >= 2 || node.validation_state === "validated_by_reuse") &&
   node.helped_count >= node.harmed_count;
 
@@ -332,7 +345,7 @@ const decideInterventionInternal = async (
   }
 
   const mode: InjectionMode =
-    correctionAwareRanked[0]?.state === "candidate" || correctionAwareRanked[0]?.state === "priority_candidate"
+    correctionAwareRanked[0] && resolveDeliveryState(correctionAwareRanked[0]) === "conservative_only"
       ? "inject_conservative"
       : "inject";
   const selected = selectInjectableNodes(

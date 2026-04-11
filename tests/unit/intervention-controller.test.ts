@@ -3,6 +3,14 @@ import { decideIntervention, selectInjectableNodes } from "../../src/controller/
 import type { ExperienceInput, ExperienceNode, ScopeTaskStats } from "../../src/types/domain.js";
 import { clearEmbeddingProviderForTests, setEmbeddingProviderForTests } from "../../src/store/vector/embeddings.js";
 
+const defaultDeliveryStateByState: Record<ExperienceNode["state"], NonNullable<ExperienceNode["delivery_state"]>> = {
+  candidate: "shadow_only",
+  priority_candidate: "conservative_only",
+  active: "eligible",
+  cooling: "conservative_only",
+  retired: "quarantined"
+};
+
 const node = (overrides: Partial<ExperienceNode>): ExperienceNode => ({
   id: "node_default",
   node_type: "strategy",
@@ -17,7 +25,8 @@ const node = (overrides: Partial<ExperienceNode>): ExperienceNode => ({
   origin_record_ids: [],
   helped_record_ids: [],
   harmed_record_ids: [],
-  state: "active",
+  state: overrides.state ?? "active",
+  delivery_state: overrides.delivery_state ?? defaultDeliveryStateByState[overrides.state ?? "active"],
   usage_count: 0,
   helped_count: 0,
   harmed_count: 0,
@@ -189,7 +198,7 @@ describe("decideIntervention", () => {
     expect(decision.selected[0]?.id).toBe("specific-distilled");
   });
 
-  it("prefers expectation-correction nodes over generic candidates when the correction context matches", async () => {
+  it("prefers expectation-correction priority candidates over generic conservative candidates when the correction context matches", async () => {
     const correctionInput: ExperienceInput = {
       scope_id: "scope_1",
       task_type: "config_debug",
@@ -208,7 +217,7 @@ describe("decideIntervention", () => {
         node({
           id: "generic-competing-candidate",
           task_type: "config_debug",
-          state: "candidate",
+          state: "priority_candidate",
           trigger_pattern:
             "Diagnose why OpenClaw is selecting the wrong Gemini model. Focus only on UI labels and aliases. Do not inspect runtime config resolution or persisted settings precedence.",
           compact_hint:
@@ -218,7 +227,7 @@ describe("decideIntervention", () => {
         node({
           id: "matching-expectation-correction",
           task_type: "config_debug",
-          state: "candidate",
+          state: "priority_candidate",
           experience_kind: "expectation_correction",
           confidence_signal: "supported_by_objective_success",
           validation_state: "pending_reuse_validation",
@@ -296,7 +305,50 @@ describe("decideIntervention", () => {
     expect(decision.selected.map((entry) => entry.id)).toEqual(["priority-direct"]);
   });
 
-  it("keeps an exact candidate-family match ahead of unrelated active cross-family nodes", async () => {
+  it("keeps cooling nodes on conservative injection even when the match is otherwise strong", async () => {
+    const decision = await decideIntervention(
+      input,
+      [
+        node({
+          id: "cooling-node",
+          state: "cooling",
+          delivery_state: "conservative_only",
+          helped_count: 6,
+          support_count: 6
+        })
+      ],
+      stats,
+      0.6,
+      3
+    );
+
+    expect(decision.mode).toBe("inject_conservative");
+    expect(decision.selected.map((entry) => entry.id)).toEqual(["cooling-node"]);
+  });
+
+  it("skips quarantined nodes even if their lifecycle state still looks active", async () => {
+    const decision = await decideIntervention(
+      input,
+      [
+        node({
+          id: "quarantined-node",
+          state: "active",
+          delivery_state: "quarantined",
+          helped_count: 8,
+          support_count: 8
+        })
+      ],
+      stats,
+      0.6,
+      3
+    );
+
+    expect(decision.mode).toBe("skip");
+    expect(decision.selected).toEqual([]);
+    expect(decision.text).toBeUndefined();
+  });
+
+  it("keeps an exact priority-candidate family match ahead of unrelated active cross-family nodes", async () => {
     const decision = await decideIntervention(
       {
         ...input,
@@ -316,7 +368,7 @@ describe("decideIntervention", () => {
         node({
           id: "exact-candidate-match",
           task_type: "integration_fix",
-          state: "candidate",
+          state: "priority_candidate",
           trigger_pattern: "Repair the broken sqlite ledger migration in ExperienceEngine",
           compact_hint:
             "Use exec to isolate the sqlite ledger migration order mismatch, apply the smallest reordering fix, then rerun exec.",
@@ -644,19 +696,19 @@ describe("decideIntervention", () => {
     expect(decision.selected.map((entry) => entry.id)).toEqual(["integration-exact"]);
   });
 
-  it("caps conservative candidate injection at one hint", async () => {
+  it("caps conservative priority-candidate injection at one hint", async () => {
     const decision = await decideIntervention(
       input,
       [
         node({
           id: "candidate_primary",
-          state: "candidate",
+          state: "priority_candidate",
           helped_count: 0,
           support_count: 1
         }),
         node({
           id: "candidate_secondary",
-          state: "candidate",
+          state: "priority_candidate",
           trigger_pattern: "Fix the failing vitest auth test in the same workspace by checking the mock service first",
           compact_hint: "Check the mock service before editing the auth flow.",
           helped_count: 0,
@@ -670,10 +722,10 @@ describe("decideIntervention", () => {
 
     expect(decision.mode).toBe("inject_conservative");
     expect(decision.selected).toHaveLength(1);
-    expect(decision.selected[0]?.state).toBe("candidate");
+    expect(decision.selected[0]?.state).toBe("priority_candidate");
   });
 
-  it("uses expectation-correction signals when deciding whether to conservatively inject a candidate", async () => {
+  it("uses expectation-correction signals when deciding whether to conservatively inject a priority candidate", async () => {
     const correctionInput: ExperienceInput = {
       scope_id: "scope_1",
       task_type: "config_debug",
@@ -704,7 +756,7 @@ describe("decideIntervention", () => {
         node({
           id: "expectation-candidate",
           task_type: "config_debug",
-          state: "candidate",
+          state: "priority_candidate",
           experience_kind: "expectation_correction",
           confidence_signal: "supported_by_objective_success",
           validation_state: "pending_reuse_validation",

@@ -362,24 +362,25 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     });
   });
 
-  it("keeps beforePromptBuild on the exact-scope shipped pool and excludes priority candidates", async () => {
+  it("allows exact-scope priority candidates into live conservative injection while excluding shadow-only candidates", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
     const db = openDatabase(loadConfig({ sqlitePath }));
     bootstrapDatabase(db);
     const nodeRepo = new NodeRepository(db);
     const timestamp = nowIso();
+    const scope = resolveScope("/repo");
 
     nodeRepo.upsert({
       id: "scope-priority",
       node_type: "strategy",
-      scope_id: "scope_repo",
+      scope_id: scope.scope_id,
       task_type: "test_debug",
       trigger_pattern: "Fix the failing vitest auth test",
-      compact_hint: "This should stay in learning-only state.",
+      compact_hint: "Start with the focused failing test before wider edits.",
       success_signal: "The focused test passes.",
       evidence_summary: "Recovered from a prior scoped run.",
-      retrieval_text: "Fix the failing vitest auth test\nThis should stay in learning-only state.",
+      retrieval_text: "Fix the failing vitest auth test\nStart with the focused failing test before wider edits.",
       source_kind: "system_derived",
       origin_record_ids: [],
       helped_record_ids: [],
@@ -393,9 +394,31 @@ describe("ExperienceRuntimeService finalize transaction", () => {
       updated_at: timestamp
     });
     nodeRepo.upsert({
+      id: "scope-candidate",
+      node_type: "strategy",
+      scope_id: scope.scope_id,
+      task_type: "test_debug",
+      trigger_pattern: "Fix the failing vitest auth test",
+      compact_hint: "This ordinary candidate should stay shadow-only.",
+      success_signal: "The focused test passes.",
+      evidence_summary: "Recovered from a prior scoped run.",
+      retrieval_text: "Fix the failing vitest auth test\nThis ordinary candidate should stay shadow-only.",
+      source_kind: "system_derived",
+      origin_record_ids: [],
+      helped_record_ids: [],
+      harmed_record_ids: [],
+      state: "candidate",
+      usage_count: 0,
+      helped_count: 0,
+      harmed_count: 0,
+      support_count: 1,
+      created_at: timestamp,
+      updated_at: timestamp
+    });
+    nodeRepo.upsert({
       id: "other-scope-active",
       node_type: "strategy",
-      scope_id: "scope_other",
+      scope_id: resolveScope("/elsewhere").scope_id,
       task_type: "test_debug",
       trigger_pattern: "Fix the failing vitest auth test",
       compact_hint: "This should stay outside the exact scope.",
@@ -429,6 +452,86 @@ describe("ExperienceRuntimeService finalize transaction", () => {
 
     const prompt = await service.beforePromptBuild({
       sessionId: "exact-scope-session",
+      cwd: "/repo",
+      userMessage: "Fix the failing vitest auth test",
+      taskSummary: "Fix the failing vitest auth test"
+    });
+
+    expect(prompt.mode).toBe("inject_conservative");
+    expect(prompt.text).toContain("focused failing test");
+    expect(prompt.text).not.toContain("ordinary candidate");
+    expect(prompt.input.injected_node_ids).toEqual(["scope-priority"]);
+  });
+
+  it("keeps beforePromptBuild on skip when only shadow-only or quarantined nodes exist in scope", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const db = openDatabase(loadConfig({ sqlitePath }));
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    const timestamp = nowIso();
+    const scope = resolveScope("/repo");
+
+    nodeRepo.upsert({
+      id: "scope-candidate",
+      node_type: "strategy",
+      scope_id: scope.scope_id,
+      task_type: "test_debug",
+      trigger_pattern: "Fix the failing vitest auth test",
+      compact_hint: "This ordinary candidate should stay shadow-only.",
+      success_signal: "The focused test passes.",
+      evidence_summary: "Recovered from a prior scoped run.",
+      retrieval_text: "Fix the failing vitest auth test\nThis ordinary candidate should stay shadow-only.",
+      source_kind: "system_derived",
+      origin_record_ids: [],
+      helped_record_ids: [],
+      harmed_record_ids: [],
+      state: "candidate",
+      usage_count: 0,
+      helped_count: 0,
+      harmed_count: 0,
+      support_count: 1,
+      created_at: timestamp,
+      updated_at: timestamp
+    });
+    nodeRepo.upsert({
+      id: "scope-quarantined",
+      node_type: "strategy",
+      scope_id: scope.scope_id,
+      task_type: "test_debug",
+      trigger_pattern: "Fix the failing vitest auth test",
+      compact_hint: "This active-looking node is quarantined and should not inject.",
+      success_signal: "The focused test passes.",
+      evidence_summary: "Recovered from a prior scoped run.",
+      retrieval_text: "Fix the failing vitest auth test\nThis active-looking node is quarantined and should not inject.",
+      source_kind: "system_derived",
+      origin_record_ids: [],
+      helped_record_ids: [],
+      harmed_record_ids: [],
+      state: "active",
+      delivery_state: "quarantined",
+      usage_count: 0,
+      helped_count: 4,
+      harmed_count: 2,
+      support_count: 1,
+      created_at: timestamp,
+      updated_at: timestamp
+    });
+
+    const service = new ExperienceRuntimeService(
+      loadConfig({
+        dataDir: join(runtimeDir, "data"),
+        sqlitePath,
+        captureDir: join(runtimeDir, "captures"),
+        distillationAutoDrain: false,
+        distillationAllowPassthrough: true
+      }, { homeDir: runtimeDir }),
+      undefined,
+      { homeDir: runtimeDir, env: {} }
+    );
+
+    const prompt = await service.beforePromptBuild({
+      sessionId: "shadow-only-session",
       cwd: "/repo",
       userMessage: "Fix the failing vitest auth test",
       taskSummary: "Fix the failing vitest auth test"
@@ -476,7 +579,7 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     expect(prompt.retrievalContext?.failureSignature).toBeUndefined();
   });
 
-  it("learns an expectation correction in one run and conservatively injects it on the next similar run", async () => {
+  it("learns an expectation correction in one run but keeps an ordinary candidate shadow-only on the next similar run", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
     const geminiJsonResponse = (payload: unknown) =>
@@ -667,9 +770,9 @@ describe("ExperienceRuntimeService finalize transaction", () => {
         "A similar task is drifting into the UI layer even though the real correction belongs in provider routing behavior."
     });
 
-    expect(secondLookup.mode).toBe("inject_conservative");
-    expect(secondLookup.input.injected_node_ids).toHaveLength(1);
-    expect(secondLookup.text).toContain("provider routing");
+    expect(secondLookup.mode).toBe("skip");
+    expect(secondLookup.input.injected_node_ids).toEqual([]);
+    expect(secondLookup.text).toBeUndefined();
   });
 
   it("persists evidence-driven reversal semantics into candidate source signals", async () => {

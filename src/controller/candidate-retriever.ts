@@ -52,8 +52,20 @@ const STRONG_GENERAL_ADJACENT_SIGNAL_THRESHOLD = 0.45;
 const GENERAL_DEBUG_LIKE_QUERY_PATTERN =
   /\b(fail|failed|failing|failure|regression|bug|broken|debug|diagnose|investigate|audit|inspect|fixture|handshake|routing|config|timeout|migration|schema)\b/i;
 
+const DEFAULT_DELIVERY_STATE_BY_LIFECYCLE: Record<ExperienceNode["state"], NonNullable<ExperienceNode["delivery_state"]>> = {
+  candidate: "shadow_only",
+  priority_candidate: "conservative_only",
+  active: "eligible",
+  cooling: "conservative_only",
+  retired: "quarantined"
+};
+
+const resolveDeliveryState = (
+  node: Pick<ExperienceNode, "state" | "delivery_state">
+): NonNullable<ExperienceNode["delivery_state"]> => node.delivery_state ?? DEFAULT_DELIVERY_STATE_BY_LIFECYCLE[node.state];
+
 const isInjectableState = (node: ExperienceNode): boolean =>
-  node.state === "active" || node.state === "cooling" || node.state === "candidate" || node.state === "priority_candidate";
+  resolveDeliveryState(node) === "eligible" || resolveDeliveryState(node) === "conservative_only";
 
 const LOW_SIGNAL_QUERY_TOKENS = new Set([
   "ok",
