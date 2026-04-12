@@ -43,6 +43,58 @@ describe("runPostmortemReviewLlmWorker", () => {
     expect((result as Record<string, unknown>).postmortem_disposition).toBeUndefined();
   });
 
+  it("normalizes injected node reviews into the bounded phase 3 contract", async () => {
+    const fixture = phase3PostmortemFixtures[0];
+    const result = await runPostmortemReviewLlmWorker(fixture.capsule, {
+      endpoint: openAiEndpoint,
+      fetchImpl: async () =>
+        new Response(
+          JSON.stringify({
+            choices: [
+              {
+                message: {
+                  content: JSON.stringify({
+                    review_verdict: "POLICY_GATED",
+                    candidate_recommendation: "OBSERVE",
+                    feedback_followup_recommendation: "NONE",
+                    confidence: "HIGH",
+                    reason: "The posttask review can make a bounded per-node adjudication.",
+                    review_artifact: "bounded node review",
+                    injectedNodeReviews: [
+                      {
+                        nodeId: "node_provider_path",
+                        feedbackVerdict: "HELPED",
+                        confidence: "HIGH",
+                        deliveryRecommendation: "KEEP",
+                        reason: "The provider-path hint clearly changed the successful execution path."
+                      }
+                    ]
+                  })
+                }
+              }
+            ]
+          }),
+          { status: 200, headers: { "content-type": "application/json" } }
+        )
+    });
+
+    expect(result).toMatchObject({
+      task: "postmortem_review",
+      review_verdict: "policy_gated",
+      candidate_recommendation: "observe",
+      feedback_followup_recommendation: "none",
+      confidence: "high",
+      injected_node_reviews: [
+        {
+          node_id: "node_provider_path",
+          feedback_verdict: "helped",
+          confidence: "high",
+          delivery_recommendation: "keep"
+        }
+      ]
+    });
+  });
+
   it("rejects malformed structured output", async () => {
     const fixture = phase3PostmortemFixtures[0];
     await expect(

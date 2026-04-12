@@ -38,10 +38,30 @@ const columnExists = (db: DatabaseSync, table: string, column: string): boolean 
   return rows.some((row) => row.name === column);
 };
 
-const ensureColumn = (db: DatabaseSync, table: string, column: string, definition: string): void => {
+const ensureColumn = (db: DatabaseSync, table: string, column: string, definition: string): boolean => {
   if (!columnExists(db, table, column)) {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
+    return true;
   }
+
+  return false;
+};
+
+const backfillExperienceNodeDeliveryState = (db: DatabaseSync, forceAllRows = false): void => {
+  db.exec(
+    `UPDATE experience_nodes
+     SET delivery_state = CASE state
+       WHEN 'candidate' THEN 'shadow_only'
+       WHEN 'priority_candidate' THEN 'conservative_only'
+       WHEN 'active' THEN 'eligible'
+       WHEN 'cooling' THEN 'conservative_only'
+       WHEN 'retired' THEN 'quarantined'
+       ELSE 'shadow_only'
+     END
+     WHERE ${forceAllRows
+       ? "1 = 1"
+       : "delivery_state IS NULL OR delivery_state = '' OR delivery_state NOT IN ('shadow_only', 'conservative_only', 'eligible', 'quarantined')"}`
+  );
 };
 
 export const bootstrapDatabase = (db: DatabaseSync): void => {
@@ -73,6 +93,12 @@ export const bootstrapDatabase = (db: DatabaseSync): void => {
   ensureColumn(db, "experience_nodes", "correction_category", "TEXT");
   ensureColumn(db, "experience_nodes", "deviation_pattern", "TEXT");
   ensureColumn(db, "experience_nodes", "corrected_constraint", "TEXT");
+  const deliveryStateAdded = ensureColumn(db, "experience_nodes", "delivery_state", "TEXT NOT NULL DEFAULT 'shadow_only'");
+  ensureColumn(db, "experience_nodes", "consecutive_harmed_count", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "experience_nodes", "last_feedback_verdict", "TEXT");
+  ensureColumn(db, "experience_nodes", "quarantined_at", "TEXT");
+  ensureColumn(db, "experience_nodes", "quarantine_reason", "TEXT");
+  backfillExperienceNodeDeliveryState(db, deliveryStateAdded);
   ensureColumn(db, "experience_candidates", "source_context_summary", "TEXT");
   ensureColumn(db, "experience_candidates", "source_outcome_signal", "TEXT NOT NULL DEFAULT 'unknown'");
   ensureColumn(db, "experience_candidates", "task_run_id", "TEXT");

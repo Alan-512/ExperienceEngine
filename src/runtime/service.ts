@@ -9,7 +9,10 @@ import { buildRetrievalContext } from "../controller/retrieval-context.js";
 import { resolveScope } from "../input/scope-resolver.js";
 import { decideIntervention } from "../controller/intervention-controller.js";
 import { renderInlineNotice } from "../controller/inline-notice.js";
-import { deriveNodeOriginProfileForNode } from "../experience-management/node-lifecycle-governance.js";
+import {
+  applyGovernedNodeFeedback,
+  deriveNodeOriginProfileForNode
+} from "../experience-management/node-lifecycle-governance.js";
 import { resolveHybridRolloutState } from "../hybrid/rollout.js";
 import { selectHybridRoute, type HybridRouteDecision, type HybridRouteSignals } from "../hybrid/router.js";
 import { nowIso } from "../utils/clock.js";
@@ -498,7 +501,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
 
   // The shipped runtime path stays exact-scope-only in this rollout.
   private resolveExactScopeInjectableNodes(scopeId: string): ExperienceNode[] {
-    return this.nodeRepo.listInjectableByExactScope(scopeId);
+    return this.nodeRepo.listLiveInjectableByExactScope(scopeId);
   }
 
   recoverToolEvents(sessionId: string, payload: unknown): void {
@@ -640,6 +643,124 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     };
   }
 
+  private applyPostmortemDeliveryRecommendation(
+    node: ExperienceNode,
+    recommendation: "keep" | "conservative_only" | "quarantine" | "review"
+  ): ExperienceNode {
+    if (recommendation === "keep" || recommendation === "review") {
+      return node;
+    }
+
+    if (recommendation === "quarantine") {
+      return {
+        ...node,
+        delivery_state: "quarantined",
+        quarantined_at: node.quarantined_at ?? nowIso(),
+        quarantine_reason: node.quarantine_reason ?? "postmortem_review"
+      };
+    }
+
+    if (node.delivery_state === "quarantined") {
+      return node;
+    }
+
+    return {
+      ...node,
+      delivery_state: node.delivery_state === "shadow_only" ? "shadow_only" : "conservative_only"
+    };
+  }
+
+  private applyAcceptedPostmortemNodeReviews(input: {
+    taskRun: TaskRun;
+    experienceInput: ExperienceInput;
+    result: Extract<HybridPostmortemResult, { status: "accepted" }>;
+  }): boolean {
+    const reviews = input.result.value.injected_node_reviews ?? [];
+    if (!reviews.length || input.taskRun.final_status === "cancelled") {
+      return false;
+    }
+
+    const allowedIds = new Set(input.experienceInput.injected_node_ids);
+    const existingEvents = this.reviewEventRepo.listByTaskRunId(input.taskRun.id);
+    let applied = false;
+
+    for (const review of reviews) {
+      if (!allowedIds.has(review.node_id) || review.confidence === "low") {
+        continue;
+      }
+
+      const current = this.nodeRepo.getById(review.node_id);
+      if (!current) {
+        continue;
+      }
+
+      const existingNodeEvents = existingEvents.filter(
+        (event) => event.node_id === review.node_id && event.source === "automatic"
+      );
+      const alreadyMarkedHelped = existingNodeEvents.some((event) => event.event_type === "mark_helped");
+      const alreadyMarkedHarmed = existingNodeEvents.some((event) => event.event_type === "mark_harmed");
+
+      let nextNode = current;
+      let feedbackEventType: "mark_helped" | "mark_harmed" | undefined;
+
+      if (review.feedback_verdict === "helped" && !alreadyMarkedHelped) {
+        nextNode = applyGovernedNodeFeedback(
+          nextNode,
+          "helped",
+          deriveNodeOriginProfileForNode(this.inputRepo, nextNode)
+        );
+        feedbackEventType = "mark_helped";
+      } else if (review.feedback_verdict === "harmed" && !alreadyMarkedHarmed) {
+        nextNode = applyGovernedNodeFeedback(
+          nextNode,
+          "harmed",
+          deriveNodeOriginProfileForNode(this.inputRepo, nextNode)
+        );
+        feedbackEventType = "mark_harmed";
+      }
+
+      const nodeAfterDelivery = this.applyPostmortemDeliveryRecommendation(
+        nextNode,
+        review.delivery_recommendation
+      );
+
+      if (
+        feedbackEventType
+        || nodeAfterDelivery.delivery_state !== current.delivery_state
+        || nodeAfterDelivery.state !== current.state
+        || nodeAfterDelivery.helped_count !== current.helped_count
+        || nodeAfterDelivery.harmed_count !== current.harmed_count
+        || nodeAfterDelivery.last_feedback_verdict !== current.last_feedback_verdict
+      ) {
+        this.nodeRepo.upsert(nodeAfterDelivery);
+        applied = true;
+      }
+
+      if (feedbackEventType) {
+        this.reviewEventRepo.upsert({
+          id: createId("review"),
+          node_id: review.node_id,
+          task_run_id: input.taskRun.id,
+          event_type: feedbackEventType,
+          source: "automatic",
+          created_at: nowIso()
+        });
+      }
+      if (current.delivery_state !== "quarantined" && nodeAfterDelivery.delivery_state === "quarantined") {
+        this.reviewEventRepo.upsert({
+          id: createId("review"),
+          node_id: review.node_id,
+          task_run_id: input.taskRun.id,
+          event_type: "quarantine",
+          source: "automatic",
+          created_at: nowIso()
+        });
+      }
+    }
+
+    return applied;
+  }
+
   private async persistHybridPostmortemArtifactAsync(input: {
     taskRun: TaskRun;
     experienceInput: ExperienceInput;
@@ -681,6 +802,9 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
         conservativeTransitionReviewWorthy:
           input.experienceInput.outcome_signal === "success" && input.experienceInput.injected_node_ids.length > 0
       },
+      injectedNodes: input.experienceInput.injected_node_ids
+        .map((id) => this.nodeRepo.getById(id))
+        .filter((node): node is ExperienceNode => Boolean(node)),
       toolEvents: input.toolEvents
     });
 
@@ -707,6 +831,14 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       result.status === "accepted"
       && input.rolloutMode !== "shadow"
       && (result.approvalClass === "review_artifact" || result.approvalClass === "policy_gated");
+    const appliedNodeWriteback =
+      result.status === "accepted" && input.rolloutMode !== "shadow"
+        ? this.applyAcceptedPostmortemNodeReviews({
+            taskRun: input.taskRun,
+            experienceInput: input.experienceInput,
+            result
+          })
+        : false;
     this.hybridTraceRepo.upsert({
       id: createId("hybridtrace"),
       surface: "runtime",
@@ -723,7 +855,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       rollout_reason: input.rolloutReason,
       worker_ran: result.status !== "fallback" || result.reason !== "provider_unavailable",
       validation_status: result.status === "accepted" ? "accepted" : "fallback",
-      output_action: persistAcceptedArtifact ? "stored" : "rejected",
+      output_action: persistAcceptedArtifact || appliedNodeWriteback ? "stored" : "rejected",
       fallback_reason: result.status === "accepted" ? undefined : result.reason,
       created_at: timestamp
     });
@@ -848,7 +980,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
         if (input.outcome_signal === "success") {
           return {
             nodeId: node.id,
-            eventType: "mark_helped" as const
+            eventType: "mark_uncertain" as const
           };
         }
 
@@ -866,7 +998,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
           value
         ): value is {
           nodeId: string;
-          eventType: "mark_helped" | "mark_harmed";
+          eventType: "mark_uncertain" | "mark_harmed";
         } => Boolean(value)
       );
 

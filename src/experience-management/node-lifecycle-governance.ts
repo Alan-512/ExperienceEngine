@@ -4,7 +4,52 @@ import { nowIso } from "../utils/clock.js";
 import { transitionState, transitionValidationState } from "../feedback/state-transition.js";
 import { deriveNodeOriginProfile, type NodeOriginProfile } from "./task-management-signals.js";
 
-type LifecycleFeedback = "helped" | "harmed" | "none";
+type LifecycleFeedback = "helped" | "harmed" | "uncertain" | "none";
+
+const CONSECUTIVE_HARM_QUARANTINE_THRESHOLD = 2;
+
+export const defaultDeliveryStateForState = (
+  state: ExperienceNode["state"]
+): NonNullable<ExperienceNode["delivery_state"]> => {
+  switch (state) {
+    case "candidate":
+      return "shadow_only";
+    case "priority_candidate":
+      return "conservative_only";
+    case "active":
+      return "eligible";
+    case "cooling":
+      return "conservative_only";
+    case "retired":
+    default:
+      return "quarantined";
+  }
+};
+
+const resolveDeliveryStateAfterFeedback = (input: {
+  previous: ExperienceNode;
+  nextState: ExperienceNode["state"];
+  feedback: LifecycleFeedback;
+  nextConsecutiveHarmedCount: number;
+}): NonNullable<ExperienceNode["delivery_state"]> => {
+  if (input.nextState === "retired") {
+    return "quarantined";
+  }
+
+  if (input.feedback === "harmed" && input.previous.state === "priority_candidate") {
+    return "quarantined";
+  }
+
+  if (input.nextConsecutiveHarmedCount >= CONSECUTIVE_HARM_QUARANTINE_THRESHOLD) {
+    return "quarantined";
+  }
+
+  if (input.previous.delivery_state === "quarantined") {
+    return input.feedback === "helped" ? "conservative_only" : "quarantined";
+  }
+
+  return defaultDeliveryStateForState(input.nextState);
+};
 
 export const deriveNodeOriginProfileForNode = (
   inputRepo: Pick<InputRecordRepository, "listByIds">,
@@ -20,18 +65,47 @@ export const applyGovernedNodeFeedback = (
   originProfile?: NodeOriginProfile
 ): ExperienceNode => {
   const timestamp = nowIso();
+  const nextConsecutiveHarmedCount =
+    feedback === "harmed"
+      ? (node.consecutive_harmed_count ?? 0) + 1
+      : feedback === "helped"
+        ? 0
+        : (node.consecutive_harmed_count ?? 0);
   const next = {
     ...node,
     helped_count: feedback === "helped" ? node.helped_count + 1 : node.helped_count,
     harmed_count: feedback === "harmed" ? node.harmed_count + 1 : node.harmed_count,
-    validation_state: feedback === "none" ? node.validation_state : transitionValidationState(node, feedback),
+    consecutive_harmed_count: nextConsecutiveHarmedCount,
+    last_feedback_verdict: feedback === "none" ? node.last_feedback_verdict : feedback,
+    validation_state:
+      feedback === "helped" || feedback === "harmed" ? transitionValidationState(node, feedback) : node.validation_state,
     last_helped_at: feedback === "helped" ? timestamp : node.last_helped_at,
     last_harmed_at: feedback === "harmed" ? timestamp : node.last_harmed_at,
     updated_at: timestamp
   };
+  const nextState = node.state === "retired" ? "retired" : transitionState(next, { originProfile });
+  const nextDeliveryState = resolveDeliveryStateAfterFeedback({
+    previous: node,
+    nextState,
+    feedback,
+    nextConsecutiveHarmedCount
+  });
 
   return {
     ...next,
-    state: node.state === "retired" ? "retired" : transitionState(next, { originProfile })
+    state: nextState,
+    delivery_state: nextDeliveryState,
+    quarantined_at:
+      nextDeliveryState === "quarantined"
+        ? (node.quarantined_at ?? timestamp)
+        : undefined,
+    quarantine_reason:
+      nextDeliveryState === "quarantined"
+        ? feedback === "harmed" && node.state === "priority_candidate"
+          ? "priority_candidate_harmed"
+          : nextConsecutiveHarmedCount >= CONSECUTIVE_HARM_QUARANTINE_THRESHOLD
+            ? "consecutive_harms"
+            : node.quarantine_reason
+        : undefined
   };
 };

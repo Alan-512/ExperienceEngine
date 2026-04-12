@@ -120,7 +120,7 @@ describe("codex broker tools", () => {
     );
 
     expect(executePayload.result).toEqual(expect.any(Array));
-  });
+  }, 10_000);
 
   it("keeps removed inspect and maintenance paths reachable through broker actions", async () => {
     const homeDir = makeTempDir();

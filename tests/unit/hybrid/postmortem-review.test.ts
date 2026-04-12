@@ -30,11 +30,35 @@ const buildCapsule = () =>
     outcomeSignal: "success",
     triggers: {
       directionalCorrectionPresent: true,
-      injectedNodeInteractionPresent: false,
+      injectedNodeInteractionPresent: true,
       retryOrInvalidationSignaturePresent: true,
       meaningfulFailureSignaturePresent: false,
       conservativeTransitionReviewWorthy: false
     },
+    injectedNodes: [
+      {
+        id: "node_provider_path",
+        node_type: "strategy",
+        scope_id: "scope_repo",
+        task_type: "test_debug",
+        compact_hint: "Move the fix into provider routing before retrying the focused auth test.",
+        trigger_pattern: "Move the failing auth fix into the provider path",
+        success_signal: "The focused auth test passes after the provider-path correction.",
+        evidence_summary: "A prior run only converged after moving the fix into provider routing.",
+        source_kind: "system_derived",
+        origin_record_ids: [],
+        helped_record_ids: [],
+        harmed_record_ids: [],
+        state: "priority_candidate",
+        delivery_state: "conservative_only",
+        usage_count: 1,
+        helped_count: 0,
+        harmed_count: 0,
+        support_count: 1,
+        created_at: "2026-03-30T00:00:00.000Z",
+        updated_at: "2026-03-30T00:00:00.000Z"
+      }
+    ],
     toolEvents: [
       {
         event_id: "tool_1",
@@ -53,10 +77,17 @@ describe("runPostmortemReviewWorker", () => {
 
     expect(result).toMatchObject({
       task: "postmortem_review",
-      review_verdict: "review_artifact",
+      review_verdict: "policy_gated",
       candidate_recommendation: "capture",
       feedback_followup_recommendation: "none"
     });
+    expect(result.injected_node_reviews).toEqual([
+      expect.objectContaining({
+        node_id: "node_provider_path",
+        feedback_verdict: "uncertain",
+        delivery_recommendation: "keep"
+      })
+    ]);
     expect(result.reason.length).toBeGreaterThan(0);
     expect(result.review_artifact?.summary.length).toBeGreaterThan(0);
     expect(result.review_artifact?.notes.length).toBeGreaterThan(0);
@@ -92,11 +123,35 @@ describe("runPostmortemReviewWorker", () => {
       outcomeSignal: "failure",
       triggers: {
         directionalCorrectionPresent: false,
-        injectedNodeInteractionPresent: false,
+        injectedNodeInteractionPresent: true,
         retryOrInvalidationSignaturePresent: true,
         meaningfulFailureSignaturePresent: true,
         conservativeTransitionReviewWorthy: false
       },
+      injectedNodes: [
+        {
+          id: "node_failed_path",
+          node_type: "strategy",
+          scope_id: "scope_repo",
+          task_type: "test_debug",
+          compact_hint: "Keep the fix in provider routing, not the UI layer.",
+          trigger_pattern: "Correct the failing auth fix boundary",
+          success_signal: "The auth test passes after the provider-path correction.",
+          evidence_summary: "A prior run converged only after the provider-path correction.",
+          source_kind: "system_derived",
+          origin_record_ids: [],
+          helped_record_ids: [],
+          harmed_record_ids: [],
+          state: "priority_candidate",
+          delivery_state: "conservative_only",
+          usage_count: 1,
+          helped_count: 0,
+          harmed_count: 0,
+          support_count: 1,
+          created_at: "2026-03-30T00:00:00.000Z",
+          updated_at: "2026-03-30T00:00:00.000Z"
+        }
+      ],
       toolEvents: []
     });
 
@@ -105,5 +160,11 @@ describe("runPostmortemReviewWorker", () => {
       task: "postmortem_review",
       candidate_recommendation: "reject"
     });
+    expect(result.injected_node_reviews).toEqual([
+      expect.objectContaining({
+        node_id: "node_failed_path",
+        feedback_verdict: "harmed"
+      })
+    ]);
   });
 });

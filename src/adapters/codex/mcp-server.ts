@@ -58,6 +58,7 @@ type CodexServerOptions = {
   operationalActionsDeps?: OperationalActionsDeps;
   operationalActionsService?: ExperienceOperationalActionsService;
   stateArtifactService?: ExperienceStateArtifactService;
+  runtimeOptions?: ConstructorParameters<typeof ExperienceRuntimeService>[2];
 };
 
 type CodexRecentMode = "all" | "injected";
@@ -116,7 +117,9 @@ const createCodexRuntime = (options: CodexServerOptions = {}): ExperienceRuntime
         env: options.env ?? process.env,
         homeDir: options.homeDir
       }
-    )
+    ),
+    undefined,
+    options.runtimeOptions
   );
 };
 
@@ -442,6 +445,10 @@ export const createCodexBehaviorLoop = (options: CodexServerOptions = {}) => {
             ? "If the injected guidance helped or harmed this task, call experienceengine_quick_feedback."
             : undefined
       };
+    },
+
+    async waitForBackgroundLearning() {
+      await runtime.waitForBackgroundLearning();
     }
   };
 };

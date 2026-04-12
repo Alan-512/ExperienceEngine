@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 afterEach(() => {
   vi.resetModules();
   vi.unmock("../../src/cli/commands/claude-hook.js");
+  vi.unmock("../../src/cli/commands/codex.js");
 });
 
 describe("CLI dispatch", () => {
@@ -17,6 +18,20 @@ describe("CLI dispatch", () => {
     await runCliCommand("claude-hook", []);
 
     expect(runClaudeHookCommand).toHaveBeenCalledTimes(1);
+  });
+
+  it("loads only the requested command handler for codex exec", async () => {
+    const runCodexCommand = vi.fn(async () => {});
+
+    vi.doMock("../../src/cli/commands/codex.js", () => ({
+      runCodexCommand
+    }));
+
+    const { runCliCommand } = await import("../../src/cli/dispatch.js");
+    await runCliCommand("codex", ["exec", "-C", "/repo", "Say ok"]);
+
+    expect(runCodexCommand).toHaveBeenCalledTimes(1);
+    expect(runCodexCommand).toHaveBeenCalledWith("exec", ["-C", "/repo", "Say ok"]);
   });
 
   it("does not advertise the removed pack route in CLI usage", async () => {

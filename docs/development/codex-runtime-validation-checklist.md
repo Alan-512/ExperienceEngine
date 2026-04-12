@@ -30,6 +30,22 @@ This checklist validates `Codex` as a supported product host. It does **not** re
 - [ ] `codex mcp get experienceengine` shows `startup_timeout_sec: 60`
 - [ ] the server command points to `dist/cli/index.js codex-mcp-server`
 
+## Deterministic Harness Fallback
+
+Use this path when nested real-host Codex validation is blocked by auth, billing, model availability, or MCP tool obedience:
+
+- [ ] run `pnpm evaluate:codex-lifecycle` or `ee evaluate codex-lifecycle`
+- [ ] confirm the harness writes `codex-lifecycle.json` and `codex-lifecycle.md`
+- [ ] confirm the report shows:
+  - `lookup=inject`
+  - `outcome=success`
+  - at least one persisted `task_run`
+  - at least one persisted `injection_event`
+  - persisted `review_events` including `mark_uncertain` and `mark_helped`
+  - at least one persisted `hybrid_review_artifact`
+
+This harness is deterministic and adapter-local. It complements, but does not replace, a true nested `codex exec` pass when the host environment is healthy.
+
 ## Read-Only Injection Path
 
 - [ ] run a real `codex exec` session that calls:

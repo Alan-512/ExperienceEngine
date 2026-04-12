@@ -786,7 +786,7 @@ describe("OpenClaw plugin runtime", () => {
     expect(countsAfter.count).toBe(countsBefore.count);
   });
 
-  it("uses provider-backed explain output for the existing OpenClaw explain_last_match routine path when phase 2 explain is enabled", async () => {
+  it("keeps OpenClaw explain_last_match on the safe fallback path even when hybrid explain overrides are requested", async () => {
     const runtimeDir = makeTempDir();
     const { sqlitePath, handlers } = registerPluginRuntime(runtimeDir, {
       hybridEnabled: true,
@@ -831,7 +831,9 @@ describe("OpenClaw plugin runtime", () => {
 
       expect(String(explainTurn.prependContext)).toContain("ExperienceEngine routine interaction:");
       expect(String(explainTurn.prependContext)).toContain("The user is asking why the last ExperienceEngine hint matched.");
-      expect(String(explainTurn.prependContext)).toContain("Why it matched: ExperienceEngine injected reusable guidance for this task. The candidate was already validated and cleared the fast path.");
+      expect(String(explainTurn.prependContext)).toContain(
+        "Why it matched: ExperienceEngine injected the best available reusable guidance for this task."
+      );
     } finally {
       globalThis.fetch = originalFetch;
       if (originalApiKey === undefined) {
@@ -1943,7 +1945,7 @@ describe("OpenClaw plugin runtime", () => {
       expect(nodeRow).toEqual({
         experience_kind: "expectation_correction",
         confidence_signal: "supported_by_objective_success",
-        validation_state: "validated_by_reuse"
+        validation_state: "pending_reuse_validation"
       });
     });
 
@@ -1972,7 +1974,7 @@ describe("OpenClaw plugin runtime", () => {
         "SELECT mode FROM injection_events WHERE session_id = ? ORDER BY created_at DESC LIMIT 1"
       )
       .get("expectation-runtime-replay") as { mode: string };
-    expect(injectionRow.mode).toBe("inject");
+    expect(injectionRow.mode).toBe("inject_conservative");
   });
 
   it("converges repeated same-family organic lessons into one stronger node", async () => {
@@ -2259,7 +2261,7 @@ describe("OpenClaw plugin runtime", () => {
     await finalizePromise;
   });
 
-  it("persists feedback timestamps when injected turns succeed or fail", async () => {
+  it("persists feedback timestamps when injected turns succeed uncertainly or fail harmfully", async () => {
     const runtimeDir = makeTempDir();
     const { sqlitePath, handlers } = registerPluginRuntime(runtimeDir);
 
@@ -2318,7 +2320,7 @@ describe("OpenClaw plugin runtime", () => {
         .prepare("SELECT usage_count, helped_count FROM experience_nodes ORDER BY updated_at DESC LIMIT 1")
         .get() as { usage_count: number; helped_count: number };
       expect(nodeRow.usage_count).toBe(1);
-      expect(nodeRow.helped_count).toBe(1);
+      expect(nodeRow.helped_count).toBe(0);
     });
 
     await beforePromptBuild?.({
@@ -2341,7 +2343,7 @@ describe("OpenClaw plugin runtime", () => {
     await waitFor(() => {
       const nodeRow = db
         .prepare(
-          "SELECT usage_count, helped_count, harmed_count, last_used_at, last_helped_at, last_harmed_at, state FROM experience_nodes WHERE task_type = 'test_debug' AND node_type = 'strategy' LIMIT 1"
+          "SELECT usage_count, helped_count, harmed_count, last_used_at, last_helped_at, last_harmed_at, state, delivery_state FROM experience_nodes WHERE task_type = 'test_debug' AND node_type = 'strategy' LIMIT 1"
         )
         .get() as {
           usage_count: number;
@@ -2351,19 +2353,21 @@ describe("OpenClaw plugin runtime", () => {
           last_helped_at: string | null;
           last_harmed_at: string | null;
           state: string;
+          delivery_state: string;
         };
 
       expect(nodeRow.usage_count).toBe(2);
-      expect(nodeRow.helped_count).toBe(1);
+      expect(nodeRow.helped_count).toBe(0);
       expect(nodeRow.harmed_count).toBe(1);
       expect(nodeRow.last_used_at).toBeTruthy();
-      expect(nodeRow.last_helped_at).toBeTruthy();
+      expect(nodeRow.last_helped_at).toBeFalsy();
       expect(nodeRow.last_harmed_at).toBeTruthy();
-      expect(nodeRow.state).toBe("active");
+      expect(nodeRow.state).toBe("candidate");
+      expect(nodeRow.delivery_state).toBe("quarantined");
     });
   });
 
-  it("keeps a meta-origin injected candidate in candidate state after the first automatic helped signal", async () => {
+  it("keeps a meta-origin injected priority candidate below active state after the first automatic uncertain signal", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
     const handlers = new Map<string, Handler>();
@@ -2435,7 +2439,9 @@ describe("OpenClaw plugin runtime", () => {
       origin_record_ids: ["input_meta_origin_runtime"],
       helped_record_ids: [],
       harmed_record_ids: [],
-      state: "candidate",
+      state: "priority_candidate",
+      promotion_signal: "high_value",
+      priority_promotion_applied: true,
       usage_count: 0,
       helped_count: 0,
       harmed_count: 0,
@@ -2467,19 +2473,21 @@ describe("OpenClaw plugin runtime", () => {
     await waitFor(() => {
       const nodeRow = db
         .prepare(
-          "SELECT usage_count, helped_count, support_count, state FROM experience_nodes WHERE id = 'node_meta_runtime_feedback' LIMIT 1"
+          "SELECT usage_count, helped_count, support_count, state, delivery_state FROM experience_nodes WHERE id = 'node_meta_runtime_feedback' LIMIT 1"
         )
         .get() as {
           usage_count: number;
           helped_count: number;
           support_count: number;
           state: string;
+          delivery_state: string;
         };
 
       expect(nodeRow.usage_count).toBe(1);
-      expect(nodeRow.helped_count).toBe(1);
+      expect(nodeRow.helped_count).toBe(0);
       expect(nodeRow.support_count).toBe(1);
-      expect(nodeRow.state).toBe("candidate");
+      expect(nodeRow.state).toBe("priority_candidate");
+      expect(nodeRow.delivery_state).toBe("conservative_only");
     });
   });
 
@@ -2548,7 +2556,7 @@ describe("OpenClaw plugin runtime", () => {
         .prepare("SELECT usage_count, helped_count FROM experience_nodes WHERE task_type = 'test_debug' AND node_type = 'strategy' LIMIT 1")
         .get() as { usage_count: number; helped_count: number };
       expect(nodeRow.usage_count).toBe(1);
-      expect(nodeRow.helped_count).toBe(1);
+      expect(nodeRow.helped_count).toBe(0);
     });
 
     await beforePromptBuild?.({
@@ -2587,7 +2595,7 @@ describe("OpenClaw plugin runtime", () => {
         };
 
       expect(nodeRow.usage_count).toBe(2);
-      expect(nodeRow.helped_count).toBe(2);
+      expect(nodeRow.helped_count).toBe(0);
       expect(nodeRow.harmed_count).toBe(0);
       expect(nodeRow.support_count).toBe(3);
     });

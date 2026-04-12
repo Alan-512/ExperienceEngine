@@ -69,7 +69,45 @@ describe("validatePostmortemReviewOutput", () => {
         summary: "The run may justify a bounded follow-up.",
         notes: ["The signal is promising but should stay non-authoritative."]
       },
+      injected_node_reviews: [
+        {
+          node_id: "node_provider_path",
+          feedback_verdict: "helped",
+          confidence: "high",
+          delivery_recommendation: "keep",
+          reason: "The injected provider-path correction materially contributed to the successful run."
+        }
+      ],
       candidateShapingSuggestions: ["Promote this as a verification-first correction pattern."]
+    });
+
+    expect(result).toMatchObject({
+      status: "accepted",
+      approvalClass: "policy_gated"
+    });
+  });
+
+  it("accepts bounded injected node reviews without lifecycle mutation instructions", () => {
+    const result = validatePostmortemReviewOutput({
+      task: "postmortem_review",
+      review_verdict: "policy_gated",
+      candidate_recommendation: "observe",
+      feedback_followup_recommendation: "none",
+      confidence: "medium",
+      reason: "The worker provides a bounded per-node adjudication only.",
+      review_artifact: {
+        summary: "Per-node adjudication only.",
+        notes: ["The worker provides a bounded per-node adjudication only."]
+      },
+      injected_node_reviews: [
+        {
+          node_id: "node_provider_path",
+          feedback_verdict: "uncertain",
+          confidence: "medium",
+          delivery_recommendation: "review",
+          reason: "The run succeeded, but the node's causal impact is still ambiguous."
+        }
+      ]
     });
 
     expect(result).toMatchObject({

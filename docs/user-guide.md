@@ -529,6 +529,9 @@ Useful commands:
 ```bash
 ee doctor codex
 ee upgrade codex
+ee codex exec -C /path/to/repo -s read-only "Say ok and exit."
+printf "Say ok and exit." | ee codex exec -C /path/to/repo -s read-only -
+ee codex exec --ee-session-id ci-smoke-1 -C /path/to/repo -s read-only "Say ok and exit."
 ```
 
 First validation:
@@ -547,6 +550,12 @@ Host note:
 - ExperienceEngine installs a longer `startup_timeout_sec` for Codex automatically
 - this avoids MCP handshake failures on slower local startups
 - if Codex still cannot see ExperienceEngine in new sessions, re-run `ee install codex`
+- `ee codex exec` is a deterministic wrapper for non-interactive runs
+- the wrapper owns `lookup -> child codex exec -> record -> finalize` outside the child process
+- for wrapped runs, ExperienceEngine removes the nested `experienceengine` MCP server from the child Codex config temporarily so lifecycle evidence is not double-written
+- use prompt `-` when you want the wrapper to read task instructions from stdin; child Codex still receives a wrapped prompt argument and does not inherit stdin
+- use `--ee-session-id <id>` when CI or debugging needs a stable ExperienceEngine session id
+- `codex exec review` is not wrapped yet; keep using native Codex review or the MCP/CLI surfaces for review workflows
 
 Developer validation docs:
 

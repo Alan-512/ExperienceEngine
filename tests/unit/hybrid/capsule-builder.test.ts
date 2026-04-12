@@ -160,6 +160,30 @@ describe("buildPostmortemReviewCapsule", () => {
         meaningfulFailureSignaturePresent: false,
         conservativeTransitionReviewWorthy: false
       },
+      injectedNodes: [
+        {
+          id: "node_provider_path",
+          node_type: "strategy",
+          scope_id: "scope_repo",
+          task_type: "test_debug",
+          compact_hint: "Move the fix into provider routing before retrying the auth test.",
+          trigger_pattern: "Fix the auth test by moving the config to the provider path",
+          success_signal: "The auth test passes after the provider-path correction.",
+          evidence_summary: "Recovered the same provider-path correction in a prior run.",
+          source_kind: "system_derived",
+          origin_record_ids: [],
+          helped_record_ids: [],
+          harmed_record_ids: [],
+          state: "priority_candidate",
+          delivery_state: "conservative_only",
+          usage_count: 1,
+          helped_count: 0,
+          harmed_count: 0,
+          support_count: 1,
+          created_at: "2026-03-30T00:00:00.000Z",
+          updated_at: "2026-03-30T00:00:00.000Z"
+        }
+      ],
       toolEvents
     });
 
@@ -167,6 +191,13 @@ describe("buildPostmortemReviewCapsule", () => {
     expect(capsule.trusted.route.route).toBe("ESCALATE_ASYNC_POSTMORTEM");
     expect(capsule.trusted.reviewTriggers.directionalCorrectionPresent).toBe(true);
     expect(capsule.trusted.reviewTriggers.retryOrInvalidationSignaturePresent).toBe(true);
+    expect(capsule.trusted.injectedNodes).toEqual([
+      expect.objectContaining({
+        nodeId: "node_provider_path",
+        state: "priority_candidate",
+        deliveryState: "conservative_only"
+      })
+    ]);
     expect(capsule.evidence.some((entry) => entry.source === "tool_event")).toBe(true);
     expect(capsule.evidence.every((entry) => entry.trust === "untrusted_evidence")).toBe(true);
   });

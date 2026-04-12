@@ -192,7 +192,9 @@ describe("Claude hook capture", () => {
       origin_record_ids: [],
       helped_record_ids: [],
       harmed_record_ids: [],
-      state: "candidate",
+      state: "priority_candidate",
+      promotion_signal: "high_value",
+      priority_promotion_applied: true,
       usage_count: 0,
       helped_count: 0,
       harmed_count: 0,
@@ -216,7 +218,7 @@ describe("Claude hook capture", () => {
 
     expect(result.hookOutput).toBeTruthy();
     expect(result.notice).toBe(
-      "[ExperienceEngine] Injected 1 strategy hint for this task (risk: high). Run ee inspect --last to review why it matched."
+      "[ExperienceEngine] Injected 1 strategy hint for this task (risk: medium). Run ee inspect --last to review why it matched."
     );
     expect(JSON.parse(result.hookOutput ?? "{}")).toEqual({
       hookSpecificOutput: {
@@ -282,7 +284,7 @@ describe("Claude hook capture", () => {
       origin_record_ids: [],
       helped_record_ids: [],
       harmed_record_ids: [],
-      state: "candidate",
+      state: "active",
       usage_count: 0,
       helped_count: 0,
       harmed_count: 0,
@@ -491,7 +493,9 @@ describe("Claude hook capture", () => {
       origin_record_ids: [],
       helped_record_ids: [],
       harmed_record_ids: [],
-      state: "candidate",
+      state: "priority_candidate",
+      promotion_signal: "high_value",
+      priority_promotion_applied: true,
       usage_count: 0,
       helped_count: 0,
       harmed_count: 0,

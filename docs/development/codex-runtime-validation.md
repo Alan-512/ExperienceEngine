@@ -11,7 +11,8 @@ For the current product phase, governance and review are exercised through the s
 Included in this pass:
 
 - Codex MCP wiring and doctor checks
-- real `codex exec` lookup, tool-result recording, and finalize flow
+- deterministic `ee evaluate codex-lifecycle` fallback for adapter-local lifecycle validation
+- real `ee codex exec` wrapper lifecycle flow
 - high-signal candidate creation from a real failure/correction/success task
 - async distillation job completion into a formal node
 - follow-up retrieval and injection of the newly distilled node
@@ -23,6 +24,49 @@ Excluded from this pass:
 - OpenClaw live-host rerun
 - Claude Code live-host rerun
 - product UX refinement outside the Codex runtime path
+
+## Deterministic Fallback Harness
+
+When real nested `codex exec` validation is blocked by host-side limits such as auth expiry, usage caps, billing state, or inconsistent MCP tool obedience, use the deterministic fallback harness:
+
+```bash
+pnpm evaluate:codex-lifecycle
+# or
+ee evaluate codex-lifecycle
+```
+
+This harness does not depend on a live nested Codex model turn. Instead, it seeds an isolated ExperienceEngine home, drives the existing Codex behavior loop in-process, waits for async posttask work to settle, and writes `codex-lifecycle.json` plus `codex-lifecycle.md` under `artifacts/evaluations/codex/...`.
+
+Acceptance meaning:
+
+- the Codex adapter can persist lookup, tool-result, and finalize evidence deterministically
+- the bounded async postmortem path can write review events and policy-gated artifacts
+- PR-level lifecycle regressions can be caught even when the external Codex host is unavailable
+
+## Preferred Real-Host Wrapper Path
+
+For non-interactive Codex validation, prefer the wrapper:
+
+```bash
+node dist/cli/index.js codex exec -C /mnt/d/project/experienceengine -s read-only "Say ok and exit."
+printf "Say ok and exit." | node dist/cli/index.js codex exec --ee-session-id codex-smoke-1 -C /mnt/d/project/experienceengine -s read-only -
+```
+
+Why this path exists:
+
+- the wrapper makes ExperienceEngine own `lookup -> child codex exec -> record -> finalize`
+- the nested child no longer needs to obey MCP lifecycle instructions correctly for the run to persist
+- the wrapper launches the child against a temporary Codex config with `[mcp_servers.experienceengine]` removed, so the nested process cannot double-write task evidence
+
+Current limitations:
+
+- no `codex exec review` or interactive wrapper yet
+
+Operational notes:
+
+- prompt `-` is read by the outer ExperienceEngine wrapper, then passed to child Codex as a wrapped prompt argument
+- child Codex still runs with stdin ignored so non-TTY validation does not stall
+- `--ee-session-id <id>` is consumed by ExperienceEngine and is not forwarded to child Codex
 
 ## Environment Used
 

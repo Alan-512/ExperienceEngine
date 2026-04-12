@@ -6,12 +6,13 @@ import {
 } from "../install/public-install.js";
 
 const usageText =
-  "Usage: ee <install openclaw|claude-code|codex|upgrade openclaw|claude-code|codex|repair [openclaw]|claude-hook|codex-mcp-server|doctor [openclaw|claude-code|codex]|status|stats|inspect|feedback|disable|enable|cool|retire>"
+  "Usage: ee <install openclaw|claude-code|codex|upgrade openclaw|claude-code|codex|repair [openclaw]|claude-hook|codex <exec ...>|codex-mcp-server|doctor [openclaw|claude-code|codex]|status|stats|inspect|feedback|disable|enable|cool|retire>"
   + " | helped|harmed"
   + " | backup|export|import <snapshot-path>|rollback <backup-id>"
   + " | maintenance embeddings-reset|embedding-smoke|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
   + " | evaluate openclaw-baseline [--lookback-hours N] [--output-dir PATH]"
   + " | evaluate openclaw-scenarios --pack high-confidence [--repo-root PATH] [--output-dir PATH] [--dry-run]"
+  + " | evaluate codex-lifecycle [--repo-root PATH] [--output-dir PATH]"
   + " | mcp-server"
   + " | init [distillation|embedding|secret|show]"
   + " | models list <provider> [query]"
@@ -58,6 +59,11 @@ export const runCliCommand = async (command: string | undefined, args: string[])
       await runClaudeHookCommand();
       break;
     }
+    case "codex": {
+      const { runCodexCommand } = await import("./commands/codex.js");
+      await runCodexCommand(args[0], args.slice(1));
+      break;
+    }
     case "codex-mcp-server": {
       const { runCodexMcpServerCommand } = await import("./commands/codex-mcp-server.js");
       await runCodexMcpServerCommand();
@@ -75,7 +81,7 @@ export const runCliCommand = async (command: string | undefined, args: string[])
     }
     case "evaluate": {
       const { runEvaluateCommand } = await import("./commands/evaluate.js");
-      runEvaluateCommand(args[0], args.slice(1));
+      await runEvaluateCommand(args[0], args.slice(1));
       break;
     }
     case "config": {
