@@ -1,4 +1,5 @@
 import { spawnSync as nodeSpawnSync, type SpawnSyncReturns } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { createCodexBehaviorLoop } from "../../adapters/codex/mcp-server.js";
 import {
@@ -92,20 +93,60 @@ type CodexCommandDeps = {
   createSessionId?: () => string;
   cwd?: () => string;
   env?: () => NodeJS.ProcessEnv;
+  readStdin?: () => string;
 };
 
 const printUsage = (): void => {
   console.log(usageText);
 };
 
-const extractPrompt = (args: string[]): string | undefined => {
+type ParsedWrapperArgs = {
+  childArgs: string[];
+  sessionId?: string;
+};
+
+const parseWrapperArgs = (args: string[]): ParsedWrapperArgs => {
+  const childArgs: string[] = [];
+  let sessionId: string | undefined;
+
+  for (let index = 0; index < args.length; index += 1) {
+    const token = args[index];
+    if (token === "--ee-session-id") {
+      sessionId = args[index + 1];
+      index += 1;
+      continue;
+    }
+
+    if (token?.startsWith("--ee-session-id=")) {
+      sessionId = token.slice("--ee-session-id=".length);
+      continue;
+    }
+
+    childArgs.push(token as string);
+  }
+
+  return { childArgs, sessionId };
+};
+
+const extractPromptToken = (args: string[]): string | undefined => {
   const prompt = args.at(-1);
   const previous = args.length > 1 ? args.at(-2) : undefined;
-  if (!prompt || prompt === "-" || (previous && EXEC_FLAGS_WITH_VALUE.has(previous))) {
+  if (!prompt || (previous && EXEC_FLAGS_WITH_VALUE.has(previous))) {
     return undefined;
   }
 
   return prompt;
+};
+
+const readPrompt = (
+  promptToken: string,
+  deps: Pick<CodexCommandDeps, "readStdin">
+): string | undefined => {
+  const prompt = promptToken === "-"
+    ? (deps.readStdin ?? (() => readFileSync(0, "utf8")))()
+    : promptToken;
+  const trimmed = prompt.trim();
+  return trimmed || undefined;
 };
 
 const resolveWrappedCwd = (argsWithoutPrompt: string[], currentWorkingDirectory: string): string => {
@@ -200,16 +241,18 @@ export const runCodexCommand = async (
     return;
   }
 
-  const prompt = extractPrompt(args);
+  const parsed = parseWrapperArgs(args);
+  const promptToken = extractPromptToken(parsed.childArgs);
+  const prompt = promptToken ? readPrompt(promptToken, deps) : undefined;
   if (!prompt) {
     printUsage();
     return;
   }
 
-  const argsWithoutPrompt = args.slice(0, -1);
+  const argsWithoutPrompt = parsed.childArgs.slice(0, -1);
   const currentWorkingDirectory = (deps.cwd ?? (() => process.cwd()))();
   const wrappedCwd = resolveWrappedCwd(argsWithoutPrompt, currentWorkingDirectory);
-  const sessionId = (deps.createSessionId ?? (() => createId("codex_exec")))();
+  const sessionId = parsed.sessionId ?? (deps.createSessionId ?? (() => createId("codex_exec")))();
   const behaviorLoop = (deps.createBehaviorLoop ?? (() => createCodexBehaviorLoop()))();
   const isolatedConfig = (deps.createIsolatedConfig ?? (() =>
     createTemporaryCodexConfigWithoutServer(CODEX_EXPERIENCEENGINE_SERVER)))();

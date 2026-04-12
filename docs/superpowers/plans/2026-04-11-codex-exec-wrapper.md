@@ -141,3 +141,49 @@ node dist/cli/index.js codex exec -C /mnt/d/project/experienceengine -s read-onl
 Verify that:
 - the child run succeeds or fails only on Codex-side external state
 - EE persists a `codex` task run without relying on nested MCP calls
+
+## Task 4: Add Phase 2 Prompt And Session Controls
+
+**Files:**
+- Modify: `src/cli/commands/codex.ts`
+- Test: `tests/unit/codex-exec-command.test.ts`
+- Modify: `docs/development/codex-runtime-validation.md`
+- Modify: `docs/user-guide.md`
+
+- [ ] **Step 1: Write failing command tests**
+
+Cover:
+- prompt `-` reads the wrapper prompt from stdin for outer lookup/finalize
+- child Codex still receives the wrapped prompt as an argument and still uses stdin ignored
+- `--ee-session-id <id>` is consumed by the wrapper and not forwarded to child Codex
+- native Codex options still preserve their values
+
+Run:
+```bash
+pnpm vitest run tests/unit/codex-exec-command.test.ts
+```
+Expected: FAIL until prompt/session parsing supports the new behavior.
+
+- [ ] **Step 2: Implement wrapper-only argument parsing**
+
+Behavior:
+- parse and remove `--ee-session-id <id>` before calling child Codex
+- allow `-` as the prompt token by reading stdin synchronously in the outer wrapper
+- keep child `stdio` as `["ignore", "inherit", "inherit"]`
+- continue passing native Codex options through unchanged
+
+- [ ] **Step 3: Update docs**
+
+Document:
+- `--ee-session-id` usage for CI/debugging
+- stdin prompt support
+- `codex exec review` remains out of scope for this wrapper phase
+
+- [ ] **Step 4: Verify**
+
+Run:
+```bash
+pnpm vitest run tests/unit/codex-exec-command.test.ts
+pnpm check
+```
+Expected: PASS

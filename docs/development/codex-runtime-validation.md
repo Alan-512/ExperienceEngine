@@ -45,10 +45,11 @@ Acceptance meaning:
 
 ## Preferred Real-Host Wrapper Path
 
-For non-interactive Codex validation, prefer the first-phase wrapper:
+For non-interactive Codex validation, prefer the wrapper:
 
 ```bash
 node dist/cli/index.js codex exec -C /mnt/d/project/experienceengine -s read-only "Say ok and exit."
+printf "Say ok and exit." | node dist/cli/index.js codex exec --ee-session-id codex-smoke-1 -C /mnt/d/project/experienceengine -s read-only -
 ```
 
 Why this path exists:
@@ -59,9 +60,13 @@ Why this path exists:
 
 Current limitations:
 
-- explicit prompt argument only
-- no stdin prompt support yet
 - no `codex exec review` or interactive wrapper yet
+
+Operational notes:
+
+- prompt `-` is read by the outer ExperienceEngine wrapper, then passed to child Codex as a wrapped prompt argument
+- child Codex still runs with stdin ignored so non-TTY validation does not stall
+- `--ee-session-id <id>` is consumed by ExperienceEngine and is not forwarded to child Codex
 
 ## Environment Used
 

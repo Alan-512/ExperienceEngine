@@ -18,12 +18,77 @@ describe("codex exec wrapper command", () => {
     );
   });
 
-  it("rejects stdin prompts in the first phase", async () => {
-    await runCodexCommand("exec", ["-C", "/repo", "-"]);
+  it("reads a stdin prompt through the outer wrapper without inheriting stdin into child Codex", async () => {
+    const lookupHints = vi.fn(async () => ({
+      mode: "skip" as const,
+      text: undefined,
+      notice: undefined,
+      injectedNodeIds: []
+    }));
+    const recordToolResult = vi.fn(async () => ({
+      status: "recorded",
+      toolName: "codex_exec",
+      eventStatus: "success"
+    }));
+    const finalizeTask = vi.fn(async () => ({
+      status: "finalized",
+      outcomeSignal: "success",
+      injectedNodeIds: [],
+      recordedToolEvents: 1
+    }));
+    const cleanup = vi.fn();
+    const spawnSync = vi.fn<
+      (command: string, args: string[], options: Record<string, unknown>) => SpawnSyncReturns<string>
+    >(() => ({
+      pid: 123,
+      output: [],
+      stdout: "",
+      stderr: "",
+      status: 0,
+      signal: null
+    }));
 
-    expect(consoleLogSpy).toHaveBeenCalledWith(
-      'Usage: ee codex exec [codex exec options...] "<prompt>"'
+    await runCodexCommand(
+      "exec",
+      ["-C", "/repo", "-"],
+      {
+        createSessionId: () => "codex_exec_stdin_session",
+        createBehaviorLoop: () => ({
+          lookupHints,
+          recordToolResult,
+          finalizeTask,
+          waitForBackgroundLearning: vi.fn(async () => {})
+        }),
+        createIsolatedConfig: () => ({
+          configPath: "/tmp/codex-wrapper.toml",
+          cleanup
+        }),
+        spawnSync,
+        cwd: () => "/workspace",
+        readStdin: () => "Fix the failing auth test from stdin\n"
+      }
     );
+
+    expect(lookupHints).toHaveBeenCalledWith({
+      cwd: "/repo",
+      prompt: "Fix the failing auth test from stdin",
+      sessionId: "codex_exec_stdin_session"
+    });
+    expect(spawnSync.mock.calls[0]?.[1]).toEqual([
+      "exec",
+      "-C",
+      "/repo",
+      expect.stringContaining("Fix the failing auth test from stdin")
+    ]);
+    expect(spawnSync.mock.calls[0]?.[2]).toMatchObject({
+      stdio: ["ignore", "inherit", "inherit"]
+    });
+    expect(finalizeTask).toHaveBeenCalledWith({
+      sessionId: "codex_exec_stdin_session",
+      cwd: "/repo",
+      prompt: "Fix the failing auth test from stdin",
+      contextSummary: "Wrapped codex exec completed with exit code 0."
+    });
   });
 
   it("wraps a child codex exec run with outer ExperienceEngine lifecycle ownership", async () => {
@@ -182,5 +247,77 @@ describe("codex exec wrapper command", () => {
     });
     expect(cleanup).toHaveBeenCalledTimes(1);
     expect(process.exitCode).toBe(2);
+  });
+
+  it("uses a wrapper-owned session id without forwarding it to child Codex", async () => {
+    const lookupHints = vi.fn(async () => ({
+      mode: "skip" as const,
+      text: undefined,
+      notice: undefined,
+      injectedNodeIds: []
+    }));
+    const recordToolResult = vi.fn(async () => ({
+      status: "recorded",
+      toolName: "codex_exec",
+      eventStatus: "success"
+    }));
+    const finalizeTask = vi.fn(async () => ({
+      status: "finalized",
+      outcomeSignal: "success",
+      injectedNodeIds: [],
+      recordedToolEvents: 1
+    }));
+    const cleanup = vi.fn();
+    const spawnSync = vi.fn<
+      (command: string, args: string[], options: Record<string, unknown>) => SpawnSyncReturns<string>
+    >(() => ({
+      pid: 123,
+      output: [],
+      stdout: "",
+      stderr: "",
+      status: 0,
+      signal: null
+    }));
+
+    await runCodexCommand(
+      "exec",
+      ["--ee-session-id", "custom-session", "-C", "/repo", "-s", "read-only", "Say ok"],
+      {
+        createSessionId: () => "generated-session-should-not-be-used",
+        createBehaviorLoop: () => ({
+          lookupHints,
+          recordToolResult,
+          finalizeTask,
+          waitForBackgroundLearning: vi.fn(async () => {})
+        }),
+        createIsolatedConfig: () => ({
+          configPath: "/tmp/codex-wrapper.toml",
+          cleanup
+        }),
+        spawnSync,
+        cwd: () => "/workspace"
+      }
+    );
+
+    expect(lookupHints).toHaveBeenCalledWith({
+      cwd: "/repo",
+      prompt: "Say ok",
+      sessionId: "custom-session"
+    });
+    expect(spawnSync.mock.calls[0]?.[1]).toEqual([
+      "exec",
+      "-C",
+      "/repo",
+      "-s",
+      "read-only",
+      expect.stringContaining("Say ok")
+    ]);
+    expect(recordToolResult).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: "custom-session",
+      inputSummary: "codex exec -C /repo -s read-only"
+    }));
+    expect(finalizeTask).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: "custom-session"
+    }));
   });
 });
