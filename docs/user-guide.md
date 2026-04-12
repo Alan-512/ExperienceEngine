@@ -529,6 +529,7 @@ Useful commands:
 ```bash
 ee doctor codex
 ee upgrade codex
+ee codex exec -C /path/to/repo -s read-only "Say ok and exit."
 ```
 
 First validation:
@@ -547,6 +548,10 @@ Host note:
 - ExperienceEngine installs a longer `startup_timeout_sec` for Codex automatically
 - this avoids MCP handshake failures on slower local startups
 - if Codex still cannot see ExperienceEngine in new sessions, re-run `ee install codex`
+- `ee codex exec` is a first-phase deterministic wrapper for non-interactive runs
+- the wrapper owns `lookup -> child codex exec -> record -> finalize` outside the child process
+- for wrapped runs, ExperienceEngine removes the nested `experienceengine` MCP server from the child Codex config temporarily so lifecycle evidence is not double-written
+- first phase only supports an explicit prompt argument, not stdin prompts or `codex exec review`
 
 Developer validation docs:
 

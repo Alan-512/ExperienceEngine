@@ -1,13 +1,16 @@
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach } from "vitest";
 import { describe, expect, it } from "vitest";
 import {
   buildCodexAddCommand,
+  createTemporaryCodexConfigWithoutServer,
   buildCodexMcpServerCommand,
   ensureCodexMcpServerStartupTimeout,
-  parseCodexMcpServerInfo
+  parseCodexMcpServerInfo,
+  resolveEffectiveCodexConfigPath,
+  stripCodexMcpServerSections
 } from "../../src/install/codex-cli.js";
 
 const tempDirs: string[] = [];
@@ -113,5 +116,78 @@ describe("Codex CLI wiring", () => {
     expect(existsSync(configPath)).toBe(true);
     expect(readFileSync(configPath, "utf8")).toContain("[mcp_servers.experienceengine]");
     expect(readFileSync(configPath, "utf8")).toContain("startup_timeout_sec = 60.0");
+  });
+
+  it("resolves the effective Codex config path from CODEX_CONFIG_PATH when present", () => {
+    expect(
+      resolveEffectiveCodexConfigPath({
+        env: {
+          CODEX_CONFIG_PATH: "/tmp/codex.custom.toml"
+        }
+      })
+    ).toBe("/tmp/codex.custom.toml");
+  });
+
+  it("strips the ExperienceEngine MCP server root and nested sections from a Codex config", () => {
+    const next = stripCodexMcpServerSections(
+      `model = "gpt-5.4"
+
+[mcp_servers.experienceengine]
+command = "/tmp/experienceengine"
+args = ["-"]
+
+[mcp_servers.experienceengine.env]
+EXPERIENCE_ENGINE_HOME = "/tmp/ee-home"
+
+[projects."/repo"]
+trust_level = "trusted"
+`,
+      "experienceengine"
+    );
+
+    expect(next).toContain('model = "gpt-5.4"');
+    expect(next).toContain('[projects."/repo"]');
+    expect(next).not.toContain("[mcp_servers.experienceengine]");
+    expect(next).not.toContain("[mcp_servers.experienceengine.env]");
+    expect(next).not.toContain("EXPERIENCE_ENGINE_HOME");
+  });
+
+  it("writes a temporary Codex config without the ExperienceEngine MCP server", () => {
+    const homeDir = makeTempDir();
+    const configPath = join(homeDir, "codex.toml");
+    const tempRoot = makeTempDir();
+    const env = {
+      CODEX_CONFIG_PATH: configPath
+    } satisfies NodeJS.ProcessEnv;
+
+    const payload = `model = "gpt-5.4"
+
+[mcp_servers.experienceengine]
+command = "/tmp/experienceengine"
+args = ["-"]
+
+[mcp_servers.experienceengine.env]
+EXPERIENCE_ENGINE_HOME = "/tmp/ee-home"
+
+[notice]
+hide_full_access_warning = true
+`;
+
+    rmSync(configPath, { force: true });
+    writeFileSync(configPath, payload, "utf8");
+
+    const isolated = createTemporaryCodexConfigWithoutServer("experienceengine", {
+      env,
+      tempRoot
+    });
+
+    expect(existsSync(isolated.configPath)).toBe(true);
+    expect(readFileSync(isolated.configPath, "utf8")).toContain('model = "gpt-5.4"');
+    expect(readFileSync(isolated.configPath, "utf8")).toContain("[notice]");
+    expect(readFileSync(isolated.configPath, "utf8")).not.toContain("[mcp_servers.experienceengine]");
+    expect(readFileSync(isolated.configPath, "utf8")).not.toContain("[mcp_servers.experienceengine.env]");
+
+    isolated.cleanup();
+    expect(existsSync(isolated.configPath)).toBe(false);
   });
 });

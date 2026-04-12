@@ -12,7 +12,7 @@ Included in this pass:
 
 - Codex MCP wiring and doctor checks
 - deterministic `ee evaluate codex-lifecycle` fallback for adapter-local lifecycle validation
-- real `codex exec` lookup, tool-result recording, and finalize flow
+- real `ee codex exec` wrapper lifecycle flow
 - high-signal candidate creation from a real failure/correction/success task
 - async distillation job completion into a formal node
 - follow-up retrieval and injection of the newly distilled node
@@ -42,6 +42,26 @@ Acceptance meaning:
 - the Codex adapter can persist lookup, tool-result, and finalize evidence deterministically
 - the bounded async postmortem path can write review events and policy-gated artifacts
 - PR-level lifecycle regressions can be caught even when the external Codex host is unavailable
+
+## Preferred Real-Host Wrapper Path
+
+For non-interactive Codex validation, prefer the first-phase wrapper:
+
+```bash
+node dist/cli/index.js codex exec -C /mnt/d/project/experienceengine -s read-only "Say ok and exit."
+```
+
+Why this path exists:
+
+- the wrapper makes ExperienceEngine own `lookup -> child codex exec -> record -> finalize`
+- the nested child no longer needs to obey MCP lifecycle instructions correctly for the run to persist
+- the wrapper launches the child against a temporary Codex config with `[mcp_servers.experienceengine]` removed, so the nested process cannot double-write task evidence
+
+Current limitations:
+
+- explicit prompt argument only
+- no stdin prompt support yet
+- no `codex exec review` or interactive wrapper yet
 
 ## Environment Used
 

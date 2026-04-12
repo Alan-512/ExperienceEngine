@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { dirname, join, resolve } from "node:path";
 import { resolveExperienceEnginePackageRoot } from "./openclaw-cli.js";
 import {
   buildCodexMcpServerCommandForTarget,
@@ -31,6 +31,12 @@ export type CodexMcpServerInfo = {
   status?: string;
   startupTimeoutSec?: number;
   removeCommand?: string;
+};
+
+export type TemporaryCodexConfig = {
+  configPath: string;
+  sourceConfigPath: string;
+  cleanup: () => void;
 };
 
 export const CODEX_EXPERIENCEENGINE_SERVER = "experienceengine";
@@ -104,6 +110,79 @@ export const buildCodexGetCommand = (cliEnv?: NodeJS.ProcessEnv): CodexCommand =
 
 export const resolveCodexConfigPath = (homeDir?: string): string =>
   join(homeDir ?? homedir(), ".codex", "config.toml");
+
+export const resolveEffectiveCodexConfigPath = (options: {
+  env?: NodeJS.ProcessEnv;
+  homeDir?: string;
+} = {}): string => options.env?.CODEX_CONFIG_PATH || resolveCodexConfigPath(options.homeDir);
+
+const matchesServerSection = (line: string, serverName: string): boolean => {
+  const match = line.match(/^\s*\[([^\]]+)\]\s*$/);
+  if (!match) {
+    return false;
+  }
+
+  const section = match[1]?.trim();
+  return section === `mcp_servers.${serverName}` || section?.startsWith(`mcp_servers.${serverName}.`) === true;
+};
+
+export const stripCodexMcpServerSections = (configText: string, serverName: string): string => {
+  const lines = configText.split(/\r?\n/);
+  const kept: string[] = [];
+  let skipping = false;
+
+  for (const line of lines) {
+    const isSectionHeader = /^\s*\[[^\]]+\]\s*$/.test(line);
+    if (isSectionHeader) {
+      if (matchesServerSection(line, serverName)) {
+        skipping = true;
+        continue;
+      }
+
+      skipping = false;
+    }
+
+    if (!skipping) {
+      kept.push(line);
+    }
+  }
+
+  return kept
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/^\n+/, "")
+    .replace(/\n*$/, "\n");
+};
+
+export const createTemporaryCodexConfigWithoutServer = (
+  serverName: string,
+  options: {
+    env?: NodeJS.ProcessEnv;
+    homeDir?: string;
+    tempRoot?: string;
+  } = {}
+): TemporaryCodexConfig => {
+  const sourceConfigPath = resolveEffectiveCodexConfigPath({
+    env: options.env,
+    homeDir: options.homeDir
+  });
+  const existing = existsSync(sourceConfigPath) ? readFileSync(sourceConfigPath, "utf8") : "";
+  const stripped = stripCodexMcpServerSections(existing, serverName);
+  const tempRoot = resolve(options.tempRoot ?? tmpdir());
+  mkdirSync(tempRoot, { recursive: true });
+  const tempDir = mkdtempSync(join(tempRoot, `experienceengine-codex-${serverName}-`));
+  const configPath = join(tempDir, "config.toml");
+
+  writeFileSync(configPath, stripped, "utf8");
+
+  return {
+    configPath,
+    sourceConfigPath,
+    cleanup: () => {
+      rmSync(tempDir, { recursive: true, force: true });
+    }
+  };
+};
 
 export const ensureCodexMcpServerStartupTimeout = (
   serverName: string,
