@@ -18,6 +18,8 @@ export const defaultConfig: ExperienceEngineConfig = {
   embeddingCacheDir: "./data/models/embeddings",
   retrievalRerankerMode: "auto",
   retrievalRerankerModel: "",
+  syncSecondOpinionMode: "disabled",
+  syncSecondOpinionModel: "",
   distillerProvider: "openai_compatible",
   distillationAuthMode: "api_key",
   distillerModel: "",

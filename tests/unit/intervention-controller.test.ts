@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { decideIntervention, selectInjectableNodes } from "../../src/controller/intervention-controller.js";
+import { clearSelectiveSecondOpinionHooksForTests, setSelectiveSecondOpinionHooksForTests } from "../../src/controller/second-opinion-gate.js";
 import type { ExperienceInput, ExperienceNode, ScopeTaskStats } from "../../src/types/domain.js";
 import { clearEmbeddingProviderForTests, setEmbeddingProviderForTests } from "../../src/store/vector/embeddings.js";
 
@@ -101,6 +102,7 @@ describe("decideIntervention", () => {
 
   afterEach(() => {
     clearEmbeddingProviderForTests();
+    clearSelectiveSecondOpinionHooksForTests();
   });
 
   it("injects only strategy nodes when both types are available", async () => {
@@ -346,6 +348,100 @@ describe("decideIntervention", () => {
     expect(decision.mode).toBe("skip");
     expect(decision.selected).toEqual([]);
     expect(decision.text).toBeUndefined();
+  });
+
+  it("lets selective sync second opinion veto a risky live injection", async () => {
+    setSelectiveSecondOpinionHooksForTests({
+      evaluate: async () => ({
+        decision: "skip",
+        confidence: "high",
+        reason: "Recent harm history makes this candidate unsafe.",
+        trigger: "harm_history"
+      })
+    });
+
+    const decision = await decideIntervention(
+      input,
+      [
+        node({
+          id: "risky-active",
+          state: "active",
+          delivery_state: "eligible",
+          harmed_count: 1,
+          support_count: 4
+        })
+      ],
+      stats,
+      0.6,
+      3,
+      {
+        embeddingProvider: "local",
+        embeddingModel: "Xenova/multilingual-e5-small",
+        embeddingDtype: "q8",
+        embeddingCacheDir: "/tmp/experienceengine-test-embeddings",
+        retrievalRerankerMode: "disabled",
+        retrievalRerankerModel: "",
+        syncSecondOpinionMode: "selective",
+        syncSecondOpinionModel: "",
+        distillerProvider: "openai_compatible",
+        distillationAuthMode: "api_key",
+        distillerModel: "gpt-second-opinion"
+      }
+    );
+
+    expect(decision.mode).toBe("skip");
+    expect(decision.selected).toEqual([]);
+    expect(decision.diagnostics?.secondOpinionApplied).toBe(true);
+    expect(decision.diagnostics?.secondOpinionDecision).toBe("skip");
+    expect(decision.diagnostics?.secondOpinionTrigger).toBe("harm_history");
+  });
+
+  it("downgrades risky live injection to conservative when second opinion asks for caution", async () => {
+    setSelectiveSecondOpinionHooksForTests({
+      evaluate: async () => ({
+        decision: "allow_conservative",
+        confidence: "medium",
+        reason: "The candidate is relevant but should ship as a single cautious hint.",
+        trigger: "harm_history"
+      })
+    });
+
+    const decision = await decideIntervention(
+      input,
+      [
+        node({
+          id: "top-close-margin",
+          state: "active",
+          delivery_state: "eligible",
+          harmed_count: 1,
+          helped_count: 1,
+          support_count: 1
+        })
+      ],
+      stats,
+      0.6,
+      3,
+      {
+        embeddingProvider: "local",
+        embeddingModel: "Xenova/multilingual-e5-small",
+        embeddingDtype: "q8",
+        embeddingCacheDir: "/tmp/experienceengine-test-embeddings",
+        retrievalRerankerMode: "disabled",
+        retrievalRerankerModel: "",
+        syncSecondOpinionMode: "selective",
+        syncSecondOpinionModel: "",
+        distillerProvider: "openai_compatible",
+        distillationAuthMode: "api_key",
+        distillerModel: "gpt-second-opinion"
+      }
+    );
+
+    expect(decision.mode).toBe("inject_conservative");
+    expect(decision.selected).toHaveLength(1);
+    expect(decision.selected[0]?.id).toBe("top-close-margin");
+    expect(decision.diagnostics?.secondOpinionApplied).toBe(true);
+    expect(decision.diagnostics?.secondOpinionDecision).toBe("allow_conservative");
+    expect(decision.diagnostics?.secondOpinionTrigger).toBe("harm_history");
   });
 
   it("keeps an exact priority-candidate family match ahead of unrelated active cross-family nodes", async () => {

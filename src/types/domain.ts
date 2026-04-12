@@ -35,6 +35,12 @@ export type InjectionMode = "skip" | "inject_conservative" | "inject";
 export type InjectionRiskLevel = "low" | "medium" | "high";
 export type InterventionConfidence = "low" | "medium" | "high";
 export type InterventionBudgetClass = "none" | "single_hint" | "multi_hint";
+export type SyncSecondOpinionDecision = "allow" | "allow_conservative" | "skip";
+export type SyncSecondOpinionTrigger =
+  | "conservative_delivery_state"
+  | "harm_history"
+  | "close_score_margin"
+  | "expectation_correction";
 export type EvaluationMode = "live" | "shadow" | "holdout";
 export type OutcomeSignal = "success" | "failure" | "unknown";
 export type ToolEventStatus = "success" | "failure" | "unknown";
@@ -324,6 +330,10 @@ export type InterventionDecisionDiagnostics = {
   decisionReason: string;
   confidence: InterventionConfidence;
   budgetClass: InterventionBudgetClass;
+  secondOpinionApplied?: boolean;
+  secondOpinionDecision?: SyncSecondOpinionDecision;
+  secondOpinionReason?: string;
+  secondOpinionTrigger?: SyncSecondOpinionTrigger;
   selectedCandidateIds: string[];
   rejectedCandidates: InterventionRejectedCandidate[];
 };
@@ -350,6 +360,10 @@ export type InjectionScorecard = {
   decisionReason?: string;
   confidence?: InterventionConfidence;
   budgetClass?: InterventionBudgetClass;
+  secondOpinionApplied?: boolean;
+  secondOpinionDecision?: SyncSecondOpinionDecision;
+  secondOpinionReason?: string;
+  secondOpinionTrigger?: SyncSecondOpinionTrigger;
   selectedCandidateIds?: string[];
   rejectedCandidates?: InterventionRejectedCandidate[];
   nodes: InjectionScorecardNode[];

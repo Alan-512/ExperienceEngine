@@ -19,6 +19,8 @@ export const configSchema = z.object({
   embeddingCacheDir: z.string().default("./data/models/embeddings"),
   retrievalRerankerMode: z.enum(["auto", "heuristic", "model", "disabled"]).default("auto"),
   retrievalRerankerModel: z.string().default(""),
+  syncSecondOpinionMode: z.enum(["disabled", "selective"]).default("disabled"),
+  syncSecondOpinionModel: z.string().default(""),
   distillerProvider: z.enum(DISTILLER_PROVIDERS).default("openai_compatible"),
   distillerModel: z.string().default(""),
   distillationAuthMode: z.enum(["api_key", "google_adc"]).default("api_key"),
@@ -134,6 +136,17 @@ export const pluginConfigJsonSchema = {
       type: "string",
       description:
         "Optional override model identifier for retrieval reranking. When empty, ExperienceEngine reuses the configured distillation model."
+    },
+    syncSecondOpinionMode: {
+      type: "string",
+      enum: ["disabled", "selective"],
+      description:
+        "Controls whether ExperienceEngine applies a selective synchronous LLM second-opinion gate before injecting high-risk live hints."
+    },
+    syncSecondOpinionModel: {
+      type: "string",
+      description:
+        "Optional override model identifier for the selective synchronous LLM second-opinion gate. When empty, ExperienceEngine reuses the configured distillation model."
     },
     distillerProvider: {
       type: "string",
@@ -306,6 +319,12 @@ export const pluginUiHints = {
   },
   retrievalRerankerModel: {
     label: "Retrieval Reranker Model"
+  },
+  syncSecondOpinionMode: {
+    label: "Sync Second Opinion Mode"
+  },
+  syncSecondOpinionModel: {
+    label: "Sync Second Opinion Model"
   },
   distillerProvider: {
     label: "Distiller Provider"

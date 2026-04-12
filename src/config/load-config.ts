@@ -82,6 +82,14 @@ export const loadConfig = (
       env.EXPERIENCE_ENGINE_RETRIEVAL_RERANKER_MODEL ??
       overrides.retrievalRerankerModel ??
       defaultConfig.retrievalRerankerModel,
+    syncSecondOpinionMode:
+      (env.EXPERIENCE_ENGINE_SYNC_SECOND_OPINION_MODE as ExperienceEngineConfig["syncSecondOpinionMode"] | undefined) ??
+      overrides.syncSecondOpinionMode ??
+      defaultConfig.syncSecondOpinionMode,
+    syncSecondOpinionModel:
+      env.EXPERIENCE_ENGINE_SYNC_SECOND_OPINION_MODEL ??
+      overrides.syncSecondOpinionModel ??
+      defaultConfig.syncSecondOpinionModel,
     distillerProvider:
       (env.EXPERIENCE_ENGINE_DISTILLER_PROVIDER as ExperienceEngineConfig["distillerProvider"] | undefined) ??
       overrides.distillerProvider ??

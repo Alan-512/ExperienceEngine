@@ -10,6 +10,7 @@ import type {
   RetrievalContext,
   ResolvedTaskType,
   ScopeTaskStats,
+  SyncSecondOpinionDecision,
   ValidationState
 } from "../types/domain.js";
 import {
@@ -22,6 +23,7 @@ import { renderInjection } from "./injection-renderer.js";
 import { rankNodes } from "./node-ranker.js";
 import { evaluateTriggerRoute, type TriggerCandidateQuality } from "./trigger-evaluator.js";
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
+import { deriveSelectiveSecondOpinionTrigger, runSelectiveSecondOpinion } from "./second-opinion-gate.js";
 
 export type InterventionDecision = {
   mode: InjectionMode;
@@ -271,6 +273,8 @@ export const decideIntervention = (
     | "distillerModel"
     | "retrievalRerankerMode"
     | "retrievalRerankerModel"
+    | "syncSecondOpinionMode"
+    | "syncSecondOpinionModel"
   >,
   retrievalContext?: RetrievalContext
 ): Promise<InterventionDecision> =>
@@ -293,6 +297,8 @@ const decideInterventionInternal = async (
     | "distillerModel"
     | "retrievalRerankerMode"
     | "retrievalRerankerModel"
+    | "syncSecondOpinionMode"
+    | "syncSecondOpinionModel"
   >,
   retrievalContext?: RetrievalContext
 ): Promise<InterventionDecision> => {
@@ -371,6 +377,110 @@ const decideInterventionInternal = async (
     decisionReason: "candidate_quality_positive"
   };
 
+  const finalizeLiveDecision = async (
+    plannedMode: Exclude<InjectionMode, "skip">,
+    plannedSelected: ExperienceNode[],
+    diagnostics: typeof diagnosticsBase
+  ): Promise<InterventionDecision> => {
+    if (!plannedSelected.length) {
+      return {
+        mode: "skip",
+        selected: [],
+        diagnostics: withDecisionEnvelope({
+          mode: "skip",
+          selected: [],
+          scoredCandidates,
+          topCandidateQuality,
+          diagnostics: {
+            ...diagnostics,
+            gateReason: "no_selected_nodes",
+            decisionReason: "selection_empty"
+          }
+        })
+      };
+    }
+
+    const trigger = deriveSelectiveSecondOpinionTrigger(input, plannedSelected, scoredCandidates);
+    let finalMode: Exclude<InjectionMode, "skip"> = plannedMode;
+    let finalSelected = plannedSelected;
+    let secondOpinionApplied = false;
+    let secondOpinionDecision: SyncSecondOpinionDecision | undefined;
+    let secondOpinionReason: string | undefined;
+
+    if (trigger) {
+      const secondOpinion = await runSelectiveSecondOpinion(
+        {
+          input,
+          plannedMode,
+          selected: plannedSelected,
+          scoredCandidates,
+          trigger
+        },
+        { config }
+      );
+
+      if (secondOpinion) {
+        secondOpinionApplied = true;
+        secondOpinionDecision = secondOpinion.decision;
+        secondOpinionReason = secondOpinion.reason;
+
+        if (secondOpinion.bestNodeId) {
+          const replacement = plannedSelected.find((node) => node.id === secondOpinion.bestNodeId)
+            ?? scoredCandidates.find((candidate) => candidate.node.id === secondOpinion.bestNodeId)?.node;
+          if (replacement) {
+            finalSelected = [replacement];
+          }
+        }
+
+        if (secondOpinion.decision === "skip") {
+          return {
+            mode: "skip",
+            selected: [],
+            diagnostics: withDecisionEnvelope({
+              mode: "skip",
+              selected: [],
+              scoredCandidates,
+              topCandidateQuality,
+              diagnostics: {
+                ...diagnostics,
+                gateReason: "selective_sync_second_opinion",
+                decisionReason: secondOpinion.reason ?? "second_opinion_skip",
+                secondOpinionApplied,
+                secondOpinionDecision,
+                secondOpinionReason,
+                secondOpinionTrigger: trigger
+              }
+            })
+          };
+        }
+
+        if (secondOpinion.decision === "allow_conservative") {
+          finalMode = "inject_conservative";
+          finalSelected = finalSelected[0] ? [finalSelected[0]] : [];
+        }
+      }
+    }
+
+    return {
+      mode: finalMode,
+      selected: finalSelected,
+      text: renderInjection(finalMode, finalSelected, finalMode === "inject_conservative" ? 1 : maxHints),
+      diagnostics: withDecisionEnvelope({
+        mode: finalMode,
+        selected: finalSelected,
+        scoredCandidates,
+        topCandidateQuality,
+          diagnostics: {
+            ...diagnostics,
+          secondOpinionApplied: secondOpinionApplied || undefined,
+          secondOpinionDecision,
+          secondOpinionReason,
+          secondOpinionTrigger: secondOpinionApplied && trigger ? trigger : undefined
+        }
+      })
+    };
+  };
+
   if (topCandidateQuality && isStrongCandidate(topCandidateQuality, runnerUpQuality)) {
     const fastPathSelection =
       isTrustedSameFamilyCluster(topCandidateQuality, runnerUpQuality)
@@ -378,23 +488,12 @@ const decideInterventionInternal = async (
         : selected[0]
           ? [selected[0]]
           : [];
-    return {
-      mode,
-      selected: fastPathSelection,
-      text: renderInjection(mode, fastPathSelection, maxHints),
-      diagnostics: withDecisionEnvelope({
-        mode,
-        selected: fastPathSelection,
-        scoredCandidates,
-        topCandidateQuality,
-        diagnostics: {
-          ...diagnosticsBase,
-          fastPathApplied: true,
-          gateReason: "strong_candidate_fast_path",
-          decisionReason: "mature_validated_candidate"
-        }
-      })
-    };
+    return finalizeLiveDecision(mode, fastPathSelection, {
+      ...diagnosticsBase,
+      fastPathApplied: true,
+      gateReason: "strong_candidate_fast_path",
+      decisionReason: "mature_validated_candidate"
+    });
   }
 
   const route = evaluateTriggerRoute(
@@ -445,22 +544,11 @@ const decideInterventionInternal = async (
       };
     }
 
-    return {
-      mode: "inject_conservative",
-      selected: conservativeSelection,
-      text: renderInjection("inject_conservative", conservativeSelection, 1),
-      diagnostics: withDecisionEnvelope({
-        mode: "inject_conservative",
-        selected: conservativeSelection,
-        scoredCandidates,
-        topCandidateQuality,
-        diagnostics: {
-          ...diagnosticsBase,
-          gateReason: "uncertainty_aware_routing",
-          decisionReason: route.reason
-        }
-      })
-    };
+    return finalizeLiveDecision("inject_conservative", conservativeSelection, {
+      ...diagnosticsBase,
+      gateReason: "uncertainty_aware_routing",
+      decisionReason: route.reason
+    });
   }
 
   if (!selected.length) {
@@ -481,16 +569,5 @@ const decideInterventionInternal = async (
     };
   }
 
-  return {
-    mode,
-    selected,
-    text: renderInjection(mode, selected, maxHints),
-    diagnostics: withDecisionEnvelope({
-      mode,
-      selected,
-      scoredCandidates,
-      topCandidateQuality,
-      diagnostics: diagnosticsBase
-    })
-  };
+  return finalizeLiveDecision(mode, selected, diagnosticsBase);
 };
