@@ -76,6 +76,7 @@ const DEFAULT_DELIVERY_STATE_BY_LIFECYCLE: Record<ExperienceNode["state"], NonNu
   cooling: "conservative_only",
   retired: "quarantined"
 };
+const OPENAI_STYLE_SECOND_OPINION_MAX_TOKENS = 160;
 
 const SECOND_OPINION_SYSTEM_PROMPT = [
   "You are a synchronous safety gate for ExperienceEngine hint injection.",
@@ -157,6 +158,7 @@ const buildRequestBody = (endpoint: DistillerEndpoint, prompt: string): Record<s
     model: endpoint.model,
     response_format: { type: "json_object" },
     temperature: 0,
+    max_tokens: OPENAI_STYLE_SECOND_OPINION_MAX_TOKENS,
     messages: [
       { role: "system", content: SECOND_OPINION_SYSTEM_PROMPT },
       { role: "user", content: prompt }
@@ -263,7 +265,10 @@ export const deriveSelectiveSecondOpinionTrigger = (
     return null;
   }
 
-  if (resolveDeliveryState(top) === "conservative_only") {
+  const deliveryState = resolveDeliveryState(top);
+  const plannedMode = deliveryState === "conservative_only" ? "inject_conservative" : "inject";
+
+  if (deliveryState === "conservative_only" && top.state === "active") {
     return "conservative_delivery_state";
   }
 
@@ -271,7 +276,7 @@ export const deriveSelectiveSecondOpinionTrigger = (
     return "harm_history";
   }
 
-  if (top.experience_kind === "expectation_correction" || hasCorrectionIntent(input)) {
+  if (plannedMode === "inject" && (top.experience_kind === "expectation_correction" || hasCorrectionIntent(input))) {
     return "expectation_correction";
   }
 
@@ -281,7 +286,7 @@ export const deriveSelectiveSecondOpinionTrigger = (
       : scoredCandidates[1]
         ? topCandidate.totalScore - scoredCandidates[1].totalScore
         : 1;
-  if (margin <= 0.05) {
+  if (margin <= 0.03) {
     return "close_score_margin";
   }
 

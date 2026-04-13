@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { evaluateSelectiveSecondOpinion } from "../../src/controller/second-opinion-gate.js";
+import { deriveSelectiveSecondOpinionTrigger, evaluateSelectiveSecondOpinion } from "../../src/controller/second-opinion-gate.js";
 import type { ExperienceInput, ExperienceNode } from "../../src/types/domain.js";
 import type { RetrievedCandidate } from "../../src/controller/candidate-retriever.js";
 
@@ -56,6 +56,66 @@ const candidate = (entry: ExperienceNode, overrides: Partial<RetrievedCandidate>
 });
 
 describe("evaluateSelectiveSecondOpinion", () => {
+  it("only escalates conservative delivery state for active nodes", () => {
+    expect(
+      deriveSelectiveSecondOpinionTrigger(
+        input,
+        [node({ id: "top-node", state: "active", delivery_state: "conservative_only" })],
+        [candidate(node({ id: "top-node", state: "active", delivery_state: "conservative_only" }))]
+      )
+    ).toBe("conservative_delivery_state");
+
+    expect(
+      deriveSelectiveSecondOpinionTrigger(
+        input,
+        [node({ id: "priority-node", state: "priority_candidate", delivery_state: "conservative_only" })],
+        [candidate(node({ id: "priority-node", state: "priority_candidate", delivery_state: "conservative_only" }))]
+      )
+    ).toBe("close_score_margin");
+  });
+
+  it("only escalates expectation correction on the live inject path", () => {
+    expect(
+      deriveSelectiveSecondOpinionTrigger(
+        {
+          ...input,
+          task_summary: "The previous pass focused too much on the wrong layer."
+        },
+        [node({ id: "top-node", state: "active", delivery_state: "eligible" })],
+        [candidate(node({ id: "top-node", state: "active", delivery_state: "eligible" }))]
+      )
+    ).toBe("expectation_correction");
+
+    expect(
+      deriveSelectiveSecondOpinionTrigger(
+        {
+          ...input,
+          task_summary: "The previous pass focused too much on the wrong layer."
+        },
+        [node({ id: "top-node", state: "active", delivery_state: "conservative_only" })],
+        [candidate(node({ id: "top-node", state: "active", delivery_state: "conservative_only" }))]
+      )
+    ).toBe("conservative_delivery_state");
+  });
+
+  it("tightens the close-score margin trigger threshold", () => {
+    expect(
+      deriveSelectiveSecondOpinionTrigger(
+        input,
+        [node({ id: "top-node" })],
+        [candidate(node({ id: "top-node" }), { scoreMargin: 0.03 })]
+      )
+    ).toBe("close_score_margin");
+
+    expect(
+      deriveSelectiveSecondOpinionTrigger(
+        input,
+        [node({ id: "top-node" })],
+        [candidate(node({ id: "top-node" }), { scoreMargin: 0.04 })]
+      )
+    ).toBeNull();
+  });
+
   it("returns null when disabled", async () => {
     const result = await evaluateSelectiveSecondOpinion(
       {
@@ -80,6 +140,7 @@ describe("evaluateSelectiveSecondOpinion", () => {
   });
 
   it("returns a structured recommendation from the provider", async () => {
+    let capturedBody: Record<string, unknown> | undefined;
     const result = await evaluateSelectiveSecondOpinion(
       {
         input,
@@ -104,8 +165,9 @@ describe("evaluateSelectiveSecondOpinion", () => {
           source: "explicit",
           provider: "openai_compatible"
         }),
-        fetchImpl: async () =>
-          new Response(
+        fetchImpl: async (_url, init) => {
+          capturedBody = JSON.parse(String(init?.body ?? "{}")) as Record<string, unknown>;
+          return new Response(
             JSON.stringify({
               choices: [
                 {
@@ -121,7 +183,8 @@ describe("evaluateSelectiveSecondOpinion", () => {
               ]
             }),
             { status: 200, headers: { "content-type": "application/json" } }
-          )
+          );
+        }
       }
     );
 
@@ -132,5 +195,6 @@ describe("evaluateSelectiveSecondOpinion", () => {
       reason: "The node matches but carries recent harm history.",
       trigger: "harm_history"
     });
+    expect(capturedBody?.max_tokens).toBe(160);
   });
 });
