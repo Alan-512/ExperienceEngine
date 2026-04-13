@@ -209,12 +209,12 @@ id: experienceengine
 Status: loaded
 Source: ~/.openclaw/extensions/experienceengine/dist/plugin/openclaw-plugin.js
 Origin: global
-Version: 0.1.3
+Version: 0.2.0
 
 Install: archive
 Source path: ~/.experienceengine/adapters/openclaw/openclaw-package/test.tgz
 Install path: ~/.openclaw/extensions/experienceengine
-Recorded version: 0.1.3`;
+Recorded version: 0.2.0`;
         }
         if (key === "openclaw config get plugins.entries.experienceengine") {
           return `{
