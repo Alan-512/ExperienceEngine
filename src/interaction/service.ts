@@ -219,6 +219,9 @@ export type ExperienceDecisionHealth = {
   recentFastPathActivations: number;
   recentRerankParticipations: number;
   recentQueryRewriteUsages: number;
+  recentSecondOpinionActivations: number;
+  recentSecondOpinionSkips: number;
+  recentSecondOpinionConservativeDowngrades: number;
   currentPriorityCandidates: number;
   recentConvergedUpdates: number;
   recentPriorityPromotions: number;
@@ -1149,6 +1152,9 @@ export class ExperienceInteractionService {
     let recentFastPathActivations = 0;
     let recentRerankParticipations = 0;
     let recentQueryRewriteUsages = 0;
+    let recentSecondOpinionActivations = 0;
+    let recentSecondOpinionSkips = 0;
+    let recentSecondOpinionConservativeDowngrades = 0;
     const scopedNodes = this.nodeRepo.listByScope(scope.scope_id);
     const recentNodes = scopedNodes.slice(0, limit);
     const currentPriorityCandidates = scopedNodes.filter((node) => node.state === "priority_candidate").length;
@@ -1195,6 +1201,15 @@ export class ExperienceInteractionService {
       if (injectionEvent?.scorecard?.queryRewriteApplied) {
         recentQueryRewriteUsages += 1;
       }
+      if (injectionEvent?.scorecard?.secondOpinionApplied) {
+        recentSecondOpinionActivations += 1;
+      }
+      if (injectionEvent?.scorecard?.secondOpinionDecision === "skip") {
+        recentSecondOpinionSkips += 1;
+      }
+      if (injectionEvent?.scorecard?.secondOpinionDecision === "allow_conservative") {
+        recentSecondOpinionConservativeDowngrades += 1;
+      }
     }
 
     return {
@@ -1209,6 +1224,9 @@ export class ExperienceInteractionService {
       recentFastPathActivations,
       recentRerankParticipations,
       recentQueryRewriteUsages,
+      recentSecondOpinionActivations,
+      recentSecondOpinionSkips,
+      recentSecondOpinionConservativeDowngrades,
       currentPriorityCandidates,
       recentConvergedUpdates,
       recentPriorityPromotions,

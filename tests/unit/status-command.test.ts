@@ -56,6 +56,9 @@ let mockDecisionHealth = {
   recentFastPathActivations: 1,
   recentRerankParticipations: 2,
   recentQueryRewriteUsages: 1,
+  recentSecondOpinionActivations: 1,
+  recentSecondOpinionSkips: 0,
+  recentSecondOpinionConservativeDowngrades: 1,
   currentPriorityCandidates: 2,
   recentConvergedUpdates: 3,
   recentPriorityPromotions: 1,
@@ -148,6 +151,9 @@ afterEach(() => {
     recentFastPathActivations: 1,
     recentRerankParticipations: 2,
     recentQueryRewriteUsages: 1,
+    recentSecondOpinionActivations: 1,
+    recentSecondOpinionSkips: 0,
+    recentSecondOpinionConservativeDowngrades: 1,
     currentPriorityCandidates: 2,
     recentConvergedUpdates: 3,
     recentPriorityPromotions: 1,
@@ -187,7 +193,9 @@ vi.mock("../../src/config/load-config.js", () => ({
     distillerProvider: "gemini",
     distillerModel: "gemini-3.1-flash-lite-preview",
     embeddingProvider: "api",
-    embeddingApiProvider: "gemini"
+    embeddingApiProvider: "gemini",
+    syncSecondOpinionMode: "selective",
+    syncSecondOpinionModel: ""
   })
 }));
 
@@ -220,6 +228,8 @@ describe("status command", () => {
         ["- Distillation model: gemini-3.1-flash-lite-preview"],
         ["- Embedding provider mode: api"],
         ["- Embedding API provider override: gemini"],
+        ["- Sync second-opinion mode: selective"],
+        ["- Sync second-opinion model: gemini-3.1-flash-lite-preview"],
         ["- Codex learning loop: instruction_installed"],
         ["- Codex instruction block: present"],
         ["- Codex task runs in current repo: 0"],
@@ -236,6 +246,9 @@ describe("status command", () => {
         ["- Recent fast matches (fast path): 1"],
         ["- Recent rerank reviews (rerank): 2"],
         ["- Recent query normalizations (query rewrites): 1"],
+        ["- Recent sync second-opinion reviews: 1"],
+        ["- Recent second-opinion skips: 0"],
+        ["- Recent second-opinion conservative downgrades: 1"],
         ["- Current rising patterns (priority candidates): 2"],
         ["- Recent merged refinements (converged updates): 3"],
         ["- Recent newly promoted hints (priority promotions): 1"],

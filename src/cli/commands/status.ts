@@ -79,6 +79,8 @@ export const runStatusCommand = (): void => {
   );
   console.log(`- Distillation provider: ${config.distillerProvider}`);
   console.log(`- Distillation model: ${config.distillerModel}`);
+  console.log(`- Sync second-opinion mode: ${config.syncSecondOpinionMode}`);
+  console.log(`- Sync second-opinion model: ${config.syncSecondOpinionModel || config.distillerModel || "shared distiller default"}`);
   console.log(`- Embedding provider mode: ${config.embeddingProvider}`);
   console.log(`- Embedding API provider override: ${config.embeddingApiProvider}`);
   console.log(
@@ -114,6 +116,9 @@ export const runStatusCommand = (): void => {
   console.log(`- Recent fast matches (fast path): ${decisionHealth.recentFastPathActivations}`);
   console.log(`- Recent rerank reviews (rerank): ${decisionHealth.recentRerankParticipations}`);
   console.log(`- Recent query normalizations (query rewrites): ${decisionHealth.recentQueryRewriteUsages}`);
+  console.log(`- Recent sync second-opinion reviews: ${decisionHealth.recentSecondOpinionActivations}`);
+  console.log(`- Recent second-opinion skips: ${decisionHealth.recentSecondOpinionSkips}`);
+  console.log(`- Recent second-opinion conservative downgrades: ${decisionHealth.recentSecondOpinionConservativeDowngrades}`);
   console.log(`- Current rising patterns (priority candidates): ${decisionHealth.currentPriorityCandidates}`);
   console.log(`- Recent merged refinements (converged updates): ${decisionHealth.recentConvergedUpdates}`);
   console.log(`- Recent newly promoted hints (priority promotions): ${decisionHealth.recentPriorityPromotions}`);

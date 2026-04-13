@@ -301,6 +301,18 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
         if (record.scorecard.decisionReason) {
           console.log(`- Decision reason: ${record.scorecard.decisionReason}`);
         }
+        if (typeof record.scorecard.secondOpinionApplied === "boolean") {
+          console.log(`- Sync second-opinion applied: ${record.scorecard.secondOpinionApplied ? "yes" : "no"}`);
+        }
+        if (record.scorecard.secondOpinionDecision) {
+          console.log(`- Sync second-opinion decision: ${record.scorecard.secondOpinionDecision}`);
+        }
+        if (record.scorecard.secondOpinionTrigger) {
+          console.log(`- Sync second-opinion trigger: ${record.scorecard.secondOpinionTrigger}`);
+        }
+        if (record.scorecard.secondOpinionReason) {
+          console.log(`- Sync second-opinion reason: ${record.scorecard.secondOpinionReason}`);
+        }
         if (record.scorecard.selectedCandidateIds?.length) {
           console.log(`- Selected candidates: ${record.scorecard.selectedCandidateIds.join(", ")}`);
         }

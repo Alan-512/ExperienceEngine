@@ -77,6 +77,8 @@ const logEvaluationMode = (): void => {
   console.log("Evaluation mode:");
   console.log(`- Mode: ${config.evaluationMode}`);
   console.log(`- Holdout rate: ${config.holdoutRate}`);
+  console.log(`- Sync second-opinion mode: ${config.syncSecondOpinionMode}`);
+  console.log(`- Sync second-opinion model: ${config.syncSecondOpinionModel || config.distillerModel || "shared distiller default"}`);
 };
 
 const logFirstValueReadiness = (
@@ -301,6 +303,9 @@ const logDecisionHealth = (summary?: ExperienceDecisionHealth): void => {
   console.log(`- Fast matches (fast path): ${summary.recentFastPathActivations}`);
   console.log(`- Rerank reviews (rerank): ${summary.recentRerankParticipations}`);
   console.log(`- Query normalizations (query rewrites): ${summary.recentQueryRewriteUsages}`);
+  console.log(`- Sync second-opinion reviews: ${summary.recentSecondOpinionActivations}`);
+  console.log(`- Second-opinion skips: ${summary.recentSecondOpinionSkips}`);
+  console.log(`- Second-opinion conservative downgrades: ${summary.recentSecondOpinionConservativeDowngrades}`);
   console.log(`- Rising patterns (priority candidates): ${summary.currentPriorityCandidates}`);
   console.log(`- Merged refinements (converged updates): ${summary.recentConvergedUpdates}`);
   console.log(`- Newly promoted hints (priority promotions): ${summary.recentPriorityPromotions}`);

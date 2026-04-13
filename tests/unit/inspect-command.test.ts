@@ -220,6 +220,11 @@ const makeInjectionEvent = (overrides: Partial<InjectionEvent> = {}): InjectionE
     priorityPromotionApplied: true,
     gateReason: "strong_candidate_fast_path",
     decisionReason: "mature_validated_candidate",
+    secondOpinionApplied: true,
+    secondOpinionDecision: "allow_conservative",
+    secondOpinionTrigger: "harm_history",
+    secondOpinionReason:
+      "The candidate still matches, but recent harm history warrants a cautious single hint.",
     selectedCandidateIds: ["node_inspect"],
     rejectedCandidates: [{ id: "node_runner_up", reasonCodes: ["same_family_runner_up"] }],
     createdAt: "2026-03-14T01:00:00.000Z",
@@ -380,6 +385,12 @@ describe("inspect command", () => {
         ["- Top candidate rerank source: model"],
         ["- Gate reason: strong_candidate_fast_path"],
         ["- Decision reason: mature_validated_candidate"],
+        ["- Sync second-opinion applied: yes"],
+        ["- Sync second-opinion decision: allow_conservative"],
+        ["- Sync second-opinion trigger: harm_history"],
+        [
+          "- Sync second-opinion reason: The candidate still matches, but recent harm history warrants a cautious single hint."
+        ],
         ["- Selected candidates: node_inspect"],
         ["- Top candidate retrieval reasons:"],
         ["- Top candidate policy reasons:"],
