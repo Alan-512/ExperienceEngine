@@ -12,11 +12,13 @@ Supported hosts today: `OpenClaw`, `Claude Code`, `Codex`
 
 Without ExperienceEngine:
 - the agent repeats the same SQLite migration mistake in a similar repo
+- it opens the DB before running the migration, then wastes turns retrying the wrong path
 
 With ExperienceEngine:
-- it injects a hint like: `Run the migration before opening the DB connection`
-- later you mark that intervention `helpful` or `harmful`
-- the experience can then become active, cool down, or retire
+- before tool use, it injects one short constraint like: `Run the migration before opening the DB connection`
+- the host agent avoids the same failed path instead of rediscovering it from scratch
+- after the task, ExperienceEngine usually updates that guidance automatically from the real outcome
+- if the guidance later starts harming similar tasks, ExperienceEngine can cool, quarantine, or retire it
 
 Task flow: `task signals -> distilled experience -> retrieval -> short intervention -> feedback -> governance`
 
@@ -25,17 +27,15 @@ Task flow: `task signals -> distilled experience -> retrieval -> short intervent
 
 User: Fix the SQLite startup failure in this repo.
 
-ExperienceEngine: Hint: `Run the migration before opening the DB connection.`
-
-Host agent: I’ll apply the migration first, then retry startup.
+Host agent: ExperienceEngine found a prior successful fix pattern in this repo: `Run the migration before opening the DB connection.` I’ll apply the migration first, then retry startup.
 
 User: Why did that ExperienceEngine hint match?
 
 Host agent: It matched a prior task in this repo with the same SQLite startup pattern and a successful migration-first fix.
 
-User: Mark the last ExperienceEngine intervention as helpful.
+User: So ExperienceEngine is trying to keep me off the same bad path?
 
-Host agent: Recorded. That experience gets stronger for similar future tasks.
+Host agent: Yes. It reused a repo-local success pattern before the next tool call, and it will usually score the outcome automatically after this run.
 
 </details>
 
@@ -100,6 +100,16 @@ ExperienceEngine is designed for intervention governance, not general memory acc
 | Keep context small and intervention-focused | Not the main goal | Yes, it injects short task-specific guidance |
 | Generic document lookup | Common fit | Not the primary job |
 
+## Why It Is Not Just Another Memory Layer
+
+ExperienceEngine is not trying to remember more things than the host. Its core job is to govern whether learned guidance should keep affecting future tasks.
+
+- most learning work happens after the task, so the current task does not need to wait for the full experience pipeline
+- each learned node moves through a lifecycle such as `candidate`, `active`, `cooling`, and `retired`
+- delivery is governed separately from storage, so harmful guidance can be cooled, quarantined, or removed from normal live injection
+- posttask review can revise whether a hint actually helped, harmed, or stayed uncertain
+- the product goal is production-safe reuse, not maximum recall
+
 ## Where It Sits In The Agent Loop
 
 At a high level, ExperienceEngine operates around the agent loop like this:
@@ -121,9 +131,10 @@ Each node moves through that lifecycle using real task outcomes, not just time-b
 ## What You Can Do Today
 
 - reuse short guidance from similar coding work
-- review why a hint matched
-- mark interventions helpful or harmful
-- inspect active, cooling, and retired experience
+- review why a hint matched or why nothing injected
+- let ExperienceEngine automatically reinforce, cool, quarantine, or retire guidance from real task outcomes
+- override the last intervention as helpful or harmful when the automatic judgment needs correction
+- inspect active, cooling, quarantined, and retired experience
 - run across `OpenClaw`, `Claude Code`, and `Codex`
 
 ### Under The Hood
@@ -147,9 +158,10 @@ For a more detailed explanation of what ExperienceEngine records and how an expe
 
 After installation and initialization, the first visible signs of value are:
 
-- ExperienceEngine injects a short hint during a real task
-- the host can explain why that hint matched
-- feedback on the last intervention affects future reuse
+- a repeated task avoids a previously known bad path instead of rediscovering it
+- ExperienceEngine injects only a short repo-relevant constraint instead of bloating the prompt
+- the host can explain why that hint matched or why nothing was injected
+- the task outcome usually updates future delivery automatically
 - `ee inspect --last` shows the recent intervention and related node state
 
 ## Prerequisites
@@ -234,11 +246,16 @@ If you prefer Gemini or Jina for embeddings, use the same `ee init embedding` fl
 
 ### Routine Use vs Operator Use
 
-For routine use, ask the host agent naturally for ExperienceEngine state or feedback actions, for example:
+For routine use, ask the host agent naturally for ExperienceEngine state first. Automatic outcome attribution is the default path; manual feedback is mainly there when you want to correct that judgment.
+
+Examples:
 
 - "What did ExperienceEngine just inject?"
 - "Why did that ExperienceEngine hint match?"
+- "Why didn't ExperienceEngine inject anything just now?"
 - "Mark the last ExperienceEngine intervention as helpful or harmful."
+
+In normal use, you should not need to manually score every intervention. ExperienceEngine is designed to learn from real task outcomes automatically, while still letting you override the result when the automatic judgment is wrong.
 
 OpenClaw also supports these additional readiness and recent-silence questions in-session:
 

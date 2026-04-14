@@ -11,27 +11,27 @@
   <g font-family="DejaVu Sans Mono, monospace" font-size="24">
     <text x="48" y="152" fill="#93C5FD">$ ee inspect --last --verbose</text>
 
-    <text x="48" y="198" fill="#E5E7EB">Session: strict-real-value-audit-2026-04-03</text>
-    <text x="48" y="232" fill="#E5E7EB">Task type: general</text>
-    <text x="48" y="266" fill="#E5E7EB">Intervention: inject</text>
-    <text x="48" y="300" fill="#E5E7EB">Automatic feedback: helped</text>
+    <text x="48" y="198" fill="#E5E7EB">Task: fix SQLite startup failure in this repo</text>
+    <text x="48" y="232" fill="#E5E7EB">Intervention: inject</text>
+    <text x="48" y="266" fill="#E5E7EB">Automatic feedback: reinforced</text>
 
-    <text x="48" y="356" fill="#A7F3D0">Injected nodes:</text>
-    <text x="72" y="390" fill="#E5E7EB">- node_8063ac8615ba strategy active system_derived</text>
-    <text x="96" y="424" fill="#E5E7EB">Trigger: agent output design for complex reasoning or evidence injection</text>
-    <text x="96" y="458" fill="#E5E7EB">Best fit: general tasks in this repo scope</text>
+    <text x="48" y="324" fill="#FCA5A5">Previous repeated mistake:</text>
+    <text x="72" y="358" fill="#E5E7EB">- opening the DB before running the migration</text>
+    <text x="72" y="392" fill="#E5E7EB">- wasting turns on the same wrong path</text>
 
-    <text x="48" y="514" fill="#FDE68A">Hints:</text>
-    <text x="72" y="548" fill="#E5E7EB">- Implement a two-layer output pattern: use lightweight in-session</text>
-    <text x="96" y="582" fill="#E5E7EB">  notices for immediate awareness and defer detailed reasoning</text>
-    <text x="96" y="616" fill="#E5E7EB">  to inspect surfaces.</text>
+    <text x="48" y="450" fill="#A7F3D0">Injected guidance:</text>
+    <text x="72" y="484" fill="#E5E7EB">- Run the migration before opening the DB connection.</text>
+    <text x="72" y="518" fill="#E5E7EB">- Keep the prompt small: one repo-specific constraint only.</text>
 
-    <text x="48" y="672" fill="#C4B5FD">Scorecard:</text>
-    <text x="72" y="706" fill="#E5E7EB">- Why ExperienceEngine acted: A mature validated candidate</text>
-    <text x="96" y="740" fill="#E5E7EB">  cleared the fast path, so ExperienceEngine injected it normally.</text>
-    <text x="72" y="774" fill="#E5E7EB">- Trust summary: medium-risk active guidance with 43 helped</text>
-    <text x="96" y="808" fill="#E5E7EB">  and 2 harmed signal(s).</text>
-    <text x="72" y="842" fill="#E5E7EB">- Query rewrite applied: yes</text>
-    <text x="72" y="876" fill="#E5E7EB">- Gate reason: strong_candidate_fast_path</text>
+    <text x="48" y="576" fill="#FDE68A">Outcome:</text>
+    <text x="72" y="610" fill="#E5E7EB">- the host agent avoided the known bad path</text>
+    <text x="72" y="644" fill="#E5E7EB">- the task moved directly toward the working fix</text>
+
+    <text x="48" y="702" fill="#C4B5FD">Governance:</text>
+    <text x="72" y="736" fill="#E5E7EB">- helpful guidance stays eligible for future use</text>
+    <text x="72" y="770" fill="#E5E7EB">- harmful guidance can cool, quarantine, or retire later</text>
+
+    <text x="48" y="828" fill="#67E8F9">Why this is not just memory:</text>
+    <text x="72" y="862" fill="#E5E7EB">- ExperienceEngine governs whether learned guidance should still ship.</text>
   </g>
 </svg>

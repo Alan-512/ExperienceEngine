@@ -12,11 +12,13 @@ ExperienceEngine 是一个面向编程 Agent 的治理层。它复用真实执�
 
 没有 ExperienceEngine：
 - agent 会在相似仓库里重复犯同样的 SQLite migration 错误
+- 它会先打开数据库、再补 migration，然后在错误方向上浪费几轮
 
 有 ExperienceEngine：
-- 它会注入一条提示，例如：`先执行 migration，再打开数据库连接`
-- 后续你可以把这次介入标记为 `helpful` 或 `harmful`
-- 这条经验会据此进入 active、降温或退役
+- 它会在真正调用工具之前注入一条很短的约束，例如：`先执行 migration，再打开数据库连接`
+- 宿主 agent 会直接避开上次已经踩过的错路，而不是重新试错
+- 任务结束后，ExperienceEngine 通常会根据真实结果自动更新这条 guidance
+- 如果这条 guidance 后面开始伤害相似任务，ExperienceEngine 会把它降温、隔离或退役
 
 任务流：`任务信号 -> 提炼经验 -> 检索 -> 短提示注入 -> 反馈 -> 治理`
 
@@ -25,17 +27,15 @@ ExperienceEngine 是一个面向编程 Agent 的治理层。它复用真实执�
 
 用户：修一下这个仓库里的 SQLite 启动失败问题。
 
-ExperienceEngine：Hint: `先执行 migration，再打开数据库连接。`
-
-宿主 agent：我会先补 migration，然后再重试启动。
+宿主 agent：ExperienceEngine 在这个仓库里找到了一个之前成功过的修复模式：`先执行 migration，再打开数据库连接。` 我会先补 migration，然后再重试启动。
 
 用户：为什么这条 ExperienceEngine 提示会命中？
 
 宿主 agent：它匹配到了这个仓库里过去一次相同的 SQLite 启动失败，以及当时成功的 migration-first 修复路径。
 
-用户：把刚才那次 ExperienceEngine 介入标记为 helpful。
+用户：所以 ExperienceEngine 的作用，是提前把我从同样的错路上拉回来？
 
-宿主 agent：已记录。之后遇到类似任务时，这条经验会更容易再次命中。
+宿主 agent：对。它在下一次工具调用前复用了这个仓库里的成功路径，而且这次任务结束后通常会自动判断这条经验到底帮到了还是干扰了结果。
 
 </details>
 
@@ -100,6 +100,16 @@ ExperienceEngine 的目标不是通用 memory 累积，而是**介入治理**。
 | 保持提示短小、任务相关 | 不是核心目标 | 是 |
 | 通用文档检索 | 常见适用场景 | 不是核心目标 |
 
+## 为什么它不是另一层记忆
+
+ExperienceEngine 不是想比宿主“记住更多东西”。它的核心价值，是持续治理一条已经学到的 guidance 还应不应该继续影响后续任务。
+
+- 大部分学习动作发生在任务之后，所以当前任务不需要等待整条经验处理链路跑完
+- 每条经验节点都会经历 `candidate`、`active`、`cooling`、`retired` 这样的生命周期
+- “存下来” 和 “还能不能继续上线” 是分开的，所以有害 guidance 可以被降温、隔离，或者退出正常注入路径
+- 任务结束后的审查会继续判断这条 hint 到底是帮到了、伤害了，还是仍然不确定
+- 这个产品追求的是“生产安全的经验复用”，不是“尽量多记、尽量多召回”
+
 ## 它在 Agent Loop 里的位置
 
 从高层看，ExperienceEngine 围绕 agent loop 的位置是这样的：
@@ -121,9 +131,10 @@ ExperienceEngine 工作在 context 层，不会修改宿主模型权重。
 ## 现在能做什么
 
 - 在相似编码任务里复用短 guidance
-- 查看某条 hint 为什么命中
-- 把最近一次介入标记为 helpful 或 harmful
-- 查看 active、cooling、retired 等生命周期状态
+- 查看某条 hint 为什么命中，或者为什么这次没有注入
+- 让 ExperienceEngine 根据真实任务结果自动强化、降温、隔离或退役 guidance
+- 当自动判断不准时，手动把最近一次介入标记为 helpful 或 harmful
+- 查看 active、cooling、quarantined、retired 等生命周期状态
 - 在 `OpenClaw`、`Claude Code`、`Codex` 三个宿主中使用
 
 ### 底层实现
@@ -147,9 +158,10 @@ ExperienceEngine 工作在 context 层，不会修改宿主模型权重。
 
 安装并初始化后，第一次真正体现价值的信号通常是：
 
-- ExperienceEngine 在真实任务里注入了一条短 hint
-- 宿主能解释为什么这条 hint 会命中
-- 你对最近一次介入的反馈，会影响后续复用
+- 一类重复任务不再重走之前已经犯过的错路
+- ExperienceEngine 只注入一条很短、和当前仓库直接相关的约束，而不是把上下文塞满
+- 宿主能解释为什么这条 hint 会命中，或者为什么这次没有注入
+- 任务结果通常会自动影响以后是否继续投放这条经验
 - `ee inspect --last` 能看到最近的介入和相关节点状态
 
 ## 前置条件
@@ -233,11 +245,16 @@ ExperienceEngine 现在不再把 `ee` CLI 当成适用于所有宿主的统一�
 
 ### 日常使用与 Operator 使用
 
-日常使用时，优先直接问宿主 agent，例如：
+日常使用时，优先直接问宿主 agent 当前的 ExperienceEngine 状态。默认主路径是自动结果归因；手动 feedback 主要用于你觉得自动判断不准时的纠偏。
+
+例如：
 
 - “ExperienceEngine 刚刚注入了什么？”
 - “为什么那条 ExperienceEngine 提示会命中？”
+- “为什么这次 ExperienceEngine 没有注入？”
 - “把刚才那次 ExperienceEngine 介入标记为 helpful 或 harmful。”
+
+正常使用里，你不应该需要手动给每次介入都打分。ExperienceEngine 的默认路径是根据真实任务结果自动学习；只有当自动判断明显不对时，你再手动纠偏。
 
 OpenClaw 还支持这些 readiness / silence 问题：
 
