@@ -18,34 +18,24 @@ With ExperienceEngine:
 - later you mark that intervention `helpful` or `harmful`
 - the experience can then become active, cool down, or retire
 
-```text
-task signals -> distilled experience -> retrieval -> short intervention -> feedback -> governance
-```
+Task flow: `task signals -> distilled experience -> retrieval -> short intervention -> feedback -> governance`
 
 <details>
 <summary>Example host transcript</summary>
 
-```text
 User: Fix the SQLite startup failure in this repo.
 
-ExperienceEngine:
-  Hint: Run the migration before opening the DB connection.
+ExperienceEngine: Hint: `Run the migration before opening the DB connection.`
 
-Host agent:
-  I’ll apply the migration first, then retry startup.
+Host agent: I’ll apply the migration first, then retry startup.
 
-User:
-  Why did that ExperienceEngine hint match?
+User: Why did that ExperienceEngine hint match?
 
-Host agent:
-  It matched a prior task in this repo with the same SQLite startup pattern and a successful migration-first fix.
+Host agent: It matched a prior task in this repo with the same SQLite startup pattern and a successful migration-first fix.
 
-User:
-  Mark the last ExperienceEngine intervention as helpful.
+User: Mark the last ExperienceEngine intervention as helpful.
 
-Host agent:
-  Recorded. That experience gets stronger for similar future tasks.
-```
+Host agent: Recorded. That experience gets stronger for similar future tasks.
 
 </details>
 
@@ -114,25 +104,17 @@ ExperienceEngine is designed for intervention governance, not general memory acc
 
 At a high level, ExperienceEngine operates around the agent loop like this:
 
-```text
-User task
-  -> before_prompt_build: retrieve and inject matching experience
-  -> agent reasoning + tools: capture failures, retries, corrections, and outcomes
-  -> task finalization: distill new candidates into reusable experience
-  -> helped / harmed feedback: promote, cool, or retire nodes
-```
+- `User task`
+- `before_prompt_build`: retrieve and inject matching experience
+- `agent reasoning + tools`: capture failures, retries, corrections, and outcomes
+- `task finalization`: distill new candidates into reusable experience
+- `helped / harmed feedback`: promote, cool, or retire nodes
 
 ExperienceEngine works at the context layer. It does not modify the host model's weights.
 
 ## Experience Lifecycle
 
-```text
-task signals
-  -> candidate
-  -> active
-  -> cooling
-  -> retired
-```
+`task signals -> candidate -> active -> cooling -> retired`
 
 Each node moves through that lifecycle using real task outcomes, not just time-based cleanup. Helpful experience gets reinforced; harmful experience gets cooled or retired.
 
@@ -243,12 +225,10 @@ After installation, ExperienceEngine should orient the user toward the next setu
 
 Minimal shared initialization example:
 
-```bash
-ee init distillation --provider openai --model gpt-4.1-mini --auth-mode api_key
-ee init secret OPENAI_API_KEY <your-api-key>
-ee init embedding --mode api --api-provider openai --model text-embedding-3-small
-ee init show
-```
+1. `ee init distillation --provider openai --model gpt-4.1-mini --auth-mode api_key`
+2. `ee init secret OPENAI_API_KEY <your-api-key>`
+3. `ee init embedding --mode api --api-provider openai --model text-embedding-3-small`
+4. `ee init show`
 
 If you prefer Gemini or Jina for embeddings, use the same `ee init embedding` flow with the matching provider and model.
 

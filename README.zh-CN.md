@@ -18,34 +18,24 @@ ExperienceEngine 是一个面向编程 Agent 的治理层。它复用真实执�
 - 后续你可以把这次介入标记为 `helpful` 或 `harmful`
 - 这条经验会据此进入 active、降温或退役
 
-```text
-任务信号 -> 提炼经验 -> 检索 -> 短提示注入 -> 反馈 -> 治理
-```
+任务流：`任务信号 -> 提炼经验 -> 检索 -> 短提示注入 -> 反馈 -> 治理`
 
 <details>
 <summary>宿主里的示例对话</summary>
 
-```text
 用户：修一下这个仓库里的 SQLite 启动失败问题。
 
-ExperienceEngine：
-  Hint: 先执行 migration，再打开数据库连接。
+ExperienceEngine：Hint: `先执行 migration，再打开数据库连接。`
 
-宿主 agent：
-  我会先补 migration，然后再重试启动。
+宿主 agent：我会先补 migration，然后再重试启动。
 
-用户：
-  为什么这条 ExperienceEngine 提示会命中？
+用户：为什么这条 ExperienceEngine 提示会命中？
 
-宿主 agent：
-  它匹配到了这个仓库里过去一次相同的 SQLite 启动失败，以及当时成功的 migration-first 修复路径。
+宿主 agent：它匹配到了这个仓库里过去一次相同的 SQLite 启动失败，以及当时成功的 migration-first 修复路径。
 
-用户：
-  把刚才那次 ExperienceEngine 介入标记为 helpful。
+用户：把刚才那次 ExperienceEngine 介入标记为 helpful。
 
-宿主 agent：
-  已记录。之后遇到类似任务时，这条经验会更容易再次命中。
-```
+宿主 agent：已记录。之后遇到类似任务时，这条经验会更容易再次命中。
 
 </details>
 
@@ -114,25 +104,17 @@ ExperienceEngine 的目标不是通用 memory 累积，而是**介入治理**。
 
 从高层看，ExperienceEngine 围绕 agent loop 的位置是这样的：
 
-```text
-用户任务
-  -> before_prompt_build：检索并注入匹配经验
-  -> agent 推理 + 工具调用：捕获失败、重试、修正和结果
-  -> task finalize：把候选信号提炼成可复用经验
-  -> helped / harmed：提升、降温或退役节点
-```
+- `用户任务`
+- `before_prompt_build`：检索并注入匹配经验
+- `agent 推理 + 工具调用`：捕获失败、重试、修正和结果
+- `task finalize`：把候选信号提炼成可复用经验
+- `helped / harmed`：提升、降温或退役节点
 
 ExperienceEngine 工作在 context 层，不会修改宿主模型权重。
 
 ## 经验生命周期
 
-```text
-任务信号
-  -> candidate
-  -> active
-  -> cooling
-  -> retired
-```
+`任务信号 -> candidate -> active -> cooling -> retired`
 
 每条经验都根据真实任务结果演化，而不是按时间粗暴清理。帮到任务的经验会被强化，反复有害的经验会被降温或退役。
 
@@ -242,12 +224,10 @@ ExperienceEngine 现在不再把 `ee` CLI 当成适用于所有宿主的统一�
 
 最小共享初始化示例：
 
-```bash
-ee init distillation --provider openai --model gpt-4.1-mini --auth-mode api_key
-ee init secret OPENAI_API_KEY <your-api-key>
-ee init embedding --mode api --api-provider openai --model text-embedding-3-small
-ee init show
-```
+1. `ee init distillation --provider openai --model gpt-4.1-mini --auth-mode api_key`
+2. `ee init secret OPENAI_API_KEY <your-api-key>`
+3. `ee init embedding --mode api --api-provider openai --model text-embedding-3-small`
+4. `ee init show`
 
 如果你更想用 Gemini 或 Jina 做 embedding，可以沿用同样的 `ee init embedding` 流程，只替换 provider 和 model。
 
