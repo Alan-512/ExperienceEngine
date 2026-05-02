@@ -172,7 +172,8 @@ export type ReviewEvent = {
     | "retire"
     | "quarantine"
     | "restore_conservative"
-    | "restore_eligible";
+    | "restore_eligible"
+    | "promote_eligible";
   source: "automatic" | "user";
   created_at: string;
 };

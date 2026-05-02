@@ -966,7 +966,12 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     }
   }
 
-  private updateInjectedNodes(input: ExperienceInput, attributionRecordId: string, taskRunId?: string): void {
+  private updateInjectedNodes(
+    input: ExperienceInput,
+    attributionRecordId: string,
+    taskRunId?: string,
+    injectionEvent?: InjectionEvent
+  ): void {
     if (!input.injected_node_ids.length) {
       return;
     }
@@ -1008,8 +1013,38 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       })
     );
 
+    const highMatchPromotionIds = new Set(
+      injectionEvent?.scorecard?.topCandidates
+        ?.filter((candidate) =>
+          candidate.matchScorecard?.scopeMatch === "same" &&
+          candidate.matchScorecard.overallMatchBand === "high" &&
+          candidate.matchScorecard.negativeEvidence.length === 0
+        )
+        .map((candidate) => candidate.id) ?? []
+    );
+    const promotedNodeIds: string[] = [];
+
     for (const node of applyFeedback(input, touched, attributionRecordId, { originProfilesByNodeId })) {
-      this.nodeRepo.upsert(node);
+      const shouldPromoteSameScopeHighMatch =
+        input.outcome_signal === "success" &&
+        input.scope_id === node.scope_id &&
+        highMatchPromotionIds.has(node.id) &&
+        node.state === "priority_candidate" &&
+        node.delivery_state === "conservative_only" &&
+        node.harmed_count === 0;
+      const nextNode = shouldPromoteSameScopeHighMatch
+        ? {
+            ...node,
+            state: "active" as const,
+            delivery_state: "eligible" as const,
+            validation_state: node.validation_state ?? "validated_by_reuse",
+            promotion_reason: node.promotion_reason ?? "same_scope_high_match_success"
+          }
+        : node;
+      if (shouldPromoteSameScopeHighMatch) {
+        promotedNodeIds.push(node.id);
+      }
+      this.nodeRepo.upsert(nextNode);
     }
 
     for (const event of automaticEvents) {
@@ -1018,6 +1053,17 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
         node_id: event.nodeId,
         task_run_id: taskRunId,
         event_type: event.eventType,
+        source: "automatic",
+        created_at: nowIso()
+      });
+    }
+
+    for (const nodeId of promotedNodeIds) {
+      this.reviewEventRepo.upsert({
+        id: createId("review"),
+        node_id: nodeId,
+        task_run_id: taskRunId,
+        event_type: "promote_eligible",
         source: "automatic",
         created_at: nowIso()
       });
@@ -1179,7 +1225,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       const taskRun = toTaskRun(input, sessionId, context);
       this.taskRunRepo.upsert(taskRun);
       this.outcomeRepo.upsert(toOutcomeRecord(taskRun, input));
-      this.updateInjectedNodes(input, record.record_id, taskRun.id);
+      this.updateInjectedNodes(input, record.record_id, taskRun.id, session.lastInjectionEvent);
       if (session.lastInjectionEvent) {
         const touchedNodes = session.lastInjectionEvent.injected_node_ids
           .map((id) => this.nodeRepo.getById(id))

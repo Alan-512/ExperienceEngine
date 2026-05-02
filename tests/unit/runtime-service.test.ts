@@ -591,6 +591,100 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     expect(prompt.retrievalContext?.failureSignature).toBeUndefined();
   });
 
+  it("promotes same-scope high-match conservative reuse after a successful run", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const db = openDatabase(loadConfig({ sqlitePath }));
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    const scope = resolveScope("/repo");
+    const timestamp = nowIso();
+
+    nodeRepo.upsert({
+      id: "same-scope-priority",
+      node_type: "strategy",
+      scope_id: scope.scope_id,
+      task_type: "test_debug",
+      trigger_pattern: "Fix the failing vitest auth test in the current workspace",
+      compact_hint: "Run the focused vitest auth test before editing and rerun it after the fix.",
+      success_signal: "The focused vitest auth test passes.",
+      evidence_summary: "Recovered from a prior same-scope auth test run. Failure signature: vitest auth assertion failed.",
+      retrieval_text:
+        "Fix the failing vitest auth test in the current workspace\nFailure signature: vitest auth assertion failed.\nRun the focused vitest auth test before editing and rerun it after the fix.",
+      source_kind: "system_derived",
+      origin_record_ids: [],
+      helped_record_ids: [],
+      harmed_record_ids: [],
+      state: "priority_candidate",
+      delivery_state: "conservative_only",
+      usage_count: 0,
+      helped_count: 0,
+      harmed_count: 0,
+      support_count: 1,
+      created_at: timestamp,
+      updated_at: timestamp
+    });
+
+    const service = new ExperienceRuntimeService(
+      loadConfig({
+        dataDir: join(runtimeDir, "data"),
+        sqlitePath,
+        captureDir: join(runtimeDir, "captures"),
+        distillationAutoDrain: false,
+        distillationAllowPassthrough: true
+      }, { homeDir: runtimeDir }),
+      undefined,
+      { homeDir: runtimeDir, env: {} }
+    );
+
+    await service.persistToolResult({
+      sessionId: "same-scope-promotion",
+      toolName: "vitest",
+      inputSummary: "run focused auth test",
+      outputSummary: "focused vitest auth test failed",
+      status: "failure",
+      errorSignature: "vitest auth assertion failed"
+    });
+
+    const lookup = await service.beforePromptBuild({
+      sessionId: "same-scope-promotion",
+      cwd: "/repo",
+      userMessage: "Fix the failing vitest auth test in the current workspace",
+      taskSummary: "Fix the failing vitest auth test in the current workspace"
+    });
+
+    expect(lookup.mode).toBe("inject_conservative");
+    expect(lookup.input.injected_node_ids).toEqual(["same-scope-priority"]);
+
+    await service.persistToolResult({
+      sessionId: "same-scope-promotion",
+      toolName: "vitest",
+      inputSummary: "run focused auth test",
+      outputSummary: "focused vitest auth test passed",
+      status: "success"
+    });
+    await service.finalizeTask({
+      sessionId: "same-scope-promotion",
+      cwd: "/repo",
+      userMessage: "Fix the failing vitest auth test in the current workspace",
+      taskSummary: "Fix the failing vitest auth test in the current workspace",
+      contextSummary: "The focused auth test passed after following the same-scope hint."
+    });
+
+    const promoted = nodeRepo.getById("same-scope-priority");
+    expect(promoted).toMatchObject({
+      state: "active",
+      delivery_state: "eligible",
+      usage_count: 1,
+      helped_count: 0,
+      last_feedback_verdict: "uncertain"
+    });
+    const reviewEvents = db.prepare(
+      "SELECT event_type FROM review_events WHERE node_id = ? ORDER BY created_at ASC"
+    ).all("same-scope-priority") as Array<{ event_type: string }>;
+    expect(reviewEvents.map((event) => event.event_type)).toContain("promote_eligible");
+  });
+
   it("learns an expectation correction in one run and conservatively injects it on the next similar run", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
