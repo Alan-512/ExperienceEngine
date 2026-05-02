@@ -242,15 +242,33 @@ const logCodexRuntimeStatus = (status?: {
   launcherPaths?: {
     mcpServer?: string;
   };
+  cliFallback?: {
+    command: "ee";
+    available: boolean;
+    path?: string;
+    recommendation?: string;
+  };
 }): void => {
-  if (!status?.runtimeTarget) {
+  if (!status?.runtimeTarget && !status?.cliFallback) {
     return;
   }
 
   console.log("Codex runtime target:");
-  console.log(`- Target: ${status.runtimeTarget}`);
+  if (status.runtimeTarget) {
+    console.log(`- Target: ${status.runtimeTarget}`);
+  }
   if (status.launcherPaths?.mcpServer) {
     console.log(`- MCP launcher: ${status.launcherPaths.mcpServer}`);
+  }
+  if (status.cliFallback) {
+    console.log(`- CLI fallback command: ${status.cliFallback.command}`);
+    console.log(`- CLI fallback available on PATH: ${status.cliFallback.available ? "yes" : "no"}`);
+    if (status.cliFallback.path) {
+      console.log(`- CLI fallback path: ${status.cliFallback.path}`);
+    }
+    if (!status.cliFallback.available && status.cliFallback.recommendation) {
+      console.log(`- CLI fallback note: ${status.cliFallback.recommendation}`);
+    }
   }
 };
 
@@ -519,6 +537,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
         transport: status.hostWiring.transport ?? "",
         command: status.hostWiring.command ?? "",
         capture_dir: status.captureDir,
+        cli_fallback: status.cliFallback?.available ?? false,
         instruction_state: status.instruction?.state ?? "",
         learning_loop: status.learningLoop?.state ?? ""
       }

@@ -8,7 +8,23 @@ const consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 const tempDirs: string[] = [];
 const originalHome = process.env.EXPERIENCE_ENGINE_HOME;
 
-let mockCodexStatus = {
+let mockCodexStatus: {
+  installed: boolean;
+  hostWiring: {
+    enabled: boolean;
+  };
+  learningLoop: {
+    state: string;
+    instructionState: string;
+    recentTaskRuns: number;
+  };
+  cliFallback: {
+    command: string;
+    available: boolean;
+    path?: string;
+    recommendation?: string;
+  };
+} = {
   installed: true,
   hostWiring: {
     enabled: true
@@ -17,6 +33,11 @@ let mockCodexStatus = {
     state: "instruction_installed",
     instructionState: "present",
     recentTaskRuns: 0
+  },
+  cliFallback: {
+    command: "ee",
+    available: true,
+    path: "/usr/local/bin/ee"
   }
 };
 
@@ -115,6 +136,11 @@ afterEach(() => {
       state: "instruction_installed",
       instructionState: "present",
       recentTaskRuns: 0
+    },
+    cliFallback: {
+      command: "ee",
+      available: true,
+      path: "/usr/local/bin/ee"
     }
   };
   mockClaudeStatus = {
@@ -233,6 +259,7 @@ describe("status command", () => {
         ["- Codex learning loop: instruction_installed"],
         ["- Codex instruction block: present"],
         ["- Codex task runs in current repo: 0"],
+        ["- Codex CLI fallback available: yes"],
         ["- OpenClaw learning loop: interaction_only"],
         ["- OpenClaw background learning default: disabled"],
         ["- OpenClaw async posttask default: disabled"],
@@ -254,6 +281,25 @@ describe("status command", () => {
         ["- Recent newly promoted hints (priority promotions): 1"],
         ["- Retrieval pattern: ExperienceEngine is finding matches in this repo, but some tasks still need smaller hints or no hint yet."]
       ])
+    );
+  });
+
+  it("prints when Codex MCP is ready but the ee CLI fallback is not on PATH", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    writeSharedSettings(process.env.EXPERIENCE_ENGINE_HOME);
+    mockCodexStatus.cliFallback = {
+      command: "ee",
+      available: false,
+      recommendation:
+        "Codex MCP can still run ExperienceEngine, but CLI fallback commands like `ee inspect --last` need the `ee` binary on PATH or an explicit npx invocation."
+    };
+
+    runStatusCommand();
+
+    expect(consoleLogSpy).toHaveBeenCalledWith("- Codex CLI fallback available: no");
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      "- Codex CLI fallback note: Codex MCP can still run ExperienceEngine, but CLI fallback commands like `ee inspect --last` need the `ee` binary on PATH or an explicit npx invocation."
     );
   });
 

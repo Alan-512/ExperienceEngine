@@ -97,6 +97,12 @@ export const runStatusCommand = (): void => {
     console.log(`- Codex instruction block: ${codex.learningLoop.instructionState}`);
     console.log(`- Codex task runs in current repo: ${codex.learningLoop.recentTaskRuns}`);
   }
+  if (codex.cliFallback) {
+    console.log(`- Codex CLI fallback available: ${codex.cliFallback.available ? "yes" : "no"}`);
+    if (!codex.cliFallback.available && codex.cliFallback.recommendation) {
+      console.log(`- Codex CLI fallback note: ${codex.cliFallback.recommendation}`);
+    }
+  }
   if (openclaw.runtimeDefaults) {
     console.log(`- OpenClaw learning loop: ${openclaw.runtimeDefaults.learningLoopState}`);
     console.log(

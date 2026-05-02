@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { spawnSync } from "node:child_process";
 import {
   buildCodexAddCommand,
   buildCodexGetCommand,
@@ -127,6 +128,13 @@ export type CodexLearningLoopStatus = {
   state: "tools_only" | "instruction_installed" | "learning_loop_active";
 };
 
+export type CodexCliFallbackStatus = {
+  command: "ee";
+  available: boolean;
+  path?: string;
+  recommendation?: string;
+};
+
 const resolveCodexInstructionPath = (cwd = process.cwd()): string => join(cwd, "AGENTS.md");
 
 const renderManagedInstructionBlock = (): string =>
@@ -226,6 +234,29 @@ const inspectCodexHost = (
   } catch {
     return null;
   }
+};
+
+const inspectCliFallback = (env: NodeJS.ProcessEnv = process.env): CodexCliFallbackStatus => {
+  const result = spawnSync("sh", ["-c", "command -v ee"], {
+    encoding: "utf8",
+    env
+  });
+  const path = result.status === 0 ? result.stdout.trim() : "";
+
+  if (path) {
+    return {
+      command: "ee",
+      available: true,
+      path
+    };
+  }
+
+  return {
+    command: "ee",
+    available: false,
+    recommendation:
+      "Codex MCP can still run ExperienceEngine, but CLI fallback commands like `ee inspect --last` need the `ee` binary on PATH or an explicit npx invocation."
+  };
 };
 
 export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstallReport => {
@@ -340,6 +371,7 @@ export const inspectCodexInstall = (options: InstallerOptions = {}) => {
     cwd: options.cwd,
     instruction
   });
+  const cliFallback = inspectCliFallback(options.cliEnv ?? options.env ?? process.env);
   const resolutionEnv: NodeJS.ProcessEnv = {
     ...(options.env ?? process.env),
     EXPERIENCE_ENGINE_ADAPTER: "codex"
@@ -370,6 +402,7 @@ export const inspectCodexInstall = (options: InstallerOptions = {}) => {
       transport: hostInfo?.transport,
       enabled: hostInfo?.enabled ?? false
     },
+    cliFallback,
     instruction,
     learningLoop,
     distillationStatus: {

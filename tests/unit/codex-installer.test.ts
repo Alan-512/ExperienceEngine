@@ -235,6 +235,9 @@ env_key = "OPENROUTER_API_KEY"
 
     const status = inspectCodexInstall({
       homeDir,
+      cliEnv: {
+        PATH: ""
+      },
       runner(command) {
         const key = [command.bin, ...command.args].join(" ");
         if (key === "codex mcp get experienceengine") {
@@ -257,6 +260,8 @@ env_key = "OPENROUTER_API_KEY"
     expect(status.versionStatus.state).toBe("current");
     expect(status.hostWiring.wired).toBe(true);
     expect(status.hostWiring.transport).toBe("stdio");
+    expect(status.cliFallback.available).toBe(false);
+    expect(status.cliFallback.recommendation).toContain("CLI fallback");
   });
 
   it("does not report llm distillation for auth-only Codex configs without an explicit provider", () => {

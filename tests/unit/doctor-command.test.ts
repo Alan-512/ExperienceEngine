@@ -60,6 +60,11 @@ const codexStatus = (overrides: Record<string, unknown> = {}) =>
       }
     },
     captureDir: "/tmp/.experienceengine/adapters/codex/captures",
+    cliFallback: {
+      command: "ee",
+      available: true,
+      path: "/usr/local/bin/ee"
+    },
     ...overrides
   }) as never;
 
@@ -270,6 +275,7 @@ describe("doctor command", () => {
       expect.arrayContaining([
         expect.objectContaining({
           adapter: "codex",
+          cli_fallback: true,
           instruction_state: "present",
           learning_loop: "learning_loop_active"
         })
@@ -282,6 +288,10 @@ describe("doctor command", () => {
         ["- Instruction path: /repo/AGENTS.md"],
         ["- State: learning_loop_active"],
         ["- Codex task runs in current repo: 2"],
+        ["Codex runtime target:"],
+        ["- CLI fallback command: ee"],
+        ["- CLI fallback available on PATH: yes"],
+        ["- CLI fallback path: /usr/local/bin/ee"],
         ["Recent retrieval activity:"],
         ["- Decisions in current repo: 4"],
         ["- Standard hints (inject): 2"],
@@ -300,6 +310,43 @@ describe("doctor command", () => {
         ["- Merged refinements (converged updates): 3"],
         ["- Newly promoted hints (priority promotions): 1"]
       ])
+    );
+  });
+
+  it("reports when Codex host wiring works but ee CLI fallback is missing", async () => {
+    await runDoctorCommand("codex", {
+      inspectCodexInstall: () =>
+        codexStatus({
+          cliFallback: {
+            command: "ee",
+            available: false,
+            recommendation:
+              "Codex MCP can still run ExperienceEngine, but CLI fallback commands like `ee inspect --last` need the `ee` binary on PATH or an explicit npx invocation."
+          }
+        }),
+      fetchLatestGitHubReleaseStatus: async () => ({
+        source: "github-releases",
+        repository: "Alan-512/ExperienceEngine",
+        latestVersion: null,
+        releaseUrl: null,
+        publishedAt: null,
+        state: "current",
+        updateAvailable: false
+      })
+    });
+
+    expect(consoleTableSpy).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          adapter: "codex",
+          host_wired: true,
+          cli_fallback: false
+        })
+      ])
+    );
+    expect(consoleLogSpy).toHaveBeenCalledWith("- CLI fallback available on PATH: no");
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      "- CLI fallback note: Codex MCP can still run ExperienceEngine, but CLI fallback commands like `ee inspect --last` need the `ee` binary on PATH or an explicit npx invocation."
     );
   });
 
