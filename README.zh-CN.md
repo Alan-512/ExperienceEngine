@@ -108,6 +108,8 @@ ExperienceEngine 不是想比宿主“记住更多东西”。它的核心价值
 - 每条经验节点都会经历 `candidate`、`active`、`cooling`、`retired` 这样的生命周期
 - “存下来” 和 “还能不能继续上线” 是分开的，所以有害 guidance 可以被降温、隔离，或者退出正常注入路径
 - 任务结束后的审查会继续判断这条 hint 到底是帮到了、伤害了，还是仍然不确定
+- 即使这次没有注入 hint，delivery decision 也会被记录下来，所以之后仍然能解释为什么跳过
+- 同仓库高匹配经验在成功复用后可以从保守投放提升到正常投放；跨仓库复用默认仍保持保守，除非后续证据更强
 - 这个产品追求的是“生产安全的经验复用”，不是“尽量多记、尽量多召回”
 
 ## 它在 Agent Loop 里的位置
@@ -141,6 +143,7 @@ ExperienceEngine 工作在 context 层，不会修改宿主模型权重。
 
 - MCP 原生交互面，加上 CLI / operator fallback
 - 支持 API 与本地回退的语义检索
+- 确定性的 match scorecard，用来区分同仓库高置信匹配和更宽泛的跨仓库复用
 - 宿主 agent 内可直接查看和反馈经验，CLI fallback 包括 `ee inspect --last`、`ee helped`、`ee harmed`
 
 如果你想看 ExperienceNode 结构和治理字段，见：
@@ -299,6 +302,7 @@ ExperienceEngine 明确拆分：
 
 宿主仍然是主交互面。
 `ee` 仍然是显式的 operator 面，用于 setup、验证、修复、状态查看和维护。
+对于 Codex，`ee status` 和 `ee doctor codex` 还会显示 `ee` CLI fallback 是否在 `PATH` 上可用。Codex 的 MCP 接入在 CLI fallback 缺失时仍可能正常工作，但 `ee inspect --last` 这类命令需要 PATH 里有 `ee`，或者使用显式的包调用方式。
 
 ## 高级按宿主命令（仅限 Operator / 开发者）
 

@@ -108,6 +108,8 @@ ExperienceEngine is not trying to remember more things than the host. Its core j
 - each learned node moves through a lifecycle such as `candidate`, `active`, `cooling`, and `retired`
 - delivery is governed separately from storage, so harmful guidance can be cooled, quarantined, or removed from normal live injection
 - posttask review can revise whether a hint actually helped, harmed, or stayed uncertain
+- delivery decisions are persisted even when no hint is shipped, so skipped turns can still be explained later
+- high-match same-repo experience can move out of conservative delivery after successful reuse, while cross-repo reuse stays cautious unless there is stronger evidence
 - the product goal is production-safe reuse, not maximum recall
 
 ## Where It Sits In The Agent Loop
@@ -141,6 +143,7 @@ Each node moves through that lifecycle using real task outcomes, not just time-b
 
 - MCP-native interaction surfaces plus CLI/operator fallback
 - semantic retrieval with API and local fallback
+- deterministic match scorecards that separate same-repo confidence from broader cross-repo reuse
 - host-agent driven inspection and feedback, with CLI fallback commands such as `ee inspect --last`, `ee helped`, and `ee harmed`
 
 For a more detailed explanation of what ExperienceEngine records and how an experience node is structured, see:
@@ -300,6 +303,7 @@ ExperienceEngine separates:
 
 The host remains the primary interaction surface.
 `ee` remains the explicit operator surface for setup, validation, repair, status, and maintenance.
+For Codex, `ee status` and `ee doctor codex` also report whether the `ee` CLI fallback is available on `PATH`. Codex MCP wiring can still work when the CLI fallback is missing, but commands such as `ee inspect --last` need either a PATH-visible `ee` binary or an explicit package invocation.
 
 ## Advanced Per-Host Commands (Operator / Development Only)
 

@@ -59,9 +59,11 @@ When it injects guidance, you will usually see a lightweight notice like:
 [ExperienceEngine] Injected 1 strategy hint for this task.
 ```
 
-If there is no intervention, it stays silent.
+If there is no intervention, it stays silent during the task. The delivery decision is still recorded, so `ee inspect --last` and host-side inspection can explain whether ExperienceEngine skipped because the match was weak, the node was not safe to ship yet, or the decision stayed in a conservative path.
 
 When ExperienceEngine is less certain but still sees a credible same-family match, it may choose a conservative injection instead of skipping entirely. In that case the injected block stays smaller by default, but mature low-risk nodes can still include a short `Goal / Steps / Avoid` structure when that makes the guidance more actionable.
+
+ExperienceEngine now uses a deterministic match scorecard before live delivery. Same-repo, high-match experience can ship directly when trust is already strong. Same-repo conservative experience can be promoted after a successful high-match reuse. Cross-repo matches are allowed only as conservative candidates unless later evidence proves they are safe in the new scope.
 
 When you inspect the latest turn, you may also see a learning decision such as:
 
@@ -154,6 +156,8 @@ ee status
 ```
 
 Use `ee init` once to initialize ExperienceEngine's shared distillation, embedding, and secret state. New host installations should reuse that same shared EE state instead of asking you to re-enter the same API key per host window.
+
+For Codex, `ee status` and `ee doctor codex` also show whether the `ee` CLI fallback is available on `PATH`. Codex MCP wiring can still be healthy without that fallback, but explicit operator commands such as `ee inspect --last` need either a PATH-visible `ee` binary or an explicit package invocation.
 
 In practical terms, the routine loop currently looks like this:
 

@@ -1,0 +1,21 @@
+# ExperienceEngine Next
+
+Release date: unreleased
+
+## Summary
+
+This development slice tightens Codex-era live-delivery quality after reviewing recent local ExperienceEngine usage.
+
+## Included
+
+- skipped delivery decisions are now persisted, so the latest turn can be explained even when no hint was injected
+- retrieval candidates now carry deterministic match scorecards before live delivery
+- high-trust, high-match same-scope experience can inject directly
+- high-match same-scope conservative experience can promote to normal eligible delivery after successful reuse
+- cross-scope reuse is available only through conservative candidates, not direct injection
+- `ee status` and `ee doctor codex` now report whether the `ee` CLI fallback is available on `PATH`
+
+## Notes
+
+- LLM usage remains in the existing places: posttask distillation and selective second-opinion review.
+- The new routing layer is deterministic and is intended to reduce both over-conservative same-scope skips and harmful broad reuse.
