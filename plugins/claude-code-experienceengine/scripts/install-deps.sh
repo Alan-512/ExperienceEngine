@@ -11,7 +11,7 @@ PACKAGE_ENTRY="${PACKAGE_DIR}/dist/cli/index.js"
 STAMP_PATH="${PLUGIN_DATA}/.experienceengine-plugin-version"
 EXPERIENCE_ENGINE_HOME_PATH="${EXPERIENCE_ENGINE_HOME:-${PLUGIN_DATA}/experienceengine-home}"
 STATE_PATH="${EXPERIENCE_ENGINE_HOME_PATH}/claude-marketplace-state.json"
-PACKAGE_VERSION="0.2.0"
+PACKAGE_VERSION="0.2.1"
 PACKAGE_SPEC="${EXPERIENCE_ENGINE_PLUGIN_PACKAGE_SPEC:-@alan512/experienceengine@${PACKAGE_VERSION}}"
 
 mkdir -p "${PLUGIN_DATA}"

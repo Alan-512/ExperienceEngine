@@ -12,7 +12,7 @@ describe("Claude plugin bundle", () => {
     ) as Record<string, unknown>;
 
     expect(manifest.name).toBe("experienceengine");
-    expect(manifest.version).toBe("0.2.0");
+    expect(manifest.version).toBe("0.2.1");
   });
 
   it("uses plugin-local hooks and runtime scripts", () => {

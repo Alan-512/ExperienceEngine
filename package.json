@@ -1,6 +1,6 @@
 {
   "name": "@alan512/experienceengine",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "type": "module",
   "description": "Experience governance for coding agents: learn from real task outcomes, inject reusable hints, and retire low-value guidance.",
   "license": "MIT",
