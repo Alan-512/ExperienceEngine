@@ -126,10 +126,132 @@ describe("evaluateTrigger", () => {
           helpedCount: 9,
           harmedCount: 0,
           validationState: "validated_by_reuse",
+          matchScorecard: {
+            scopeMatch: "same",
+            taskTypeMatch: "high",
+            techStackMatch: "high",
+            failureSignatureMatch: "high",
+            artifactMatch: "high",
+            intentMatch: "high",
+            negativeEvidence: [],
+            overallMatchBand: "high",
+            directInjectEligible: true
+          },
           scoreMargin: 0.28
         }
       })
     ).toBe(true);
+  });
+
+  it("routes high-trust high-match candidates to direct injection", () => {
+    expect(
+      evaluateTriggerRoute(baseInput, lowFailureStats, {
+        candidateQuality: {
+          semanticScore: 0.82,
+          retrievalScore: 0.55,
+          policyAdjustment: 0.32,
+          retrievalReasons: ["semantic:0.8200", "family:exact"],
+          policyReasons: ["family:1.0000", "maturity:0.1200"],
+          totalScore: 0.9,
+          familyScore: 1,
+          scopeMatch: true,
+          taskFamilyMatch: true,
+          state: "active",
+          helpedCount: 2,
+          harmedCount: 0,
+          validationState: "validated_by_reuse",
+          matchScorecard: {
+            scopeMatch: "same",
+            taskTypeMatch: "high",
+            techStackMatch: "high",
+            failureSignatureMatch: "high",
+            artifactMatch: "high",
+            intentMatch: "high",
+            negativeEvidence: [],
+            overallMatchBand: "high",
+            directInjectEligible: true
+          },
+          scoreMargin: 0.2
+        }
+      })
+    ).toEqual({
+      decision: "allow",
+      reason: "high_trust_high_match"
+    });
+  });
+
+  it("downgrades high-trust medium-match candidates to conservative injection", () => {
+    expect(
+      evaluateTriggerRoute(baseInput, lowFailureStats, {
+        candidateQuality: {
+          semanticScore: 0.82,
+          retrievalScore: 0.55,
+          policyAdjustment: 0.32,
+          retrievalReasons: ["semantic:0.8200", "family:exact"],
+          policyReasons: ["family:1.0000", "maturity:0.1200"],
+          totalScore: 0.9,
+          familyScore: 1,
+          scopeMatch: true,
+          taskFamilyMatch: true,
+          state: "active",
+          helpedCount: 2,
+          harmedCount: 0,
+          validationState: "validated_by_reuse",
+          matchScorecard: {
+            scopeMatch: "same",
+            taskTypeMatch: "high",
+            techStackMatch: "medium",
+            failureSignatureMatch: "medium",
+            artifactMatch: "medium",
+            intentMatch: "high",
+            negativeEvidence: [],
+            overallMatchBand: "medium",
+            directInjectEligible: false
+          },
+          scoreMargin: 0.2
+        }
+      })
+    ).toEqual({
+      decision: "inject_conservative",
+      reason: "high_trust_medium_match"
+    });
+  });
+
+  it("skips low-match candidates even when raw retrieval confidence is high", () => {
+    expect(
+      evaluateTriggerRoute(baseInput, lowFailureStats, {
+        candidateQuality: {
+          semanticScore: 0.92,
+          retrievalScore: 0.61,
+          policyAdjustment: 0.34,
+          retrievalReasons: ["semantic:0.9200", "family:exact"],
+          policyReasons: ["family:1.0000", "maturity:0.1200"],
+          totalScore: 0.98,
+          familyScore: 1,
+          scopeMatch: true,
+          taskFamilyMatch: true,
+          state: "active",
+          helpedCount: 4,
+          harmedCount: 0,
+          validationState: "validated_by_reuse",
+          matchScorecard: {
+            scopeMatch: "same",
+            taskTypeMatch: "high",
+            techStackMatch: "low",
+            failureSignatureMatch: "low",
+            artifactMatch: "low",
+            intentMatch: "medium",
+            negativeEvidence: ["failure_signature_mismatch"],
+            overallMatchBand: "low",
+            directInjectEligible: false
+          },
+          scoreMargin: 0.25
+        }
+      })
+    ).toEqual({
+      decision: "skip",
+      reason: "low_match_scorecard"
+    });
   });
 
   it("routes close same-family active candidates through conservative injection instead of skipping", () => {

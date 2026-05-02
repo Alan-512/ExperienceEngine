@@ -108,6 +108,7 @@ const toCandidateQuality = (
     helpedCount: node.helped_count,
     harmedCount: node.harmed_count,
     validationState: node.validation_state as ValidationState | undefined,
+    matchScorecard: candidate.matchScorecard,
     scoreMargin: candidate.scoreMargin
   };
 };

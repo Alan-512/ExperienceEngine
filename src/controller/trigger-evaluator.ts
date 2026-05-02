@@ -1,4 +1,4 @@
-import type { ExperienceInput, ExperienceState, ScopeTaskStats, ValidationState } from "../types/domain.js";
+import type { ExperienceInput, ExperienceState, MatchScorecard, ScopeTaskStats, ValidationState } from "../types/domain.js";
 import { tokenize } from "../utils/text.js";
 
 export type TriggerCandidateQuality = {
@@ -15,6 +15,7 @@ export type TriggerCandidateQuality = {
   helpedCount: number;
   harmedCount: number;
   validationState?: ValidationState;
+  matchScorecard?: MatchScorecard;
   scoreMargin: number;
 };
 
@@ -112,6 +113,20 @@ export const evaluateTriggerRoute = (
       candidateQuality.validationState === "validated_by_reuse"
     ) &&
     hasPolicySupport;
+  const highTrustCandidate =
+    candidateQuality &&
+    candidateQuality.scopeMatch &&
+    candidateQuality.taskFamilyMatch &&
+    candidateQuality.state === "active" &&
+    candidateQuality.helpedCount >= candidateQuality.harmedCount &&
+    (
+      candidateQuality.helpedCount >= 2 ||
+      candidateQuality.validationState === "validated_by_reuse"
+    );
+
+  if (candidateQuality?.matchScorecard?.overallMatchBand === "low") {
+    return { decision: "skip", reason: "low_match_scorecard" };
+  }
 
   if (explicitFailure) {
     return { decision: "allow", reason: "explicit_failure_signal" };
@@ -119,6 +134,14 @@ export const evaluateTriggerRoute = (
 
   if (failureRate >= threshold) {
     return { decision: "allow", reason: "scope_failure_rate_high" };
+  }
+
+  if (highTrustCandidate && candidateQuality.matchScorecard?.overallMatchBand === "high") {
+    return { decision: "allow", reason: "high_trust_high_match" };
+  }
+
+  if (highTrustCandidate && candidateQuality.matchScorecard?.overallMatchBand === "medium") {
+    return { decision: "inject_conservative", reason: "high_trust_medium_match" };
   }
 
   if (strongCandidate) {
