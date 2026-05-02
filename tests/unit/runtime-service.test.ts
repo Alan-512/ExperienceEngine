@@ -8,6 +8,7 @@ import { resolveScope } from "../../src/input/scope-resolver.js";
 import { ExperienceRuntimeService } from "../../src/runtime/service.js";
 import { decidePosttaskHybridRoute } from "../../src/runtime/service.js";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
+import { InjectionRepository } from "../../src/store/sqlite/repositories/injection-repo.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
 import { clearEmbeddingProviderForTests, setEmbeddingProviderForTests } from "../../src/store/vector/embeddings.js";
 import { nowIso } from "../../src/utils/clock.js";
@@ -540,6 +541,17 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     expect(prompt.mode).toBe("skip");
     expect(prompt.text).toBeUndefined();
     expect(prompt.input.injected_node_ids).toEqual([]);
+
+    const latestDecision = new InjectionRepository(db).getLatestBySessionId("shadow-only-session");
+    expect(latestDecision).toMatchObject({
+      session_id: "shadow-only-session",
+      scope_id: scope.scope_id,
+      mode: "skip",
+      delivery_mode: "live",
+      delivered: false,
+      injected_node_ids: [],
+      injection_count: 0
+    });
   });
 
   it("builds retrieval context on the prompt-time runtime path before any tool events exist", async () => {

@@ -183,10 +183,11 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
     console.log(`Scope: ${record.scopeId}`);
     console.log(`Task type: ${record.taskType}`);
     console.log(`Intervention: ${record.intervention}`);
-    if (record.scorecard?.mode) {
-      console.log(`Delivery style: ${describeDeliveryStyle(record.scorecard.mode)}`);
+    const deliveryStyleMode = record.scorecard?.mode ?? (record.intervention === "skip" ? "skip" : undefined);
+    if (deliveryStyleMode) {
+      console.log(`Delivery style: ${describeDeliveryStyle(deliveryStyleMode)}`);
       if (verbose) {
-        console.log(`Route mode: ${record.scorecard.mode}`);
+        console.log(`Route mode: ${deliveryStyleMode}`);
       }
     }
     console.log(`Automatic feedback: ${record.autoFeedback}`);

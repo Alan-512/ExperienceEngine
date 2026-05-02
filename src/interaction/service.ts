@@ -828,7 +828,9 @@ export class ExperienceInteractionService {
     const reviewEvents = taskRun?.id ? this.reviewEventRepo.listByTaskRunId(taskRun.id) : [];
     const autoFeedback = summarizeAutomaticFeedback(reviewEvents);
     const intervention =
-      selectedNodeIds.length === 0
+      injectionEvent?.mode === "skip"
+        ? "skip"
+        : selectedNodeIds.length === 0
         ? "skip"
         : injectionEvent && !injectionEvent.delivered
           ? injectionEvent.delivery_mode === "holdout"
@@ -895,7 +897,9 @@ export class ExperienceInteractionService {
     const reviewEvents = taskRun?.id ? this.reviewEventRepo.listByTaskRunId(taskRun.id) : [];
     const autoFeedback = summarizeAutomaticFeedback(reviewEvents);
     const latestAutomaticFeedback = reviewEvents.find((reviewEvent) => reviewEvent.source === "automatic");
-    const intervention: ExperienceLastInspection["intervention"] = !event.delivered
+    const intervention: ExperienceLastInspection["intervention"] = event.mode === "skip"
+      ? "skip"
+      : !event.delivered
       ? event.delivery_mode === "holdout"
         ? "holdout"
         : "shadow"

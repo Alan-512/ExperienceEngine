@@ -400,6 +400,43 @@ describe("inspect command", () => {
     );
   });
 
+  it("prints persisted skip delivery decisions", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+
+    const scopeId = resolveScope(process.cwd()).scope_id;
+    new InjectionRepository(db).upsert({
+      injection_id: "decision_skip",
+      session_id: "session_skip",
+      scope_id: scopeId,
+      task_type: "test_debug",
+      task_summary: "Fix the failing auth test",
+      mode: "skip",
+      delivery_mode: "live",
+      delivered: true,
+      injected_node_ids: [],
+      injection_count: 0,
+      was_successful: null,
+      harm_observed: null,
+      created_at: "2026-03-14T02:00:00.000Z"
+    });
+
+    runInspectCommand("--last");
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Session: session_skip"],
+        [`Scope: ${scopeId}`],
+        ["Task type: test_debug"],
+        ["Intervention: skip"],
+        ["Delivery style: no hint delivered"],
+        ["Automatic feedback: none"]
+      ])
+    );
+  });
+
   it("prints learning status and rejection reason for recorded-only tasks", () => {
     const home = makeTempDir();
     process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");

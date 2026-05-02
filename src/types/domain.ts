@@ -264,7 +264,7 @@ export type InjectionEvent = {
   scope_id: string;
   task_type: TaskType;
   task_summary?: string;
-  mode: Exclude<InjectionMode, "skip">;
+  mode: InjectionMode;
   delivery_mode: EvaluationMode;
   delivered: boolean;
   injected_node_ids: string[];

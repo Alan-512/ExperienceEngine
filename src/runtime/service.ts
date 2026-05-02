@@ -1086,35 +1086,34 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       injectedNodeIds: session.injectedNodeIds
     };
 
-    if (decision.mode !== "skip") {
-      const scorecard = buildInjectionScorecard(
+    const scorecard =
+      decision.mode !== "skip"
+        ? buildInjectionScorecard(
         input,
         decision.mode,
         decision.selected,
         sessionId,
         decision.diagnostics
-      );
-      const injectionEvent: InjectionEvent = {
-        injection_id: createId("inject"),
-        session_id: sessionId,
-        scope_id: input.scope_id,
-        task_type: input.task_type === "unknown" ? "general" : input.task_type,
-        task_summary: input.task_summary,
-        mode: decision.mode,
-        delivery_mode: delivery.deliveryMode,
-        delivered: delivery.delivered,
-        injected_node_ids: selectedNodeIds,
-        injection_count: selectedNodeIds.length,
-        scorecard,
-        was_successful: null,
-        harm_observed: null,
-        created_at: nowIso()
-      };
-      this.injectionRepo.upsert(injectionEvent);
-      session.lastInjectionEvent = injectionEvent;
-    } else {
-      session.lastInjectionEvent = undefined;
-    }
+      )
+        : undefined;
+    const injectionEvent: InjectionEvent = {
+      injection_id: createId(decision.mode === "skip" ? "decision" : "inject"),
+      session_id: sessionId,
+      scope_id: input.scope_id,
+      task_type: input.task_type === "unknown" ? "general" : input.task_type,
+      task_summary: input.task_summary,
+      mode: decision.mode,
+      delivery_mode: delivery.deliveryMode,
+      delivered: delivery.delivered,
+      injected_node_ids: selectedNodeIds,
+      injection_count: selectedNodeIds.length,
+      scorecard,
+      was_successful: null,
+      harm_observed: null,
+      created_at: nowIso()
+    };
+    this.injectionRepo.upsert(injectionEvent);
+    session.lastInjectionEvent = injectionEvent;
 
     this.logger.debug?.("experienceengine.before_prompt_build", {
       sessionId,
