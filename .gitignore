@@ -17,6 +17,7 @@ artifacts/
 .worktrees/
 docs/superpowers/specs/
 docs/superpowers/plans/
+docs/development
 .claude-plugin/
 .codex/skills/
 scripts/tmp-*
