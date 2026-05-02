@@ -33,6 +33,19 @@ export type CorrectionCategory =
   | "style_constraint";
 export type InjectionMode = "skip" | "inject_conservative" | "inject";
 export type InjectionRiskLevel = "low" | "medium" | "high";
+export type MatchBand = "high" | "medium" | "low";
+export type ScopeMatchBand = "same" | "related" | "cross" | "none";
+export type MatchScorecard = {
+  scopeMatch: ScopeMatchBand;
+  taskTypeMatch: MatchBand;
+  techStackMatch: MatchBand;
+  failureSignatureMatch: MatchBand;
+  artifactMatch: MatchBand;
+  intentMatch: MatchBand;
+  negativeEvidence: string[];
+  overallMatchBand: MatchBand;
+  directInjectEligible: boolean;
+};
 export type InterventionConfidence = "low" | "medium" | "high";
 export type InterventionBudgetClass = "none" | "single_hint" | "multi_hint";
 export type SyncSecondOpinionDecision = "allow" | "allow_conservative" | "skip";
@@ -294,6 +307,7 @@ export type InjectionScorecardNode = {
 
 export type InjectionScorecardCandidate = {
   id: string;
+  matchScorecard?: MatchScorecard;
   semanticScore?: number;
   lexicalScore?: number;
   fusedScore?: number;

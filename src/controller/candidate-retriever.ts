@@ -1,4 +1,4 @@
-import type { ExperienceInput, ExperienceNode, RetrievalContext, TaskType } from "../types/domain.js";
+import type { ExperienceInput, ExperienceNode, MatchBand, MatchScorecard, RetrievalContext, TaskType } from "../types/domain.js";
 import {
   buildLegacyEmbedding,
   embedQueryText,
@@ -27,6 +27,7 @@ export type RetrievedCandidate = {
   rerankScore?: number;
   rerankSource?: "heuristic" | "model";
   familyScore: number;
+  matchScorecard?: MatchScorecard;
   totalScore: number;
   scopeMatch: boolean;
   taskFamilyMatch: boolean;
@@ -289,6 +290,139 @@ const buildRetrievalReasons = (input: {
   return reasons;
 };
 
+const KNOWN_TECH_STACK_TERMS = [
+  "wxml",
+  "wechat",
+  "miniprogram",
+  "cocos",
+  "openrouter",
+  "sqlite",
+  "vitest",
+  "playwright",
+  "typescript"
+];
+
+const normalizeSignalText = (value?: string): string => value?.toLowerCase().trim() ?? "";
+
+const buildNodeSignalText = (node: ExperienceNode): string =>
+  [
+    node.trigger_pattern,
+    node.compact_hint,
+    node.evidence_summary,
+    node.retrieval_text,
+    node.goal,
+    node.success_signal,
+    node.recommended_steps?.join(" ")
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+const escapeRegExp = (value: string): string => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const hasPhrase = (haystack: string, phrase?: string): boolean => {
+  const normalizedPhrase = normalizeSignalText(phrase);
+  return Boolean(normalizedPhrase) && haystack.includes(normalizedPhrase);
+};
+
+const extractArtifactFamilies = (text: string): Set<string> => {
+  const families = new Set<string>();
+  const extensionPattern = /\.([a-z0-9]+)\b/g;
+  for (const match of text.matchAll(extensionPattern)) {
+    families.add(match[1] ?? "");
+  }
+  for (const term of KNOWN_TECH_STACK_TERMS) {
+    if (new RegExp(`\\b${escapeRegExp(term)}\\b`, "i").test(text)) {
+      families.add(term);
+    }
+  }
+  return new Set([...families].filter(Boolean));
+};
+
+const hasIntersection = (left: Set<string>, right: Set<string>): boolean =>
+  [...left].some((value) => right.has(value));
+
+const bandFromScore = (score: number): MatchBand => {
+  if (score >= 0.75) {
+    return "high";
+  }
+  if (score >= 0.4) {
+    return "medium";
+  }
+  return "low";
+};
+
+const buildMatchScorecard = (
+  input: ExperienceInput,
+  node: ExperienceNode,
+  retrievalContext?: RetrievalContext
+): MatchScorecard => {
+  const nodeText = buildNodeSignalText(node);
+  const taskText = normalizeSignalText(
+    `${retrievalContext?.taskSummary ?? input.task_summary} ${retrievalContext?.contextSummary ?? input.context_summary ?? ""}`
+  );
+  const negativeEvidence: string[] = [];
+
+  const scopeMatch = node.scope_id === input.scope_id ? "same" : "cross";
+  const taskTypeMatch: MatchBand =
+    node.task_type === input.task_type || node.task_type === retrievalContext?.taskType
+      ? "high"
+      : node.task_type === "general" || input.task_type === "general"
+        ? "medium"
+        : "low";
+
+  const currentFailure = normalizeSignalText(retrievalContext?.failureSignature);
+  const failureSignatureMatch: MatchBand = currentFailure
+    ? hasPhrase(nodeText, currentFailure)
+      ? "high"
+      : "low"
+    : "medium";
+  if (currentFailure && failureSignatureMatch === "low") {
+    negativeEvidence.push("failure_signature_mismatch");
+  }
+
+  const currentArtifacts = extractArtifactFamilies(
+    `${retrievalContext?.modulePaths?.join(" ") ?? ""} ${taskText}`
+  );
+  const nodeArtifacts = extractArtifactFamilies(nodeText);
+  const artifactMatch: MatchBand =
+    currentArtifacts.size === 0
+      ? "medium"
+      : hasIntersection(currentArtifacts, nodeArtifacts)
+        ? "high"
+        : "low";
+  if (currentArtifacts.size > 0 && nodeArtifacts.size > 0 && artifactMatch === "low") {
+    negativeEvidence.push("artifact_mismatch");
+  }
+
+  const techStackMatch: MatchBand = artifactMatch === "high" ? "high" : artifactMatch === "medium" ? "medium" : "low";
+  const intentMatch = bandFromScore(textOverlapScore(taskText, nodeText));
+
+  let overallScore = 0;
+  overallScore += scopeMatch === "same" ? 0.28 : 0.08;
+  overallScore += taskTypeMatch === "high" ? 0.2 : taskTypeMatch === "medium" ? 0.1 : 0;
+  overallScore += failureSignatureMatch === "high" ? 0.22 : failureSignatureMatch === "medium" ? 0.08 : 0;
+  overallScore += artifactMatch === "high" ? 0.18 : artifactMatch === "medium" ? 0.08 : 0;
+  overallScore += intentMatch === "high" ? 0.12 : intentMatch === "medium" ? 0.06 : 0;
+  if (negativeEvidence.length) {
+    overallScore = Math.min(overallScore, 0.68);
+  }
+
+  const overallMatchBand = bandFromScore(overallScore);
+
+  return {
+    scopeMatch,
+    taskTypeMatch,
+    techStackMatch,
+    failureSignatureMatch,
+    artifactMatch,
+    intentMatch,
+    negativeEvidence,
+    overallMatchBand,
+    directInjectEligible: scopeMatch === "same" && overallMatchBand === "high" && negativeEvidence.length === 0
+  };
+};
+
 export const retrieveCandidates = async (
   input: ExperienceInput,
   nodes: ExperienceNode[],
@@ -373,6 +507,7 @@ export const retrieveCandidateBundle = async (
       const fusedScore = fusedScoreById.get(node.id) ?? Math.max(semanticScore, lexicalScore);
       const retrievalScore = fusedScore * 0.68;
       const policy = enrichPolicyForCandidate(input, node, options.retrievalContext);
+      const matchScorecard = buildMatchScorecard(input, node, options.retrievalContext);
       const retrievalReasons = buildRetrievalReasons({
         semanticScore,
         lexicalScore,
@@ -393,6 +528,7 @@ export const retrieveCandidateBundle = async (
         policyScore: policy.policyScore,
         policyReasons: policy.reasons,
         familyScore: policy.familyScore,
+        matchScorecard,
         totalScore,
         scopeMatch: node.scope_id === input.scope_id,
         taskFamilyMatch: node.task_type === input.task_type
@@ -446,6 +582,7 @@ export const retrieveCandidateBundle = async (
           policyScore,
           policyReasons,
           familyScore,
+          matchScorecard,
           totalScore,
           scopeMatch,
           taskFamilyMatch
@@ -460,6 +597,7 @@ export const retrieveCandidateBundle = async (
           policyScore,
           policyReasons,
           familyScore,
+          matchScorecard,
           totalScore,
           scopeMatch,
           taskFamilyMatch

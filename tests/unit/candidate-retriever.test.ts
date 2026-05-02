@@ -133,6 +133,75 @@ describe("retrieveCandidates", () => {
     expect(candidates.map((entry) => entry.id)).not.toContain("far-family-node");
   });
 
+  it("marks same-scope candidates with matching failure and artifact signals as high match", async () => {
+    const candidates = await retrieveScoredCandidates(
+      input({
+        task_type: "test_debug",
+        task_summary: "Fix WXML compile error: unexpected end-tag near miniprogram/pages/index/index.wxml"
+      }),
+      [
+        node({
+          id: "wxml-match",
+          task_type: "test_debug",
+          trigger_pattern: "WXML compile error with unexpected end-tag in miniprogram/pages/index/index.wxml",
+          compact_hint: "Inspect the WXML file for corrupted text and add an integrity test.",
+          evidence_summary: "Failure signature: unexpected end-tag. Artifact: miniprogram/pages/index/index.wxml.",
+          retrieval_text:
+            "WXML compile error unexpected end-tag miniprogram/pages/index/index.wxml corrupted text integrity test"
+        })
+      ],
+      {
+        retrievalContext: retrievalContext({
+          taskType: "test_debug",
+          taskSummary: "Fix WXML compile error: unexpected end-tag near miniprogram/pages/index/index.wxml",
+          failureSignature: "unexpected end-tag",
+          modulePaths: ["miniprogram/pages/index/index.wxml"]
+        })
+      }
+    );
+
+    expect(candidates[0]?.matchScorecard).toMatchObject({
+      scopeMatch: "same",
+      taskTypeMatch: "high",
+      failureSignatureMatch: "high",
+      artifactMatch: "high",
+      overallMatchBand: "high",
+      directInjectEligible: true
+    });
+    expect(candidates[0]?.matchScorecard?.negativeEvidence).toEqual([]);
+  });
+
+  it("caps same-scope candidates with conflicting failure signatures below high match", async () => {
+    const candidates = await retrieveScoredCandidates(
+      input({
+        task_type: "test_debug",
+        task_summary: "Fix WXML compile error: missing closing tag near miniprogram/pages/index/index.wxml"
+      }),
+      [
+        node({
+          id: "wxml-different-failure",
+          task_type: "test_debug",
+          trigger_pattern: "WXML compile error with unexpected end-tag in miniprogram/pages/index/index.wxml",
+          compact_hint: "Inspect the WXML file for corrupted text and add an integrity test.",
+          evidence_summary: "Failure signature: unexpected end-tag. Artifact: miniprogram/pages/index/index.wxml.",
+          retrieval_text:
+            "WXML compile error unexpected end-tag miniprogram/pages/index/index.wxml corrupted text integrity test"
+        })
+      ],
+      {
+        retrievalContext: retrievalContext({
+          taskType: "test_debug",
+          taskSummary: "Fix WXML compile error: missing closing tag near miniprogram/pages/index/index.wxml",
+          failureSignature: "missing closing tag",
+          modulePaths: ["miniprogram/pages/index/index.wxml"]
+        })
+      }
+    );
+
+    expect(candidates[0]?.matchScorecard?.overallMatchBand).not.toBe("high");
+    expect(candidates[0]?.matchScorecard?.negativeEvidence).toContain("failure_signature_mismatch");
+  });
+
   it("downranks low-specificity legacy hints below more specific distilled nodes", async () => {
     const candidates = await retrieveCandidates(
       input({

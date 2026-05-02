@@ -114,6 +114,7 @@ const toCandidateQuality = (
 
 const toScorecardCandidate = (candidate: RetrievedCandidate): InjectionScorecardCandidate => ({
   id: candidate.node.id,
+  matchScorecard: candidate.matchScorecard,
   semanticScore: Number(candidate.semanticScore.toFixed(4)),
   lexicalScore: Number(candidate.lexicalScore.toFixed(4)),
   fusedScore: Number(candidate.fusedScore.toFixed(4)),
