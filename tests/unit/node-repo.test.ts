@@ -175,4 +175,19 @@ describe("NodeRepository", () => {
       "scope-priority"
     ]);
   });
+
+  it("lists conservative cross-scope candidates separately from exact-scope candidates", () => {
+    const { repo } = makeRepo();
+
+    repo.upsert(node({ id: "current-active", scope_id: "scope_1", state: "active" }));
+    repo.upsert(node({ id: "cross-active", scope_id: "scope_2", state: "active" }));
+    repo.upsert(node({ id: "cross-priority", scope_id: "scope_3", state: "priority_candidate" }));
+    repo.upsert(node({ id: "cross-shadow", scope_id: "scope_4", state: "candidate" }));
+    repo.upsert(node({ id: "cross-quarantined", scope_id: "scope_5", state: "active", delivery_state: "quarantined" }));
+
+    const crossScope = (repo as unknown as { listConservativeCrossScopeCandidates: (scopeId: string) => ExperienceNode[] })
+      .listConservativeCrossScopeCandidates("scope_1");
+
+    expect(crossScope.map((entry) => entry.id).sort()).toEqual(["cross-active", "cross-priority"]);
+  });
 });

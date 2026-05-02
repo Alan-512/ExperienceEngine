@@ -254,6 +254,43 @@ describe("evaluateTrigger", () => {
     });
   });
 
+  it("allows cross-scope high-match candidates only as conservative injection", () => {
+    expect(
+      evaluateTriggerRoute(baseInput, lowFailureStats, {
+        candidateQuality: {
+          semanticScore: 0.9,
+          retrievalScore: 0.61,
+          policyAdjustment: 0.34,
+          retrievalReasons: ["semantic:0.9000", "family:exact"],
+          policyReasons: ["family:1.0000", "maturity:0.1200"],
+          totalScore: 0.95,
+          familyScore: 1,
+          scopeMatch: false,
+          taskFamilyMatch: true,
+          state: "active",
+          helpedCount: 5,
+          harmedCount: 0,
+          validationState: "validated_by_reuse",
+          matchScorecard: {
+            scopeMatch: "cross",
+            taskTypeMatch: "high",
+            techStackMatch: "high",
+            failureSignatureMatch: "high",
+            artifactMatch: "high",
+            intentMatch: "high",
+            negativeEvidence: [],
+            overallMatchBand: "high",
+            directInjectEligible: false
+          },
+          scoreMargin: 0.2
+        }
+      })
+    ).toEqual({
+      decision: "inject_conservative",
+      reason: "cross_scope_high_match"
+    });
+  });
+
   it("routes close same-family active candidates through conservative injection instead of skipping", () => {
     expect(
       evaluateTriggerRoute(baseInput, lowFailureStats, {

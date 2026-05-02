@@ -322,6 +322,18 @@ export class NodeRepository {
       .map((row) => this.mapNode(row as Parameters<typeof this.mapNode>[0]));
   }
 
+  listConservativeCrossScopeCandidates(scopeId: string): ExperienceNode[] {
+    return this.db
+      .prepare(
+        `SELECT * FROM experience_nodes
+         WHERE scope_id != ?
+           AND delivery_state IN ('eligible', 'conservative_only')
+         ORDER BY updated_at DESC`
+      )
+      .all(scopeId)
+      .map((row) => this.mapNode(row as Parameters<typeof this.mapNode>[0]));
+  }
+
   listShadowEligibleByExactScope(scopeId: string): ExperienceNode[] {
     return this.db
       .prepare(

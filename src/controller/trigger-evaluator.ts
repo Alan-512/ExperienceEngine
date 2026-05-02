@@ -144,6 +144,17 @@ export const evaluateTriggerRoute = (
     return { decision: "inject_conservative", reason: "high_trust_medium_match" };
   }
 
+  if (
+    candidateQuality?.matchScorecard?.scopeMatch === "cross" &&
+    (candidateQuality.matchScorecard.overallMatchBand === "high" || candidateQuality.matchScorecard.overallMatchBand === "medium") &&
+    candidateQuality.matchScorecard.negativeEvidence.length === 0 &&
+    candidateQuality.taskFamilyMatch &&
+    candidateQuality.totalScore >= 0.75 &&
+    candidateQuality.helpedCount >= candidateQuality.harmedCount
+  ) {
+    return { decision: "inject_conservative", reason: "cross_scope_high_match" };
+  }
+
   if (strongCandidate) {
     return { decision: "allow", reason: "strong_candidate_quality" };
   }

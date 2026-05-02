@@ -504,6 +504,10 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     return this.nodeRepo.listLiveInjectableByExactScope(scopeId);
   }
 
+  private resolveConservativeCrossScopeCandidates(scopeId: string): ExperienceNode[] {
+    return this.nodeRepo.listConservativeCrossScopeCandidates(scopeId);
+  }
+
   recoverToolEvents(sessionId: string, payload: unknown): void {
     for (const toolResult of extractToolResultsFromPayload(payload)) {
       const recoveredEvent = toolResult.toolCallId
@@ -1107,7 +1111,12 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
 
     const stats =
       input.task_type !== "unknown" ? this.statsRepo.get(input.scope_id, input.task_type) : undefined;
-    const nodes = input.task_type !== "unknown" ? this.resolveExactScopeInjectableNodes(input.scope_id) : [];
+    const nodes = input.task_type !== "unknown"
+      ? [
+          ...this.resolveExactScopeInjectableNodes(input.scope_id),
+          ...this.resolveConservativeCrossScopeCandidates(input.scope_id)
+        ]
+      : [];
     const decision = await decideIntervention(
       input,
       nodes,
