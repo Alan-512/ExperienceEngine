@@ -3,6 +3,7 @@ import type { ReviewEvent } from "../../../types/domain.js";
 
 type ReviewEventRow = {
   id: string;
+  episode_id: string | null;
   node_id: string;
   task_run_id: string | null;
   event_type: ReviewEvent["event_type"];
@@ -16,6 +17,7 @@ export class ReviewEventRepository {
   private mapRow(row: ReviewEventRow): ReviewEvent {
     return {
       id: row.id,
+      episode_id: row.episode_id ?? undefined,
       node_id: row.node_id,
       task_run_id: row.task_run_id ?? undefined,
       event_type: row.event_type,
@@ -28,16 +30,18 @@ export class ReviewEventRepository {
     this.db
       .prepare(
         `INSERT INTO review_events
-          (id, node_id, task_run_id, event_type, source, created_at)
+          (id, episode_id, node_id, task_run_id, event_type, source, created_at)
          VALUES
-          (@id, @node_id, @task_run_id, @event_type, @source, @created_at)
+          (@id, @episode_id, @node_id, @task_run_id, @event_type, @source, @created_at)
          ON CONFLICT(id) DO UPDATE SET
+          episode_id = excluded.episode_id,
           task_run_id = excluded.task_run_id,
           event_type = excluded.event_type,
           source = excluded.source`
       )
       .run({
         id: event.id,
+        episode_id: event.episode_id ?? null,
         node_id: event.node_id,
         task_run_id: event.task_run_id ?? null,
         event_type: event.event_type,
@@ -66,6 +70,13 @@ export class ReviewEventRepository {
     return this.db
       .prepare("SELECT * FROM review_events WHERE task_run_id = ? ORDER BY created_at DESC")
       .all(taskRunId)
+      .map((row) => this.mapRow(row as ReviewEventRow));
+  }
+
+  listByEpisodeId(episodeId: string): ReviewEvent[] {
+    return this.db
+      .prepare("SELECT * FROM review_events WHERE episode_id = ? ORDER BY created_at DESC")
+      .all(episodeId)
       .map((row) => this.mapRow(row as ReviewEventRow));
   }
 

@@ -3,6 +3,7 @@ import type { TaskRun } from "../../../types/domain.js";
 
 type TaskRunRow = {
   id: string;
+  episode_id: string | null;
   host: TaskRun["host"];
   scope_id: string;
   session_id: string | null;
@@ -26,6 +27,7 @@ export class TaskRunRepository {
   private mapRow(row: TaskRunRow): TaskRun {
     return {
       id: row.id,
+      episode_id: row.episode_id ?? undefined,
       host: row.host,
       scope_id: row.scope_id,
       session_id: row.session_id ?? undefined,
@@ -48,12 +50,13 @@ export class TaskRunRepository {
     this.db
       .prepare(
         `INSERT INTO task_runs
-          (id, host, scope_id, session_id, task_type, task_summary, prompt_excerpt, context_summary,
+          (id, episode_id, host, scope_id, session_id, task_type, task_summary, prompt_excerpt, context_summary,
            started_at, ended_at, final_status, failure_signature, learning_status, learning_reason, created_at, updated_at)
          VALUES
-          (@id, @host, @scope_id, @session_id, @task_type, @task_summary, @prompt_excerpt, @context_summary,
+          (@id, @episode_id, @host, @scope_id, @session_id, @task_type, @task_summary, @prompt_excerpt, @context_summary,
            @started_at, @ended_at, @final_status, @failure_signature, @learning_status, @learning_reason, @created_at, @updated_at)
          ON CONFLICT(id) DO UPDATE SET
+          episode_id = excluded.episode_id,
           ended_at = excluded.ended_at,
           final_status = excluded.final_status,
           failure_signature = excluded.failure_signature,
@@ -65,6 +68,7 @@ export class TaskRunRepository {
       )
       .run({
         id: taskRun.id,
+        episode_id: taskRun.episode_id ?? null,
         host: taskRun.host,
         scope_id: taskRun.scope_id,
         session_id: taskRun.session_id ?? null,
@@ -94,6 +98,13 @@ export class TaskRunRepository {
     const row = this.db
       .prepare("SELECT * FROM task_runs WHERE session_id = ? ORDER BY updated_at DESC LIMIT 1")
       .get(sessionId) as TaskRunRow | undefined;
+    return row ? this.mapRow(row) : undefined;
+  }
+
+  getLatestByEpisodeId(episodeId: string): TaskRun | undefined {
+    const row = this.db
+      .prepare("SELECT * FROM task_runs WHERE episode_id = ? ORDER BY updated_at DESC LIMIT 1")
+      .get(episodeId) as TaskRunRow | undefined;
     return row ? this.mapRow(row) : undefined;
   }
 

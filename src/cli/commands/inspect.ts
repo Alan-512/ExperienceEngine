@@ -180,6 +180,9 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
     }
 
     console.log(`Session: ${record.sessionId ?? "unknown"}`);
+    if (record.episodeId) {
+      console.log(`Episode: ${record.episodeId}`);
+    }
     console.log(`Scope: ${record.scopeId}`);
     console.log(`Task type: ${record.taskType}`);
     console.log(`Intervention: ${record.intervention}`);

@@ -99,6 +99,7 @@ const loadHybridPostmortemProviderClient = async (): Promise<typeof import("../h
 
 type SessionState = {
   context?: HostPromptContext;
+  episodeId?: string;
   toolEvents: ToolEvent[];
   toolEventKeys: Set<string>;
   injectedNodeIds: string[];
@@ -112,8 +113,9 @@ const toEvidence = (input: ExperienceInput): string[] =>
       .join(": ")
   );
 
-const toInputRecord = (input: ExperienceInput, sessionId?: string): ExperienceInputRecord => ({
+const toInputRecord = (input: ExperienceInput, sessionId?: string, episodeId?: string): ExperienceInputRecord => ({
   record_id: createId("input"),
+  episode_id: episodeId,
   scope_id: input.scope_id,
   session_id: sessionId,
   task_type: input.task_type,
@@ -125,12 +127,13 @@ const toInputRecord = (input: ExperienceInput, sessionId?: string): ExperienceIn
   created_at: nowIso()
 });
 
-const toTaskRun = (input: ExperienceInput, sessionId: string, context: HostPromptContext): TaskRun => {
+const toTaskRun = (input: ExperienceInput, sessionId: string, context: HostPromptContext, episodeId?: string): TaskRun => {
   const timestamp = nowIso();
   const signals = buildCandidateSignals(input);
 
   return {
     id: stableId("taskrun", `${sessionId}:${input.task_summary}:${timestamp}`),
+    episode_id: episodeId,
     host: context.host ?? "openclaw",
     scope_id: input.scope_id,
     session_id: sessionId,
@@ -150,8 +153,9 @@ const toTaskRun = (input: ExperienceInput, sessionId: string, context: HostPromp
   };
 };
 
-const toOutcomeRecord = (taskRun: TaskRun, input: ExperienceInput): OutcomeRecord => ({
+const toOutcomeRecord = (taskRun: TaskRun, input: ExperienceInput, episodeId?: string): OutcomeRecord => ({
   id: createId("outcome"),
+  episode_id: episodeId,
   task_run_id: taskRun.id,
   outcome_signal: input.outcome_signal,
   failure_signature: taskRun.failure_signature,
@@ -175,6 +179,11 @@ const buildCandidateSourceSignal = (input: ExperienceInput): CandidateSourceSign
     evidence_driven_reversal: signals.evidence_driven_reversal,
     tool_event_summary: signals.tool_event_summary
   };
+};
+
+const resolveEpisodeId = (session: SessionState, sessionId: string, input: Pick<ExperienceInput, "scope_id" | "task_summary">): string => {
+  session.episodeId ??= stableId("episode", `${sessionId}:${input.scope_id}:${input.task_summary}`);
+  return session.episodeId;
 };
 
 const mergeDirectionalCorrectionIntoSourceSignal = (
@@ -580,7 +589,8 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   private persistFinalizedInput(
     input: ExperienceInput,
     sessionId: string,
-    session: SessionState
+    session: SessionState,
+    episodeId?: string
   ): ExperienceInputRecord {
     const resolvedScope = resolveScope(session.context?.cwd);
     const existingScope = this.scopeRepo.getById(resolvedScope.scope_id);
@@ -589,7 +599,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       is_disabled: existingScope?.is_disabled ?? resolvedScope.is_disabled
     });
 
-    const record = toInputRecord(input, sessionId);
+    const record = toInputRecord(input, sessionId, episodeId);
     this.inputRepo.upsert(record);
 
     if (input.task_type !== "unknown") {
@@ -784,6 +794,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       if (feedbackEventType) {
         this.reviewEventRepo.upsert({
           id: createId("review"),
+          episode_id: input.taskRun.episode_id,
           node_id: review.node_id,
           task_run_id: input.taskRun.id,
           event_type: feedbackEventType,
@@ -794,6 +805,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       if (current.delivery_state !== "quarantined" && nodeAfterDelivery.delivery_state === "quarantined") {
         this.reviewEventRepo.upsert({
           id: createId("review"),
+          episode_id: input.taskRun.episode_id,
           node_id: review.node_id,
           task_run_id: input.taskRun.id,
           event_type: "quarantine",
@@ -1015,7 +1027,8 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     input: ExperienceInput,
     attributionRecordId: string,
     taskRunId?: string,
-    injectionEvent?: InjectionEvent
+    injectionEvent?: InjectionEvent,
+    episodeId?: string
   ): void {
     if (!input.injected_node_ids.length) {
       return;
@@ -1099,6 +1112,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     for (const event of automaticEvents) {
       this.reviewEventRepo.upsert({
         id: createId("review"),
+        episode_id: episodeId,
         node_id: event.nodeId,
         task_run_id: taskRunId,
         event_type: event.eventType,
@@ -1110,6 +1124,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     for (const nodeId of promotedNodeIds) {
       this.reviewEventRepo.upsert({
         id: createId("review"),
+        episode_id: episodeId,
         node_id: nodeId,
         task_run_id: taskRunId,
         event_type: "promote_eligible",
@@ -1151,6 +1166,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     experienceInput: ExperienceInput;
     inputRecordId: string;
     taskRunId: string;
+    episodeId?: string;
     resolvedInjectionEvent: InjectionEvent;
   }): void {
     const event = input.resolvedInjectionEvent;
@@ -1168,6 +1184,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
         id: stableId("attr", `${event.injection_id}:${nodeId}:automatic`),
         injection_id: event.injection_id,
         node_id: nodeId,
+        episode_id: input.episodeId,
         intervention_strength: event.scorecard?.interventionStrength,
         injection_mode: event.mode,
         delivery_mode: event.delivery_mode,
@@ -1193,6 +1210,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
         id: stableId("attr", `${event.injection_id}:${nodeId}:diagnostic_record`),
         injection_id: event.injection_id,
         node_id: nodeId,
+        episode_id: input.episodeId,
         intervention_strength: "diagnostic_hint",
         injection_mode: event.mode,
         delivery_mode: event.delivery_mode,
@@ -1262,6 +1280,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       this.config,
       retrievalContext
     );
+    const episodeId = resolveEpisodeId(session, sessionId, input);
 
     const selectedNodeIds = decision.selected.map((node) => node.id);
     const delivery = resolveDeliveryMode(
@@ -1291,6 +1310,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
           : undefined;
     const injectionEvent: InjectionEvent = {
       injection_id: createId(decision.mode === "skip" ? "decision" : "inject"),
+      episode_id: episodeId,
       session_id: sessionId,
       scope_id: input.scope_id,
       task_type: input.task_type === "unknown" ? "general" : input.task_type,
@@ -1368,11 +1388,12 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
         }
       | undefined;
     withTransaction(this.db, () => {
-      const record = this.persistFinalizedInput(input, sessionId, session);
-      const taskRun = toTaskRun(input, sessionId, context);
+      const episodeId = resolveEpisodeId(session, sessionId, input);
+      const record = this.persistFinalizedInput(input, sessionId, session, episodeId);
+      const taskRun = toTaskRun(input, sessionId, context, episodeId);
       this.taskRunRepo.upsert(taskRun);
-      this.outcomeRepo.upsert(toOutcomeRecord(taskRun, input));
-      this.updateInjectedNodes(input, record.record_id, taskRun.id, session.lastInjectionEvent);
+      this.outcomeRepo.upsert(toOutcomeRecord(taskRun, input, episodeId));
+      this.updateInjectedNodes(input, record.record_id, taskRun.id, session.lastInjectionEvent, episodeId);
       if (session.lastInjectionEvent) {
         const touchedNodes = session.lastInjectionEvent.injected_node_ids
           .map((id) => this.nodeRepo.getById(id))
@@ -1400,6 +1421,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
           experienceInput: input,
           inputRecordId: record.record_id,
           taskRunId: taskRun.id,
+          episodeId,
           resolvedInjectionEvent
         });
       }

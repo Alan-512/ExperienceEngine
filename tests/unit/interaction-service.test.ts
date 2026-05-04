@@ -84,6 +84,7 @@ const seedLatestInspectionRecord = (homeDir: string, cwd: string): void => {
 
   inputRepo.upsert({
     record_id: "input_latest_explain",
+    episode_id: "episode_latest_explain",
     scope_id: scope.scope_id,
     session_id: "session_latest_explain",
     task_type: "test_debug",
@@ -97,6 +98,7 @@ const seedLatestInspectionRecord = (homeDir: string, cwd: string): void => {
 
   injectionRepo.upsert({
     injection_id: "inject_latest_explain",
+    episode_id: "episode_latest_explain",
     session_id: "session_latest_explain",
     scope_id: scope.scope_id,
     task_type: "test_debug",
@@ -255,6 +257,27 @@ describe("ExperienceInteractionService", () => {
     const explanation = await service.explainLastDecision("/repo", "Why did ExperienceEngine inject that hint here?");
 
     expect(explanation).toContain("ExperienceEngine injected");
+  });
+
+  it("includes episode id in latest inspection when compatible rows have one", () => {
+    const homeDir = makeTempDir();
+    const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_interaction_detail");
+    seedLatestInspectionRecord(homeDir, "/repo");
+
+    const service = new ExperienceInteractionService(config);
+
+    expect(service.inspectLast("/repo")).toMatchObject({
+      episodeId: "episode_latest_explain",
+      episodeProjection: expect.objectContaining({
+        episode_id: "episode_latest_explain",
+        input_records: [expect.objectContaining({ record_id: "input_latest_explain" })],
+        injection_events: [expect.objectContaining({ injection_id: "inject_latest_explain" })]
+      })
+    });
   });
 
   it("keeps shadow-mode hybrid explanations non-user-visible", async () => {

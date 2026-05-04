@@ -6,6 +6,7 @@ export class InjectionRepository {
 
   private mapEvent(row: {
     injection_id: string;
+    episode_id: string | null;
     session_id: string | null;
     scope_id: string;
     task_type: InjectionEvent["task_type"];
@@ -24,6 +25,7 @@ export class InjectionRepository {
   }): InjectionEvent {
     return {
       injection_id: row.injection_id,
+      episode_id: row.episode_id ?? undefined,
       session_id: row.session_id ?? undefined,
       scope_id: row.scope_id,
       task_type: row.task_type,
@@ -45,6 +47,7 @@ export class InjectionRepository {
   upsert(event: InjectionEvent): InjectionEvent {
     const payload = {
       injection_id: event.injection_id,
+      episode_id: event.episode_id ?? null,
       session_id: event.session_id ?? null,
       scope_id: event.scope_id,
       task_type: event.task_type,
@@ -65,10 +68,11 @@ export class InjectionRepository {
     this.db
       .prepare(
         `INSERT INTO injection_events
-          (injection_id, session_id, scope_id, task_type, task_summary, mode, delivery_mode, delivered, injected_node_ids_json, injection_count, scorecard_json, was_successful, harm_observed, attribution_reason, created_at, resolved_at)
+          (injection_id, episode_id, session_id, scope_id, task_type, task_summary, mode, delivery_mode, delivered, injected_node_ids_json, injection_count, scorecard_json, was_successful, harm_observed, attribution_reason, created_at, resolved_at)
          VALUES
-          (@injection_id, @session_id, @scope_id, @task_type, @task_summary, @mode, @delivery_mode, @delivered, @injected_node_ids_json, @injection_count, @scorecard_json, @was_successful, @harm_observed, @attribution_reason, @created_at, @resolved_at)
+          (@injection_id, @episode_id, @session_id, @scope_id, @task_type, @task_summary, @mode, @delivery_mode, @delivered, @injected_node_ids_json, @injection_count, @scorecard_json, @was_successful, @harm_observed, @attribution_reason, @created_at, @resolved_at)
          ON CONFLICT(injection_id) DO UPDATE SET
+          episode_id = excluded.episode_id,
           session_id = excluded.session_id,
           task_summary = excluded.task_summary,
           delivery_mode = excluded.delivery_mode,
@@ -86,7 +90,7 @@ export class InjectionRepository {
   getLatest(): InjectionEvent | undefined {
     const row = this.db
       .prepare(
-        `SELECT injection_id, session_id, scope_id, task_type, task_summary, mode, delivery_mode, delivered, injected_node_ids_json,
+        `SELECT injection_id, episode_id, session_id, scope_id, task_type, task_summary, mode, delivery_mode, delivered, injected_node_ids_json,
                 injection_count, scorecard_json, was_successful, harm_observed, attribution_reason, created_at, resolved_at
          FROM injection_events
          ORDER BY created_at DESC
@@ -100,7 +104,7 @@ export class InjectionRepository {
   getLatestByScope(scopeId: string): InjectionEvent | undefined {
     const row = this.db
       .prepare(
-        `SELECT injection_id, session_id, scope_id, task_type, task_summary, mode, delivery_mode, delivered, injected_node_ids_json,
+        `SELECT injection_id, episode_id, session_id, scope_id, task_type, task_summary, mode, delivery_mode, delivered, injected_node_ids_json,
                 injection_count, scorecard_json, was_successful, harm_observed, attribution_reason, created_at, resolved_at
          FROM injection_events
          WHERE scope_id = ?
@@ -115,7 +119,7 @@ export class InjectionRepository {
   getLatestBySessionId(sessionId: string): InjectionEvent | undefined {
     const row = this.db
       .prepare(
-        `SELECT injection_id, session_id, scope_id, task_type, task_summary, mode, delivery_mode, delivered, injected_node_ids_json,
+        `SELECT injection_id, episode_id, session_id, scope_id, task_type, task_summary, mode, delivery_mode, delivered, injected_node_ids_json,
                 injection_count, scorecard_json, was_successful, harm_observed, attribution_reason, created_at, resolved_at
          FROM injection_events
          WHERE session_id = ?
@@ -129,6 +133,19 @@ export class InjectionRepository {
 
   count(): number {
     return (this.db.prepare("SELECT COUNT(*) AS count FROM injection_events").get() as { count: number }).count;
+  }
+
+  listByEpisodeId(episodeId: string): InjectionEvent[] {
+    return this.db
+      .prepare(
+        `SELECT injection_id, episode_id, session_id, scope_id, task_type, task_summary, mode, delivery_mode, delivered, injected_node_ids_json,
+                injection_count, scorecard_json, was_successful, harm_observed, attribution_reason, created_at, resolved_at
+         FROM injection_events
+         WHERE episode_id = ?
+         ORDER BY created_at DESC`
+      )
+      .all(episodeId)
+      .map((row) => this.mapEvent(row as Parameters<typeof this.mapEvent>[0]));
   }
 
   countByScope(scopeId: string): number {

@@ -14,6 +14,7 @@ import { HybridInvocationTraceRepository } from "../store/sqlite/repositories/hy
 import { InputRecordRepository } from "../store/sqlite/repositories/input-record-repo.js";
 import { InjectionRepository } from "../store/sqlite/repositories/injection-repo.js";
 import { AttributionRecordRepository } from "../store/sqlite/repositories/attribution-record-repo.js";
+import { EpisodeRepository } from "../store/sqlite/repositories/episode-repo.js";
 import { NodeRepository } from "../store/sqlite/repositories/node-repo.js";
 import { OutcomeRecordRepository } from "../store/sqlite/repositories/outcome-record-repo.js";
 import { ReviewEventRepository } from "../store/sqlite/repositories/review-event-repo.js";
@@ -27,6 +28,7 @@ import type {
   ExperienceInputRecord,
   FeedbackAttributionReason,
   AttributionRecord,
+  EpisodeProjection,
   InjectionEvent,
   InjectionScorecard,
   ExperienceNode,
@@ -104,6 +106,7 @@ export type ExperienceTimelineEntry = {
 
 export type ExperienceLastInspection = {
   sessionId?: string;
+  episodeId?: string;
   scopeId: string;
   taskType: ExperienceInputRecord["task_type"];
   intervention: "inject" | "skip" | "shadow" | "holdout";
@@ -112,6 +115,7 @@ export type ExperienceLastInspection = {
   autoFeedback: "helped" | "harmed" | "none";
   autoFeedbackReason?: InjectionEvent["attribution_reason"];
   attributionRecords: AttributionRecord[];
+  episodeProjection?: EpisodeProjection;
   outcome: ExperienceInputRecord["outcome_signal"];
   injectedNodes: ExperienceNodeSummary[];
   hints: string[];
@@ -326,9 +330,11 @@ const toReviewEvent = (
   nodeId: string,
   eventType: ReviewEvent["event_type"],
   source: ReviewEvent["source"],
-  taskRunId?: string
+  taskRunId?: string,
+  episodeId?: string
 ): ReviewEvent => ({
   id: createId("review"),
+  episode_id: episodeId,
   node_id: nodeId,
   task_run_id: taskRunId,
   event_type: eventType,
@@ -340,6 +346,7 @@ const toManualOverrideAttributionRecord = (input: {
   nodeId: string;
   feedback: FeedbackValue;
   injectionEvent?: InjectionEvent;
+  episodeId?: string;
   evidenceRefs: string[];
 }): AttributionRecord => {
   const timestamp = nowIso();
@@ -350,6 +357,7 @@ const toManualOverrideAttributionRecord = (input: {
     ),
     injection_id: input.injectionEvent?.injection_id,
     node_id: input.nodeId,
+    episode_id: input.episodeId ?? input.injectionEvent?.episode_id,
     intervention_strength: input.injectionEvent?.scorecard?.interventionStrength,
     injection_mode: input.injectionEvent?.mode,
     delivery_mode: input.injectionEvent?.delivery_mode,
@@ -712,6 +720,7 @@ export class ExperienceInteractionService {
   private readonly inputRepo;
   private readonly injectionRepo;
   private readonly attributionRecordRepo;
+  private readonly episodeRepo;
   private readonly nodeRepo;
   private readonly candidateRepo;
   private readonly jobRepo;
@@ -728,6 +737,7 @@ export class ExperienceInteractionService {
     this.inputRepo = new InputRecordRepository(db);
     this.injectionRepo = new InjectionRepository(db);
     this.attributionRecordRepo = new AttributionRecordRepository(db);
+    this.episodeRepo = new EpisodeRepository(db);
     this.nodeRepo = new NodeRepository(db);
     this.candidateRepo = new CandidateRepository(db);
     this.jobRepo = new DistillationJobRepository(db);
@@ -836,18 +846,19 @@ export class ExperienceInteractionService {
       return undefined;
     }
 
-    const injectionEvent = record.session_id
+    const episodeProjection = record.episode_id ? this.episodeRepo.getByEpisodeId(record.episode_id) : undefined;
+    const injectionEvent = episodeProjection?.injection_events[0] ?? (record.session_id
       ? this.injectionRepo.getLatestBySessionId(record.session_id)
       : record.injected_node_ids.length
         ? this.injectionRepo.getLatest()
-        : undefined;
+        : undefined);
     const selectedNodeIds = injectionEvent?.injected_node_ids?.length
       ? injectionEvent.injected_node_ids
       : record.injected_node_ids;
     const injectedNodes = this.nodeRepo.listByIds(selectedNodeIds);
-    const attributionRecords = injectionEvent
+    const attributionRecords = episodeProjection?.attribution_records ?? (injectionEvent
       ? this.attributionRecordRepo.listByInjectionId(injectionEvent.injection_id)
-      : selectedNodeIds.flatMap((nodeId) => this.attributionRecordRepo.listByNodeId(nodeId));
+      : selectedNodeIds.flatMap((nodeId) => this.attributionRecordRepo.listByNodeId(nodeId)));
     const scorecard =
       injectionEvent?.scorecard ??
       (selectedNodeIds.length
@@ -866,8 +877,8 @@ export class ExperienceInteractionService {
             record.session_id
           )
         : undefined);
-    const taskRun = record.session_id ? this.taskRunRepo.getLatestBySessionId(record.session_id) : undefined;
-    const reviewEvents = taskRun?.id ? this.reviewEventRepo.listByTaskRunId(taskRun.id) : [];
+    const taskRun = episodeProjection?.task_run ?? (record.session_id ? this.taskRunRepo.getLatestBySessionId(record.session_id) : undefined);
+    const reviewEvents = episodeProjection?.review_events ?? (taskRun?.id ? this.reviewEventRepo.listByTaskRunId(taskRun.id) : []);
     const autoFeedback = summarizeAutomaticFeedback(reviewEvents);
     const intervention =
       injectionEvent?.mode === "skip"
@@ -879,7 +890,7 @@ export class ExperienceInteractionService {
             ? "holdout"
             : "shadow"
           : "inject";
-    const outcomeRecord = taskRun?.id ? this.outcomeRepo.listByTaskRunId(taskRun.id)[0] : undefined;
+    const outcomeRecord = episodeProjection?.outcome_records[0] ?? (taskRun?.id ? this.outcomeRepo.listByTaskRunId(taskRun.id)[0] : undefined);
     const latestAutomaticFeedback = reviewEvents.find((event) => event.source === "automatic");
     const autoFeedbackReason = inferAutoFeedbackReason({
       explicitReason: injectionEvent?.attribution_reason,
@@ -890,6 +901,7 @@ export class ExperienceInteractionService {
     const decisionExplanation = buildDecisionExplanation({ intervention, scorecard });
     return {
       sessionId: record.session_id,
+      episodeId: record.episode_id,
       scopeId: record.scope_id,
       taskType: record.task_type,
       intervention,
@@ -898,6 +910,7 @@ export class ExperienceInteractionService {
       autoFeedback,
       autoFeedbackReason,
       attributionRecords,
+      episodeProjection,
       outcome: record.outcome_signal,
       injectedNodes: injectedNodes.map(toNodeSummary),
       hints: injectedNodes.map((node) => node.compact_hint),
@@ -930,15 +943,16 @@ export class ExperienceInteractionService {
       return undefined;
     }
 
-    const taskRun = event.session_id ? this.taskRunRepo.getLatestBySessionId(event.session_id) : undefined;
+    const episodeProjection = event.episode_id ? this.episodeRepo.getByEpisodeId(event.episode_id) : undefined;
+    const taskRun = episodeProjection?.task_run ?? (event.session_id ? this.taskRunRepo.getLatestBySessionId(event.session_id) : undefined);
     const latestRecord = event.session_id ? this.inputRepo.getLatestBySessionId(event.session_id) : undefined;
     if (latestRecord) {
       return this.inspectRecord(latestRecord);
     }
 
     const injectedNodes = this.nodeRepo.listByIds(event.injected_node_ids);
-    const attributionRecords = this.attributionRecordRepo.listByInjectionId(event.injection_id);
-    const reviewEvents = taskRun?.id ? this.reviewEventRepo.listByTaskRunId(taskRun.id) : [];
+    const attributionRecords = episodeProjection?.attribution_records ?? this.attributionRecordRepo.listByInjectionId(event.injection_id);
+    const reviewEvents = episodeProjection?.review_events ?? (taskRun?.id ? this.reviewEventRepo.listByTaskRunId(taskRun.id) : []);
     const autoFeedback = summarizeAutomaticFeedback(reviewEvents);
     const latestAutomaticFeedback = reviewEvents.find((reviewEvent) => reviewEvent.source === "automatic");
     const intervention: ExperienceLastInspection["intervention"] = event.mode === "skip"
@@ -948,7 +962,7 @@ export class ExperienceInteractionService {
         ? "holdout"
         : "shadow"
       : "inject";
-    const outcomeRecord = taskRun?.id ? this.outcomeRepo.listByTaskRunId(taskRun.id)[0] : undefined;
+    const outcomeRecord = episodeProjection?.outcome_records[0] ?? (taskRun?.id ? this.outcomeRepo.listByTaskRunId(taskRun.id)[0] : undefined);
     const outcome =
       outcomeRecord?.outcome_signal ??
       (taskRun?.final_status === "success" ? "success" : taskRun?.final_status === "failure" ? "failure" : "unknown");
@@ -957,6 +971,7 @@ export class ExperienceInteractionService {
 
     return {
       sessionId: event.session_id,
+      episodeId: event.episode_id,
       scopeId: event.scope_id,
       taskType: event.task_type,
       intervention,
@@ -970,6 +985,7 @@ export class ExperienceInteractionService {
         outcome
       }),
       attributionRecords,
+      episodeProjection,
       outcome,
       injectedNodes: injectedNodes.map(toNodeSummary),
       hints: injectedNodes.map((node) => node.compact_hint),
@@ -1306,6 +1322,7 @@ export class ExperienceInteractionService {
     const taskRunId = record.session_id
       ? this.taskRunRepo.getLatestBySessionId(record.session_id)?.id
       : undefined;
+    const episodeId = record.episode_id;
     const injectionEvent = record.session_id
       ? this.injectionRepo.getLatestBySessionId(record.session_id)
       : undefined;
@@ -1318,13 +1335,14 @@ export class ExperienceInteractionService {
     for (const node of nodes) {
       this.nodeRepo.upsert(applyGovernedNodeFeedback(node, feedback, this.deriveOriginProfile(node)));
       this.reviewEventRepo.upsert(
-        toReviewEvent(node.id, feedback === "helped" ? "mark_helped" : "mark_harmed", "user", taskRunId)
+        toReviewEvent(node.id, feedback === "helped" ? "mark_helped" : "mark_harmed", "user", taskRunId, episodeId)
       );
       this.attributionRecordRepo.insert(
         toManualOverrideAttributionRecord({
           nodeId: node.id,
           feedback,
           injectionEvent,
+          episodeId,
           evidenceRefs
         })
       );

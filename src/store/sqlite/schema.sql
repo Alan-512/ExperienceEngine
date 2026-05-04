@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS scopes (
 
 CREATE TABLE IF NOT EXISTS experience_input_records (
   record_id TEXT PRIMARY KEY,
+  episode_id TEXT,
   scope_id TEXT NOT NULL,
   session_id TEXT,
   task_type TEXT NOT NULL,
@@ -23,6 +24,7 @@ CREATE TABLE IF NOT EXISTS experience_input_records (
 
 CREATE TABLE IF NOT EXISTS task_runs (
   id TEXT PRIMARY KEY,
+  episode_id TEXT,
   host TEXT NOT NULL,
   scope_id TEXT NOT NULL,
   session_id TEXT,
@@ -42,6 +44,7 @@ CREATE TABLE IF NOT EXISTS task_runs (
 
 CREATE TABLE IF NOT EXISTS outcome_records (
   id TEXT PRIMARY KEY,
+  episode_id TEXT,
   task_run_id TEXT NOT NULL,
   outcome_signal TEXT NOT NULL,
   failure_signature TEXT,
@@ -51,6 +54,7 @@ CREATE TABLE IF NOT EXISTS outcome_records (
 
 CREATE TABLE IF NOT EXISTS review_events (
   id TEXT PRIMARY KEY,
+  episode_id TEXT,
   node_id TEXT NOT NULL,
   task_run_id TEXT,
   event_type TEXT NOT NULL,
@@ -217,6 +221,7 @@ CREATE TABLE IF NOT EXISTS distillation_jobs (
 
 CREATE TABLE IF NOT EXISTS injection_events (
   injection_id TEXT PRIMARY KEY,
+  episode_id TEXT,
   session_id TEXT,
   scope_id TEXT NOT NULL,
   task_type TEXT NOT NULL,
@@ -256,7 +261,6 @@ CREATE TABLE IF NOT EXISTS attribution_records (
 
 CREATE INDEX IF NOT EXISTS idx_attribution_records_injection_id ON attribution_records(injection_id);
 CREATE INDEX IF NOT EXISTS idx_attribution_records_node_id ON attribution_records(node_id);
-CREATE INDEX IF NOT EXISTS idx_attribution_records_episode_id ON attribution_records(episode_id);
 CREATE INDEX IF NOT EXISTS idx_attribution_records_verdict ON attribution_records(attribution_verdict);
 CREATE INDEX IF NOT EXISTS idx_attribution_records_created_at ON attribution_records(created_at);
 

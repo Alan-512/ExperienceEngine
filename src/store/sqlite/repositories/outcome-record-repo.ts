@@ -3,6 +3,7 @@ import type { OutcomeRecord } from "../../../types/domain.js";
 
 type OutcomeRecordRow = {
   id: string;
+  episode_id: string | null;
   task_run_id: string;
   outcome_signal: OutcomeRecord["outcome_signal"];
   failure_signature: string | null;
@@ -16,6 +17,7 @@ export class OutcomeRecordRepository {
   private mapRow(row: OutcomeRecordRow): OutcomeRecord {
     return {
       id: row.id,
+      episode_id: row.episode_id ?? undefined,
       task_run_id: row.task_run_id,
       outcome_signal: row.outcome_signal,
       failure_signature: row.failure_signature ?? undefined,
@@ -28,16 +30,18 @@ export class OutcomeRecordRepository {
     this.db
       .prepare(
         `INSERT INTO outcome_records
-          (id, task_run_id, outcome_signal, failure_signature, summary, created_at)
+          (id, episode_id, task_run_id, outcome_signal, failure_signature, summary, created_at)
          VALUES
-          (@id, @task_run_id, @outcome_signal, @failure_signature, @summary, @created_at)
+          (@id, @episode_id, @task_run_id, @outcome_signal, @failure_signature, @summary, @created_at)
          ON CONFLICT(id) DO UPDATE SET
+          episode_id = excluded.episode_id,
           outcome_signal = excluded.outcome_signal,
           failure_signature = excluded.failure_signature,
           summary = excluded.summary`
       )
       .run({
         id: record.id,
+        episode_id: record.episode_id ?? null,
         task_run_id: record.task_run_id,
         outcome_signal: record.outcome_signal,
         failure_signature: record.failure_signature ?? null,
@@ -59,6 +63,13 @@ export class OutcomeRecordRepository {
     return this.db
       .prepare("SELECT * FROM outcome_records WHERE task_run_id = ? ORDER BY created_at DESC")
       .all(taskRunId)
+      .map((row) => this.mapRow(row as OutcomeRecordRow));
+  }
+
+  listByEpisodeId(episodeId: string): OutcomeRecord[] {
+    return this.db
+      .prepare("SELECT * FROM outcome_records WHERE episode_id = ? ORDER BY created_at DESC")
+      .all(episodeId)
       .map((row) => this.mapRow(row as OutcomeRecordRow));
   }
 

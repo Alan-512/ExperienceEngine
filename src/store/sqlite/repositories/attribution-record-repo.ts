@@ -103,6 +103,13 @@ export class AttributionRecordRepository {
       .map((row) => this.mapRow(row as AttributionRecordRow));
   }
 
+  listByEpisodeId(episodeId: string): AttributionRecord[] {
+    return this.db
+      .prepare("SELECT * FROM attribution_records WHERE episode_id = ? ORDER BY created_at DESC, id DESC")
+      .all(episodeId)
+      .map((row) => this.mapRow(row as AttributionRecordRow));
+  }
+
   countByVerdict(verdict: AttributionVerdict): number {
     return (
       this.db

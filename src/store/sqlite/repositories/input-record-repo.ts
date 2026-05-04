@@ -6,6 +6,7 @@ export class InputRecordRepository {
 
   private mapRecord(row: {
     record_id: string;
+    episode_id: string | null;
     scope_id: string;
     session_id: string | null;
     task_type: ExperienceInputRecord["task_type"];
@@ -18,6 +19,7 @@ export class InputRecordRepository {
   }): ExperienceInputRecord {
     return {
       record_id: row.record_id,
+      episode_id: row.episode_id ?? undefined,
       scope_id: row.scope_id,
       session_id: row.session_id ?? undefined,
       task_type: row.task_type,
@@ -33,6 +35,7 @@ export class InputRecordRepository {
   upsert(record: ExperienceInputRecord): ExperienceInputRecord {
     const payload = {
       record_id: record.record_id,
+      episode_id: record.episode_id ?? null,
       scope_id: record.scope_id,
       session_id: record.session_id ?? null,
       task_type: record.task_type,
@@ -47,10 +50,11 @@ export class InputRecordRepository {
     this.db
       .prepare(
         `INSERT INTO experience_input_records
-          (record_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary, evidence_json, injected_node_ids_json, created_at)
+          (record_id, episode_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary, evidence_json, injected_node_ids_json, created_at)
          VALUES
-          (@record_id, @scope_id, @session_id, @task_type, @task_summary, @outcome_signal, @context_summary, @evidence_json, @injected_node_ids_json, @created_at)
+          (@record_id, @episode_id, @scope_id, @session_id, @task_type, @task_summary, @outcome_signal, @context_summary, @evidence_json, @injected_node_ids_json, @created_at)
          ON CONFLICT(record_id) DO UPDATE SET
+          episode_id = excluded.episode_id,
           outcome_signal = excluded.outcome_signal,
           context_summary = excluded.context_summary,
           evidence_json = excluded.evidence_json,
@@ -63,7 +67,7 @@ export class InputRecordRepository {
   getLatest(): ExperienceInputRecord | undefined {
     const row = this.db
       .prepare(
-        `SELECT record_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary,
+        `SELECT record_id, episode_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary,
                 evidence_json, injected_node_ids_json, created_at
          FROM experience_input_records
          ORDER BY created_at DESC
@@ -72,6 +76,7 @@ export class InputRecordRepository {
       .get() as
       | {
           record_id: string;
+          episode_id: string | null;
           scope_id: string;
           session_id: string | null;
           task_type: ExperienceInputRecord["task_type"];
@@ -90,7 +95,7 @@ export class InputRecordRepository {
   getLatestInjected(): ExperienceInputRecord | undefined {
     const row = this.db
       .prepare(
-        `SELECT record_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary,
+        `SELECT record_id, episode_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary,
                 evidence_json, injected_node_ids_json, created_at
          FROM experience_input_records
          WHERE injected_node_ids_json != '[]'
@@ -100,6 +105,7 @@ export class InputRecordRepository {
       .get() as
       | {
           record_id: string;
+          episode_id: string | null;
           scope_id: string;
           session_id: string | null;
           task_type: ExperienceInputRecord["task_type"];
@@ -118,7 +124,7 @@ export class InputRecordRepository {
   getLatestInjectedByScope(scopeId: string): ExperienceInputRecord | undefined {
     const row = this.db
       .prepare(
-        `SELECT record_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary,
+        `SELECT record_id, episode_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary,
                 evidence_json, injected_node_ids_json, created_at
          FROM experience_input_records
          WHERE scope_id = ? AND injected_node_ids_json != '[]'
@@ -128,6 +134,7 @@ export class InputRecordRepository {
       .get(scopeId) as
       | {
           record_id: string;
+          episode_id: string | null;
           scope_id: string;
           session_id: string | null;
           task_type: ExperienceInputRecord["task_type"];
@@ -146,7 +153,7 @@ export class InputRecordRepository {
   getLatestBySessionId(sessionId: string): ExperienceInputRecord | undefined {
     const row = this.db
       .prepare(
-        `SELECT record_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary,
+        `SELECT record_id, episode_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary,
                 evidence_json, injected_node_ids_json, created_at
          FROM experience_input_records
          WHERE session_id = ?
@@ -156,6 +163,7 @@ export class InputRecordRepository {
       .get(sessionId) as
       | {
           record_id: string;
+          episode_id: string | null;
           scope_id: string;
           session_id: string | null;
           task_type: ExperienceInputRecord["task_type"];
@@ -174,7 +182,7 @@ export class InputRecordRepository {
   getLatestByScope(scopeId: string): ExperienceInputRecord | undefined {
     const row = this.db
       .prepare(
-        `SELECT record_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary,
+        `SELECT record_id, episode_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary,
                 evidence_json, injected_node_ids_json, created_at
          FROM experience_input_records
          WHERE scope_id = ?
@@ -184,6 +192,7 @@ export class InputRecordRepository {
       .get(scopeId) as
       | {
           record_id: string;
+          episode_id: string | null;
           scope_id: string;
           session_id: string | null;
           task_type: ExperienceInputRecord["task_type"];
@@ -207,7 +216,7 @@ export class InputRecordRepository {
     const placeholders = recordIds.map(() => "?").join(", ");
     return this.db
       .prepare(
-        `SELECT record_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary,
+        `SELECT record_id, episode_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary,
                 evidence_json, injected_node_ids_json, created_at
          FROM experience_input_records
          WHERE record_id IN (${placeholders})`
@@ -217,6 +226,36 @@ export class InputRecordRepository {
         this.mapRecord(
           row as {
             record_id: string;
+            episode_id: string | null;
+            scope_id: string;
+            session_id: string | null;
+            task_type: ExperienceInputRecord["task_type"];
+            task_summary: string;
+            outcome_signal: ExperienceInputRecord["outcome_signal"];
+            context_summary: string | null;
+            evidence_json: string;
+            injected_node_ids_json: string;
+            created_at: string;
+          }
+        )
+      );
+  }
+
+  listByEpisodeId(episodeId: string): ExperienceInputRecord[] {
+    return this.db
+      .prepare(
+        `SELECT record_id, episode_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary,
+                evidence_json, injected_node_ids_json, created_at
+         FROM experience_input_records
+         WHERE episode_id = ?
+         ORDER BY created_at DESC`
+      )
+      .all(episodeId)
+      .map((row) =>
+        this.mapRecord(
+          row as {
+            record_id: string;
+            episode_id: string | null;
             scope_id: string;
             session_id: string | null;
             task_type: ExperienceInputRecord["task_type"];
@@ -237,7 +276,7 @@ export class InputRecordRepository {
 
     return this.db
       .prepare(
-        `SELECT record_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary,
+        `SELECT record_id, episode_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary,
                 evidence_json, injected_node_ids_json, created_at
          FROM experience_input_records
          ${whereClause}
@@ -249,6 +288,7 @@ export class InputRecordRepository {
         this.mapRecord(
           row as {
             record_id: string;
+            episode_id: string | null;
             scope_id: string;
             session_id: string | null;
             task_type: ExperienceInputRecord["task_type"];
@@ -266,7 +306,7 @@ export class InputRecordRepository {
   listRecentByScope(scopeId: string, limit = 10): ExperienceInputRecord[] {
     return this.db
       .prepare(
-        `SELECT record_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary,
+        `SELECT record_id, episode_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary,
                 evidence_json, injected_node_ids_json, created_at
          FROM experience_input_records
          WHERE scope_id = ?
@@ -278,6 +318,7 @@ export class InputRecordRepository {
         this.mapRecord(
           row as {
             record_id: string;
+            episode_id: string | null;
             scope_id: string;
             session_id: string | null;
             task_type: ExperienceInputRecord["task_type"];

@@ -135,6 +135,7 @@ export type RetrievalContext = {
 
 export type ExperienceInputRecord = {
   record_id: string;
+  episode_id?: string;
   scope_id: string;
   session_id?: string;
   task_type: ResolvedTaskType;
@@ -148,6 +149,7 @@ export type ExperienceInputRecord = {
 
 export type TaskRun = {
   id: string;
+  episode_id?: string;
   host: "openclaw" | "claude-code" | "codex";
   scope_id: string;
   session_id?: string;
@@ -167,6 +169,7 @@ export type TaskRun = {
 
 export type OutcomeRecord = {
   id: string;
+  episode_id?: string;
   task_run_id: string;
   outcome_signal: OutcomeSignal;
   failure_signature?: string;
@@ -176,6 +179,7 @@ export type OutcomeRecord = {
 
 export type ReviewEvent = {
   id: string;
+  episode_id?: string;
   node_id: string;
   task_run_id?: string;
   event_type:
@@ -288,6 +292,7 @@ export type ExperienceNode = {
 
 export type InjectionEvent = {
   injection_id: string;
+  episode_id?: string;
   session_id?: string;
   scope_id: string;
   task_type: TaskType;
@@ -323,6 +328,29 @@ export type AttributionRecord = {
   attribution_reason?: FeedbackAttributionReason | "manual_override" | "diagnostic_record";
   created_at: string;
   resolved_at?: string;
+};
+
+export type EpisodeProjection = {
+  episode_id: string;
+  scope_id?: string;
+  session_id?: string;
+  task_run?: TaskRun;
+  input_records: ExperienceInputRecord[];
+  outcome_records: OutcomeRecord[];
+  injection_events: InjectionEvent[];
+  attribution_records: AttributionRecord[];
+  review_events: ReviewEvent[];
+};
+
+export type EpisodeSummary = {
+  episode_id: string;
+  scope_id: string;
+  session_id?: string;
+  task_type?: ResolvedTaskType;
+  task_summary?: string;
+  outcome?: OutcomeSignal;
+  created_at: string;
+  updated_at: string;
 };
 
 export type InjectionScorecardNode = {

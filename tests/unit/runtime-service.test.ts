@@ -1794,6 +1794,16 @@ describe("ExperienceRuntimeService finalize transaction", () => {
       confidence: string;
       source: string;
     }>;
+    const episodeRows = db
+      .prepare(
+        `SELECT episode_id FROM task_runs WHERE session_id = 'harm-session'
+         UNION ALL SELECT episode_id FROM experience_input_records WHERE session_id = 'harm-session'
+         UNION ALL SELECT episode_id FROM outcome_records
+         UNION ALL SELECT episode_id FROM injection_events WHERE session_id = 'harm-session'
+         UNION ALL SELECT episode_id FROM attribution_records
+         UNION ALL SELECT episode_id FROM review_events`
+      )
+      .all() as Array<{ episode_id: string | null }>;
 
     expect(injectionRow.was_successful).toBe(0);
     expect(injectionRow.harm_observed).toBe(1);
@@ -1814,6 +1824,9 @@ describe("ExperienceRuntimeService finalize transaction", () => {
         source: "automatic"
       })
     ]);
+    const episodeIds = episodeRows.map((row) => row.episode_id);
+    expect(new Set(episodeIds).size).toBe(1);
+    expect(episodeIds[0]).toMatch(/^episode_/);
   });
 
   it("quarantines a priority candidate after harmful automatic feedback", async () => {

@@ -71,6 +71,12 @@ export const buildExplainDecisionCapsule = (input: {
     toEvidence("context_summary", input.inspection.trustSummary),
     ...input.inspection.retrievalNotes.map((note) => toEvidence("retrieval_note", note)),
     ...input.inspection.timeline.map((entry) => toEvidence("timeline", entry.summary)),
+    ...(input.inspection.episodeProjection?.outcome_records ?? []).map((record) =>
+      toEvidence("timeline", `${record.outcome_signal}: ${record.summary}`)
+    ),
+    ...(input.inspection.episodeProjection?.attribution_records ?? []).map((record) =>
+      toEvidence("retrieval_note", `${record.node_id}: ${record.attribution_verdict} (${record.confidence})`)
+    ),
     ...input.inspection.evidence.map((entry) => toEvidence("tool_event", entry))
   ].filter((entry): entry is HybridCapsuleEvidence => Boolean(entry));
 

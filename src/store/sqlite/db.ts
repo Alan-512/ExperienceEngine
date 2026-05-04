@@ -47,6 +47,10 @@ const ensureColumn = (db: DatabaseSync, table: string, column: string, definitio
   return false;
 };
 
+const ensureIndex = (db: DatabaseSync, indexName: string, table: string, column: string): void => {
+  db.exec(`CREATE INDEX IF NOT EXISTS ${indexName} ON ${table}(${column})`);
+};
+
 const backfillExperienceNodeDeliveryState = (db: DatabaseSync, forceAllRows = false): void => {
   db.exec(
     `UPDATE experience_nodes
@@ -136,6 +140,18 @@ export const bootstrapDatabase = (db: DatabaseSync): void => {
   ensureColumn(db, "injection_events", "delivered", "INTEGER NOT NULL DEFAULT 1");
   ensureColumn(db, "injection_events", "scorecard_json", "TEXT");
   ensureColumn(db, "injection_events", "attribution_reason", "TEXT");
+  ensureColumn(db, "experience_input_records", "episode_id", "TEXT");
+  ensureColumn(db, "task_runs", "episode_id", "TEXT");
+  ensureColumn(db, "outcome_records", "episode_id", "TEXT");
+  ensureColumn(db, "injection_events", "episode_id", "TEXT");
+  ensureColumn(db, "attribution_records", "episode_id", "TEXT");
+  ensureColumn(db, "review_events", "episode_id", "TEXT");
+  ensureIndex(db, "idx_experience_input_records_episode_id", "experience_input_records", "episode_id");
+  ensureIndex(db, "idx_task_runs_episode_id", "task_runs", "episode_id");
+  ensureIndex(db, "idx_outcome_records_episode_id", "outcome_records", "episode_id");
+  ensureIndex(db, "idx_injection_events_episode_id", "injection_events", "episode_id");
+  ensureIndex(db, "idx_attribution_records_episode_id", "attribution_records", "episode_id");
+  ensureIndex(db, "idx_review_events_episode_id", "review_events", "episode_id");
   ensureColumn(db, "task_runs", "learning_status", "TEXT");
   ensureColumn(db, "task_runs", "learning_reason", "TEXT");
   ensureColumn(db, "hybrid_review_artifacts", "schema_version", "TEXT NOT NULL DEFAULT 'hybrid-capsule-v1'");
