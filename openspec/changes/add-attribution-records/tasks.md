@@ -9,7 +9,7 @@
 ## 2. Repository
 
 - [ ] 2.1 Create `src/store/sqlite/repositories/attribution-record-repo.ts`
-- [ ] 2.2 Implement `upsert`, `listByInjectionId`, `listByNodeId`, and verdict/count queries needed by inspection and later policy
+- [ ] 2.2 Implement append-only `insert` plus idempotent insert-by-record-id retry handling, `listByInjectionId`, `listByNodeId`, and verdict/count queries needed by inspection and later policy
 - [ ] 2.3 Ensure JSON evidence refs round-trip correctly
 - [ ] 2.4 Add `tests/unit/attribution-record-repo.test.ts`
 - [ ] 2.5 Run `pnpm vitest run tests/unit/attribution-record-repo.test.ts`
@@ -23,16 +23,24 @@
 - [ ] 3.5 Assert attribution writes do not mutate usage/helped/harmed counters or delivery state
 - [ ] 3.6 Run `pnpm vitest run tests/unit/runtime-service.test.ts`
 
-## 4. Inspection And Summaries
+## 4. Manual Override Mirroring
 
-- [ ] 4.1 Extend latest inspection data with attribution records
-- [ ] 4.2 Show verdict and confidence in `ee inspect --last --verbose`
-- [ ] 4.3 Keep default inspect output concise and source-compatible
-- [ ] 4.4 Update MCP or benchmark summaries only where they already expose comparable intervention detail
-- [ ] 4.5 Run `pnpm vitest run tests/unit/inspect-command.test.ts tests/unit/interaction-service.test.ts tests/unit/codex-mcp-server.test.ts`
+- [ ] 4.1 Mirror `feedbackLast` helped/harmed actions into attribution override evidence when the related injection/node can be resolved
+- [ ] 4.2 Mirror `feedbackNode` helped/harmed actions into attribution override evidence when no injection context exists, using a manual-override source and preserving existing review-event behavior
+- [ ] 4.3 Ensure override writes do not replace existing attribution rows; write a new append-only override record or an idempotent retry of the same override record
+- [ ] 4.4 Add interaction tests proving manual feedback still updates existing governance exactly as before and additionally appears in attribution inspection
+- [ ] 4.5 Run `pnpm vitest run tests/unit/interaction-service.test.ts`
 
-## 5. Validation
+## 5. Inspection And Summaries
 
-- [ ] 5.1 Run targeted unit tests for schema, repository, runtime, and inspection
-- [ ] 5.2 Run `pnpm typecheck`
-- [ ] 5.3 Run `openspec validate --changes --strict`
+- [ ] 5.1 Extend latest inspection data with attribution records
+- [ ] 5.2 Show verdict and confidence in `ee inspect --last --verbose`
+- [ ] 5.3 Keep default inspect output concise and source-compatible
+- [ ] 5.4 Update MCP or benchmark summaries only where they already expose comparable intervention detail
+- [ ] 5.5 Run `pnpm vitest run tests/unit/inspect-command.test.ts tests/unit/interaction-service.test.ts tests/unit/codex-mcp-server.test.ts`
+
+## 6. Validation
+
+- [ ] 6.1 Run targeted unit tests for schema, repository, runtime, manual feedback override, and inspection
+- [ ] 6.2 Run `pnpm typecheck`
+- [ ] 6.3 Run `openspec validate --changes --strict`

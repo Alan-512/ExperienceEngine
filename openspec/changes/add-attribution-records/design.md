@@ -28,7 +28,7 @@ Phase 3 introduced record-only diagnostic candidate metadata and live `diagnosti
 
 ### 1. Attribution is append-only evidence
 
-Attribution records should be written as a separate repository/table keyed by record id and linked to `injection_id` plus `node_id`.
+Attribution records should be written as a separate repository/table keyed by record id and linked to `injection_id` plus `node_id`. Repository writes should be append-only inserts, with optional idempotent insert-by-record-id behavior only to tolerate retries of the same logical write.
 
 Rationale:
 - Existing injection and feedback tables remain the operational source of truth.
@@ -47,6 +47,7 @@ Manual user feedback should be reflected as an attribution override, but the cur
 
 Rationale:
 - Product language treats automatic outcome attribution as normal and manual feedback as an override. This change should make that relationship visible without changing state transitions.
+- The existing `feedbackLast` and `feedbackNode` paths are where override evidence should be mirrored; they should not be replaced.
 
 ### 4. Diagnostic records are not delivered injection records
 

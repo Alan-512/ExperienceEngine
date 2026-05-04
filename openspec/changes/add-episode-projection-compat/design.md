@@ -36,6 +36,7 @@ For new task paths, runtime should generate a stable episode id and propagate it
 
 Rationale:
 - A projection is only useful when new evidence can be grouped deterministically.
+- Runtime currently writes injection events before task finalization. The episode id therefore needs to be created before the first injection event write and retained in session/runtime state through finalization.
 
 ### 3. Old data remains readable
 

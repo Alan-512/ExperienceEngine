@@ -29,8 +29,8 @@ Repo policy can compute from attribution records first and fall back to injectio
 The modes are:
 
 - `safe`: default Phase 3 diagnostic gate.
-- `fast_learning`: slightly lowers diagnostic thresholds, but never allows cross-scope, harmed, negative-evidence, destructive, or quarantined candidates.
-- `strict`: raises diagnostic thresholds and can temporarily disable live diagnostic candidates after circuit breaker trips.
+- `fast_learning`: may lower only the numeric score and margin thresholds by one named policy step from `safe`, but never allows cross-scope, harmed, negative-evidence, destructive, retired, disabled-scope, or quarantined candidates.
+- `strict`: requires the strongest match band and at least the `safe` score/margin thresholds; after a circuit trip it suppresses live diagnostic candidates until manual restore.
 
 Rationale:
 - This avoids mixing repo policy with `DeliveryState`, `EvaluationMode`, or `InjectionMode`.
@@ -44,11 +44,11 @@ Rationale:
 
 ### 3. Circuit breaker downgrades deterministically
 
-The circuit breaker should compute recent harmful or low-trust intervention evidence from attribution records, with injection events as fallback. Threshold breaches downgrade:
+The circuit breaker should compute recent harmful or low-trust intervention evidence from attribution records, with injection events as fallback. The first implementation should use a deterministic rolling window of the latest 20 delivered or live-diagnostic interventions for a repo/scope, with a minimum denominator of 5 before automatic downgrade. A breach occurs when at least 2 records in the window are `strong_harmed`, or when harmful records (`weak_harmed` plus `strong_harmed`) are at least 30% of the eligible window. Threshold breaches downgrade:
 
 - `fast_learning` to `safe`
 - `safe` to `strict`
-- `strict` remains strict and disables live diagnostic candidates temporarily
+- `strict` remains strict and disables live diagnostic candidates until manual restore
 
 Rationale:
 - This gives a production-safe automatic recovery path without deleting data or mutating node lifecycle.

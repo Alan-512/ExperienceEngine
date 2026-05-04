@@ -1,6 +1,6 @@
 ## 1. Schema Compatibility
 
-- [ ] 1.1 Add nullable `episode_id` to `task_runs`, `experience_input_records`, `outcome_records`, `injection_events`, and `attribution_records`
+- [ ] 1.1 Add nullable `episode_id` to `task_runs`, `experience_input_records`, `outcome_records`, `injection_events`, `attribution_records`, and `review_events`
 - [ ] 1.2 Add indexes for each `episode_id` field
 - [ ] 1.3 Keep existing primary keys, foreign keys, and write ownership unchanged
 - [ ] 1.4 Update migrations for existing databases
@@ -8,10 +8,11 @@
 
 ## 2. Runtime Propagation
 
-- [ ] 2.1 Generate a stable episode id for new task/session paths
-- [ ] 2.2 Propagate the episode id to task, input, outcome, injection, attribution, and compatible review records
-- [ ] 2.3 Add tests proving new runtime-created evidence shares one episode id
-- [ ] 2.4 Run `pnpm vitest run tests/unit/runtime-service.test.ts`
+- [ ] 2.1 Generate a stable episode id before the first `beforePromptBuild` injection-event write for a task/session path
+- [ ] 2.2 Retain the episode id in session/runtime state through `finalizeTask`
+- [ ] 2.3 Propagate the episode id to task, input, outcome, injection, attribution, and review records
+- [ ] 2.4 Add tests proving new runtime-created evidence shares one episode id across pre-finalize injection and finalize writes
+- [ ] 2.5 Run `pnpm vitest run tests/unit/runtime-service.test.ts`
 
 ## 3. Episode Projection Repository
 

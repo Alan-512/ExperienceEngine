@@ -9,17 +9,18 @@
 ## 2. Policy Evaluator
 
 - [ ] 2.1 Create `src/experience-management/repo-policy.ts`
-- [ ] 2.2 Compute recent harmful intervention rate from attribution records
+- [ ] 2.2 Compute recent harmful intervention rate from the latest 20 delivered or live-diagnostic attribution records for a repo/scope, requiring at least 5 eligible records before automatic downgrade
 - [ ] 2.3 Fall back to injection event evidence when attribution records are missing
-- [ ] 2.4 Implement deterministic downgrades from `fast_learning` to `safe`, `safe` to `strict`, and strict circuit hold
-- [ ] 2.5 Add evaluator tests for thresholds, fallback, and no-evidence behavior
+- [ ] 2.4 Treat a circuit breach as at least 2 `strong_harmed` records or at least 30% `weak_harmed` plus `strong_harmed` records in the eligible window
+- [ ] 2.5 Implement deterministic downgrades from `fast_learning` to `safe`, `safe` to `strict`, and strict circuit hold until manual restore
+- [ ] 2.6 Add evaluator tests for thresholds, fallback, no-evidence behavior, and manual-restore reset
 
 ## 3. Runtime Integration
 
 - [ ] 3.1 Apply repo policy to the diagnostic candidate gate
 - [ ] 3.2 Keep `safe` equal to the Phase 3 gate
-- [ ] 3.3 Let `fast_learning` relax only numeric/strength thresholds, never hard safety predicates
-- [ ] 3.4 Let `strict` require highest-confidence match and suppress live diagnostics when the circuit is tripped
+- [ ] 3.3 Let `fast_learning` relax only named numeric score/margin thresholds by one policy step from `safe`, never hard safety predicates
+- [ ] 3.4 Let `strict` require the strongest match band plus at least `safe` score/margin thresholds and suppress live diagnostics when the circuit is tripped
 - [ ] 3.5 Assert disabled scope and quarantined/retired delivery states remain authoritative
 - [ ] 3.6 Run `pnpm vitest run tests/unit/runtime-service.test.ts tests/unit/repo-policy.test.ts`
 
