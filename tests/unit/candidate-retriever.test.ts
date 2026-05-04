@@ -133,6 +133,37 @@ describe("retrieveCandidates", () => {
     expect(candidates.map((entry) => entry.id)).not.toContain("far-family-node");
   });
 
+  it("keeps shadow candidates out of normal retrieval unless diagnostic evaluation is enabled", async () => {
+    const shadowCandidate = node({
+      id: "shadow-diagnostic",
+      scope_id: "scope-a",
+      task_type: "test_debug",
+      state: "candidate",
+      delivery_state: "shadow_only",
+      trigger_pattern: "Fix the failing auth test in this repo",
+      compact_hint: "Run the failing auth test before editing and verify after the fix."
+    });
+
+    const normalCandidates = await retrieveCandidates(
+      input({
+        task_type: "test_debug",
+        task_summary: "Fix the failing auth test in this repo"
+      }),
+      [shadowCandidate]
+    );
+    const diagnosticCandidates = await retrieveCandidates(
+      input({
+        task_type: "test_debug",
+        task_summary: "Fix the failing auth test in this repo"
+      }),
+      [shadowCandidate],
+      { includeShadowDiagnosticCandidates: true }
+    );
+
+    expect(normalCandidates).toEqual([]);
+    expect(diagnosticCandidates.map((entry) => entry.id)).toEqual(["shadow-diagnostic"]);
+  });
+
   it("marks same-scope candidates with matching failure and artifact signals as high match", async () => {
     const candidates = await retrieveScoredCandidates(
       input({

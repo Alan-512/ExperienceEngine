@@ -36,7 +36,12 @@ beforeEach(() => {
   });
 });
 
-const seedStrategyNode = (sqlitePath: string, cwd: string, id: string): void => {
+const seedStrategyNode = (
+  sqlitePath: string,
+  cwd: string,
+  id: string,
+  overrides: Partial<import("../../src/types/domain.js").ExperienceNode> = {}
+): void => {
   const db = openDatabase(loadConfig({ sqlitePath }));
   bootstrapDatabase(db);
   const nodeRepo = new NodeRepository(db);
@@ -74,7 +79,8 @@ const seedStrategyNode = (sqlitePath: string, cwd: string, id: string): void => 
     last_helped_at: undefined,
     last_harmed_at: undefined,
     created_at: timestamp,
-    updated_at: timestamp
+    updated_at: timestamp,
+    ...overrides
   });
 };
 
@@ -569,6 +575,135 @@ describe("ExperienceRuntimeService finalize transaction", () => {
       delivered: false,
       injected_node_ids: [],
       injection_count: 0
+    });
+  });
+
+  it("records same-scope shadow candidate diagnostics without prompt delivery when the live gate rejects them", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    seedStrategyNode(sqlitePath, "/repo", "node_record_only_diagnostic", {
+      state: "candidate",
+      delivery_state: "shadow_only",
+      harmed_count: 1,
+      compact_hint: "Run the failing vitest auth test before editing and verify after the fix.",
+      retrieval_text: "Fix the failing vitest auth test\nRun the failing vitest auth test before editing and verify after the fix."
+    });
+    const service = new ExperienceRuntimeService(
+      loadConfig({
+        dataDir: join(runtimeDir, "data"),
+        sqlitePath,
+        captureDir: join(runtimeDir, "captures"),
+        distillationAutoDrain: false,
+        distillationAllowPassthrough: true
+      }, { homeDir: runtimeDir }),
+      undefined,
+      { homeDir: runtimeDir, env: {} }
+    );
+
+    const prompt = await service.beforePromptBuild({
+      sessionId: "record-only-diagnostic-session",
+      cwd: "/repo",
+      userMessage: "Fix the failing vitest auth test",
+      taskSummary: "Fix the failing vitest auth test"
+    });
+
+    expect(prompt.mode).toBe("skip");
+    expect(prompt.text).toBeUndefined();
+    expect(prompt.input.injected_node_ids).toEqual([]);
+    expect(prompt.scorecard).toMatchObject({
+      mode: "skip",
+      interventionStrength: "diagnostic_hint",
+      recordOnlyDiagnosticCandidateIds: ["node_record_only_diagnostic"]
+    });
+
+    const db = new DatabaseSync(sqlitePath);
+    const injectionRow = db.prepare(
+      "SELECT mode, delivered, injected_node_ids_json, scorecard_json FROM injection_events WHERE session_id = ?"
+    ).get("record-only-diagnostic-session") as {
+      mode: string;
+      delivered: number;
+      injected_node_ids_json: string;
+      scorecard_json: string | null;
+    };
+    const scorecard = JSON.parse(injectionRow.scorecard_json ?? "{}") as {
+      recordOnlyDiagnosticCandidateIds?: string[];
+    };
+
+    expect(injectionRow.mode).toBe("skip");
+    expect(injectionRow.delivered).toBe(0);
+    expect(JSON.parse(injectionRow.injected_node_ids_json)).toEqual([]);
+    expect(scorecard.recordOnlyDiagnosticCandidateIds).toEqual(["node_record_only_diagnostic"]);
+  });
+
+  it("delivers a safe diagnostic hint without mutating candidate lifecycle or counters", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    seedStrategyNode(sqlitePath, "/repo", "node_live_diagnostic", {
+      state: "candidate",
+      delivery_state: "shadow_only",
+      compact_hint: "Run the failing vitest auth test before editing and verify after the fix.",
+      retrieval_text: "Fix the failing vitest auth test\nRun the failing vitest auth test before editing and verify after the fix.",
+      recommended_steps: ["Run the focused vitest auth test before editing."]
+    });
+    const service = new ExperienceRuntimeService(
+      loadConfig({
+        dataDir: join(runtimeDir, "data"),
+        sqlitePath,
+        captureDir: join(runtimeDir, "captures"),
+        distillationAutoDrain: false,
+        distillationAllowPassthrough: true
+      }, { homeDir: runtimeDir }),
+      undefined,
+      { homeDir: runtimeDir, env: {} }
+    );
+
+    await service.persistToolResult({
+      sessionId: "live-diagnostic-session",
+      toolName: "vitest",
+      outputSummary: "failing vitest auth test",
+      errorSignature: "failing vitest auth test",
+      status: "failure"
+    });
+
+    const prompt = await service.beforePromptBuild({
+      sessionId: "live-diagnostic-session",
+      cwd: "/repo",
+      userMessage: "Fix the failing vitest auth test",
+      taskSummary: "Fix the failing vitest auth test"
+    });
+
+    expect(prompt.mode).toBe("inject_conservative");
+    expect(prompt.text).toContain("Diagnostic lead from prior experience:");
+    expect(prompt.input.injected_node_ids).toEqual(["node_live_diagnostic"]);
+    expect(prompt.scorecard).toMatchObject({
+      mode: "inject_conservative",
+      interventionStrength: "diagnostic_hint"
+    });
+
+    await service.finalizeTask({
+      sessionId: "live-diagnostic-session",
+      cwd: "/repo",
+      userMessage: "Fix the failing vitest auth test",
+      taskSummary: "Fix the failing vitest auth test"
+    });
+
+    const db = new DatabaseSync(sqlitePath);
+    const nodeRow = db.prepare(
+      "SELECT state, delivery_state, usage_count, helped_count, harmed_count FROM experience_nodes WHERE id = ?"
+    ).get("node_live_diagnostic") as {
+      state: string;
+      delivery_state: string;
+      usage_count: number;
+      helped_count: number;
+      harmed_count: number;
+    };
+
+    expect(nodeRow).toEqual({
+      state: "candidate",
+      delivery_state: "shadow_only",
+      usage_count: 0,
+      helped_count: 0,
+      harmed_count: 0
     });
   });
 

@@ -144,6 +144,7 @@ type RetrieveOptions = {
   reranker?: (input: { queryText: string; taskType: TaskType; candidates: RerankCandidate[] }) => Promise<RerankResult[]>;
   retrievalContext?: RetrievalContext;
   fetchImpl?: typeof fetch;
+  includeShadowDiagnosticCandidates?: boolean;
   resolveRerankerEndpoint?: (options?: {
     env?: NodeJS.ProcessEnv;
     homeDir?: string;
@@ -464,7 +465,18 @@ export const retrieveCandidateBundle = async (
     : null;
   const legacyQuery = buildLegacyEmbedding(queryText || retrievalSource.taskSummary);
   const vectorStore = openVectorStore();
-  const scopeLocalNodes = nodes.filter((node) => isInjectableState(node) && passesCorrectionScopeGate(input, node));
+  const scopeLocalNodes = nodes.filter((node) =>
+    (
+      isInjectableState(node) ||
+      (
+        options.includeShadowDiagnosticCandidates === true &&
+        node.scope_id === input.scope_id &&
+        node.state === "candidate" &&
+        resolveDeliveryState(node) === "shadow_only"
+      )
+    ) &&
+    passesCorrectionScopeGate(input, node)
+  );
   const localSemanticRecords = scopeLocalNodes
     .filter((node) => localQuery && isMatchingEmbeddingSpace(node, localQuery.space))
     .map((node) => ({

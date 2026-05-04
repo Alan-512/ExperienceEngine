@@ -338,6 +338,7 @@ export type InterventionRejectedCandidate = {
 
 export type InterventionDecisionDiagnostics = {
   interventionStrength?: InterventionStrength;
+  recordOnlyDiagnosticCandidateIds?: string[];
   topCandidates: InjectionScorecardCandidate[];
   topCandidateScore?: number;
   scoreMargin?: number;
@@ -364,7 +365,7 @@ export type InjectionScorecard = {
   scopeId: string;
   taskType: TaskType;
   taskSummary: string;
-  mode: Exclude<InjectionMode, "skip">;
+  mode: InjectionMode;
   interventionStrength?: InterventionStrength;
   riskLevel: InjectionRiskLevel;
   recommendation: string;
@@ -387,6 +388,7 @@ export type InjectionScorecard = {
   secondOpinionReason?: string;
   secondOpinionTrigger?: SyncSecondOpinionTrigger;
   selectedCandidateIds?: string[];
+  recordOnlyDiagnosticCandidateIds?: string[];
   rejectedCandidates?: InterventionRejectedCandidate[];
   nodes: InjectionScorecardNode[];
   createdAt: string;

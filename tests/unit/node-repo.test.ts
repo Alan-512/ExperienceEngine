@@ -212,4 +212,19 @@ describe("NodeRepository", () => {
 
     expect(crossScope.map((entry) => entry.id).sort()).toEqual(["cross-active", "cross-priority"]);
   });
+
+  it("lists only same-scope shadow candidates for diagnostic evaluation", () => {
+    const { repo } = makeRepo();
+
+    repo.upsert(node({ id: "scope-candidate", scope_id: "scope_1", state: "candidate" }));
+    repo.upsert(node({ id: "scope-priority", scope_id: "scope_1", state: "priority_candidate" }));
+    repo.upsert(node({ id: "scope-active", scope_id: "scope_1", state: "active" }));
+    repo.upsert(node({ id: "other-candidate", scope_id: "scope_2", state: "candidate" }));
+    repo.upsert(node({ id: "quarantined-candidate", scope_id: "scope_1", state: "candidate", delivery_state: "quarantined" }));
+
+    const diagnosticCandidates = (repo as unknown as { listDiagnosticCandidatesByExactScope: (scopeId: string) => ExperienceNode[] })
+      .listDiagnosticCandidatesByExactScope("scope_1");
+
+    expect(diagnosticCandidates.map((entry) => entry.id)).toEqual(["scope-candidate"]);
+  });
 });

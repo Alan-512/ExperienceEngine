@@ -26,7 +26,9 @@ import type {
   ExperienceInput,
   ExperienceInputRecord,
   HybridReviewArtifact,
+  InterventionDecisionDiagnostics,
   InjectionEvent,
+  InjectionScorecard,
   ExperienceNode,
   OutcomeRecord,
   TaskRun,
@@ -388,6 +390,36 @@ const resolveDeliveryMode = (
   };
 };
 
+const buildRecordOnlyDiagnosticScorecard = (
+  input: ExperienceInput,
+  sessionId: string,
+  diagnostics: InterventionDecisionDiagnostics
+): InjectionScorecard => ({
+  sessionId,
+  scopeId: input.scope_id,
+  taskType: input.task_type === "unknown" ? "general" : input.task_type,
+  taskSummary: input.task_summary,
+  mode: "skip",
+  interventionStrength: "diagnostic_hint",
+  riskLevel: "high",
+  recommendation: "Record-only diagnostic candidate matched; keep it out of prompt text until the live gate clears.",
+  reasons: ["A same-scope shadow candidate matched this task but was not delivered."],
+  topCandidates: diagnostics.topCandidates,
+  topCandidateScore: diagnostics.topCandidateScore,
+  scoreMargin: diagnostics.scoreMargin,
+  fastPathApplied: diagnostics.fastPathApplied,
+  queryRewriteApplied: diagnostics.queryRewriteApplied,
+  gateReason: diagnostics.gateReason,
+  decisionReason: diagnostics.decisionReason,
+  confidence: diagnostics.confidence,
+  budgetClass: diagnostics.budgetClass,
+  selectedCandidateIds: [],
+  recordOnlyDiagnosticCandidateIds: diagnostics.recordOnlyDiagnosticCandidateIds,
+  rejectedCandidates: diagnostics.rejectedCandidates,
+  nodes: [],
+  createdAt: nowIso()
+});
+
 const HYBRID_LIGHTWEIGHT_PATTERN = /\b(wording-only|wording only|copy-only|copy only|copy pass|inline notice wording|expression-layer refinement)\b/i;
 
 const isLightweightHybridExcludedTask = (input: Pick<ExperienceInput, "task_summary" | "context_summary">): boolean =>
@@ -506,6 +538,10 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
 
   private resolveConservativeCrossScopeCandidates(scopeId: string): ExperienceNode[] {
     return this.nodeRepo.listConservativeCrossScopeCandidates(scopeId);
+  }
+
+  private resolveDiagnosticCandidates(scopeId: string): ExperienceNode[] {
+    return this.nodeRepo.listDiagnosticCandidatesByExactScope(scopeId);
   }
 
   recoverToolEvents(sessionId: string, payload: unknown): void {
@@ -980,6 +1016,10 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       return;
     }
 
+    if (injectionEvent?.scorecard?.interventionStrength === "diagnostic_hint") {
+      return;
+    }
+
     const touched = input.injected_node_ids
       .map((id) => this.nodeRepo.getById(id))
       .filter((node): node is ExperienceNode => Boolean(node));
@@ -1114,7 +1154,8 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     const nodes = input.task_type !== "unknown"
       ? [
           ...this.resolveExactScopeInjectableNodes(input.scope_id),
-          ...this.resolveConservativeCrossScopeCandidates(input.scope_id)
+          ...this.resolveConservativeCrossScopeCandidates(input.scope_id),
+          ...this.resolveDiagnosticCandidates(input.scope_id)
         ]
       : [];
     const decision = await decideIntervention(
@@ -1150,7 +1191,9 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
         sessionId,
         decision.diagnostics
       )
-        : undefined;
+        : decision.diagnostics?.recordOnlyDiagnosticCandidateIds?.length
+          ? buildRecordOnlyDiagnosticScorecard(input, sessionId, decision.diagnostics)
+          : undefined;
     const injectionEvent: InjectionEvent = {
       injection_id: createId(decision.mode === "skip" ? "decision" : "inject"),
       session_id: sessionId,
@@ -1184,7 +1227,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       text: deliveredMode === "skip" ? undefined : decision.text,
       notice:
         deliveredMode !== "skip" && this.config.noticesInline ? renderInlineNotice(decision.selected) : undefined,
-      scorecard: decision.mode !== "skip" ? session.lastInjectionEvent?.scorecard : undefined,
+      scorecard: session.lastInjectionEvent?.scorecard,
       deliveryMode: decision.mode !== "skip" ? delivery.deliveryMode : undefined,
       delivered: decision.mode !== "skip" ? delivery.delivered : undefined,
       retrievalContext,

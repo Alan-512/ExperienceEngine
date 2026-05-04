@@ -1045,4 +1045,111 @@ describe("decideIntervention", () => {
     expect(softDecision.text).toContain("Relevant prior experience:");
   });
 
+  it("delivers at most one same-scope safe shadow candidate as a diagnostic hint", async () => {
+    const decision = await decideIntervention(
+      input,
+      [
+        node({
+          id: "diagnostic-primary",
+          state: "candidate",
+          delivery_state: "shadow_only",
+          task_type: "test_debug",
+          trigger_pattern: "Fix the failing vitest auth test in the current workspace",
+          compact_hint: "Run the failing vitest auth test before editing and verify after the fix.",
+          recommended_steps: ["Run the focused auth test first."]
+        }),
+        node({
+          id: "diagnostic-secondary",
+          state: "candidate",
+          delivery_state: "shadow_only",
+          task_type: "test_debug",
+          trigger_pattern: "Fix the failing vitest auth test in the current workspace",
+          compact_hint: "Check the auth fixture before editing unrelated files.",
+          recommended_steps: ["Inspect the auth fixture."]
+        })
+      ],
+      stats,
+      0.6,
+      3,
+      undefined,
+      {
+        scopeId: "scope_1",
+        host: "codex",
+        taskType: "test_debug",
+        taskSummary: "Fix the failing vitest auth test in the current workspace",
+        failureSignature: "failing vitest auth test",
+        toolNames: ["vitest"],
+        outcomeSignal: "unknown",
+        injectedNodeIds: []
+      }
+    );
+
+    expect(decision.mode).toBe("inject_conservative");
+    expect(decision.selected).toHaveLength(1);
+    expect(decision.selected[0]?.state).toBe("candidate");
+    expect(decision.diagnostics?.interventionStrength).toBe("diagnostic_hint");
+    expect(decision.text).toContain("Diagnostic lead from prior experience:");
+  });
+
+  it("records diagnostic candidates without delivery when the live gate rejects them", async () => {
+    const decision = await decideIntervention(
+      input,
+      [
+        node({
+          id: "diagnostic-harmed",
+          state: "candidate",
+          delivery_state: "shadow_only",
+          task_type: "test_debug",
+          trigger_pattern: "Fix the failing vitest auth test in the current workspace",
+          compact_hint: "Run the failing vitest auth test before editing and verify after the fix.",
+          harmed_count: 1
+        })
+      ],
+      stats,
+      0.6,
+      3
+    );
+
+    expect(decision.mode).toBe("skip");
+    expect(decision.selected).toEqual([]);
+    expect(decision.text).toBeUndefined();
+    expect(decision.diagnostics?.interventionStrength).toBe("diagnostic_hint");
+    expect(decision.diagnostics?.recordOnlyDiagnosticCandidateIds).toEqual(["diagnostic-harmed"]);
+  });
+
+  it("keeps destructive shadow candidates record-only even when other diagnostic signals match", async () => {
+    const decision = await decideIntervention(
+      input,
+      [
+        node({
+          id: "diagnostic-destructive",
+          state: "candidate",
+          delivery_state: "shadow_only",
+          task_type: "test_debug",
+          trigger_pattern: "Fix the failing vitest auth test in the current workspace",
+          compact_hint: "Run git reset --hard before checking the failing vitest auth test.",
+          recommended_steps: ["Run git reset --hard before verifying the failure."]
+        })
+      ],
+      stats,
+      0.6,
+      3,
+      undefined,
+      {
+        scopeId: "scope_1",
+        host: "codex",
+        taskType: "test_debug",
+        taskSummary: "Fix the failing vitest auth test in the current workspace",
+        failureSignature: "failing vitest auth test",
+        toolNames: ["vitest"],
+        outcomeSignal: "unknown",
+        injectedNodeIds: []
+      }
+    );
+
+    expect(decision.mode).toBe("skip");
+    expect(decision.selected).toEqual([]);
+    expect(decision.diagnostics?.recordOnlyDiagnosticCandidateIds).toEqual(["diagnostic-destructive"]);
+  });
+
 });
