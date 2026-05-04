@@ -119,7 +119,7 @@ describe("decideIntervention", () => {
 
     expect(decision.mode).toBe("inject");
     expect(decision.selected.map((entry) => entry.id)).toEqual(["strategy"]);
-    expect(decision.text).toContain("Execution hints");
+    expect(decision.text).toContain("Validated prior experience:");
     expect(decision.text).not.toContain("Do not keep iterating blindly.");
   });
 
@@ -1022,6 +1022,7 @@ describe("decideIntervention", () => {
     expect(strongDecision.mode).toBe("inject");
     expect(strongDecision.selected.map((entry) => entry.id)).toEqual(["strength-strong"]);
     expect(strongDecision.diagnostics?.interventionStrength).toBe("strong_recommendation");
+    expect(strongDecision.text).toContain("Validated prior experience:");
 
     const softDecision = await decideIntervention(
       input,
@@ -1041,6 +1042,7 @@ describe("decideIntervention", () => {
     expect(softDecision.mode).toBe("inject_conservative");
     expect(softDecision.selected.map((entry) => entry.id)).toEqual(["strength-soft"]);
     expect(softDecision.diagnostics?.interventionStrength).toBe("soft_recommendation");
+    expect(softDecision.text).toContain("Relevant prior experience:");
   });
 
 });

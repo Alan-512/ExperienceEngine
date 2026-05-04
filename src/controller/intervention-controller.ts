@@ -503,10 +503,12 @@ const decideInterventionInternal = async (
       }
     }
 
+    const finalStrength = deriveInterventionStrength(finalMode, finalSelected);
+
     return {
       mode: finalMode,
       selected: finalSelected,
-      text: renderInjection(finalMode, finalSelected, finalMode === "inject_conservative" ? 1 : maxHints),
+      text: renderInjection(finalMode, finalSelected, finalMode === "inject_conservative" ? 1 : maxHints, finalStrength),
       diagnostics: withDecisionEnvelope({
         mode: finalMode,
         selected: finalSelected,

@@ -1504,7 +1504,8 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     });
 
     expect(prompt.mode).toBe("inject");
-    expect(prompt.text).toContain("Execution hints from prior similar tasks:");
+    expect(prompt.text).toContain("Relevant prior experience:");
+    expect(prompt.text).toContain("Check this before making unrelated changes");
     expect(prompt.input.injected_node_ids).toEqual(["node_runtime_live"]);
     expect(prompt.deliveryMode).toBe("live");
     expect(prompt.delivered).toBe(true);

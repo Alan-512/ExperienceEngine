@@ -1,4 +1,4 @@
-import type { ExperienceNode, InjectionMode } from "../types/domain.js";
+import type { ExperienceNode, InjectionMode, InterventionStrength } from "../types/domain.js";
 
 const MAX_RENDERED_STEPS = 3;
 const MAX_RENDERED_AVOID_STEPS = 2;
@@ -74,15 +74,38 @@ const renderNode = (mode: Exclude<InjectionMode, "skip">, node: ExperienceNode):
   return lines.join("\n");
 };
 
+const policyHeaderByStrength: Record<InterventionStrength, { title: string; instruction: string }> = {
+  diagnostic_hint: {
+    title: "Diagnostic lead from prior experience:",
+    instruction:
+      "Use this only as a diagnostic lead. First verify whether the same signal exists in the current task. Do not treat it as a required fix."
+  },
+  soft_recommendation: {
+    title: "Relevant prior experience:",
+    instruction:
+      "Check this before making unrelated changes; apply it only if current evidence matches."
+  },
+  strong_recommendation: {
+    title: "Validated prior experience:",
+    instruction: "Follow this unless current evidence contradicts it."
+  },
+  hard_constraint: {
+    title: "Project constraint or explicit instruction:",
+    instruction: "Do not violate this without explicit user approval."
+  }
+};
+
 export const renderInjection = (
   mode: Exclude<InjectionMode, "skip">,
   nodes: ExperienceNode[],
-  maxHints = 3
+  maxHints = 3,
+  strength?: InterventionStrength
 ): string => {
   const selected = nodes.slice(0, maxHints);
   const body = selected.map((node) => renderNode(mode, node)).join("\n");
-  const title =
+  const fallbackTitle =
     mode === "inject" ? "Execution hints from prior similar tasks:" : "Conservative execution hints:";
+  const policyHeader = strength ? policyHeaderByStrength[strength] : undefined;
 
-  return [title, body].filter(Boolean).join("\n");
+  return [policyHeader?.title ?? fallbackTitle, policyHeader?.instruction, body].filter(Boolean).join("\n");
 };

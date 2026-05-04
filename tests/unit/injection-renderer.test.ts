@@ -86,6 +86,36 @@ describe("renderInjection", () => {
     expect(output).not.toContain("  1.");
   });
 
+  it("renders diagnostic hints as non-authoritative leads", () => {
+    const output = renderInjection("inject_conservative", [node()], 1, "diagnostic_hint");
+
+    expect(output).toContain("Diagnostic lead from prior experience:");
+    expect(output).toContain("Use this only as a diagnostic lead.");
+    expect(output).toContain("Do not treat it as a required fix.");
+    expect(output).toContain("- Validate the failing migration");
+  });
+
+  it("renders soft recommendations as relevant prior experience", () => {
+    const output = renderInjection("inject_conservative", [node()], 1, "soft_recommendation");
+
+    expect(output).toContain("Relevant prior experience:");
+    expect(output).toContain("Check this before making unrelated changes");
+  });
+
+  it("renders strong recommendations as validated prior experience", () => {
+    const output = renderInjection("inject", [node()], 3, "strong_recommendation");
+
+    expect(output).toContain("Validated prior experience:");
+    expect(output).toContain("Follow this unless current evidence contradicts it.");
+  });
+
+  it("renders hard constraints as explicit constraints", () => {
+    const output = renderInjection("inject", [node()], 3, "hard_constraint");
+
+    expect(output).toContain("Project constraint or explicit instruction:");
+    expect(output).toContain("Do not violate this without explicit user approval.");
+  });
+
   it("expands mature conservative guidance when the node is validated and low risk", () => {
     const output = renderInjection(
       "inject_conservative",
