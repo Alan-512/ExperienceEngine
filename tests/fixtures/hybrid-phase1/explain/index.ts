@@ -17,6 +17,7 @@ const baseInspection = (): ExperienceLastInspection => ({
   deliveryMode: "live",
   delivered: true,
   autoFeedback: "none",
+  attributionRecords: [],
   outcome: "success",
   injectedNodes: [],
   hints: ["Run the failing auth test before editing."],

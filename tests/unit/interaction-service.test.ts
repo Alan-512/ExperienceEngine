@@ -13,6 +13,7 @@ import {
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
 import { InputRecordRepository } from "../../src/store/sqlite/repositories/input-record-repo.js";
 import { InjectionRepository } from "../../src/store/sqlite/repositories/injection-repo.js";
+import { AttributionRecordRepository } from "../../src/store/sqlite/repositories/attribution-record-repo.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
 import { ReviewEventRepository } from "../../src/store/sqlite/repositories/review-event-repo.js";
 import { ScopeRepository } from "../../src/store/sqlite/repositories/scope-repo.js";
@@ -162,6 +163,7 @@ describe("ExperienceInteractionService", () => {
       intervention: "skip",
       outcome: "success",
       autoFeedback: "none",
+      attributionRecords: [],
       injectedNodes: [],
       hints: [],
       evidence: [],
@@ -427,6 +429,34 @@ describe("ExperienceInteractionService", () => {
     });
   });
 
+  it("mirrors feedbackLast into manual attribution override evidence", () => {
+    const homeDir = makeTempDir();
+    const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    const attributionRepo = new AttributionRecordRepository(db);
+    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_interaction_detail");
+    seedLatestInspectionRecord(homeDir, "/repo");
+
+    const service = new ExperienceInteractionService(config);
+
+    expect(service.feedbackLast("helped", "/repo")).toEqual({
+      status: "updated",
+      feedback: "helped",
+      nodeIds: ["node_interaction_detail"]
+    });
+    expect(attributionRepo.listByInjectionId("inject_latest_explain")).toEqual([
+      expect.objectContaining({
+        node_id: "node_interaction_detail",
+        source: "manual_override",
+        user_override: "helped",
+        attribution_verdict: "strong_helped",
+        confidence: "high"
+      })
+    ]);
+  });
+
   it("toggles scope state and reports whether the state changed", () => {
     const homeDir = makeTempDir();
     const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });
@@ -494,6 +524,7 @@ describe("ExperienceInteractionService", () => {
     bootstrapDatabase(db);
     const nodeRepo = new NodeRepository(db);
     const reviewRepo = new ReviewEventRepository(db);
+    const attributionRepo = new AttributionRecordRepository(db);
     seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_interaction_feedback");
     nodeRepo.upsert({
       ...nodeRepo.getById("node_interaction_feedback")!,
@@ -512,6 +543,18 @@ describe("ExperienceInteractionService", () => {
     });
     expect(reviewRepo.listByNodeId("node_interaction_feedback")).toHaveLength(2);
     expect(reviewRepo.listByNodeId("node_interaction_feedback").every((event) => event.event_type === "mark_harmed")).toBe(true);
+    expect(attributionRepo.listByNodeId("node_interaction_feedback")).toEqual([
+      expect.objectContaining({
+        source: "manual_override",
+        user_override: "harmed",
+        attribution_verdict: "strong_harmed"
+      }),
+      expect.objectContaining({
+        source: "manual_override",
+        user_override: "harmed",
+        attribution_verdict: "strong_harmed"
+      })
+    ]);
   });
 
   it("does not automatically revive explicitly retired nodes through feedback", () => {

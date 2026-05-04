@@ -29,6 +29,8 @@ import type {
   InterventionDecisionDiagnostics,
   InjectionEvent,
   InjectionScorecard,
+  AttributionRecord,
+  AttributionVerdict,
   ExperienceNode,
   OutcomeRecord,
   TaskRun,
@@ -52,6 +54,7 @@ import { ScopeRepository } from "../store/sqlite/repositories/scope-repo.js";
 import { StatsRepository } from "../store/sqlite/repositories/stats-repo.js";
 import { TaskRunRepository } from "../store/sqlite/repositories/task-run-repo.js";
 import { InjectionRepository } from "../store/sqlite/repositories/injection-repo.js";
+import { AttributionRecordRepository } from "../store/sqlite/repositories/attribution-record-repo.js";
 import { HybridInvocationTraceRepository } from "../store/sqlite/repositories/hybrid-invocation-trace-repo.js";
 import { RuntimeCaptureWriter } from "../plugin/runtime-capture.js";
 import { normalizeToolResult } from "../plugin/hooks/tool-result-persist.js";
@@ -467,6 +470,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly reviewEventRepo;
   private readonly statsRepo;
   private readonly injectionRepo;
+  private readonly attributionRecordRepo;
   private readonly hybridReviewArtifactRepo;
   private readonly hybridTraceRepo;
   private readonly runtimeOptions: ExperienceRuntimeServiceOptions;
@@ -499,6 +503,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     this.reviewEventRepo = new ReviewEventRepository(this.db);
     this.statsRepo = new StatsRepository(this.db);
     this.injectionRepo = new InjectionRepository(this.db);
+    this.attributionRecordRepo = new AttributionRecordRepository(this.db);
     this.hybridReviewArtifactRepo = new HybridReviewArtifactRepository(this.db);
     this.hybridTraceRepo = new HybridInvocationTraceRepository(this.db);
     this.captureWriter = new RuntimeCaptureWriter(config, this.logger);
@@ -1114,6 +1119,96 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     }
   }
 
+  private deriveAttributionVerdict(input: ExperienceInput, node: ExperienceNode, delivered: boolean): {
+    verdict: AttributionVerdict;
+    confidence: AttributionRecord["confidence"];
+  } {
+    if (!delivered) {
+      return { verdict: "unknown", confidence: "low" };
+    }
+
+    if (input.outcome_signal === "success") {
+      return { verdict: "weak_helped", confidence: "medium" };
+    }
+
+    if (input.outcome_signal === "failure") {
+      if (detectHarm(input, node)) {
+        return { verdict: "strong_harmed", confidence: "high" };
+      }
+
+      const reason = classifyFailureAttributionReason(input, node);
+      if (reason === "relevant_failure") {
+        return { verdict: "weak_harmed", confidence: "medium" };
+      }
+
+      return { verdict: "neutral", confidence: "low" };
+    }
+
+    return { verdict: "unknown", confidence: "low" };
+  }
+
+  private writeAttributionRecords(input: {
+    experienceInput: ExperienceInput;
+    inputRecordId: string;
+    taskRunId: string;
+    resolvedInjectionEvent: InjectionEvent;
+  }): void {
+    const event = input.resolvedInjectionEvent;
+    const evidenceRefs = [input.inputRecordId, input.taskRunId, event.injection_id];
+    const selectedNodeIds = new Set(event.injected_node_ids);
+
+    for (const nodeId of selectedNodeIds) {
+      const node = this.nodeRepo.getById(nodeId);
+      if (!node) {
+        continue;
+      }
+
+      const attribution = this.deriveAttributionVerdict(input.experienceInput, node, event.delivered);
+      this.attributionRecordRepo.insert({
+        id: stableId("attr", `${event.injection_id}:${nodeId}:automatic`),
+        injection_id: event.injection_id,
+        node_id: nodeId,
+        intervention_strength: event.scorecard?.interventionStrength,
+        injection_mode: event.mode,
+        delivery_mode: event.delivery_mode,
+        delivered: event.delivered,
+        outcome: input.experienceInput.outcome_signal,
+        attribution_verdict: attribution.verdict,
+        confidence: attribution.confidence,
+        evidence_refs: evidenceRefs,
+        source: "automatic",
+        attribution_reason: event.attribution_reason,
+        created_at: nowIso(),
+        resolved_at: event.resolved_at
+      });
+    }
+
+    const diagnosticNodeIds = event.scorecard?.recordOnlyDiagnosticCandidateIds ?? [];
+    for (const nodeId of diagnosticNodeIds) {
+      if (selectedNodeIds.has(nodeId)) {
+        continue;
+      }
+
+      this.attributionRecordRepo.insert({
+        id: stableId("attr", `${event.injection_id}:${nodeId}:diagnostic_record`),
+        injection_id: event.injection_id,
+        node_id: nodeId,
+        intervention_strength: "diagnostic_hint",
+        injection_mode: event.mode,
+        delivery_mode: event.delivery_mode,
+        delivered: false,
+        outcome: input.experienceInput.outcome_signal,
+        attribution_verdict: "unknown",
+        confidence: "low",
+        evidence_refs: evidenceRefs,
+        source: "diagnostic_record",
+        attribution_reason: "diagnostic_record",
+        created_at: nowIso(),
+        resolved_at: event.resolved_at
+      });
+    }
+  }
+
   async beforePromptBuild(context: HostPromptContext) {
     const sessionId = context.sessionId ?? "global";
     const session = this.getSession(sessionId);
@@ -1293,12 +1388,19 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
                   .find((reason) => reason === "relevant_failure")
                   ?? classifyFailureAttributionReason(input)
               : "unknown_outcome";
-        this.injectionRepo.upsert({
+        const resolvedInjectionEvent: InjectionEvent = {
           ...session.lastInjectionEvent,
           was_successful: input.outcome_signal === "success",
           harm_observed: harmObserved,
           attribution_reason: attributionReason,
           resolved_at: nowIso()
+        };
+        this.injectionRepo.upsert(resolvedInjectionEvent);
+        this.writeAttributionRecords({
+          experienceInput: input,
+          inputRecordId: record.record_id,
+          taskRunId: taskRun.id,
+          resolvedInjectionEvent
         });
       }
       learningTaskContext = {

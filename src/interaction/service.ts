@@ -13,6 +13,7 @@ import { DistillationJobRepository } from "../store/sqlite/repositories/distilla
 import { HybridInvocationTraceRepository } from "../store/sqlite/repositories/hybrid-invocation-trace-repo.js";
 import { InputRecordRepository } from "../store/sqlite/repositories/input-record-repo.js";
 import { InjectionRepository } from "../store/sqlite/repositories/injection-repo.js";
+import { AttributionRecordRepository } from "../store/sqlite/repositories/attribution-record-repo.js";
 import { NodeRepository } from "../store/sqlite/repositories/node-repo.js";
 import { OutcomeRecordRepository } from "../store/sqlite/repositories/outcome-record-repo.js";
 import { ReviewEventRepository } from "../store/sqlite/repositories/review-event-repo.js";
@@ -25,6 +26,7 @@ import type {
   EvaluationMode,
   ExperienceInputRecord,
   FeedbackAttributionReason,
+  AttributionRecord,
   InjectionEvent,
   InjectionScorecard,
   ExperienceNode,
@@ -43,7 +45,7 @@ import {
   isPotentialMisfire
 } from "../experience-management/governance-observability.js";
 import { nowIso } from "../utils/clock.js";
-import { createId } from "../utils/ids.js";
+import { createId, stableId } from "../utils/ids.js";
 import {
   buildRepoSummary,
   type ExperienceRepoSummary
@@ -109,6 +111,7 @@ export type ExperienceLastInspection = {
   delivered?: boolean;
   autoFeedback: "helped" | "harmed" | "none";
   autoFeedbackReason?: InjectionEvent["attribution_reason"];
+  attributionRecords: AttributionRecord[];
   outcome: ExperienceInputRecord["outcome_signal"];
   injectedNodes: ExperienceNodeSummary[];
   hints: string[];
@@ -332,6 +335,40 @@ const toReviewEvent = (
   source,
   created_at: nowIso()
 });
+
+const toManualOverrideAttributionRecord = (input: {
+  nodeId: string;
+  feedback: FeedbackValue;
+  injectionEvent?: InjectionEvent;
+  evidenceRefs: string[];
+}): AttributionRecord => {
+  const timestamp = nowIso();
+  return {
+    id: stableId(
+      "attr",
+      `${input.injectionEvent?.injection_id ?? "manual"}:${input.nodeId}:manual_override:${input.feedback}:${timestamp}`
+    ),
+    injection_id: input.injectionEvent?.injection_id,
+    node_id: input.nodeId,
+    intervention_strength: input.injectionEvent?.scorecard?.interventionStrength,
+    injection_mode: input.injectionEvent?.mode,
+    delivery_mode: input.injectionEvent?.delivery_mode,
+    delivered: Boolean(input.injectionEvent?.delivered),
+    outcome: input.injectionEvent?.was_successful === true
+      ? "success"
+      : input.injectionEvent?.was_successful === false
+        ? "failure"
+        : "unknown",
+    attribution_verdict: input.feedback === "helped" ? "strong_helped" : "strong_harmed",
+    confidence: "high",
+    evidence_refs: input.evidenceRefs,
+    user_override: input.feedback,
+    source: "manual_override",
+    attribution_reason: "manual_override",
+    created_at: timestamp,
+    resolved_at: timestamp
+  };
+};
 
 const deriveNodeRisk = (node: ExperienceNode): "low" | "medium" | "high" => {
   if (node.state === "candidate") {
@@ -674,6 +711,7 @@ export class ExperienceInteractionService {
   private readonly hybridWorkerClient;
   private readonly inputRepo;
   private readonly injectionRepo;
+  private readonly attributionRecordRepo;
   private readonly nodeRepo;
   private readonly candidateRepo;
   private readonly jobRepo;
@@ -689,6 +727,7 @@ export class ExperienceInteractionService {
     bootstrapDatabase(db);
     this.inputRepo = new InputRecordRepository(db);
     this.injectionRepo = new InjectionRepository(db);
+    this.attributionRecordRepo = new AttributionRecordRepository(db);
     this.nodeRepo = new NodeRepository(db);
     this.candidateRepo = new CandidateRepository(db);
     this.jobRepo = new DistillationJobRepository(db);
@@ -806,6 +845,9 @@ export class ExperienceInteractionService {
       ? injectionEvent.injected_node_ids
       : record.injected_node_ids;
     const injectedNodes = this.nodeRepo.listByIds(selectedNodeIds);
+    const attributionRecords = injectionEvent
+      ? this.attributionRecordRepo.listByInjectionId(injectionEvent.injection_id)
+      : selectedNodeIds.flatMap((nodeId) => this.attributionRecordRepo.listByNodeId(nodeId));
     const scorecard =
       injectionEvent?.scorecard ??
       (selectedNodeIds.length
@@ -855,6 +897,7 @@ export class ExperienceInteractionService {
       delivered: injectionEvent?.delivered,
       autoFeedback,
       autoFeedbackReason,
+      attributionRecords,
       outcome: record.outcome_signal,
       injectedNodes: injectedNodes.map(toNodeSummary),
       hints: injectedNodes.map((node) => node.compact_hint),
@@ -894,6 +937,7 @@ export class ExperienceInteractionService {
     }
 
     const injectedNodes = this.nodeRepo.listByIds(event.injected_node_ids);
+    const attributionRecords = this.attributionRecordRepo.listByInjectionId(event.injection_id);
     const reviewEvents = taskRun?.id ? this.reviewEventRepo.listByTaskRunId(taskRun.id) : [];
     const autoFeedback = summarizeAutomaticFeedback(reviewEvents);
     const latestAutomaticFeedback = reviewEvents.find((reviewEvent) => reviewEvent.source === "automatic");
@@ -925,6 +969,7 @@ export class ExperienceInteractionService {
         intervention,
         outcome
       }),
+      attributionRecords,
       outcome,
       injectedNodes: injectedNodes.map(toNodeSummary),
       hints: injectedNodes.map((node) => node.compact_hint),
@@ -1261,11 +1306,27 @@ export class ExperienceInteractionService {
     const taskRunId = record.session_id
       ? this.taskRunRepo.getLatestBySessionId(record.session_id)?.id
       : undefined;
+    const injectionEvent = record.session_id
+      ? this.injectionRepo.getLatestBySessionId(record.session_id)
+      : undefined;
+    const evidenceRefs = [
+      record.record_id,
+      taskRunId,
+      injectionEvent?.injection_id
+    ].filter((value): value is string => Boolean(value));
 
     for (const node of nodes) {
       this.nodeRepo.upsert(applyGovernedNodeFeedback(node, feedback, this.deriveOriginProfile(node)));
       this.reviewEventRepo.upsert(
         toReviewEvent(node.id, feedback === "helped" ? "mark_helped" : "mark_harmed", "user", taskRunId)
+      );
+      this.attributionRecordRepo.insert(
+        toManualOverrideAttributionRecord({
+          nodeId: node.id,
+          feedback,
+          injectionEvent,
+          evidenceRefs
+        })
       );
     }
 
@@ -1289,6 +1350,13 @@ export class ExperienceInteractionService {
     this.nodeRepo.upsert(applyGovernedNodeFeedback(node, feedback, this.deriveOriginProfile(node)));
     this.reviewEventRepo.upsert(
       toReviewEvent(nodeId, feedback === "helped" ? "mark_helped" : "mark_harmed", "user")
+    );
+    this.attributionRecordRepo.insert(
+      toManualOverrideAttributionRecord({
+        nodeId,
+        feedback,
+        evidenceRefs: [`manual:${nodeId}`]
+      })
     );
     return {
       status: "updated",

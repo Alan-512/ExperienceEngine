@@ -16,6 +16,7 @@ describe("repo summary", () => {
         intervention: "inject",
         autoFeedback: "helped",
         autoFeedbackReason: "success_outcome",
+        attributionRecords: [],
         outcome: "success",
         injectedNodes: [],
         hints: [],

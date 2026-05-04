@@ -352,6 +352,16 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
             console.log(`  - ${note}`);
           }
         }
+        if (record.attributionRecords.length) {
+          console.log("- Attribution records:");
+          for (const attribution of record.attributionRecords) {
+            const delivered = attribution.delivered ? "delivered" : "not delivered";
+            const override = attribution.user_override ? ` override=${attribution.user_override}` : "";
+            console.log(
+              `  - ${attribution.node_id}: ${attribution.attribution_verdict} (${attribution.confidence}, ${delivered}, source=${attribution.source}${override})`
+            );
+          }
+        }
       }
       if (record.scorecard.reasons.length) {
         console.log("- Why it matched:");

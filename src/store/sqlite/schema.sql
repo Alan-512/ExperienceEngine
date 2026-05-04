@@ -234,6 +234,32 @@ CREATE TABLE IF NOT EXISTS injection_events (
   resolved_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS attribution_records (
+  id TEXT PRIMARY KEY,
+  injection_id TEXT,
+  node_id TEXT NOT NULL,
+  episode_id TEXT,
+  intervention_strength TEXT,
+  injection_mode TEXT,
+  delivery_mode TEXT,
+  delivered INTEGER NOT NULL,
+  outcome TEXT NOT NULL,
+  attribution_verdict TEXT NOT NULL,
+  confidence TEXT NOT NULL,
+  evidence_refs_json TEXT NOT NULL,
+  user_override TEXT,
+  source TEXT NOT NULL,
+  attribution_reason TEXT,
+  created_at TEXT NOT NULL,
+  resolved_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_attribution_records_injection_id ON attribution_records(injection_id);
+CREATE INDEX IF NOT EXISTS idx_attribution_records_node_id ON attribution_records(node_id);
+CREATE INDEX IF NOT EXISTS idx_attribution_records_episode_id ON attribution_records(episode_id);
+CREATE INDEX IF NOT EXISTS idx_attribution_records_verdict ON attribution_records(attribution_verdict);
+CREATE INDEX IF NOT EXISTS idx_attribution_records_created_at ON attribution_records(created_at);
+
 CREATE TABLE IF NOT EXISTS scope_task_stats (
   scope_id TEXT NOT NULL,
   task_type TEXT NOT NULL,

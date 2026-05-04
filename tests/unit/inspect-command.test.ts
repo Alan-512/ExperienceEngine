@@ -10,6 +10,7 @@ import { CandidateRepository } from "../../src/store/sqlite/repositories/candida
 import { DistillationJobRepository } from "../../src/store/sqlite/repositories/distillation-job-repo.js";
 import { InputRecordRepository } from "../../src/store/sqlite/repositories/input-record-repo.js";
 import { InjectionRepository } from "../../src/store/sqlite/repositories/injection-repo.js";
+import { AttributionRecordRepository } from "../../src/store/sqlite/repositories/attribution-record-repo.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
 import { OutcomeRecordRepository } from "../../src/store/sqlite/repositories/outcome-record-repo.js";
 import { ReviewEventRepository } from "../../src/store/sqlite/repositories/review-event-repo.js";
@@ -21,6 +22,7 @@ import type {
   ExperienceCandidate,
   ExperienceInputRecord,
   InjectionEvent,
+  AttributionRecord,
   ExperienceNode,
   OutcomeRecord,
   ReviewEvent,
@@ -239,6 +241,24 @@ const makeInjectionEvent = (overrides: Partial<InjectionEvent> = {}): InjectionE
   ...overrides
 });
 
+const makeAttributionRecord = (overrides: Partial<AttributionRecord> = {}): AttributionRecord => ({
+  id: "attr_inspect",
+  injection_id: "inject_inspect",
+  node_id: "node_inspect",
+  intervention_strength: "strong_recommendation",
+  injection_mode: "inject",
+  delivery_mode: "live",
+  delivered: true,
+  outcome: "success",
+  attribution_verdict: "weak_helped",
+  confidence: "medium",
+  evidence_refs: ["input_inspect", "taskrun_inspect", "inject_inspect"],
+  source: "automatic",
+  attribution_reason: "success_outcome",
+  created_at: "2026-03-14T01:05:00.000Z",
+  ...overrides
+});
+
 const makeJob = (overrides: Partial<DistillationJob> = {}): DistillationJob => ({
   id: "job_inspect",
   candidate_id: "candidate_inspect",
@@ -348,6 +368,7 @@ describe("inspect command", () => {
     const nodeRepo = new NodeRepository(db);
     const inputRepo = new InputRecordRepository(db);
     const injectionRepo = new InjectionRepository(db);
+    const attributionRepo = new AttributionRecordRepository(db);
     const scopeId = resolveScope(process.cwd()).scope_id;
     nodeRepo.upsert(makeNode({ scope_id: scopeId }));
     inputRepo.upsert(
@@ -364,6 +385,7 @@ describe("inspect command", () => {
         scope_id: scopeId
       })
     );
+    attributionRepo.insert(makeAttributionRecord());
 
     runInspectCommand("--last", "--verbose");
 
@@ -397,7 +419,9 @@ describe("inspect command", () => {
         ["- Top candidate retrieval reasons:"],
         ["- Top candidate policy reasons:"],
         ["- Governance notes:"],
-        ["  - Governance favored real coding-error guidance for this task."]
+        ["  - Governance favored real coding-error guidance for this task."],
+        ["- Attribution records:"],
+        ["  - node_inspect: weak_helped (medium, delivered, source=automatic)"]
       ])
     );
   });

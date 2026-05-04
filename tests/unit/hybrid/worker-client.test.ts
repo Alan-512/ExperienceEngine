@@ -17,6 +17,7 @@ const buildCapsule = () =>
       deliveryMode: "live",
       delivered: true,
       autoFeedback: "none",
+      attributionRecords: [],
       outcome: "success",
       injectedNodes: [],
       hints: [],

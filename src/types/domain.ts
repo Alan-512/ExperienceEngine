@@ -61,6 +61,15 @@ export type SyncSecondOpinionTrigger =
   | "expectation_correction";
 export type EvaluationMode = "live" | "shadow" | "holdout";
 export type OutcomeSignal = "success" | "failure" | "unknown";
+export type AttributionVerdict =
+  | "strong_helped"
+  | "weak_helped"
+  | "neutral"
+  | "unknown"
+  | "weak_harmed"
+  | "strong_harmed";
+export type AttributionConfidence = "low" | "medium" | "high";
+export type AttributionSource = "automatic" | "manual_override" | "diagnostic_record";
 export type ToolEventStatus = "success" | "failure" | "unknown";
 export type CandidateLifecycleState = "pending" | "distilled" | "failed" | "discarded";
 export type DistillationJobState = "pending" | "processing" | "succeeded" | "failed" | "discarded";
@@ -292,6 +301,26 @@ export type InjectionEvent = {
   was_successful: boolean | null;
   harm_observed: boolean | null;
   attribution_reason?: FeedbackAttributionReason;
+  created_at: string;
+  resolved_at?: string;
+};
+
+export type AttributionRecord = {
+  id: string;
+  injection_id?: string;
+  node_id: string;
+  episode_id?: string;
+  intervention_strength?: InterventionStrength;
+  injection_mode?: InjectionMode;
+  delivery_mode?: EvaluationMode;
+  delivered: boolean;
+  outcome: OutcomeSignal;
+  attribution_verdict: AttributionVerdict;
+  confidence: AttributionConfidence;
+  evidence_refs: string[];
+  user_override?: "helped" | "harmed" | "neutral";
+  source: AttributionSource;
+  attribution_reason?: FeedbackAttributionReason | "manual_override" | "diagnostic_record";
   created_at: string;
   resolved_at?: string;
 };

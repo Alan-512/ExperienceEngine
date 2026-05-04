@@ -633,6 +633,37 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     expect(injectionRow.delivered).toBe(0);
     expect(JSON.parse(injectionRow.injected_node_ids_json)).toEqual([]);
     expect(scorecard.recordOnlyDiagnosticCandidateIds).toEqual(["node_record_only_diagnostic"]);
+
+    await service.finalizeTask({
+      sessionId: "record-only-diagnostic-session",
+      cwd: "/repo",
+      userMessage: "Fix the failing vitest auth test",
+      taskSummary: "Fix the failing vitest auth test"
+    });
+
+    const attributionRows = db
+      .prepare(
+        "SELECT node_id, delivered, attribution_verdict, confidence, source, attribution_reason FROM attribution_records"
+      )
+      .all() as Array<{
+      node_id: string;
+      delivered: number;
+      attribution_verdict: string;
+      confidence: string;
+      source: string;
+      attribution_reason: string | null;
+    }>;
+
+    expect(attributionRows).toEqual([
+      expect.objectContaining({
+        node_id: "node_record_only_diagnostic",
+        delivered: 0,
+        attribution_verdict: "unknown",
+        confidence: "low",
+        source: "diagnostic_record",
+        attribution_reason: "diagnostic_record"
+      })
+    ]);
   });
 
   it("delivers a safe diagnostic hint without mutating candidate lifecycle or counters", async () => {
@@ -1551,6 +1582,19 @@ describe("ExperienceRuntimeService finalize transaction", () => {
       "SELECT injected_node_ids_json FROM experience_input_records LIMIT 1"
     ).get() as { injected_node_ids_json: string };
     const reviewCount = db.prepare("SELECT COUNT(*) AS count FROM review_events").get() as { count: number };
+    const attributionRows = db
+      .prepare(
+        "SELECT node_id, delivered, outcome, attribution_verdict, confidence, source, attribution_reason FROM attribution_records"
+      )
+      .all() as Array<{
+      node_id: string;
+      delivered: number;
+      outcome: string;
+      attribution_verdict: string;
+      confidence: string;
+      source: string;
+      attribution_reason: string | null;
+    }>;
 
     expect(injectionRow.mode).toBe("inject");
     expect(injectionRow.delivery_mode).toBe("shadow");
@@ -1559,6 +1603,17 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     expect(JSON.parse(injectionRow.injected_node_ids_json)).toEqual(["node_runtime_shadow"]);
     expect(JSON.parse(latestRecord.injected_node_ids_json)).toEqual([]);
     expect(reviewCount.count).toBe(0);
+    expect(attributionRows).toEqual([
+      expect.objectContaining({
+        node_id: "node_runtime_shadow",
+        delivered: 0,
+        outcome: "unknown",
+        attribution_verdict: "unknown",
+        confidence: "low",
+        source: "automatic",
+        attribution_reason: "suppressed_delivery"
+      })
+    ]);
   });
 
   it("suppresses delivery in holdout mode when the holdout bucket wins", async () => {
@@ -1729,6 +1784,16 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     const reviewRows = db
       .prepare("SELECT event_type, source FROM review_events ORDER BY created_at ASC")
       .all() as Array<{ event_type: string; source: string }>;
+    const attributionRows = db
+      .prepare("SELECT node_id, delivered, outcome, attribution_verdict, confidence, source FROM attribution_records")
+      .all() as Array<{
+      node_id: string;
+      delivered: number;
+      outcome: string;
+      attribution_verdict: string;
+      confidence: string;
+      source: string;
+    }>;
 
     expect(injectionRow.was_successful).toBe(0);
     expect(injectionRow.harm_observed).toBe(1);
@@ -1736,6 +1801,16 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     expect(reviewRows).toEqual([
       expect.objectContaining({
         event_type: "mark_harmed",
+        source: "automatic"
+      })
+    ]);
+    expect(attributionRows).toEqual([
+      expect.objectContaining({
+        node_id: "node_runtime_harm",
+        delivered: 1,
+        outcome: "failure",
+        attribution_verdict: "strong_harmed",
+        confidence: "high",
         source: "automatic"
       })
     ]);
