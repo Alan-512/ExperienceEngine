@@ -39,6 +39,10 @@ export const loadConfig = (
       (env.EXPERIENCE_ENGINE_EVALUATION_MODE as ExperienceEngineConfig["evaluationMode"] | undefined) ??
       overrides.evaluationMode ??
       defaultConfig.evaluationMode,
+    repoExperienceMode:
+      (env.EXPERIENCE_ENGINE_REPO_EXPERIENCE_MODE as ExperienceEngineConfig["repoExperienceMode"] | undefined) ??
+      overrides.repoExperienceMode ??
+      defaultConfig.repoExperienceMode,
     holdoutRate: env.EXPERIENCE_ENGINE_HOLDOUT_RATE
       ? Number(env.EXPERIENCE_ENGINE_HOLDOUT_RATE)
       : overrides.holdoutRate ?? defaultConfig.holdoutRate,

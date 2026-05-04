@@ -16,6 +16,7 @@ import { InjectionRepository } from "../../src/store/sqlite/repositories/injecti
 import { AttributionRecordRepository } from "../../src/store/sqlite/repositories/attribution-record-repo.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
 import { ReviewEventRepository } from "../../src/store/sqlite/repositories/review-event-repo.js";
+import { RepoPolicyRepository } from "../../src/store/sqlite/repositories/repo-policy-repo.js";
 import { ScopeRepository } from "../../src/store/sqlite/repositories/scope-repo.js";
 import { nowIso } from "../../src/utils/clock.js";
 
@@ -509,6 +510,55 @@ describe("ExperienceInteractionService", () => {
       isDisabled: false,
       changed: true
     });
+  });
+
+  it("surfaces and restores repo policy without deleting evidence", () => {
+    const homeDir = makeTempDir();
+    const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const scope = resolveScope("/repo");
+    const policyRepo = new RepoPolicyRepository(db);
+    const injectionRepo = new InjectionRepository(db);
+    policyRepo.upsert({
+      scope_id: scope.scope_id,
+      configured_mode: "safe",
+      effective_mode: "strict",
+      circuit_state: "tripped",
+      circuit_reason: "repo_circuit",
+      live_diagnostics_disabled: true,
+      created_at: "2026-05-04T10:00:00.000Z",
+      updated_at: "2026-05-04T10:01:00.000Z",
+      last_tripped_at: "2026-05-04T10:01:00.000Z"
+    });
+    injectionRepo.upsert({
+      injection_id: "inject_policy_history",
+      scope_id: scope.scope_id,
+      task_type: "test_debug",
+      mode: "inject_conservative",
+      delivery_mode: "live",
+      delivered: true,
+      injected_node_ids: ["node_policy_history"],
+      injection_count: 1,
+      was_successful: null,
+      harm_observed: null,
+      created_at: "2026-05-04T10:00:00.000Z"
+    });
+
+    const service = new ExperienceInteractionService(config);
+
+    expect(service.inspectRepoSummary("/repo").policy).toMatchObject({
+      configuredMode: "safe",
+      effectiveMode: "strict",
+      circuitState: "tripped",
+      liveDiagnosticsDisabled: true
+    });
+    expect(service.restoreRepoPolicy("/repo")).toMatchObject({
+      effective_mode: "safe",
+      circuit_state: "clear",
+      live_diagnostics_disabled: false
+    });
+    expect(injectionRepo.countByScope(scope.scope_id)).toBe(1);
   });
 
   it("updates node lifecycle state through the shared interaction service", () => {

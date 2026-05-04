@@ -259,6 +259,19 @@ CREATE TABLE IF NOT EXISTS attribution_records (
   resolved_at TEXT
 );
 
+CREATE TABLE IF NOT EXISTS repo_policies (
+  scope_id TEXT PRIMARY KEY,
+  configured_mode TEXT NOT NULL DEFAULT 'safe',
+  effective_mode TEXT NOT NULL DEFAULT 'safe',
+  circuit_state TEXT NOT NULL DEFAULT 'clear',
+  circuit_reason TEXT,
+  live_diagnostics_disabled INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  last_tripped_at TEXT,
+  restored_at TEXT
+);
+
 CREATE INDEX IF NOT EXISTS idx_attribution_records_injection_id ON attribution_records(injection_id);
 CREATE INDEX IF NOT EXISTS idx_attribution_records_node_id ON attribution_records(node_id);
 CREATE INDEX IF NOT EXISTS idx_attribution_records_verdict ON attribution_records(attribution_verdict);

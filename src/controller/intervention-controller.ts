@@ -8,6 +8,7 @@ import type {
   InterventionRejectedCandidate,
   InjectionScorecardCandidate,
   InjectionMode,
+  RepoPolicy,
   RetrievalContext,
   ResolvedTaskType,
   ScopeTaskStats,
@@ -236,18 +237,32 @@ const isDestructiveOrIrreversibleGuidance = (node: ExperienceNode): boolean => {
 const isDiagnosticCandidate = (candidate: RetrievedCandidate): boolean =>
   candidate.node.state === "candidate" && resolveDeliveryState(candidate.node) === "shadow_only";
 
-const passesDiagnosticLiveGate = (candidate: RetrievedCandidate): boolean =>
-  isDiagnosticCandidate(candidate) &&
-  candidate.node.node_type === "strategy" &&
-  candidate.scopeMatch &&
-  candidate.taskFamilyMatch &&
-  candidate.matchScorecard?.scopeMatch === "same" &&
-  candidate.matchScorecard.overallMatchBand === "high" &&
-  candidate.matchScorecard.negativeEvidence.length === 0 &&
-  candidate.node.harmed_count === 0 &&
-  candidate.totalScore >= 0.6 &&
-  candidate.scoreMargin >= 0.05 &&
-  !isDestructiveOrIrreversibleGuidance(candidate.node);
+const DIAGNOSTIC_GATE_THRESHOLDS: Record<RepoPolicy["effective_mode"], { totalScore: number; scoreMargin: number }> = {
+  safe: { totalScore: 0.6, scoreMargin: 0.05 },
+  fast_learning: { totalScore: 0.55, scoreMargin: 0.03 },
+  strict: { totalScore: 0.6, scoreMargin: 0.05 }
+};
+
+const passesDiagnosticLiveGate = (candidate: RetrievedCandidate, repoPolicy?: RepoPolicy): boolean => {
+  const mode = repoPolicy?.effective_mode ?? "safe";
+  const thresholds = DIAGNOSTIC_GATE_THRESHOLDS[mode];
+  const strictCircuitSuppressed = mode === "strict" && repoPolicy?.live_diagnostics_disabled;
+
+  return (
+    !strictCircuitSuppressed &&
+    isDiagnosticCandidate(candidate) &&
+    candidate.node.node_type === "strategy" &&
+    candidate.scopeMatch &&
+    candidate.taskFamilyMatch &&
+    candidate.matchScorecard?.scopeMatch === "same" &&
+    candidate.matchScorecard.overallMatchBand === "high" &&
+    candidate.matchScorecard.negativeEvidence.length === 0 &&
+    candidate.node.harmed_count === 0 &&
+    candidate.totalScore >= thresholds.totalScore &&
+    candidate.scoreMargin >= thresholds.scoreMargin &&
+    !isDestructiveOrIrreversibleGuidance(candidate.node)
+  );
+};
 
 const withDecisionEnvelope = (input: {
   diagnostics: Omit<InterventionDecisionDiagnostics, "confidence" | "budgetClass" | "selectedCandidateIds" | "rejectedCandidates">;
@@ -354,9 +369,10 @@ export const decideIntervention = (
     | "syncSecondOpinionMode"
     | "syncSecondOpinionModel"
   >,
-  retrievalContext?: RetrievalContext
+  retrievalContext?: RetrievalContext,
+  repoPolicy?: RepoPolicy
 ): Promise<InterventionDecision> =>
-  decideInterventionInternal(input, nodes, stats, threshold, maxHints, config, retrievalContext);
+  decideInterventionInternal(input, nodes, stats, threshold, maxHints, config, retrievalContext, repoPolicy);
 
 const decideInterventionInternal = async (
   input: ExperienceInput,
@@ -378,7 +394,8 @@ const decideInterventionInternal = async (
     | "syncSecondOpinionMode"
     | "syncSecondOpinionModel"
   >,
-  retrievalContext?: RetrievalContext
+  retrievalContext?: RetrievalContext,
+  repoPolicy?: RepoPolicy
 ): Promise<InterventionDecision> => {
   const retrievalBundle = await retrieveCandidateBundle(input, nodes, {
     config,
@@ -414,7 +431,7 @@ const decideInterventionInternal = async (
     : ranked;
   const liveCorrectionAwareRanked = correctionAwareRanked.filter(isLiveInjectableNode);
   const diagnosticCandidates = scoredCandidates.filter(isDiagnosticCandidate);
-  const liveDiagnosticCandidate = diagnosticCandidates.find(passesDiagnosticLiveGate);
+  const liveDiagnosticCandidate = diagnosticCandidates.find((candidate) => passesDiagnosticLiveGate(candidate, repoPolicy));
   const diagnosticCandidateIds = diagnosticCandidates.map((candidate) => candidate.node.id);
 
   const buildRecordOnlyDiagnosticDiagnostics = (

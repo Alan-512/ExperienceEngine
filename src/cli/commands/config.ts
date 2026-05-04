@@ -17,6 +17,8 @@ import {
 } from "../../config/settings-store.js";
 import { resolveModelCatalog, type ProviderModelCatalog } from "../../distillation/model-catalog.js";
 import type { DistillerProvider } from "../../distillation/providers/types.js";
+import { loadConfig } from "../../config/load-config.js";
+import { ExperienceInteractionService } from "../../interaction/service.js";
 
 type ConfigCommandDeps = {
   resolveModelCatalog?: (provider: DistillerProvider) => Promise<ProviderModelCatalog>;
@@ -28,6 +30,15 @@ export const runConfigCommand = async (
   value?: string,
   deps: ConfigCommandDeps = {}
 ): Promise<void> => {
+  if (action === "restore" && key === "repo-policy") {
+    const config = loadConfig();
+    const policy = new ExperienceInteractionService(config).restoreRepoPolicy(process.cwd());
+    console.log(
+      `[ExperienceEngine] Repo policy restored for ${policy.scope_id}: ${policy.effective_mode}.`
+    );
+    return;
+  }
+
   if (action === "get" && key?.startsWith("secret.")) {
     const secretKey = key.slice("secret.".length);
     if (!isSupportedSecretKey(secretKey)) {
@@ -220,6 +231,6 @@ export const runConfigCommand = async (
   }
 
   console.log(
-    "Usage: ee config <get|set|unset> notices.inline|distillation.provider|distillation.auth_mode|distillation.model|embedding.provider|embedding.api_provider|embedding.model|embedding.dtype|secret.<ENV_KEY> [value]"
+    "Usage: ee config <get|set|unset|restore> notices.inline|distillation.provider|distillation.auth_mode|distillation.model|embedding.provider|embedding.api_provider|embedding.model|embedding.dtype|secret.<ENV_KEY>|repo-policy [value]"
   );
 };

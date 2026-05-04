@@ -148,6 +148,23 @@ export class InjectionRepository {
       .map((row) => this.mapEvent(row as Parameters<typeof this.mapEvent>[0]));
   }
 
+  listRecentResolvedByScope(scopeId: string, limit = 20): InjectionEvent[] {
+    return this.db
+      .prepare(
+        `SELECT injection_id, episode_id, session_id, scope_id, task_type, task_summary, mode, delivery_mode, delivered, injected_node_ids_json,
+                injection_count, scorecard_json, was_successful, harm_observed, attribution_reason, created_at, resolved_at
+         FROM injection_events
+         WHERE scope_id = ?
+           AND resolved_at IS NOT NULL
+           AND (delivered = 1 OR mode = 'inject_conservative')
+           AND (was_successful IS NOT NULL OR harm_observed IS NOT NULL OR attribution_reason IS NOT NULL)
+         ORDER BY created_at DESC, injection_id DESC
+         LIMIT ?`
+      )
+      .all(scopeId, limit)
+      .map((row) => this.mapEvent(row as Parameters<typeof this.mapEvent>[0]));
+  }
+
   countByScope(scopeId: string): number {
     return (
       this.db

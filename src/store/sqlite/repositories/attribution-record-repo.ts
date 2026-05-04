@@ -110,6 +110,22 @@ export class AttributionRecordRepository {
       .map((row) => this.mapRow(row as AttributionRecordRow));
   }
 
+  listRecentEligibleByScope(scopeId: string, limit = 20): AttributionRecord[] {
+    return this.db
+      .prepare(
+        `SELECT ar.*
+         FROM attribution_records ar
+         LEFT JOIN injection_events ie ON ie.injection_id = ar.injection_id
+         LEFT JOIN experience_nodes en ON en.id = ar.node_id
+         WHERE (ie.scope_id = ? OR (ie.injection_id IS NULL AND en.scope_id = ?))
+           AND (ar.delivered = 1 OR ar.intervention_strength = 'diagnostic_hint')
+         ORDER BY ar.created_at DESC, ar.id DESC
+         LIMIT ?`
+      )
+      .all(scopeId, scopeId, limit)
+      .map((row) => this.mapRow(row as AttributionRecordRow));
+  }
+
   countByVerdict(verdict: AttributionVerdict): number {
     return (
       this.db

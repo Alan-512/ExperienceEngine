@@ -10,6 +10,7 @@ import { decidePosttaskHybridRoute } from "../../src/runtime/service.js";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
 import { InjectionRepository } from "../../src/store/sqlite/repositories/injection-repo.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
+import { RepoPolicyRepository } from "../../src/store/sqlite/repositories/repo-policy-repo.js";
 import { clearEmbeddingProviderForTests, setEmbeddingProviderForTests } from "../../src/store/vector/embeddings.js";
 import { nowIso } from "../../src/utils/clock.js";
 
@@ -735,6 +736,54 @@ describe("ExperienceRuntimeService finalize transaction", () => {
       usage_count: 0,
       helped_count: 0,
       harmed_count: 0
+    });
+  });
+
+  it("suppresses live diagnostics in strict tripped policy while keeping record-only evaluation", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    seedStrategyNode(sqlitePath, "/repo", "node_strict_record_only_diagnostic", {
+      state: "candidate",
+      delivery_state: "shadow_only",
+      compact_hint: "Run the failing vitest auth test before editing and verify after the fix.",
+      retrieval_text: "Fix the failing vitest auth test\nRun the failing vitest auth test before editing and verify after the fix."
+    });
+    const config = loadConfig({
+      dataDir: join(runtimeDir, "data"),
+      sqlitePath,
+      captureDir: join(runtimeDir, "captures"),
+      distillationAutoDrain: false,
+      distillationAllowPassthrough: true
+    }, { homeDir: runtimeDir });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const scope = resolveScope("/repo");
+    new RepoPolicyRepository(db).upsert({
+      scope_id: scope.scope_id,
+      configured_mode: "safe",
+      effective_mode: "strict",
+      circuit_state: "tripped",
+      circuit_reason: "repo_circuit",
+      live_diagnostics_disabled: true,
+      created_at: "2026-05-04T10:00:00.000Z",
+      updated_at: "2026-05-04T10:01:00.000Z",
+      last_tripped_at: "2026-05-04T10:01:00.000Z"
+    });
+    const service = new ExperienceRuntimeService(config, undefined, { homeDir: runtimeDir, env: {} });
+
+    const prompt = await service.beforePromptBuild({
+      sessionId: "strict-record-only-diagnostic-session",
+      cwd: "/repo",
+      userMessage: "Fix the failing vitest auth test",
+      taskSummary: "Fix the failing vitest auth test"
+    });
+
+    expect(prompt.mode).toBe("skip");
+    expect(prompt.text).toBeUndefined();
+    expect(prompt.scorecard).toMatchObject({
+      mode: "skip",
+      interventionStrength: "diagnostic_hint",
+      recordOnlyDiagnosticCandidateIds: ["node_strict_record_only_diagnostic"]
     });
   });
 

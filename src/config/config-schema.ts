@@ -7,6 +7,7 @@ export const configSchema = z.object({
   logLevel: z.enum(["debug", "info", "warn", "error"]).default("info"),
   noticesInline: z.boolean().default(true),
   evaluationMode: z.enum(["live", "shadow", "holdout"]).default("live"),
+  repoExperienceMode: z.enum(["safe", "fast_learning", "strict"]).default("safe"),
   holdoutRate: z.number().min(0).max(1).default(0.2),
   captureRawPayloads: z.boolean().default(false),
   captureDir: z.string().default("./data/runtime-captures"),
@@ -75,6 +76,11 @@ export const pluginConfigJsonSchema = {
       type: "string",
       enum: ["live", "shadow", "holdout"],
       description: "Controls whether ExperienceEngine delivers interventions live, suppresses them in shadow mode, or randomly withholds them for holdout evaluation."
+    },
+    repoExperienceMode: {
+      type: "string",
+      enum: ["safe", "fast_learning", "strict"],
+      description: "Repo-level policy mode for diagnostic candidate aggressiveness. It does not override disabled scopes or delivery-state safety gates."
     },
     holdoutRate: {
       type: "number",

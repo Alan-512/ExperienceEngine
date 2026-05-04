@@ -4,6 +4,9 @@ import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runConfigCommand } from "../../src/cli/commands/config.js";
 import { loadConfig } from "../../src/config/load-config.js";
+import { resolveScope } from "../../src/input/scope-resolver.js";
+import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
+import { RepoPolicyRepository } from "../../src/store/sqlite/repositories/repo-policy-repo.js";
 
 const tempDirs: string[] = [];
 const originalHome = process.env.EXPERIENCE_ENGINE_HOME;
@@ -58,6 +61,38 @@ describe("config command", () => {
     runConfigCommand("get", "notices.inline");
 
     expect(consoleLogSpy).toHaveBeenCalledWith("false");
+  });
+
+  it("restores repo policy through the config surface", async () => {
+    const home = makeTempDir();
+    const productHome = join(home, ".experienceengine");
+    process.env.EXPERIENCE_ENGINE_HOME = productHome;
+    const config = loadConfig({}, { env: { EXPERIENCE_ENGINE_HOME: productHome } as NodeJS.ProcessEnv });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const scope = resolveScope(process.cwd());
+    new RepoPolicyRepository(db).upsert({
+      scope_id: scope.scope_id,
+      configured_mode: "safe",
+      effective_mode: "strict",
+      circuit_state: "tripped",
+      circuit_reason: "repo_circuit",
+      live_diagnostics_disabled: true,
+      created_at: "2026-05-04T10:00:00.000Z",
+      updated_at: "2026-05-04T10:01:00.000Z",
+      last_tripped_at: "2026-05-04T10:01:00.000Z"
+    });
+
+    await runConfigCommand("restore", "repo-policy");
+
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      `[ExperienceEngine] Repo policy restored for ${scope.scope_id}: safe.`
+    );
+    expect(new RepoPolicyRepository(db).get(scope.scope_id)).toMatchObject({
+      effective_mode: "safe",
+      circuit_state: "clear",
+      live_diagnostics_disabled: false
+    });
   });
 
   it("persists distillation auth mode selection", () => {

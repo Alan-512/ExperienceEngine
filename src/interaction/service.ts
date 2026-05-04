@@ -14,6 +14,7 @@ import { HybridInvocationTraceRepository } from "../store/sqlite/repositories/hy
 import { InputRecordRepository } from "../store/sqlite/repositories/input-record-repo.js";
 import { InjectionRepository } from "../store/sqlite/repositories/injection-repo.js";
 import { AttributionRecordRepository } from "../store/sqlite/repositories/attribution-record-repo.js";
+import { RepoPolicyRepository } from "../store/sqlite/repositories/repo-policy-repo.js";
 import { EpisodeRepository } from "../store/sqlite/repositories/episode-repo.js";
 import { NodeRepository } from "../store/sqlite/repositories/node-repo.js";
 import { OutcomeRecordRepository } from "../store/sqlite/repositories/outcome-record-repo.js";
@@ -720,6 +721,7 @@ export class ExperienceInteractionService {
   private readonly inputRepo;
   private readonly injectionRepo;
   private readonly attributionRecordRepo;
+  private readonly repoPolicyRepo;
   private readonly episodeRepo;
   private readonly nodeRepo;
   private readonly candidateRepo;
@@ -737,6 +739,7 @@ export class ExperienceInteractionService {
     this.inputRepo = new InputRecordRepository(db);
     this.injectionRepo = new InjectionRepository(db);
     this.attributionRecordRepo = new AttributionRecordRepository(db);
+    this.repoPolicyRepo = new RepoPolicyRepository(db);
     this.episodeRepo = new EpisodeRepository(db);
     this.nodeRepo = new NodeRepository(db);
     this.candidateRepo = new CandidateRepository(db);
@@ -1174,8 +1177,14 @@ export class ExperienceInteractionService {
         rootPath: scope.root_path
       },
       latest: latest && latest.scopeId === scope.scope_id ? latest : undefined,
-      learning
+      learning,
+      policy: this.repoPolicyRepo.getOrCreate(scope.scope_id, this.config.repoExperienceMode)
     });
+  }
+
+  restoreRepoPolicy(cwd: string = process.cwd()) {
+    const scope = resolveScope(cwd);
+    return this.repoPolicyRepo.restore(scope.scope_id, this.config.repoExperienceMode);
   }
 
   inspectFirstValueReadiness(cwd: string = process.cwd()): ExperienceFirstValueReadiness {

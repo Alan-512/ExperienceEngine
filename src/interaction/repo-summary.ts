@@ -1,4 +1,5 @@
 import type { BenchmarkSummary } from "../evaluation/benchmark-summary.js";
+import type { RepoPolicy } from "../types/domain.js";
 import type { ExperienceLastInspection, ExperienceLearningSummary } from "./service.js";
 
 export type ExperienceRepoSummary = {
@@ -18,6 +19,16 @@ export type ExperienceRepoSummary = {
     latestTrustSummary?: ExperienceLastInspection["trustSummary"];
   };
   benchmark: BenchmarkSummary;
+  policy?: {
+    configuredMode: RepoPolicy["configured_mode"];
+    effectiveMode: RepoPolicy["effective_mode"];
+    circuitState: RepoPolicy["circuit_state"];
+    circuitReason?: string;
+    liveDiagnosticsDisabled: boolean;
+    updatedAt: string;
+    lastTrippedAt?: string;
+    restoredAt?: string;
+  };
   recommendedNextAction: string;
 };
 
@@ -42,6 +53,7 @@ export const buildRepoSummary = (input: {
   };
   latest?: ExperienceLastInspection;
   learning: ExperienceLearningSummary;
+  policy?: RepoPolicy;
 }): ExperienceRepoSummary => ({
   scope: input.scope,
   recent: {
@@ -55,5 +67,17 @@ export const buildRepoSummary = (input: {
     latestTrustSummary: input.latest?.trustSummary
   },
   benchmark: input.learning.benchmark,
+  policy: input.policy
+    ? {
+        configuredMode: input.policy.configured_mode,
+        effectiveMode: input.policy.effective_mode,
+        circuitState: input.policy.circuit_state,
+        circuitReason: input.policy.circuit_reason,
+        liveDiagnosticsDisabled: input.policy.live_diagnostics_disabled,
+        updatedAt: input.policy.updated_at,
+        lastTrippedAt: input.policy.last_tripped_at,
+        restoredAt: input.policy.restored_at
+      }
+    : undefined,
   recommendedNextAction: summarizeRecommendation(input.learning.benchmark)
 });

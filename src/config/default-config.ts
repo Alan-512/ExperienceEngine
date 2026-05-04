@@ -6,6 +6,7 @@ export const defaultConfig: ExperienceEngineConfig = {
   logLevel: "info",
   noticesInline: true,
   evaluationMode: "live",
+  repoExperienceMode: "safe",
   holdoutRate: 0.2,
   captureRawPayloads: false,
   captureDir: "./data/runtime-captures",

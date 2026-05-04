@@ -70,6 +70,8 @@ export type AttributionVerdict =
   | "strong_harmed";
 export type AttributionConfidence = "low" | "medium" | "high";
 export type AttributionSource = "automatic" | "manual_override" | "diagnostic_record";
+export type RepoExperienceMode = "safe" | "fast_learning" | "strict";
+export type RepoCircuitState = "clear" | "tripped";
 export type ToolEventStatus = "success" | "failure" | "unknown";
 export type CandidateLifecycleState = "pending" | "distilled" | "failed" | "discarded";
 export type DistillationJobState = "pending" | "processing" | "succeeded" | "failed" | "discarded";
@@ -328,6 +330,19 @@ export type AttributionRecord = {
   attribution_reason?: FeedbackAttributionReason | "manual_override" | "diagnostic_record";
   created_at: string;
   resolved_at?: string;
+};
+
+export type RepoPolicy = {
+  scope_id: string;
+  configured_mode: RepoExperienceMode;
+  effective_mode: RepoExperienceMode;
+  circuit_state: RepoCircuitState;
+  circuit_reason?: string;
+  live_diagnostics_disabled: boolean;
+  created_at: string;
+  updated_at: string;
+  last_tripped_at?: string;
+  restored_at?: string;
 };
 
 export type EpisodeProjection = {

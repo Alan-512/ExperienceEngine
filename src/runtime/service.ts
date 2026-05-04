@@ -13,6 +13,7 @@ import {
   applyGovernedNodeFeedback,
   deriveNodeOriginProfileForNode
 } from "../experience-management/node-lifecycle-governance.js";
+import { evaluateRepoPolicy } from "../experience-management/repo-policy.js";
 import { resolveHybridRolloutState } from "../hybrid/rollout.js";
 import { selectHybridRoute, type HybridRouteDecision, type HybridRouteSignals } from "../hybrid/router.js";
 import { nowIso } from "../utils/clock.js";
@@ -55,6 +56,7 @@ import { StatsRepository } from "../store/sqlite/repositories/stats-repo.js";
 import { TaskRunRepository } from "../store/sqlite/repositories/task-run-repo.js";
 import { InjectionRepository } from "../store/sqlite/repositories/injection-repo.js";
 import { AttributionRecordRepository } from "../store/sqlite/repositories/attribution-record-repo.js";
+import { RepoPolicyRepository } from "../store/sqlite/repositories/repo-policy-repo.js";
 import { HybridInvocationTraceRepository } from "../store/sqlite/repositories/hybrid-invocation-trace-repo.js";
 import { RuntimeCaptureWriter } from "../plugin/runtime-capture.js";
 import { normalizeToolResult } from "../plugin/hooks/tool-result-persist.js";
@@ -480,6 +482,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly statsRepo;
   private readonly injectionRepo;
   private readonly attributionRecordRepo;
+  private readonly repoPolicyRepo;
   private readonly hybridReviewArtifactRepo;
   private readonly hybridTraceRepo;
   private readonly runtimeOptions: ExperienceRuntimeServiceOptions;
@@ -513,6 +516,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     this.statsRepo = new StatsRepository(this.db);
     this.injectionRepo = new InjectionRepository(this.db);
     this.attributionRecordRepo = new AttributionRecordRepository(this.db);
+    this.repoPolicyRepo = new RepoPolicyRepository(this.db);
     this.hybridReviewArtifactRepo = new HybridReviewArtifactRepository(this.db);
     this.hybridTraceRepo = new HybridInvocationTraceRepository(this.db);
     this.captureWriter = new RuntimeCaptureWriter(config, this.logger);
@@ -1271,6 +1275,21 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
           ...this.resolveDiagnosticCandidates(input.scope_id)
         ]
       : [];
+    const existingRepoPolicy = this.repoPolicyRepo.getOrCreate(input.scope_id, this.config.repoExperienceMode);
+    const repoPolicyEvaluation = evaluateRepoPolicy(
+      existingRepoPolicy,
+      this.attributionRecordRepo.listRecentEligibleByScope(input.scope_id),
+      this.injectionRepo.listRecentResolvedByScope(input.scope_id)
+    );
+    if (repoPolicyEvaluation.changed) {
+      this.repoPolicyRepo.upsert(repoPolicyEvaluation.policy);
+      this.logger.warn?.("experienceengine.repo_policy_circuit_tripped", {
+        scopeId: input.scope_id,
+        configuredMode: repoPolicyEvaluation.policy.configured_mode,
+        effectiveMode: repoPolicyEvaluation.policy.effective_mode,
+        reason: repoPolicyEvaluation.policy.circuit_reason
+      });
+    }
     const decision = await decideIntervention(
       input,
       nodes,
@@ -1278,7 +1297,8 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       this.config.triggerThreshold,
       this.config.maxHints,
       this.config,
-      retrievalContext
+      retrievalContext,
+      repoPolicyEvaluation.policy
     );
     const episodeId = resolveEpisodeId(session, sessionId, input);
 
