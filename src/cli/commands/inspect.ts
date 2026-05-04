@@ -253,6 +253,9 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
         if (record.scorecard.confidence) {
           console.log(`- Confidence: ${record.scorecard.confidence}`);
         }
+        if (record.scorecard.interventionStrength) {
+          console.log(`- Intervention strength: ${record.scorecard.interventionStrength}`);
+        }
         if (record.scorecard.budgetClass) {
           console.log(`- Budget class: ${record.scorecard.budgetClass}`);
         }

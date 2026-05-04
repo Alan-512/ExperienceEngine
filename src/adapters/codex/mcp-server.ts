@@ -338,6 +338,7 @@ const summarizeRetrievalNotes = (scorecard: {
 const summarizeScorecard = (
   scorecard: {
     mode?: string;
+    interventionStrength?: string;
     riskLevel?: string;
     recommendation?: string;
     reasons?: string[];
@@ -355,6 +356,7 @@ const summarizeScorecard = (
   scorecard
     ? {
         mode: scorecard.mode,
+        interventionStrength: scorecard.interventionStrength,
         riskLevel: scorecard.riskLevel,
         recommendation: scorecard.recommendation,
         actionReason: summarizeActionReason(scorecard),

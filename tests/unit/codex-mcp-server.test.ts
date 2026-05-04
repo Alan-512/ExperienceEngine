@@ -160,6 +160,7 @@ describe("Codex MCP behavior loop", () => {
     expect(result.injectedNodeIds).toEqual(["node_codex_prompt_injection"]);
     expect(result.summary).toMatchObject({
       actionReason: "ExperienceEngine chose conservative injection because the best match still needs more runtime evidence.",
+      interventionStrength: "soft_recommendation",
       riskLevel: "medium",
       trustSummary: "medium-risk low-confidence priority_candidate guidance with 0 helped and 0 harmed signal(s).",
       retrievalNotes: expect.arrayContaining([

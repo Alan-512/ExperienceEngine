@@ -4,6 +4,7 @@ import type {
   InterventionBudgetClass,
   InterventionConfidence,
   InterventionDecisionDiagnostics,
+  InterventionStrength,
   InterventionRejectedCandidate,
   InjectionScorecardCandidate,
   InjectionMode,
@@ -154,6 +155,44 @@ const deriveBudgetClass = (mode: InjectionMode, selectedCount: number): Interven
   return selectedCount > 1 ? "multi_hint" : "single_hint";
 };
 
+const deriveInterventionStrength = (
+  mode: InjectionMode,
+  selected: ExperienceNode[]
+): InterventionStrength | undefined => {
+  const primaryNode = selected[0];
+  if (mode === "skip" || !primaryNode) {
+    return undefined;
+  }
+
+  if (
+    primaryNode.experience_kind === "expectation_correction" &&
+    primaryNode.confidence_signal === "confirmed_by_user" &&
+    (
+      primaryNode.validation_state === "validated_by_reuse" ||
+      primaryNode.corrected_constraint?.trim()
+    )
+  ) {
+    return "hard_constraint";
+  }
+
+  if (mode === "inject_conservative") {
+    return primaryNode.state === "candidate" ? "diagnostic_hint" : "soft_recommendation";
+  }
+
+  if (
+    primaryNode.state === "active" &&
+    primaryNode.helped_count >= primaryNode.harmed_count &&
+    (
+      primaryNode.validation_state === "validated_by_reuse" ||
+      primaryNode.helped_count >= 2
+    )
+  ) {
+    return "strong_recommendation";
+  }
+
+  return "soft_recommendation";
+};
+
 const buildRejectedCandidateBriefs = (
   candidates: RetrievedCandidate[],
   selectedIds: Set<string>
@@ -184,6 +223,7 @@ const withDecisionEnvelope = (input: {
   const selectedCandidateIds = input.selected.map((node) => node.id);
   return {
     ...input.diagnostics,
+    interventionStrength: deriveInterventionStrength(input.mode, input.selected),
     confidence: deriveDecisionConfidence(input.mode, input.topCandidateQuality, input.diagnostics.fastPathApplied),
     budgetClass: deriveBudgetClass(input.mode, input.selected.length),
     selectedCandidateIds,

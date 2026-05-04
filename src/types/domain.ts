@@ -32,6 +32,11 @@ export type CorrectionCategory =
   | "implementation_boundary"
   | "style_constraint";
 export type InjectionMode = "skip" | "inject_conservative" | "inject";
+export type InterventionStrength =
+  | "diagnostic_hint"
+  | "soft_recommendation"
+  | "strong_recommendation"
+  | "hard_constraint";
 export type InjectionRiskLevel = "low" | "medium" | "high";
 export type MatchBand = "high" | "medium" | "low";
 export type ScopeMatchBand = "same" | "related" | "cross" | "none";
@@ -332,6 +337,7 @@ export type InterventionRejectedCandidate = {
 };
 
 export type InterventionDecisionDiagnostics = {
+  interventionStrength?: InterventionStrength;
   topCandidates: InjectionScorecardCandidate[];
   topCandidateScore?: number;
   scoreMargin?: number;
@@ -359,6 +365,7 @@ export type InjectionScorecard = {
   taskType: TaskType;
   taskSummary: string;
   mode: Exclude<InjectionMode, "skip">;
+  interventionStrength?: InterventionStrength;
   riskLevel: InjectionRiskLevel;
   recommendation: string;
   reasons: string[];

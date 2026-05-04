@@ -177,6 +177,7 @@ export const buildInjectionScorecard = (
     taskType: input.task_type === "unknown" ? "general" : input.task_type,
     taskSummary: input.task_summary,
     mode,
+    interventionStrength: diagnostics?.interventionStrength,
     riskLevel,
     recommendation: recommendationForRisk(riskLevel),
     reasons: summarizeReasons(scoredNodes, mode),

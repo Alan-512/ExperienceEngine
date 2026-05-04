@@ -1263,6 +1263,7 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     expect(injectionRow.task_summary).toContain("Fix the failing vitest auth test");
     expect(injectionRow.mode).toBe("inject");
     expect(JSON.parse(injectionRow.scorecard_json ?? "{}")).toMatchObject({
+      interventionStrength: "soft_recommendation",
       riskLevel: "low",
       topCandidateScore: expect.any(Number),
       scoreMargin: expect.any(Number),
@@ -1520,6 +1521,7 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     };
     const scorecard = JSON.parse(injectionRow.scorecard_json ?? "{}") as {
       mode?: string;
+      interventionStrength?: string;
       riskLevel?: string;
       selectedCandidateIds?: string[];
       nodes?: Array<{ id?: string; riskLevel?: string }>;
@@ -1532,6 +1534,7 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     expect(JSON.parse(injectionRow.injected_node_ids_json)).toEqual(["node_runtime_live"]);
     expect(scorecard).toMatchObject({
       mode: "inject",
+      interventionStrength: "soft_recommendation",
       riskLevel: "low",
       selectedCandidateIds: ["node_runtime_live"],
       nodes: [

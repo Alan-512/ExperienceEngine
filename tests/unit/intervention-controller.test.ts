@@ -1002,4 +1002,45 @@ describe("decideIntervention", () => {
     expect(decision.selected[0]?.id).toBe("semantic-local-node");
   });
 
+  it("derives intervention strength without changing injection mode or selected nodes", async () => {
+    const strongDecision = await decideIntervention(
+      input,
+      [
+        node({
+          id: "strength-strong",
+          state: "active",
+          delivery_state: "eligible",
+          helped_count: 3,
+          support_count: 3
+        })
+      ],
+      stats,
+      0.6,
+      3
+    );
+
+    expect(strongDecision.mode).toBe("inject");
+    expect(strongDecision.selected.map((entry) => entry.id)).toEqual(["strength-strong"]);
+    expect(strongDecision.diagnostics?.interventionStrength).toBe("strong_recommendation");
+
+    const softDecision = await decideIntervention(
+      input,
+      [
+        node({
+          id: "strength-soft",
+          state: "priority_candidate",
+          delivery_state: "conservative_only",
+          support_count: 1
+        })
+      ],
+      stats,
+      0.6,
+      3
+    );
+
+    expect(softDecision.mode).toBe("inject_conservative");
+    expect(softDecision.selected.map((entry) => entry.id)).toEqual(["strength-soft"]);
+    expect(softDecision.diagnostics?.interventionStrength).toBe("soft_recommendation");
+  });
+
 });
