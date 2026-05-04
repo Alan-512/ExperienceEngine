@@ -462,6 +462,24 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     expect(prompt.text).toContain("focused failing test");
     expect(prompt.text).not.toContain("ordinary candidate");
     expect(prompt.input.injected_node_ids).toEqual(["scope-priority"]);
+
+    const injectionRow = db.prepare(
+      "SELECT mode, delivery_mode, delivered, injected_node_ids_json, injection_count FROM injection_events WHERE session_id = ?"
+    ).get("exact-scope-session") as {
+      mode: string;
+      delivery_mode: string;
+      delivered: number;
+      injected_node_ids_json: string;
+      injection_count: number;
+    };
+
+    expect(injectionRow).toMatchObject({
+      mode: "inject_conservative",
+      delivery_mode: "live",
+      delivered: 1,
+      injection_count: 1
+    });
+    expect(JSON.parse(injectionRow.injected_node_ids_json)).toEqual(["scope-priority"]);
   });
 
   it("keeps beforePromptBuild on skip when only shadow-only or quarantined nodes exist in scope", async () => {
@@ -1460,6 +1478,69 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     expect(injectionRow.attribution_reason).toBe("suppressed_delivery");
     expect(JSON.parse(latestRecord.injected_node_ids_json)).toEqual([]);
     expect(reviewCount.count).toBe(0);
+  });
+
+  it("delivers prompt text and injected ids in live evaluation mode", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    seedStrategyNode(sqlitePath, "/repo", "node_runtime_live");
+    const service = new ExperienceRuntimeService(
+      loadConfig({
+        dataDir: join(runtimeDir, "data"),
+        sqlitePath,
+        captureDir: join(runtimeDir, "captures"),
+        evaluationMode: "live"
+      }, { homeDir: runtimeDir }),
+      undefined,
+      { homeDir: runtimeDir, env: {} }
+    );
+
+    const prompt = await service.beforePromptBuild({
+      sessionId: "live-session",
+      cwd: "/repo",
+      userMessage: "Fix the failing vitest auth test",
+      taskSummary: "Fix the failing vitest auth test"
+    });
+
+    expect(prompt.mode).toBe("inject");
+    expect(prompt.text).toContain("Execution hints from prior similar tasks:");
+    expect(prompt.input.injected_node_ids).toEqual(["node_runtime_live"]);
+    expect(prompt.deliveryMode).toBe("live");
+    expect(prompt.delivered).toBe(true);
+
+    const db = new DatabaseSync(sqlitePath);
+    const injectionRow = db.prepare(
+      "SELECT mode, delivery_mode, delivered, injected_node_ids_json, scorecard_json FROM injection_events WHERE session_id = ?"
+    ).get("live-session") as {
+      mode: string;
+      delivery_mode: string;
+      delivered: number;
+      injected_node_ids_json: string;
+      scorecard_json: string | null;
+    };
+    const scorecard = JSON.parse(injectionRow.scorecard_json ?? "{}") as {
+      mode?: string;
+      riskLevel?: string;
+      selectedCandidateIds?: string[];
+      nodes?: Array<{ id?: string; riskLevel?: string }>;
+    };
+    expect(injectionRow).toMatchObject({
+      mode: "inject",
+      delivery_mode: "live",
+      delivered: 1
+    });
+    expect(JSON.parse(injectionRow.injected_node_ids_json)).toEqual(["node_runtime_live"]);
+    expect(scorecard).toMatchObject({
+      mode: "inject",
+      riskLevel: "low",
+      selectedCandidateIds: ["node_runtime_live"],
+      nodes: [
+        expect.objectContaining({
+          id: "node_runtime_live",
+          riskLevel: "low"
+        })
+      ]
+    });
   });
 
   it("persists relevant failure attribution when injected guidance appears harmful", async () => {

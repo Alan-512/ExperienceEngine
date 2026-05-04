@@ -32,8 +32,12 @@ const node = (overrides: Partial<ExperienceNode> = {}): ExperienceNode => ({
 describe("renderInjection", () => {
   it("renders a compact hints block", () => {
     const output = renderInjection("inject", [node()]);
-    expect(output).toContain("Execution hints from prior similar tasks:");
-    expect(output).toContain("- Validate the failing migration");
+    expect(output).toBe(
+      [
+        "Execution hints from prior similar tasks:",
+        "- Validate the failing migration before changing unrelated schema code."
+      ].join("\n")
+    );
   });
 
   it("expands structured steps for mature injected guidance", () => {
@@ -76,7 +80,7 @@ describe("renderInjection", () => {
       ]
     );
 
-    expect(output).toContain("Conservative execution hints:");
+    expect(output).toMatch(/^Conservative execution hints:\n- Validate the failing migration before changing unrelated schema code\./);
     expect(output).not.toContain("Steps:");
     expect(output).not.toContain("Goal:");
     expect(output).not.toContain("  1.");

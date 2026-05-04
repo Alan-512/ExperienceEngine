@@ -143,6 +143,28 @@ describe("NodeRepository", () => {
     expect(deliveryState?.delivery_state).toBe("conservative_only");
   });
 
+  it("freezes default delivery-state mapping for current lifecycle states", () => {
+    const { db, repo } = makeRepo();
+
+    repo.upsert(node({ id: "state-candidate", state: "candidate" }));
+    repo.upsert(node({ id: "state-priority", state: "priority_candidate" }));
+    repo.upsert(node({ id: "state-active", state: "active" }));
+    repo.upsert(node({ id: "state-cooling", state: "cooling" }));
+    repo.upsert(node({ id: "state-retired", state: "retired" }));
+
+    const rows = db
+      .prepare("SELECT id, delivery_state FROM experience_nodes WHERE id LIKE 'state-%' ORDER BY id ASC")
+      .all() as Array<{ id: string; delivery_state: string }>;
+
+    expect(rows).toEqual([
+      { id: "state-active", delivery_state: "eligible" },
+      { id: "state-candidate", delivery_state: "shadow_only" },
+      { id: "state-cooling", delivery_state: "conservative_only" },
+      { id: "state-priority", delivery_state: "conservative_only" },
+      { id: "state-retired", delivery_state: "quarantined" }
+    ]);
+  });
+
   it("lists live-injectable nodes by exact scope using delivery-state gating", () => {
     const { repo } = makeRepo();
 

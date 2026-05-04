@@ -328,6 +328,96 @@ describe("decideIntervention", () => {
     expect(decision.selected.map((entry) => entry.id)).toEqual(["cooling-node"]);
   });
 
+  it("freezes controller delivery-state outcomes for current lifecycle states", async () => {
+    const cases: Array<{
+      name: string;
+      candidate: Partial<ExperienceNode>;
+      expectedMode: "inject" | "inject_conservative" | "skip";
+      expectedSelectedIds: string[];
+    }> = [
+      {
+        name: "active eligible nodes inject normally",
+        candidate: {
+          id: "golden-active",
+          state: "active",
+          delivery_state: "eligible",
+          helped_count: 4,
+          support_count: 4
+        },
+        expectedMode: "inject",
+        expectedSelectedIds: ["golden-active"]
+      },
+      {
+        name: "priority candidates stay conservative",
+        candidate: {
+          id: "golden-priority",
+          state: "priority_candidate",
+          delivery_state: "conservative_only",
+          support_count: 1
+        },
+        expectedMode: "inject_conservative",
+        expectedSelectedIds: ["golden-priority"]
+      },
+      {
+        name: "cooling nodes stay conservative",
+        candidate: {
+          id: "golden-cooling",
+          state: "cooling",
+          delivery_state: "conservative_only",
+          helped_count: 4,
+          support_count: 4
+        },
+        expectedMode: "inject_conservative",
+        expectedSelectedIds: ["golden-cooling"]
+      },
+      {
+        name: "retired nodes are quarantined by default",
+        candidate: {
+          id: "golden-retired",
+          state: "retired",
+          helped_count: 8,
+          support_count: 8
+        },
+        expectedMode: "skip",
+        expectedSelectedIds: []
+      },
+      {
+        name: "explicitly quarantined active nodes are skipped",
+        candidate: {
+          id: "golden-quarantined",
+          state: "active",
+          delivery_state: "quarantined",
+          helped_count: 8,
+          support_count: 8
+        },
+        expectedMode: "skip",
+        expectedSelectedIds: []
+      }
+    ];
+
+    for (const testCase of cases) {
+      const decision = await decideIntervention(
+        input,
+        [node(testCase.candidate)],
+        stats,
+        0.6,
+        3
+      );
+
+      expect(
+        {
+          name: testCase.name,
+          mode: decision.mode,
+          selectedIds: decision.selected.map((entry) => entry.id)
+        }
+      ).toEqual({
+        name: testCase.name,
+        mode: testCase.expectedMode,
+        selectedIds: testCase.expectedSelectedIds
+      });
+    }
+  });
+
   it("skips quarantined nodes even if their lifecycle state still looks active", async () => {
     const decision = await decideIntervention(
       input,

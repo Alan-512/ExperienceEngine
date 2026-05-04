@@ -162,6 +162,10 @@ describe("Codex MCP behavior loop", () => {
       actionReason: "ExperienceEngine chose conservative injection because the best match still needs more runtime evidence.",
       riskLevel: "medium",
       trustSummary: "medium-risk low-confidence priority_candidate guidance with 0 helped and 0 harmed signal(s).",
+      retrievalNotes: expect.arrayContaining([
+        expect.stringContaining("Top retrieval signals:"),
+        expect.stringContaining("Top policy signals:")
+      ]),
       confidence: "low",
       budgetClass: "single_hint",
       selectedCandidateIds: ["node_codex_prompt_injection"],
