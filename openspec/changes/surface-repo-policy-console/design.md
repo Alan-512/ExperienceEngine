@@ -35,7 +35,7 @@ Rationale:
 
 ### 2. Inspect recent evidence, not the entire history
 
-The policy inspection should report the same bounded evidence window used by the evaluator: latest delivered or live-diagnostic attribution records plus fallback injection evidence, capped at 20.
+The policy inspection should report the same bounded evidence model used by the evaluator: delivered or live-diagnostic attribution records merged with fallback injection evidence, ordered by timestamp, and capped at 20 entries. When an attribution record and fallback injection event refer to the same injection, the inspection surface should prefer the attribution entry and suppress the duplicate fallback entry.
 
 Rationale:
 
@@ -64,4 +64,3 @@ Rationale:
 - [CLI output becomes a new product commitment] -> Start with existing inspect surfaces and structured service output, not a separate console app.
 - [Restore appears unsafe or magical] -> Show restore command/help text but keep restore as an explicit command.
 - [Fallback evidence is misunderstood as canonical attribution] -> Label evidence source as `attribution` or `injection_fallback`.
-

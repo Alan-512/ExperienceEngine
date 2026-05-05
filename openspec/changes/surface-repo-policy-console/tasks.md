@@ -1,10 +1,10 @@
 ## 1. Policy Evidence Read Model
 
 - [ ] 1.1 Define structured repo policy inspection types for state, restore guidance, evidence summary, and evidence entries.
-- [ ] 1.2 Add repository methods that return recent attribution evidence entries for a scope with node and injection references.
-- [ ] 1.3 Add repository methods that return recent fallback injection evidence entries for a scope.
-- [ ] 1.4 Add a pure evidence summarizer that merges attribution and fallback evidence, caps the window at 20, and counts verdicts/sources.
-- [ ] 1.5 Add unit tests for evidence windowing, source labeling, verdict counts, and no-evidence behavior.
+- [ ] 1.2 Reuse or add repository methods that return recent attribution evidence entries for a scope with node and injection references.
+- [ ] 1.3 Reuse or add repository methods that return recent fallback injection evidence entries for a scope.
+- [ ] 1.4 Add a pure evidence summarizer that merges attribution and fallback evidence, suppresses duplicate fallback entries for the same injection, caps the window at 20, and counts verdicts/sources.
+- [ ] 1.5 Add unit tests for evidence windowing, source labeling, manual override labeling, duplicate fallback suppression, verdict counts, and no-evidence behavior.
 
 ## 2. Interaction Surface
 
@@ -16,14 +16,13 @@
 
 ## 3. CLI And Operator Output
 
-- [ ] 3.1 Extend existing inspect/config CLI output to show repo policy state and evidence-aware circuit details.
-- [ ] 3.2 Keep restore output explicit and aligned with `ee config restore repo-policy`.
+- [ ] 3.1 Extend `ee inspect repo` output to show repo policy state and evidence-aware circuit details.
+- [ ] 3.2 Keep restore behavior explicit through `ee config restore repo-policy` and align help/restore wording only.
 - [ ] 3.3 Ensure CLI wording distinguishes automatic attribution from manual override evidence and fallback injection evidence.
-- [ ] 3.4 Add inspect/config command tests for clear policy, tripped policy, evidence rows, and restore guidance.
+- [ ] 3.4 Add inspect/config command tests for clear policy, tripped policy, evidence rows, manual override wording, and restore guidance.
 
 ## 4. Validation
 
 - [ ] 4.1 Run `pnpm vitest run tests/unit/repo-policy.test.ts tests/unit/interaction-service.test.ts tests/unit/inspect-command.test.ts tests/unit/config-command.test.ts`.
 - [ ] 4.2 Run `pnpm typecheck`.
 - [ ] 4.3 Run `openspec validate --changes --strict`.
-

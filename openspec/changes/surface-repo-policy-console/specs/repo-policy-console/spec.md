@@ -26,6 +26,12 @@ ExperienceEngine SHALL include bounded recent evidence that explains repo policy
 - **THEN** ExperienceEngine reports attribution evidence counts by verdict
 - **AND** it lists recent evidence entries with source, verdict, node or injection reference, delivery status, and timestamp
 
+#### Scenario: Manual override evidence is labeled as override
+
+- **WHEN** recent attribution evidence includes a manual feedback override
+- **THEN** ExperienceEngine labels that entry as manual override evidence
+- **AND** it does not present manual feedback as the primary automatic attribution path
+
 #### Scenario: Fallback injection evidence is used
 
 - **WHEN** fallback injection evidence contributes to the repo policy evidence window
@@ -35,8 +41,14 @@ ExperienceEngine SHALL include bounded recent evidence that explains repo policy
 #### Scenario: Evidence output is bounded
 
 - **WHEN** more than 20 eligible evidence records exist
-- **THEN** ExperienceEngine limits policy evidence output to the latest 20 eligible records
+- **THEN** ExperienceEngine merges attribution and fallback injection evidence, orders it by timestamp, and limits policy evidence output to the latest 20 eligible records
 - **AND** it reports the bounded window size used for the inspection
+
+#### Scenario: Duplicate fallback evidence is suppressed
+
+- **WHEN** attribution evidence and fallback injection evidence refer to the same injection
+- **THEN** ExperienceEngine prefers the attribution evidence entry
+- **AND** it does not render a duplicate fallback entry for that same injection
 
 ### Requirement: Repo policy inspection is read-only
 
@@ -47,4 +59,3 @@ ExperienceEngine SHALL keep repo policy inspection read-only.
 - **WHEN** an operator inspects repo policy evidence
 - **THEN** ExperienceEngine does not change repo policy state
 - **AND** it does not write attribution, injection, review, or node lifecycle records
-
