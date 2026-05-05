@@ -38,6 +38,11 @@ ExperienceEngine SHALL expose different interaction categories through MCP accor
 - **THEN** those views are served as MCP resources
 - **AND** the resource payloads are structured so agents can consume them without scraping terminal output
 
+#### Scenario: Hygiene inspection is exposed as read-only state
+- **WHEN** ExperienceEngine exposes hygiene findings through MCP or session interaction surfaces
+- **THEN** those findings are exposed as structured read-only state through a resource or read-only action
+- **AND** the payload includes summary counts, bounded findings, affected ids, evidence summaries, and review-only recommendations
+
 #### Scenario: The first low-risk control surface is exposed as tools
 - **WHEN** ExperienceEngine exposes feedback or scope enable/disable actions
 - **THEN** those actions are served as MCP tools
