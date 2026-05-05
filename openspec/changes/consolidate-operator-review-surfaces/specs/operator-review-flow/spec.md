@@ -1,0 +1,52 @@
+## ADDED Requirements
+
+### Requirement: Operator review flow summarizes scope health
+
+ExperienceEngine SHALL provide a bounded read-only operator review report for one scope.
+
+#### Scenario: Operator reviews scope health
+
+- **WHEN** an operator requests the review flow for a repo
+- **THEN** ExperienceEngine returns a structured report with scope id, generated timestamp, repo policy health, hygiene summary, export draft summary, recommended review order, and review-only next actions
+- **AND** it does not mutate repo policy, nodes, candidates, attribution records, injection records, review events, managed snapshots, or external instruction files
+
+#### Scenario: No review items exist
+
+- **WHEN** repo policy is clear, hygiene findings are empty, and export drafts are empty
+- **THEN** ExperienceEngine returns a review report with an empty issue list and a low-priority next action
+
+### Requirement: Operator review flow prioritizes risks
+
+ExperienceEngine SHALL prioritize review items by operational risk rather than by report source order alone.
+
+#### Scenario: Circuit or high-severity hygiene risk exists
+
+- **WHEN** repo policy is tripped or high-severity hygiene findings exist
+- **THEN** ExperienceEngine places those items before export-ready draft review
+- **AND** it includes review-only guidance to inspect the relevant detailed report
+
+#### Scenario: Export drafts are ready but hygiene is risky
+
+- **WHEN** export drafts exist and high-risk hygiene findings also exist
+- **THEN** ExperienceEngine includes the export draft summary
+- **AND** it recommends resolving or inspecting the hygiene risk before exporting guidance
+
+### Requirement: Operator review flow preserves drill-down paths
+
+ExperienceEngine SHALL link summary items to existing detailed inspection surfaces.
+
+#### Scenario: Review report includes drill-down references
+
+- **WHEN** ExperienceEngine returns an operator review report
+- **THEN** each major section includes a CLI drill-down command or MCP resource reference for the detailed repo, hygiene, or export-draft report
+- **AND** those references remain advisory and do not execute changes
+
+### Requirement: Operator review flow is filterable and bounded
+
+ExperienceEngine SHALL keep the review flow bounded for CLI and MCP use.
+
+#### Scenario: Operator sets a review limit
+
+- **WHEN** an operator requests a review report with a limit
+- **THEN** ExperienceEngine applies the limit to the number of surfaced hygiene findings and export drafts
+- **AND** it still includes summary counts for each source report
