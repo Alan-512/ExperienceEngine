@@ -447,11 +447,16 @@ describe("Codex MCP behavior loop", () => {
     const server = createCodexMcpServer({ homeDir, env });
     const lastResource = getRegisteredResource(server, "experienceengine://last");
     const repoSummaryResource = getRegisteredResource(server, "experienceengine://repo-summary");
+    const exportDraftsResource = getRegisteredResource(server, "experienceengine://export-drafts");
     const executeActionTool = getRegisteredTool(server, "experienceengine_execute_action");
 
     const lastPayload = await lastResource.readCallback(new URL("experienceengine://last"), {});
     const repoSummaryPayload = await repoSummaryResource.readCallback(
       new URL("experienceengine://repo-summary"),
+      {}
+    );
+    const exportDraftsPayload = await exportDraftsResource.readCallback(
+      new URL("experienceengine://export-drafts"),
       {}
     );
     const recentPayload = parseTextPayload<{ actionId: string; result: unknown[] }>(
@@ -470,6 +475,18 @@ describe("Codex MCP behavior loop", () => {
         content: Array<{ type: string; text?: string }>;
       }
     );
+    const exportDraftsActionPayload = parseTextPayload<{
+      actionId: string;
+      result: {
+        summary: { total: number };
+        drafts: Array<{ draftId: string; suggestedTargetType: string; nodeIds: string[] }>;
+      };
+    }>((await executeActionTool.handler({
+      actionId: "inspect_export_drafts",
+      payload: { cwd: "/repo", nodeType: "strategy", limit: 5 }
+    })) as {
+      content: Array<{ type: string; text?: string }>;
+    });
 
     expect(JSON.parse((lastPayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({
       sessionId: "codex-resource-view",
@@ -538,6 +555,25 @@ describe("Codex MCP behavior loop", () => {
     expect(
       JSON.parse((repoSummaryPayload as { contents: Array<{ text: string }> }).contents[0].text).recent.latestDecisionExplanation
     ).toBeUndefined();
+    expect(JSON.parse((exportDraftsPayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({
+      summary: {
+        total: expect.any(Number)
+      }
+    });
+    expect(exportDraftsActionPayload).toMatchObject({
+      actionId: "inspect_export_drafts",
+      result: {
+        summary: {
+          total: 1
+        },
+        drafts: [
+          expect.objectContaining({
+            draftId: "draft_node_codex_resource_view",
+            nodeIds: ["node_codex_resource_view"]
+          })
+        ]
+      }
+    });
     expect(nodePayload).toMatchObject({
       actionId: "inspect_node_detail",
       result: {

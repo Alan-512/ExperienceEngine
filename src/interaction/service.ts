@@ -10,6 +10,11 @@ import {
   type HygieneReviewFilters,
   type HygieneReviewReport
 } from "../maintenance/experience-hygiene.js";
+import {
+  buildExperienceExportDraftReport,
+  type ExperienceExportDraftFilters,
+  type ExperienceExportDraftReport
+} from "../maintenance/experience-export-drafts.js";
 import { selectHybridRoute, type HybridRouteDecision } from "../hybrid/router.js";
 import { HybridWorkerClient } from "../hybrid/worker-client.js";
 import { resolveScope } from "../input/scope-resolver.js";
@@ -1107,6 +1112,56 @@ export class ExperienceInteractionService {
       nodes: this.nodeRepo.listByScope(scopeId),
       candidates: candidateStates.flatMap((state) => this.candidateRepo.listByLifecycleState(state)).filter((candidate) => candidate.scope_id === scopeId),
       attributionRecords: this.attributionRecordRepo.listRecentByScope(scopeId, Math.max(50, filters.limit ?? 20)),
+      filters: {
+        ...filters,
+        scopeId
+      }
+    });
+  }
+
+  inspectExportDrafts(
+    cwd: string = process.cwd(),
+    filters: Omit<ExperienceExportDraftFilters, "scopeId"> & { scopeId?: string } = {}
+  ): ExperienceExportDraftReport {
+    const scopeId = filters.scopeId ?? resolveScope(cwd).scope_id;
+    const candidateStates: CandidateLifecycleState[] = ["pending", "distilled", "failed", "discarded"];
+    const nodes = this.nodeRepo.listByScope(scopeId);
+    const explicitLowReadiness = Boolean(filters.nodeId || filters.risk || filters.state || filters.deliveryState);
+    const candidateNodes = nodes
+      .filter((node) => !filters.nodeId || node.id === filters.nodeId)
+      .filter((node) => !filters.nodeType || node.node_type === filters.nodeType)
+      .filter((node) => !filters.taskFamily || node.task_type === filters.taskFamily)
+      .filter((node) => !filters.state || node.state === filters.state)
+      .filter((node) => !filters.deliveryState || node.delivery_state === filters.deliveryState)
+      .filter((node) => explicitLowReadiness || (node.state === "active" && (!node.delivery_state || node.delivery_state === "eligible") && node.harmed_count <= node.helped_count));
+    const candidates = candidateStates
+      .flatMap((state) => this.candidateRepo.listByLifecycleState(state))
+      .filter((candidate) => candidate.scope_id === scopeId);
+    const attributionRecordsById = new Map<string, AttributionRecord>();
+    for (const record of this.attributionRecordRepo.listRecentByScope(scopeId, Math.max(50, filters.limit ?? 20))) {
+      attributionRecordsById.set(record.id, record);
+    }
+    for (const node of candidateNodes) {
+      for (const record of this.attributionRecordRepo.listByNodeId(node.id)) {
+        attributionRecordsById.set(record.id, record);
+      }
+    }
+    const attributionRecords = [...attributionRecordsById.values()];
+    const hygiene = buildHygieneReviewReport({
+      nodes,
+      candidates,
+      attributionRecords,
+      filters: {
+        scopeId,
+        limit: Math.max(50, filters.limit ?? 20)
+      }
+    });
+
+    return buildExperienceExportDraftReport({
+      nodes,
+      candidates,
+      attributionRecords,
+      hygieneFindings: hygiene.findings,
       filters: {
         ...filters,
         scopeId

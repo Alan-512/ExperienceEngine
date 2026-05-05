@@ -9,8 +9,8 @@ The repo already has managed backup/export snapshots in `ExperienceStateArtifact
 **Goals:**
 
 - Produce bounded, structured export drafts for selected experience nodes.
-- Include provenance, evidence, scope, applicability, risk, hygiene context, and recommended target type.
-- Support filters by scope, node id, node type, task family, severity/risk, and limit.
+- Include provenance, evidence, scope, applicability, risk, hygiene context, and advisory recommended target type.
+- Support filters by scope, node id, node type, task family, lifecycle state, delivery state, severity/risk, and limit.
 - Expose drafts through operator inspection surfaces.
 - Keep all output review-only and non-mutating.
 
@@ -36,23 +36,35 @@ Rationale:
 
 Each draft should contain a stable id, node ids, scope id, task family, guidance text, evidence summary, provenance refs, risk notes, hygiene notes, and suggested target type.
 
+The first-pass suggested target type enum is advisory and local-only:
+
+- `instruction_note`
+- `repo_guidance`
+- `skill_candidate`
+- `documentation_note`
+- `do_not_export`
+
 Rationale:
 
 - Operators need enough context to accept/rewrite/reject exported guidance.
 - Suggested targets are advisory, not mutation payloads.
+- `do_not_export` gives the builder a conservative output for high-risk or low-readiness guidance without mutating node state.
 
 ### 3. Start from nodes, not raw candidates
 
 The first pass should draft from formal nodes only. Raw candidates can appear as context when hygiene findings point to duplicates, but they should not become export drafts until promoted/distilled.
 
+Default exportable nodes should be active/eligible or otherwise validated by reuse/evidence. Nodes that are cooling, conservative-only, priority candidates, or otherwise lower-readiness may appear only when explicitly selected or filtered and must carry risk notes. Retired, quarantined, or clearly harmed nodes are excluded by default unless an explicit diagnostic filter asks for them.
+
 Rationale:
 
 - Formal nodes have compact guidance and lifecycle/delivery metadata.
 - This avoids exporting noisy pre-distillation candidates.
+- Readiness defaults prevent export drafts from becoming a back door around delivery-state governance.
 
 ### 4. CLI/MCP surfaces stay read-only
 
-Expose the first surface as `ee inspect export-drafts` or an equivalent read-only inspect/export draft path, plus a brokered Codex inspect action.
+Expose the first CLI surface as `ee inspect export-drafts`, plus a read-only Codex resource and brokered inspect action.
 
 Rationale:
 
@@ -63,5 +75,5 @@ Rationale:
 
 - [Drafts imply authority] -> Label every output as review-only and avoid executable mutation payloads.
 - [Confusion with snapshot export] -> Keep naming and help text clear: state export snapshots are not guidance export drafts.
-- [Noisy guidance exports] -> Default to active/eligible or validated nodes and include hygiene/risk notes.
+- [Noisy guidance exports] -> Default to active/eligible or validated nodes, downgrade high-risk drafts to `do_not_export`, and include hygiene/risk notes.
 - [Premature team feature] -> Keep target types advisory and local; no team/org workflow in this change.

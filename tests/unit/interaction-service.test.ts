@@ -10,6 +10,7 @@ import {
   ExperienceInteractionService,
   type ExperienceLastInspection
 } from "../../src/interaction/service.js";
+import { ExperienceStateArtifactService } from "../../src/interaction/state-artifact-service.js";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
 import { InputRecordRepository } from "../../src/store/sqlite/repositories/input-record-repo.js";
 import { InjectionRepository } from "../../src/store/sqlite/repositories/injection-repo.js";
@@ -778,6 +779,106 @@ describe("ExperienceInteractionService", () => {
         evidenceRefs: ["input_target_older"]
       })
     ]);
+  });
+
+  it("inspects export drafts without mutating stored governance or snapshot state", () => {
+    const homeDir = makeTempDir();
+    const cwd = "/repo";
+    const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    const attributionRepo = new AttributionRecordRepository(db);
+    const artifactService = new ExperienceStateArtifactService({ homeDir });
+    seedStrategyNode(nodeRepo, cwd, "2026-05-04T00:00:00.000Z", "node_export_draft");
+    const node = nodeRepo.getById("node_export_draft");
+    nodeRepo.upsert({
+      ...node!,
+      delivery_state: "eligible",
+      validation_state: "validated_by_reuse",
+      helped_count: 1,
+      helped_record_ids: ["input_helped"],
+      updated_at: "2026-05-04T00:00:00.000Z"
+    });
+    attributionRepo.insert({
+      id: "attr_export_draft",
+      node_id: "node_export_draft",
+      delivered: true,
+      outcome: "success",
+      attribution_verdict: "strong_helped",
+      confidence: "high",
+      evidence_refs: ["input_helped", "inject_helped"],
+      source: "automatic",
+      created_at: "2026-05-04T01:00:00.000Z"
+    });
+
+    const beforeNode = nodeRepo.getById("node_export_draft");
+    const beforeReviewCount = (db.prepare("SELECT COUNT(*) AS count FROM review_events").get() as { count: number }).count;
+    const beforeAttributionCount = (db.prepare("SELECT COUNT(*) AS count FROM attribution_records").get() as { count: number }).count;
+    const beforeBackups = artifactService.listBackups();
+
+    const service = new ExperienceInteractionService(config);
+    const report = service.inspectExportDrafts(cwd, { limit: 5 });
+
+    expect(report.summary.total).toBe(1);
+    expect(report.drafts[0]).toMatchObject({
+      draftId: "draft_node_export_draft",
+      suggestedTargetType: "repo_guidance",
+      risk: "low"
+    });
+    expect(nodeRepo.getById("node_export_draft")).toEqual(beforeNode);
+    expect((db.prepare("SELECT COUNT(*) AS count FROM review_events").get() as { count: number }).count).toBe(beforeReviewCount);
+    expect((db.prepare("SELECT COUNT(*) AS count FROM attribution_records").get() as { count: number }).count).toBe(beforeAttributionCount);
+    expect(artifactService.listBackups()).toEqual(beforeBackups);
+  });
+
+  it("keeps export draft attribution context scoped to selected nodes outside the recent scope window", () => {
+    const homeDir = makeTempDir();
+    const cwd = "/repo";
+    const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    const attributionRepo = new AttributionRecordRepository(db);
+    seedStrategyNode(nodeRepo, cwd, "2026-01-01T00:00:00.000Z", "node_export_old_harm");
+    seedStrategyNode(nodeRepo, cwd, "2026-05-04T00:00:00.000Z", "node_export_recent_noise");
+
+    for (let index = 0; index < 55; index += 1) {
+      attributionRepo.insert({
+        id: `attr_export_noise_${index}`,
+        node_id: "node_export_recent_noise",
+        delivered: true,
+        outcome: "success",
+        attribution_verdict: "strong_helped",
+        confidence: "high",
+        evidence_refs: [`input_noise_${index}`],
+        source: "automatic",
+        created_at: `2026-05-04T00:${String(index).padStart(2, "0")}:00.000Z`
+      });
+    }
+    attributionRepo.insert({
+      id: "attr_export_old_harm",
+      node_id: "node_export_old_harm",
+      delivered: true,
+      outcome: "failure",
+      attribution_verdict: "strong_harmed",
+      confidence: "high",
+      evidence_refs: ["input_old_harm"],
+      source: "automatic",
+      created_at: "2026-05-03T00:00:00.000Z"
+    });
+
+    const service = new ExperienceInteractionService(config);
+    const report = service.inspectExportDrafts(cwd, { nodeId: "node_export_old_harm", limit: 5 });
+
+    expect(report.summary.total).toBe(1);
+    expect(report.drafts[0]).toMatchObject({
+      draftId: "draft_node_export_old_harm",
+      risk: "high",
+      suggestedTargetType: "do_not_export"
+    });
+    expect(report.drafts[0].provenanceRefs).toContain("input_old_harm");
+    expect(report.drafts[0].riskNotes).toEqual(expect.arrayContaining(["Has 1 recent harmed attribution record(s)."]));
   });
 
   it("updates node lifecycle state through the shared interaction service", () => {

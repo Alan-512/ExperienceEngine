@@ -563,6 +563,49 @@ describe("inspect command", () => {
     ]);
   });
 
+  it("prints bounded guidance export drafts with filters", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+    const cwd = "/repo-export-drafts-cli";
+    const scopeId = resolveScope(cwd).scope_id;
+    const nodeRepo = new NodeRepository(db);
+    nodeRepo.upsert(makeNode({
+      id: "node_export_cli",
+      scope_id: scopeId,
+      delivery_state: "eligible",
+      validation_state: "validated_by_reuse",
+      helped_count: 1,
+      helped_record_ids: ["input_helped_cli"],
+      updated_at: "2026-05-04T00:00:00.000Z"
+    }));
+
+    runInspectCommand("export-drafts", "--cwd", cwd, "--node-type", "strategy", "--limit", "5");
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Guidance export drafts:"],
+        [
+          "- Review-only: no instruction files, skills, docs, node state, attribution, review events, repo policy, or snapshots were written."
+        ],
+        [`- Scope: ${scopeId}`],
+        ["- Drafts: 1"],
+        ["By risk:"],
+        ["By suggested target:"]
+      ])
+    );
+    expect(consoleTableSpy.mock.calls.at(-1)?.[0]).toEqual([
+      expect.objectContaining({
+        draft: "draft_node_export_cli",
+        nodes: "node_export_cli",
+        task: "test_debug",
+        risk: "low",
+        target: "repo_guidance"
+      })
+    ]);
+  });
+
   it("prints persisted skip delivery decisions", () => {
     const home = makeTempDir();
     process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");

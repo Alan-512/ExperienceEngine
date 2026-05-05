@@ -45,4 +45,4 @@ The product SHALL expose explicit CLI commands for users who want to inspect rec
 
 - **WHEN** a user runs `ee inspect export-drafts`
 - **THEN** ExperienceEngine prints bounded read-only guidance export drafts with summary counts and review context
-- **AND** optional filters such as scope, node id, node type, task family, risk, and limit narrow the report without mutating stored state
+- **AND** optional filters such as scope, node id, node type, task family, lifecycle state, delivery state, risk, and limit narrow the report without mutating stored state

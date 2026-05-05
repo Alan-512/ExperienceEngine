@@ -5,8 +5,8 @@ ExperienceEngine now exposes repo policy evidence and hygiene findings, but oper
 ## What Changes
 
 - Add an experience export draft capability that builds reviewable export plans from selected nodes, hygiene findings, and supporting evidence.
-- Include candidate/node ids, scope, task family, compact guidance, evidence summary, provenance refs, risk notes, and suggested export target.
-- Surface drafts through interaction and CLI/Codex inspect/export review surfaces.
+- Include candidate/node ids, scope, task family, lifecycle/delivery state, compact guidance, evidence summary, provenance refs, risk notes, and an advisory suggested export target type.
+- Surface drafts through interaction and `ee inspect export-drafts` / Codex read-only inspection surfaces.
 - Keep drafts non-mutating: do not write instruction files, modify node state, publish team assets, or change feedback/state machines.
 - Keep team/org capability and automated synchronization out of scope.
 
@@ -26,11 +26,11 @@ ExperienceEngine now exposes repo policy evidence and hygiene findings, but oper
 - Affected code:
   - `src/maintenance/experience-export-drafts.ts`
   - `src/interaction/service.ts`
-  - `src/cli/commands/inspect.ts` or `src/cli/commands/export.ts`
+  - `src/cli/commands/inspect.ts`
   - `src/adapters/codex/action-registry.ts`
   - `src/adapters/codex/mcp-server.ts`
 - Affected tests:
   - `tests/unit/experience-export-drafts.test.ts`
   - `tests/unit/interaction-service.test.ts`
-  - `tests/unit/inspect-command.test.ts` or export command coverage
+  - `tests/unit/inspect-command.test.ts`
   - Codex broker/resource tests if the MCP surface changes

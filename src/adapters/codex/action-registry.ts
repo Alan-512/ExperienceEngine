@@ -1,6 +1,7 @@
 import { z } from "zod";
-import type { ExperienceNodeType, ExperienceState } from "../../types/domain.js";
+import type { DeliveryState, ExperienceNodeType, ExperienceState, TaskType } from "../../types/domain.js";
 import type { HygieneFindingType, HygieneSeverity } from "../../maintenance/experience-hygiene.js";
+import type { ExportDraftRisk } from "../../maintenance/experience-export-drafts.js";
 
 export type CodexActionCategory = "inspect" | "state" | "admin" | "maintenance";
 export type CodexActionRiskLevel = "low" | "medium" | "high";
@@ -25,6 +26,16 @@ type RegistryDeps = {
     listNodesByType: (args: { nodeType: ExperienceNodeType }) => Promise<unknown>;
     inspectLearningSummary: () => Promise<unknown>;
     inspectHygiene: (args?: { cwd?: string; type?: HygieneFindingType; severity?: HygieneSeverity; limit?: number }) => Promise<unknown>;
+    inspectExportDrafts: (args?: {
+      cwd?: string;
+      nodeId?: string;
+      nodeType?: ExperienceNodeType;
+      taskFamily?: TaskType;
+      state?: ExperienceState;
+      deliveryState?: DeliveryState;
+      risk?: ExportDraftRisk;
+      limit?: number;
+    }) => Promise<unknown>;
     coolNode: (args: { nodeId: string }) => Promise<unknown>;
     retireNode: (args: { nodeId: string }) => Promise<unknown>;
     feedbackNode: (args: { nodeId: string; feedback: "helped" | "harmed" }) => Promise<unknown>;
@@ -300,6 +311,36 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
           cwd: typeof cwd === "string" ? cwd : undefined,
           type: type as HygieneFindingType | undefined,
           severity: severity as HygieneSeverity | undefined,
+          limit: typeof limit === "number" ? limit : undefined
+        })
+    },
+    {
+      id: "inspect_export_drafts",
+      title: "Inspect Export Drafts",
+      summary: "Inspect read-only review packages for guidance that may be exported outside local EE state.",
+      category: "inspect",
+      riskLevel: "low",
+      requiresConfirmation: false,
+      inputSchema: z.object({
+        cwd: z.string().min(1).optional(),
+        nodeId: z.string().min(1).optional(),
+        nodeType: z.enum(["strategy", "warning"]).optional(),
+        taskFamily: z.string().min(1).optional(),
+        state: z.enum(["candidate", "priority_candidate", "active", "cooling", "retired"]).optional(),
+        deliveryState: z.enum(["shadow_only", "conservative_only", "eligible", "quarantined"]).optional(),
+        risk: z.enum(["low", "medium", "high"]).optional(),
+        limit: z.number().int().positive().optional()
+      }),
+      examplePayload: { cwd: "/path/to/repo", state: "cooling", risk: "high", limit: 10 },
+      handler: async ({ cwd, nodeId, nodeType, taskFamily, state, deliveryState, risk, limit }) =>
+        deps.interactionSurface.inspectExportDrafts({
+          cwd: typeof cwd === "string" ? cwd : undefined,
+          nodeId: typeof nodeId === "string" ? nodeId : undefined,
+          nodeType: nodeType as ExperienceNodeType | undefined,
+          taskFamily: taskFamily as TaskType | undefined,
+          state: state as ExperienceState | undefined,
+          deliveryState: deliveryState as DeliveryState | undefined,
+          risk: risk as ExportDraftRisk | undefined,
           limit: typeof limit === "number" ? limit : undefined
         })
     },

@@ -2,12 +2,14 @@ import { loadConfig } from "../../config/load-config.js";
 import { deriveGovernanceSignals } from "../../experience-management/governance-observability.js";
 import { ExperienceInteractionService } from "../../interaction/service.js";
 import { ExperienceStateArtifactService } from "../../interaction/state-artifact-service.js";
-import type { ExperienceNode } from "../../types/domain.js";
+import type { DeliveryState, ExperienceNode } from "../../types/domain.js";
 import type { ExperienceLastInspection, ExperienceNodeDetail } from "../../interaction/service.js";
 import type { HygieneFindingType, HygieneSeverity } from "../../maintenance/experience-hygiene.js";
+import type { ExportDraftRisk } from "../../maintenance/experience-export-drafts.js";
 
 const NODE_STATES: ExperienceNode["state"][] = ["candidate", "priority_candidate", "active", "cooling", "retired"];
 const NODE_TYPES: ExperienceNode["node_type"][] = ["strategy", "warning"];
+const DELIVERY_STATES: DeliveryState[] = ["shadow_only", "conservative_only", "eligible", "quarantined"];
 const HYGIENE_TYPES: HygieneFindingType[] = [
   "stale_experience",
   "duplicate_guidance",
@@ -16,6 +18,7 @@ const HYGIENE_TYPES: HygieneFindingType[] = [
   "evidence_drift"
 ];
 const HYGIENE_SEVERITIES: HygieneSeverity[] = ["high", "medium", "low"];
+const EXPORT_DRAFT_RISKS: ExportDraftRisk[] = ["high", "medium", "low"];
 
 const describeInterventionReason = (record: ExperienceLastInspection): string | undefined => {
   const scorecard = record.scorecard;
@@ -178,6 +181,88 @@ const parseHygieneArgs = (args: string[]): { cwd?: string; type?: HygieneFinding
     }
     if ((value === "--severity" || value === "severity") && next && HYGIENE_SEVERITIES.includes(next as HygieneSeverity)) {
       parsed.severity = next as HygieneSeverity;
+      index += 1;
+      continue;
+    }
+    if ((value === "--limit" || value === "limit") && next) {
+      const limit = Number(next);
+      if (Number.isInteger(limit) && limit > 0) {
+        parsed.limit = limit;
+        index += 1;
+        continue;
+      }
+    }
+    const numericLimit = Number(value);
+    if (Number.isInteger(numericLimit) && numericLimit > 0) {
+      parsed.limit = numericLimit;
+      continue;
+    }
+    return null;
+  }
+  return parsed;
+};
+
+const parseExportDraftArgs = (
+  args: string[]
+): {
+  cwd?: string;
+  nodeId?: string;
+  nodeType?: ExperienceNode["node_type"];
+  taskFamily?: ExperienceNode["task_type"];
+  state?: ExperienceNode["state"];
+  deliveryState?: DeliveryState;
+  risk?: ExportDraftRisk;
+  limit?: number;
+} | null => {
+  const parsed: {
+    cwd?: string;
+    nodeId?: string;
+    nodeType?: ExperienceNode["node_type"];
+    taskFamily?: ExperienceNode["task_type"];
+    state?: ExperienceNode["state"];
+    deliveryState?: DeliveryState;
+    risk?: ExportDraftRisk;
+    limit?: number;
+  } = {};
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+    const next = args[index + 1];
+    if ((value === "--cwd" || value === "cwd" || value === "--scope" || value === "scope") && next) {
+      parsed.cwd = next;
+      index += 1;
+      continue;
+    }
+    if ((value === "--node-id" || value === "node" || value === "nodeId") && next) {
+      parsed.nodeId = next;
+      index += 1;
+      continue;
+    }
+    if ((value === "--node-type" || value === "nodeType" || value === "type") && next && NODE_TYPES.includes(next as ExperienceNode["node_type"])) {
+      parsed.nodeType = next as ExperienceNode["node_type"];
+      index += 1;
+      continue;
+    }
+    if ((value === "--task-family" || value === "taskFamily" || value === "task") && next) {
+      parsed.taskFamily = next as ExperienceNode["task_type"];
+      index += 1;
+      continue;
+    }
+    if ((value === "--state" || value === "state") && next && NODE_STATES.includes(next as ExperienceNode["state"])) {
+      parsed.state = next as ExperienceNode["state"];
+      index += 1;
+      continue;
+    }
+    if (
+      (value === "--delivery-state" || value === "deliveryState" || value === "delivery")
+      && next
+      && DELIVERY_STATES.includes(next as DeliveryState)
+    ) {
+      parsed.deliveryState = next as DeliveryState;
+      index += 1;
+      continue;
+    }
+    if ((value === "--risk" || value === "risk") && next && EXPORT_DRAFT_RISKS.includes(next as ExportDraftRisk)) {
+      parsed.risk = next as ExportDraftRisk;
       index += 1;
       continue;
     }
@@ -549,6 +634,45 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string,
         candidates: finding.affectedCandidateIds.join(","),
         evidence: finding.evidenceSummary,
         recommendation: finding.recommendation
+      }))
+    );
+    return;
+  }
+
+  if (target === "export-drafts") {
+    const filters = parseExportDraftArgs([arg1, arg2, ...extraArgs].filter((value): value is string => Boolean(value)));
+    if (!filters) {
+      console.log(
+        "Usage: ee inspect export-drafts [--cwd <path>] [--node-id <id>] [--node-type <strategy|warning>] [--task-family <task>] [--state <candidate|priority_candidate|active|cooling|retired>] [--delivery-state <shadow_only|conservative_only|eligible|quarantined>] [--risk <high|medium|low>] [--limit <n>]"
+      );
+      return;
+    }
+    const { cwd, ...draftFilters } = filters;
+    const report = interaction.inspectExportDrafts(cwd ?? process.cwd(), draftFilters);
+    console.log("Guidance export drafts:");
+    console.log("- Review-only: no instruction files, skills, docs, node state, attribution, review events, repo policy, or snapshots were written.");
+    console.log(`- Scope: ${report.scopeId ?? "current"}`);
+    console.log(`- Drafts: ${report.summary.total}`);
+    console.log(`- Generated at: ${report.generatedAt}`);
+    console.log("By risk:");
+    console.table(report.summary.byRisk);
+    console.log("By suggested target:");
+    console.table(report.summary.byTargetType);
+    if (!report.drafts.length) {
+      console.log("No exportable guidance drafts found.");
+      return;
+    }
+    console.table(
+      report.drafts.map((draft) => ({
+        draft: draft.draftId,
+        nodes: draft.nodeIds.join(","),
+        candidates: draft.contextCandidateIds.join(","),
+        task: draft.taskFamily,
+        risk: draft.risk,
+        target: draft.suggestedTargetType,
+        readiness: draft.readinessScore,
+        guidance: draft.guidanceText.split("\n")[0],
+        evidence: draft.evidenceSummary
       }))
     );
     return;

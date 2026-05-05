@@ -18,8 +18,9 @@ import {
 } from "../../interaction/operational-actions-service.js";
 import { ExperienceStateArtifactService } from "../../interaction/state-artifact-service.js";
 import { ExperienceRuntimeService } from "../../runtime/service.js";
-import type { ExperienceNodeType, ExperienceState, ToolEventStatus } from "../../types/domain.js";
+import type { DeliveryState, ExperienceNodeType, ExperienceState, TaskType, ToolEventStatus } from "../../types/domain.js";
 import type { HygieneFindingType, HygieneSeverity } from "../../maintenance/experience-hygiene.js";
+import type { ExportDraftRisk } from "../../maintenance/experience-export-drafts.js";
 import { fetchLatestGitHubReleaseStatus } from "../../version/remote-release.js";
 import { createCodexActionRegistry } from "./action-registry.js";
 import {
@@ -86,7 +87,9 @@ const buildExperienceCapabilities = () => ({
     "experienceengine://doctor/{adapter}",
     "experienceengine://capabilities",
     "experienceengine://last",
-    "experienceengine://repo-summary"
+    "experienceengine://repo-summary",
+    "experienceengine://hygiene",
+    "experienceengine://export-drafts"
   ],
   advanced_actions: [
     "brokered admin actions",
@@ -500,6 +503,22 @@ export const createCodexInteractionSurface = (options: CodexServerOptions = {}) 
       return interaction.inspectHygiene(cwd ?? process.cwd(), filters);
     },
 
+    async inspectExportDrafts(
+      args: {
+        cwd?: string;
+        nodeId?: string;
+        nodeType?: ExperienceNodeType;
+        taskFamily?: TaskType;
+        state?: ExperienceState;
+        deliveryState?: DeliveryState;
+        risk?: ExportDraftRisk;
+        limit?: number;
+      } = {}
+    ) {
+      const { cwd, ...filters } = args;
+      return interaction.inspectExportDrafts(cwd ?? process.cwd(), filters);
+    },
+
     async explainLastDecision(args: { cwd?: string; userMessage: string }) {
       return interaction.explainLastDecision(args.cwd, args.userMessage);
     },
@@ -619,6 +638,17 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
       mimeType: "application/json"
     },
     async (uri) => toJsonResourceResult(uri.toString(), await interactionSurface.inspectHygiene())
+  );
+
+  server.registerResource(
+    "experienceengine_export_drafts",
+    "experienceengine://export-drafts",
+    {
+      title: "ExperienceEngine Export Drafts",
+      description: "Read-only review packages for guidance export drafts in the current scope.",
+      mimeType: "application/json"
+    },
+    async (uri) => toJsonResourceResult(uri.toString(), await interactionSurface.inspectExportDrafts())
   );
 
   server.registerTool(

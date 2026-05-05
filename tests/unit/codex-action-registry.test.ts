@@ -10,6 +10,7 @@ describe("codex action registry", () => {
         listNodesByState: async () => [],
         listNodesByType: async () => [],
         inspectLearningSummary: async () => ({}),
+        inspectExportDrafts: async () => ({}),
         coolNode: async () => ({}),
         retireNode: async () => ({}),
         feedbackNode: async () => ({}),
@@ -36,7 +37,8 @@ describe("codex action registry", () => {
         "plan_backup",
         "inspect_recent_history",
         "inspect_node_detail",
-        "inspect_learning_summary"
+        "inspect_learning_summary",
+        "inspect_export_drafts"
       ])
     );
     expect(registry.get("lookup_hints")).toBeUndefined();
@@ -53,6 +55,7 @@ describe("codex action registry", () => {
         listNodesByState: async () => [],
         listNodesByType: async () => [],
         inspectLearningSummary: async () => ({}),
+        inspectExportDrafts: async () => ({}),
         coolNode: async () => ({}),
         retireNode: async () => ({}),
         feedbackNode: async () => ({}),
