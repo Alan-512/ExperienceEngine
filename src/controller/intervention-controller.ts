@@ -582,8 +582,7 @@ const decideInterventionInternal = async (
         secondOpinionReason = secondOpinion.reason;
 
         if (secondOpinion.bestNodeId) {
-          const replacement = plannedSelected.find((node) => node.id === secondOpinion.bestNodeId)
-            ?? scoredCandidates.find((candidate) => candidate.node.id === secondOpinion.bestNodeId)?.node;
+          const replacement = plannedSelected.find((node) => node.id === secondOpinion.bestNodeId);
           if (replacement) {
             finalSelected = [replacement];
           }

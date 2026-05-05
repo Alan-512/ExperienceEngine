@@ -534,6 +534,61 @@ describe("decideIntervention", () => {
     expect(decision.diagnostics?.secondOpinionTrigger).toBe("harm_history");
   });
 
+  it("does not let second opinion promote a shadow diagnostic candidate into live selection", async () => {
+    setSelectiveSecondOpinionHooksForTests({
+      evaluate: async () => ({
+        decision: "allow",
+        confidence: "medium",
+        reason: "The diagnostic candidate looks related but was not part of the live plan.",
+        trigger: "harm_history",
+        bestNodeId: "shadow-diagnostic"
+      })
+    });
+
+    const decision = await decideIntervention(
+      input,
+      [
+        node({
+          id: "risky-active",
+          state: "active",
+          delivery_state: "eligible",
+          harmed_count: 1,
+          helped_count: 2,
+          support_count: 4
+        }),
+        node({
+          id: "shadow-diagnostic",
+          state: "candidate",
+          delivery_state: "shadow_only",
+          task_type: "test_debug",
+          trigger_pattern: "Fix the failing vitest auth test in the current workspace",
+          compact_hint: "Inspect the auth fixture before changing runtime code."
+        })
+      ],
+      stats,
+      0.6,
+      3,
+      {
+        embeddingProvider: "local",
+        embeddingModel: "Xenova/multilingual-e5-small",
+        embeddingDtype: "q8",
+        embeddingCacheDir: "/tmp/experienceengine-test-embeddings",
+        retrievalRerankerMode: "disabled",
+        retrievalRerankerModel: "",
+        syncSecondOpinionMode: "selective",
+        syncSecondOpinionModel: "",
+        distillerProvider: "openai_compatible",
+        distillationAuthMode: "api_key",
+        distillerModel: "gpt-second-opinion"
+      }
+    );
+
+    expect(decision.mode).toBe("inject");
+    expect(decision.selected.map((entry) => entry.id)).toEqual(["risky-active"]);
+    expect(decision.diagnostics?.secondOpinionApplied).toBe(true);
+    expect(decision.diagnostics?.selectedCandidateIds).toEqual(["risky-active"]);
+  });
+
   it("keeps an exact priority-candidate family match ahead of unrelated active cross-family nodes", async () => {
     const decision = await decideIntervention(
       {

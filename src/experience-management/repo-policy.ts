@@ -103,11 +103,16 @@ export const evaluateRepoPolicy = (
 ): RepoPolicyEvaluation => {
   const attributionEvidence = evidenceFromAttributionRecords(attributionRecords);
   const fallbackEvidence = evidenceFromInjectionFallback(fallbackInjectionEvents);
-  const evidence = (attributionEvidence.length > 0 ? attributionEvidence : fallbackEvidence)
+  const evidence = [...attributionEvidence, ...fallbackEvidence]
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
     .slice(0, REPO_POLICY_WINDOW_SIZE);
 
-  const evidenceSource = evidence.length === 0 ? "none" : evidence[0].source;
+  const evidenceSource =
+    evidence.length === 0
+      ? "none"
+      : attributionEvidence.length > 0
+        ? "attribution"
+        : "injection_fallback";
   const strongHarmedCount = evidence.filter((item) => item.verdict === "strong_harmed").length;
   const harmfulCount = evidence.filter((item) => isHarmfulVerdict(item.verdict)).length;
   const eligibleCount = evidence.length;

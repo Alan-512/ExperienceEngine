@@ -191,6 +191,26 @@ describe("repo policy evaluator", () => {
     expect(evaluation.policy.effective_mode).toBe("strict");
   });
 
+  it("keeps fallback injection evidence in the circuit window during attribution migration", () => {
+    const attribution = [attributionRecord(10, { attribution_verdict: "neutral" })];
+    const events = Array.from({ length: 4 }, (_, index) =>
+      injectionEvent(index, {
+        was_successful: index < 2 ? false : true,
+        attribution_reason: index < 2 ? "relevant_failure" : "success_outcome"
+      })
+    );
+
+    const evaluation = evaluateRepoPolicy(buildDefaultRepoPolicy("scope_repo", "safe"), attribution, events);
+
+    expect(evaluation).toMatchObject({
+      evidenceSource: "attribution",
+      eligibleCount: 5,
+      harmfulCount: 2,
+      breached: true
+    });
+    expect(evaluation.policy.effective_mode).toBe("strict");
+  });
+
   it("clears a strict circuit on manual restore", () => {
     const strictPolicy = {
       ...buildDefaultRepoPolicy("scope_repo", "safe"),

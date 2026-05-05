@@ -1038,7 +1038,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       return;
     }
 
-    if (injectionEvent?.scorecard?.interventionStrength === "diagnostic_hint") {
+    if (injectionEvent?.scorecard?.interventionStrength === "diagnostic_hint" && !injectionEvent.delivered) {
       return;
     }
 
@@ -1079,8 +1079,11 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       })
     );
 
+    const isDiagnosticHint = injectionEvent?.scorecard?.interventionStrength === "diagnostic_hint";
     const highMatchPromotionIds = new Set(
-      injectionEvent?.scorecard?.topCandidates
+      isDiagnosticHint
+        ? []
+        : injectionEvent?.scorecard?.topCandidates
         ?.filter((candidate) =>
           candidate.matchScorecard?.scopeMatch === "same" &&
           candidate.matchScorecard.overallMatchBand === "high" &&

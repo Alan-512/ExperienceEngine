@@ -667,7 +667,7 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     ]);
   });
 
-  it("delivers a safe diagnostic hint without mutating candidate lifecycle or counters", async () => {
+  it("lets a delivered harmful diagnostic hint enter governance writeback", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
     seedStrategyNode(sqlitePath, "/repo", "node_live_diagnostic", {
@@ -721,21 +721,23 @@ describe("ExperienceRuntimeService finalize transaction", () => {
 
     const db = new DatabaseSync(sqlitePath);
     const nodeRow = db.prepare(
-      "SELECT state, delivery_state, usage_count, helped_count, harmed_count FROM experience_nodes WHERE id = ?"
+      "SELECT state, delivery_state, usage_count, helped_count, harmed_count, last_feedback_verdict FROM experience_nodes WHERE id = ?"
     ).get("node_live_diagnostic") as {
       state: string;
       delivery_state: string;
       usage_count: number;
       helped_count: number;
       harmed_count: number;
+      last_feedback_verdict: string | null;
     };
 
     expect(nodeRow).toEqual({
-      state: "candidate",
-      delivery_state: "shadow_only",
-      usage_count: 0,
+      state: "cooling",
+      delivery_state: "conservative_only",
+      usage_count: 1,
       helped_count: 0,
-      harmed_count: 0
+      harmed_count: 1,
+      last_feedback_verdict: "harmed"
     });
   });
 
