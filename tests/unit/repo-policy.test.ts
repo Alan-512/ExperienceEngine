@@ -213,6 +213,32 @@ describe("repo policy evaluator", () => {
     expect(evaluation.policy.effective_mode).toBe("strict");
   });
 
+  it("uses the same duplicate-suppressed evidence window for evaluator and inspection", () => {
+    const attribution = [
+      attributionRecord(1, { injection_id: "inject_shared", attribution_verdict: "strong_harmed" }),
+      attributionRecord(2, { attribution_verdict: "neutral" }),
+      attributionRecord(3, { attribution_verdict: "neutral" }),
+      attributionRecord(4, { attribution_verdict: "neutral" }),
+      attributionRecord(5, { attribution_verdict: "neutral" })
+    ];
+    const events = [
+      injectionEvent(1, { injection_id: "inject_shared", harm_observed: true }),
+      injectionEvent(6, { was_successful: true })
+    ];
+
+    const evaluation = evaluateRepoPolicy(buildDefaultRepoPolicy("scope_repo", "safe"), attribution, events);
+    const inspection = summarizeRepoPolicyEvidence(attribution, events);
+
+    expect(inspection.summary.fallbackSuppressedCount).toBe(1);
+    expect(inspection.entries).toHaveLength(6);
+    expect(evaluation).toMatchObject({
+      eligibleCount: 6,
+      strongHarmedCount: 1,
+      harmfulCount: 1,
+      breached: false
+    });
+  });
+
   it("clears a strict circuit on manual restore", () => {
     const strictPolicy = {
       ...buildDefaultRepoPolicy("scope_repo", "safe"),

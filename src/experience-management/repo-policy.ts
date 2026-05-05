@@ -55,6 +55,13 @@ export type RepoPolicyEvaluation = {
   changed: boolean;
 };
 
+const evidenceSourceForEntries = (entries: RepoPolicyEvidenceEntry[]): RepoPolicyEvaluation["evidenceSource"] => {
+  if (!entries.length) {
+    return "none";
+  }
+  return entries.some((entry) => entry.source === "attribution") ? "attribution" : "injection_fallback";
+};
+
 export const buildDefaultRepoPolicy = (
   scopeId: string,
   configuredMode: RepoExperienceMode = "safe",
@@ -212,21 +219,12 @@ export const evaluateRepoPolicy = (
   fallbackInjectionEvents: InjectionEvent[] = [],
   timestamp = nowIso()
 ): RepoPolicyEvaluation => {
-  const attributionEvidence = evidenceFromAttributionRecords(attributionRecords);
-  const fallbackEvidence = evidenceFromInjectionFallback(fallbackInjectionEvents);
-  const evidence = [...attributionEvidence, ...fallbackEvidence]
-    .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-    .slice(0, REPO_POLICY_WINDOW_SIZE);
-
-  const evidenceSource =
-    evidence.length === 0
-      ? "none"
-      : attributionEvidence.length > 0
-        ? "attribution"
-        : "injection_fallback";
-  const strongHarmedCount = evidence.filter((item) => item.verdict === "strong_harmed").length;
-  const harmfulCount = evidence.filter((item) => isHarmfulVerdict(item.verdict)).length;
-  const eligibleCount = evidence.length;
+  const evidence = summarizeRepoPolicyEvidence(attributionRecords, fallbackInjectionEvents);
+  const entries = evidence.entries;
+  const evidenceSource = evidenceSourceForEntries(entries);
+  const strongHarmedCount = entries.filter((item) => item.verdict === "strong_harmed").length;
+  const harmfulCount = entries.filter((item) => isHarmfulVerdict(item.verdict)).length;
+  const eligibleCount = entries.length;
   const harmfulRate = eligibleCount > 0 ? harmfulCount / eligibleCount : 0;
   const breached =
     eligibleCount >= REPO_POLICY_MIN_EVIDENCE &&
