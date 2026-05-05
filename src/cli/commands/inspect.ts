@@ -4,9 +4,18 @@ import { ExperienceInteractionService } from "../../interaction/service.js";
 import { ExperienceStateArtifactService } from "../../interaction/state-artifact-service.js";
 import type { ExperienceNode } from "../../types/domain.js";
 import type { ExperienceLastInspection, ExperienceNodeDetail } from "../../interaction/service.js";
+import type { HygieneFindingType, HygieneSeverity } from "../../maintenance/experience-hygiene.js";
 
 const NODE_STATES: ExperienceNode["state"][] = ["candidate", "priority_candidate", "active", "cooling", "retired"];
 const NODE_TYPES: ExperienceNode["node_type"][] = ["strategy", "warning"];
+const HYGIENE_TYPES: HygieneFindingType[] = [
+  "stale_experience",
+  "duplicate_guidance",
+  "conflicting_guidance",
+  "over_generalized_guidance",
+  "evidence_drift"
+];
+const HYGIENE_SEVERITIES: HygieneSeverity[] = ["high", "medium", "low"];
 
 const describeInterventionReason = (record: ExperienceLastInspection): string | undefined => {
   const scorecard = record.scorecard;
@@ -152,6 +161,39 @@ const parseRecentArgs = (arg1?: string, arg2?: string): { injectedOnly: boolean;
 const isVerboseInspect = (arg1?: string, arg2?: string): boolean =>
   arg1 === "--verbose" || arg2 === "--verbose";
 
+const parseHygieneArgs = (args: string[]): { type?: HygieneFindingType; severity?: HygieneSeverity; limit?: number } | null => {
+  const parsed: { type?: HygieneFindingType; severity?: HygieneSeverity; limit?: number } = {};
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+    const next = args[index + 1];
+    if ((value === "--type" || value === "type") && next && HYGIENE_TYPES.includes(next as HygieneFindingType)) {
+      parsed.type = next as HygieneFindingType;
+      index += 1;
+      continue;
+    }
+    if ((value === "--severity" || value === "severity") && next && HYGIENE_SEVERITIES.includes(next as HygieneSeverity)) {
+      parsed.severity = next as HygieneSeverity;
+      index += 1;
+      continue;
+    }
+    if ((value === "--limit" || value === "limit") && next) {
+      const limit = Number(next);
+      if (Number.isInteger(limit) && limit > 0) {
+        parsed.limit = limit;
+        index += 1;
+        continue;
+      }
+    }
+    const numericLimit = Number(value);
+    if (Number.isInteger(numericLimit) && numericLimit > 0) {
+      parsed.limit = numericLimit;
+      continue;
+    }
+    return null;
+  }
+  return parsed;
+};
+
 const describeDeliveryStyle = (mode?: string): string | undefined => {
   if (mode === "inject") {
     return "normal hint delivery";
@@ -168,7 +210,7 @@ const describeDeliveryStyle = (mode?: string): string | undefined => {
   return mode;
 };
 
-export const runInspectCommand = (target?: string, arg1?: string, arg2?: string): void => {
+export const runInspectCommand = (target?: string, arg1?: string, arg2?: string, ...extraArgs: string[]): void => {
   const interaction = new ExperienceInteractionService(loadConfig());
 
   if (target === "--last") {
@@ -471,6 +513,38 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
     if (summary.latestRecordCreatedAt) {
       console.log(`Latest task record: ${summary.latestRecordCreatedAt}`);
     }
+    return;
+  }
+
+  if (target === "hygiene") {
+    const filters = parseHygieneArgs([arg1, arg2, ...extraArgs].filter((value): value is string => Boolean(value)));
+    if (!filters) {
+      console.log("Usage: ee inspect hygiene [--type <finding_type>] [--severity <high|medium|low>] [--limit <n>]");
+      return;
+    }
+    const report = interaction.inspectHygiene(process.cwd(), filters);
+    console.log("Experience hygiene:");
+    console.log(`- Scope: ${report.scopeId ?? "current"}`);
+    console.log(`- Findings: ${report.summary.total}`);
+    console.log(`- Generated at: ${report.generatedAt}`);
+    console.log("By severity:");
+    console.table(report.summary.bySeverity);
+    console.log("By type:");
+    console.table(report.summary.byType);
+    if (!report.findings.length) {
+      console.log("No hygiene findings found.");
+      return;
+    }
+    console.table(
+      report.findings.map((finding) => ({
+        severity: finding.severity,
+        type: finding.type,
+        nodes: finding.affectedNodeIds.join(","),
+        candidates: finding.affectedCandidateIds.join(","),
+        evidence: finding.evidenceSummary,
+        recommendation: finding.recommendation
+      }))
+    );
     return;
   }
 

@@ -676,6 +676,54 @@ describe("ExperienceInteractionService", () => {
     expect(policyRepo.get(scope.scope_id)).toBeUndefined();
   });
 
+  it("inspects hygiene findings without mutating stored governance state", () => {
+    const homeDir = makeTempDir();
+    const cwd = "/repo";
+    const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    const attributionRepo = new AttributionRecordRepository(db);
+    const timestamp = "2026-01-01T00:00:00.000Z";
+    seedStrategyNode(nodeRepo, cwd, timestamp, "node_hygiene_drift");
+    const existing = nodeRepo.getById("node_hygiene_drift");
+    nodeRepo.upsert({
+      ...existing!,
+      delivery_state: "eligible",
+      harmed_count: 1,
+      harmed_record_ids: ["input_harmed"],
+      updated_at: timestamp
+    });
+    attributionRepo.insert({
+      id: "attr_hygiene_drift",
+      node_id: "node_hygiene_drift",
+      delivered: true,
+      outcome: "failure",
+      attribution_verdict: "strong_harmed",
+      confidence: "high",
+      evidence_refs: ["input_harmed", "inject_harmed"],
+      source: "automatic",
+      created_at: "2026-05-04T00:00:00.000Z"
+    });
+
+    const beforeNode = nodeRepo.getById("node_hygiene_drift");
+    const beforeReviewCount = (db.prepare("SELECT COUNT(*) AS count FROM review_events").get() as { count: number }).count;
+    const beforeAttributionCount = (db.prepare("SELECT COUNT(*) AS count FROM attribution_records").get() as { count: number }).count;
+
+    const service = new ExperienceInteractionService(config);
+    const report = service.inspectHygiene(cwd, { type: "evidence_drift", limit: 5, now: "2026-05-05T00:00:00.000Z" });
+
+    expect(report.summary.total).toBe(1);
+    expect(report.findings[0]).toMatchObject({
+      type: "evidence_drift",
+      affectedNodeIds: ["node_hygiene_drift"],
+      evidenceRefs: ["input_harmed", "inject_harmed"]
+    });
+    expect(nodeRepo.getById("node_hygiene_drift")).toEqual(beforeNode);
+    expect((db.prepare("SELECT COUNT(*) AS count FROM review_events").get() as { count: number }).count).toBe(beforeReviewCount);
+    expect((db.prepare("SELECT COUNT(*) AS count FROM attribution_records").get() as { count: number }).count).toBe(beforeAttributionCount);
+  });
+
   it("updates node lifecycle state through the shared interaction service", () => {
     const homeDir = makeTempDir();
     const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });

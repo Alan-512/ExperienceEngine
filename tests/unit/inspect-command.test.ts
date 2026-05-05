@@ -516,6 +516,52 @@ describe("inspect command", () => {
     ]));
   });
 
+  it("prints bounded hygiene findings with filters", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+    const scopeId = resolveScope(process.cwd()).scope_id;
+    const nodeRepo = new NodeRepository(db);
+    const attributionRepo = new AttributionRecordRepository(db);
+    nodeRepo.upsert(makeNode({
+      id: "node_hygiene_cli",
+      scope_id: scopeId,
+      delivery_state: "eligible",
+      harmed_count: 1,
+      harmed_record_ids: ["input_harmed_cli"],
+      updated_at: "2026-05-04T00:00:00.000Z"
+    }));
+    attributionRepo.insert(makeAttributionRecord({
+      id: "attr_hygiene_cli",
+      node_id: "node_hygiene_cli",
+      injection_id: undefined,
+      attribution_verdict: "strong_harmed",
+      evidence_refs: ["input_harmed_cli", "inject_harmed_cli"],
+      source: "automatic",
+      created_at: "2026-05-04T00:00:00.000Z"
+    }));
+
+    runInspectCommand("hygiene", "--type", "evidence_drift", "--limit", "5");
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Experience hygiene:"],
+        [`- Scope: ${scopeId}`],
+        ["- Findings: 1"],
+        ["By severity:"],
+        ["By type:"]
+      ])
+    );
+    expect(consoleTableSpy.mock.calls.at(-1)?.[0]).toEqual([
+      expect.objectContaining({
+        severity: "high",
+        type: "evidence_drift",
+        nodes: "node_hygiene_cli"
+      })
+    ]);
+  });
+
   it("prints persisted skip delivery decisions", () => {
     const home = makeTempDir();
     process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");

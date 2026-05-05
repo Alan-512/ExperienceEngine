@@ -20,7 +20,11 @@ export const tokenize = (value: string): string[] =>
 
 const EXPERIENCE_INJECTION_HEADINGS = [
   "Execution hints from prior similar tasks:",
-  "Conservative execution hints:"
+  "Conservative execution hints:",
+  "Diagnostic lead from prior experience:",
+  "Relevant prior experience:",
+  "Validated prior experience:",
+  "Project constraint or explicit instruction:"
 ];
 
 export const stripLeadingExperienceInjection = (value: string): string => {

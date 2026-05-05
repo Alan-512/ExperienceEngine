@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { ExperienceNodeType, ExperienceState } from "../../types/domain.js";
+import type { HygieneFindingType, HygieneSeverity } from "../../maintenance/experience-hygiene.js";
 
 export type CodexActionCategory = "inspect" | "state" | "admin" | "maintenance";
 export type CodexActionRiskLevel = "low" | "medium" | "high";
@@ -23,6 +24,7 @@ type RegistryDeps = {
     listNodesByState: (args: { state: ExperienceState }) => Promise<unknown>;
     listNodesByType: (args: { nodeType: ExperienceNodeType }) => Promise<unknown>;
     inspectLearningSummary: () => Promise<unknown>;
+    inspectHygiene: (args?: { type?: HygieneFindingType; severity?: HygieneSeverity; limit?: number }) => Promise<unknown>;
     coolNode: (args: { nodeId: string }) => Promise<unknown>;
     retireNode: (args: { nodeId: string }) => Promise<unknown>;
     feedbackNode: (args: { nodeId: string; feedback: "helped" | "harmed" }) => Promise<unknown>;
@@ -272,6 +274,32 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
       requiresConfirmation: false,
       examplePayload: {},
       handler: async () => deps.interactionSurface.inspectLearningSummary()
+    },
+    {
+      id: "inspect_experience_hygiene",
+      title: "Inspect Experience Hygiene",
+      summary: "Inspect read-only EE hygiene findings for stale, duplicate, conflicting, over-generalized, or drifted guidance.",
+      category: "inspect",
+      riskLevel: "low",
+      requiresConfirmation: false,
+      inputSchema: z.object({
+        type: z.enum([
+          "stale_experience",
+          "duplicate_guidance",
+          "conflicting_guidance",
+          "over_generalized_guidance",
+          "evidence_drift"
+        ]).optional(),
+        severity: z.enum(["high", "medium", "low"]).optional(),
+        limit: z.number().int().positive().optional()
+      }),
+      examplePayload: { severity: "high", limit: 10 },
+      handler: async ({ type, severity, limit }) =>
+        deps.interactionSurface.inspectHygiene({
+          type: type as HygieneFindingType | undefined,
+          severity: severity as HygieneSeverity | undefined,
+          limit: typeof limit === "number" ? limit : undefined
+        })
     },
     {
       id: "inspect_backup_inventory",

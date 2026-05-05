@@ -150,7 +150,8 @@ export const runCliCommand = async (command: string | undefined, args: string[])
       runInspectCommand(
         args[0] === "node" && args[1] ? `node:${args[1]}` : args[0],
         args[0] === "node" ? args[2] : args[1],
-        args[0] === "node" ? args[3] : args[2]
+        args[0] === "node" ? args[3] : args[2],
+        ...(args[0] === "node" ? args.slice(4) : args.slice(3))
       );
       break;
     }

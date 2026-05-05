@@ -686,7 +686,7 @@ describe("OpenClaw plugin runtime", () => {
     })) as Record<string, unknown>;
 
     expect(typeof secondTurn.prependContext).toBe("string");
-    expect(String(secondTurn.prependContext).toLowerCase()).toContain("execution hints");
+    expect(String(secondTurn.prependContext).toLowerCase()).toContain("prior experience");
     expect(secondTurn.prependContext).toContain("make the smallest code change");
   });
 
@@ -1307,7 +1307,7 @@ describe("OpenClaw plugin runtime", () => {
     })) as Record<string, unknown>;
 
     expect(typeof secondTurn.prependContext).toBe("string");
-    expect(String(secondTurn.prependContext).toLowerCase()).toContain("execution hints");
+    expect(String(secondTurn.prependContext).toLowerCase()).toContain("prior experience");
   });
 
   it("does not persist injected hint blocks back into follow-up task summaries", async () => {
@@ -1447,9 +1447,9 @@ describe("OpenClaw plugin runtime", () => {
       expect(replayResult.prependContext, scenario.name).toBeTruthy();
       if (Array.isArray(scenario.replayPrompt.prependContext)) {
         expect(Array.isArray(replayResult.prependContext), scenario.name).toBe(true);
-        expect(String((replayResult.prependContext as unknown[])[0]), scenario.name).toMatch(/execution hints/i);
+        expect(String((replayResult.prependContext as unknown[])[0]), scenario.name).toMatch(/prior experience/i);
       } else {
-        expect(String(replayResult.prependContext), scenario.name).toMatch(/execution hints/i);
+        expect(String(replayResult.prependContext), scenario.name).toMatch(/prior experience/i);
       }
     }
   });
@@ -1865,7 +1865,7 @@ describe("OpenClaw plugin runtime", () => {
       }
     )) as Record<string, unknown>;
     expect(typeof followUp.prependContext).toBe("string");
-    expect(String(followUp.prependContext)).toMatch(/conservative execution hints/i);
+    expect(String(followUp.prependContext)).toMatch(/prior experience/i);
 
     await persistToolResult?.(
       {
@@ -1967,7 +1967,7 @@ describe("OpenClaw plugin runtime", () => {
     )) as Record<string, unknown>;
 
     expect(typeof replayResult.prependContext).toBe("string");
-    expect(String(replayResult.prependContext)).toMatch(/execution hints/i);
+    expect(String(replayResult.prependContext)).toMatch(/prior experience/i);
 
     const injectionRow = db
       .prepare(

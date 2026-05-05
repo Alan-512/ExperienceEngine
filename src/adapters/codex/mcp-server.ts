@@ -19,6 +19,7 @@ import {
 import { ExperienceStateArtifactService } from "../../interaction/state-artifact-service.js";
 import { ExperienceRuntimeService } from "../../runtime/service.js";
 import type { ExperienceNodeType, ExperienceState, ToolEventStatus } from "../../types/domain.js";
+import type { HygieneFindingType, HygieneSeverity } from "../../maintenance/experience-hygiene.js";
 import { fetchLatestGitHubReleaseStatus } from "../../version/remote-release.js";
 import { createCodexActionRegistry } from "./action-registry.js";
 import {
@@ -494,6 +495,10 @@ export const createCodexInteractionSurface = (options: CodexServerOptions = {}) 
       return interaction.inspectRepoSummary(args.cwd);
     },
 
+    async inspectHygiene(args: { type?: HygieneFindingType; severity?: HygieneSeverity; limit?: number } = {}) {
+      return interaction.inspectHygiene(process.cwd(), args);
+    },
+
     async explainLastDecision(args: { cwd?: string; userMessage: string }) {
       return interaction.explainLastDecision(args.cwd, args.userMessage);
     },
@@ -602,6 +607,17 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
       mimeType: "application/json"
     },
     async (uri) => toJsonResourceResult(uri.toString(), await interactionSurface.inspectRepoSummary())
+  );
+
+  server.registerResource(
+    "experienceengine_hygiene",
+    "experienceengine://hygiene",
+    {
+      title: "ExperienceEngine Hygiene",
+      description: "Read-only ExperienceEngine hygiene findings for the current scope.",
+      mimeType: "application/json"
+    },
+    async (uri) => toJsonResourceResult(uri.toString(), await interactionSurface.inspectHygiene())
   );
 
   server.registerTool(

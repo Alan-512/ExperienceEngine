@@ -5,6 +5,11 @@ import { buildExplainDecisionCapsule } from "../hybrid/capsule-builder.js";
 import { resolveHybridExplainProviderEndpoint } from "../hybrid/explain-provider-client.js";
 import { resolveHybridRolloutState } from "../hybrid/rollout.js";
 import { buildDefaultRepoPolicy, inspectRepoPolicyEvidence } from "../experience-management/repo-policy.js";
+import {
+  buildHygieneReviewReport,
+  type HygieneReviewFilters,
+  type HygieneReviewReport
+} from "../maintenance/experience-hygiene.js";
 import { selectHybridRoute, type HybridRouteDecision } from "../hybrid/router.js";
 import { HybridWorkerClient } from "../hybrid/worker-client.js";
 import { resolveScope } from "../input/scope-resolver.js";
@@ -1093,6 +1098,20 @@ export class ExperienceInteractionService {
 
   inspectLearningSummary(): ExperienceLearningSummary {
     return this.buildLearningSummary();
+  }
+
+  inspectHygiene(cwd: string = process.cwd(), filters: Omit<HygieneReviewFilters, "scopeId"> & { scopeId?: string } = {}): HygieneReviewReport {
+    const scopeId = filters.scopeId ?? resolveScope(cwd).scope_id;
+    const candidateStates: CandidateLifecycleState[] = ["pending", "distilled", "failed", "discarded"];
+    return buildHygieneReviewReport({
+      nodes: this.nodeRepo.listByScope(scopeId),
+      candidates: candidateStates.flatMap((state) => this.candidateRepo.listByLifecycleState(state)).filter((candidate) => candidate.scope_id === scopeId),
+      attributionRecords: this.attributionRecordRepo.listRecentEligibleByScope(scopeId, Math.max(50, filters.limit ?? 20)),
+      filters: {
+        ...filters,
+        scopeId
+      }
+    });
   }
 
   private buildLearningSummary(scopeId?: string): ExperienceLearningSummary {
