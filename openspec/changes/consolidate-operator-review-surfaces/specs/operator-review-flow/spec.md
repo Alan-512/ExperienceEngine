@@ -7,13 +7,21 @@ ExperienceEngine SHALL provide a bounded read-only operator review report for on
 #### Scenario: Operator reviews scope health
 
 - **WHEN** an operator requests the review flow for a repo
-- **THEN** ExperienceEngine returns a structured report with scope id, generated timestamp, repo policy health, hygiene summary, export draft summary, recommended review order, and review-only next actions
+- **THEN** ExperienceEngine returns a structured report with scope id, generated timestamp, `sections`, `reviewItems`, recommended review order, drill-down references, and review-only next actions
 - **AND** it does not mutate repo policy, nodes, candidates, attribution records, injection records, review events, managed snapshots, or external instruction files
+
+#### Scenario: Review report has a stable minimal shape
+
+- **WHEN** ExperienceEngine returns an operator review report
+- **THEN** each review item includes `priority`, `source`, `title`, `summary`, and `drillDown`
+- **AND** `priority` is one of `high`, `medium`, or `low`
+- **AND** `source` is one of `repo_policy`, `hygiene`, or `export_drafts`
+- **AND** the repo policy section health is one of `clear`, `attention`, or `tripped`
 
 #### Scenario: No review items exist
 
 - **WHEN** repo policy is clear, hygiene findings are empty, and export drafts are empty
-- **THEN** ExperienceEngine returns a review report with an empty issue list and a low-priority next action
+- **THEN** ExperienceEngine returns a review report with an empty `reviewItems` list and a low-priority next action
 
 ### Requirement: Operator review flow prioritizes risks
 
@@ -47,6 +55,6 @@ ExperienceEngine SHALL keep the review flow bounded for CLI and MCP use.
 
 #### Scenario: Operator sets a review limit
 
-- **WHEN** an operator requests a review report with a limit
+- **WHEN** an operator requests a review report with a scope/cwd and limit
 - **THEN** ExperienceEngine applies the limit to the number of surfaced hygiene findings and export drafts
 - **AND** it still includes summary counts for each source report

@@ -1,6 +1,6 @@
 ## 1. Review Flow Builder
 
-- [ ] 1.1 Add a pure `src/maintenance/operator-review-flow.ts` summarizer with report types, bounded item selection, review order, drill-down references, and review-only next actions.
+- [ ] 1.1 Add a pure `src/maintenance/operator-review-flow.ts` summarizer with report types, stable minimal shape, bounded item selection, review order, drill-down references, and review-only next actions.
 - [ ] 1.2 Combine repo policy health, hygiene summary, and export draft summary without requiring database access in the summarizer.
 - [ ] 1.3 Prioritize tripped repo policy and high-severity hygiene risks before export-ready draft review.
 
@@ -13,11 +13,11 @@
 
 ## 3. Documentation Hygiene
 
-- [ ] 3.1 Replace the archived placeholder Purpose in `openspec/specs/experience-export-drafts/spec.md` with durable product wording.
+- [ ] 3.1 Replace the archived placeholder Purpose in `openspec/specs/experience-export-drafts/spec.md` with durable product wording as direct documentation hygiene, not an OpenSpec delta.
 
 ## 4. Tests
 
-- [ ] 4.1 Add unit coverage for review flow summarization, empty reports, risk prioritization, bounded findings/drafts, drill-down references, and review-only next actions.
+- [ ] 4.1 Add unit coverage for review flow summarization, stable report shape, empty reports, risk prioritization, bounded findings/drafts, drill-down references, and review-only next actions.
 - [ ] 4.2 Add mutation-guard coverage proving review inspection does not write lifecycle, attribution, review, repo policy, or managed snapshot state.
 - [ ] 4.3 Add CLI and Codex/MCP tests for review report output and filter handling.
 

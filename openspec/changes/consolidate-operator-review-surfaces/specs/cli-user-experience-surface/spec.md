@@ -51,4 +51,4 @@ The product SHALL expose explicit CLI commands for users who want to inspect rec
 
 - **WHEN** a user runs `ee inspect review`
 - **THEN** ExperienceEngine prints a bounded read-only operator review report with repo policy, hygiene, and export-draft summary sections
-- **AND** optional filters such as scope and limit narrow the report without mutating stored state
+- **AND** optional filters such as cwd/scope and limit narrow the report without mutating stored state

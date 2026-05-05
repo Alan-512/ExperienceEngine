@@ -8,7 +8,7 @@ ExperienceEngine now has separate repo policy, hygiene, and export-draft inspect
 - Provide a recommended review order and next actions, while keeping each action advisory and non-mutating.
 - Surface the review flow through `ee inspect review` and Codex/MCP read-only inspection.
 - Keep repo policy, hygiene, and export draft detailed reports as separate drill-down surfaces.
-- Improve the archived `experience-export-drafts` spec purpose text as documentation hygiene so the product goal is explicit.
+- Improve the archived `experience-export-drafts` spec purpose text as direct implementation-time documentation hygiene, not as an OpenSpec delta requirement.
 
 ## Capabilities
 

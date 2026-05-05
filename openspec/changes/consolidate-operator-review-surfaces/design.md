@@ -52,10 +52,11 @@ Rationale:
 The report should include:
 
 - scope id and generated timestamp
-- repo policy health
-- hygiene summary and highest-severity findings
-- export draft summary and highest-risk drafts
-- recommended review order
+- `sections` for `repo_policy`, `hygiene`, and `export_drafts`
+- `reviewItems` with `priority` (`high`, `medium`, `low`) and `source` (`repo_policy`, `hygiene`, `export_drafts`)
+- repo policy `health` (`clear`, `attention`, `tripped`)
+- summary counts for hygiene findings and export drafts
+- recommended review order derived from the highest-risk items
 - suggested drill-down commands/resources
 - review-only next actions
 
@@ -63,6 +64,7 @@ Rationale:
 
 - Operators need prioritization, not another long dump.
 - Suggested actions must stay advisory to avoid bypassing state governance.
+- A stable minimal shape keeps CLI, MCP, and tests aligned without requiring a full console model.
 
 ### 4. CLI/MCP surfaces mirror existing inspect patterns
 
