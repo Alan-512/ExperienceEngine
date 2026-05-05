@@ -480,6 +480,51 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string)
     console.log(`- Scope: ${summary.scope.scopeId}`);
     console.log(`- Benchmark verdict: ${summary.benchmark.verdict}`);
     console.log(`- Suggested mode: ${summary.benchmark.suggestedMode}`);
+    if (summary.policy) {
+      console.log("Repo policy:");
+      console.log(`- Configured mode: ${summary.policy.configuredMode}`);
+      console.log(`- Effective mode: ${summary.policy.effectiveMode}`);
+      console.log(`- Circuit state: ${summary.policy.circuitState}`);
+      console.log(`- Live diagnostics suppressed: ${summary.policy.liveDiagnosticsDisabled ? "yes" : "no"}`);
+      console.log(`- Updated at: ${summary.policy.updatedAt}`);
+      if (summary.policy.circuitReason) {
+        console.log(`- Circuit reason: ${summary.policy.circuitReason}`);
+      }
+      if (summary.policy.lastTrippedAt) {
+        console.log(`- Last tripped at: ${summary.policy.lastTrippedAt}`);
+      }
+      if (summary.policy.restoreGuidance) {
+        console.log(`- Restore: ${summary.policy.restoreGuidance}`);
+      }
+      if (summary.policy.evidenceSummary) {
+        console.log("Repo policy evidence:");
+        console.log(`- Window: ${summary.policy.evidenceSummary.windowSize}/${summary.policy.evidenceSummary.limit}`);
+        console.log(`- Attribution evidence: ${summary.policy.evidenceSummary.countsBySource.attribution}`);
+        console.log(`- Injection fallback evidence: ${summary.policy.evidenceSummary.countsBySource.injection_fallback}`);
+        console.log(`- Manual override evidence: ${summary.policy.evidenceSummary.manualOverrideCount}`);
+        if (summary.policy.evidenceSummary.fallbackSuppressedCount > 0) {
+          console.log(`- Duplicate fallback entries suppressed: ${summary.policy.evidenceSummary.fallbackSuppressedCount}`);
+        }
+        console.log("Evidence verdicts:");
+        console.table(summary.policy.evidenceSummary.countsByVerdict);
+        if (summary.policy.evidence?.length) {
+          console.log("Recent policy evidence:");
+          console.table(
+            summary.policy.evidence.map((entry) => ({
+              source: entry.source,
+              label: entry.evidenceLabel,
+              verdict: entry.verdict,
+              node: entry.nodeId ?? "",
+              injection: entry.injectionId ?? "",
+              delivered: entry.delivered == null ? "" : entry.delivered ? "yes" : "no",
+              override: entry.userOverride ?? "",
+              reason: entry.attributionReason ?? "",
+              created_at: entry.createdAt
+            }))
+          );
+        }
+      }
+    }
     if (summary.recent.latestIntervention) {
       console.log(`- Latest intervention summary: ${summary.recent.latestIntervention} on the latest recorded task.`);
     }

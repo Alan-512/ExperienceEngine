@@ -14,6 +14,7 @@ import { AttributionRecordRepository } from "../../src/store/sqlite/repositories
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
 import { OutcomeRecordRepository } from "../../src/store/sqlite/repositories/outcome-record-repo.js";
 import { ReviewEventRepository } from "../../src/store/sqlite/repositories/review-event-repo.js";
+import { RepoPolicyRepository } from "../../src/store/sqlite/repositories/repo-policy-repo.js";
 import { TaskRunRepository } from "../../src/store/sqlite/repositories/task-run-repo.js";
 import { nowIso } from "../../src/utils/clock.js";
 import { ExperienceStateArtifactService } from "../../src/interaction/state-artifact-service.js";
@@ -424,6 +425,95 @@ describe("inspect command", () => {
         ["  - node_inspect: weak_helped (medium, delivered, source=automatic)"]
       ])
     );
+  });
+
+  it("prints repo policy state and evidence-aware circuit details", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+    const scopeId = resolveScope(process.cwd()).scope_id;
+    const policyRepo = new RepoPolicyRepository(db);
+    const injectionRepo = new InjectionRepository(db);
+    const attributionRepo = new AttributionRecordRepository(db);
+    policyRepo.upsert({
+      scope_id: scopeId,
+      configured_mode: "safe",
+      effective_mode: "strict",
+      circuit_state: "tripped",
+      circuit_reason: "repo_circuit: 2 strong_harmed records in 5 recent interventions",
+      live_diagnostics_disabled: true,
+      created_at: "2026-05-04T10:00:00.000Z",
+      updated_at: "2026-05-04T10:01:00.000Z",
+      last_tripped_at: "2026-05-04T10:01:00.000Z"
+    });
+    injectionRepo.upsert(makeInjectionEvent({
+      injection_id: "inject_manual_override",
+      scope_id: scopeId,
+      was_successful: false,
+      harm_observed: true,
+      attribution_reason: "relevant_failure",
+      resolved_at: "2026-05-04T10:01:10.000Z"
+    }));
+    injectionRepo.upsert(makeInjectionEvent({
+      injection_id: "inject_fallback_policy",
+      scope_id: scopeId,
+      was_successful: false,
+      harm_observed: false,
+      attribution_reason: "relevant_failure",
+      created_at: "2026-05-04T10:02:00.000Z",
+      resolved_at: "2026-05-04T10:02:10.000Z"
+    }));
+    attributionRepo.insert(makeAttributionRecord({
+      id: "attr_manual_override",
+      injection_id: "inject_manual_override",
+      node_id: "node_manual_override",
+      attribution_verdict: "strong_harmed",
+      user_override: "harmed",
+      source: "manual_override",
+      attribution_reason: "manual_override",
+      created_at: "2026-05-04T10:01:00.000Z"
+    }));
+
+    runInspectCommand("repo");
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Repo policy:"],
+        ["- Configured mode: safe"],
+        ["- Effective mode: strict"],
+        ["- Circuit state: tripped"],
+        ["- Live diagnostics suppressed: yes"],
+        ["- Circuit reason: repo_circuit: 2 strong_harmed records in 5 recent interventions"],
+        ["- Last tripped at: 2026-05-04T10:01:00.000Z"],
+        ["- Restore: Run `ee config restore repo-policy` after investigating the circuit evidence."],
+        ["Repo policy evidence:"],
+        ["- Window: 2/20"],
+        ["- Attribution evidence: 1"],
+        ["- Injection fallback evidence: 1"],
+        ["- Manual override evidence: 1"],
+        ["- Duplicate fallback entries suppressed: 1"],
+        ["Evidence verdicts:"],
+        ["Recent policy evidence:"]
+      ])
+    );
+    expect(consoleTableSpy).toHaveBeenCalledWith(expect.objectContaining({
+      strong_harmed: 1,
+      weak_harmed: 1
+    }));
+    expect(consoleTableSpy).toHaveBeenCalledWith(expect.arrayContaining([
+      expect.objectContaining({
+        source: "attribution",
+        label: "manual_override",
+        verdict: "strong_harmed",
+        override: "harmed"
+      }),
+      expect.objectContaining({
+        source: "injection_fallback",
+        label: "injection_fallback",
+        verdict: "weak_harmed"
+      })
+    ]));
   });
 
   it("prints persisted skip delivery decisions", () => {

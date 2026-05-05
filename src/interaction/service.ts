@@ -4,6 +4,7 @@ import { buildBenchmarkSummary, type BenchmarkSummary } from "../evaluation/benc
 import { buildExplainDecisionCapsule } from "../hybrid/capsule-builder.js";
 import { resolveHybridExplainProviderEndpoint } from "../hybrid/explain-provider-client.js";
 import { resolveHybridRolloutState } from "../hybrid/rollout.js";
+import { buildDefaultRepoPolicy, inspectRepoPolicyEvidence } from "../experience-management/repo-policy.js";
 import { selectHybridRoute, type HybridRouteDecision } from "../hybrid/router.js";
 import { HybridWorkerClient } from "../hybrid/worker-client.js";
 import { resolveScope } from "../input/scope-resolver.js";
@@ -1169,6 +1170,7 @@ export class ExperienceInteractionService {
     const latestRecord = this.inputRepo.getLatestByScope(scope.scope_id);
     const latest = latestRecord ? this.inspectRecord(latestRecord) : undefined;
     const learning = this.buildLearningSummary(scope.scope_id);
+    const policyInspection = this.inspectRepoPolicy(cwd);
 
     return buildRepoSummary({
       scope: {
@@ -1178,8 +1180,20 @@ export class ExperienceInteractionService {
       },
       latest: latest && latest.scopeId === scope.scope_id ? latest : undefined,
       learning,
-      policy: this.repoPolicyRepo.getOrCreate(scope.scope_id, this.config.repoExperienceMode)
+      policyInspection
     });
+  }
+
+  inspectRepoPolicy(cwd: string = process.cwd()) {
+    const scope = resolveScope(cwd);
+    const policy =
+      this.repoPolicyRepo.get(scope.scope_id) ??
+      buildDefaultRepoPolicy(scope.scope_id, this.config.repoExperienceMode);
+    return inspectRepoPolicyEvidence(
+      policy,
+      this.attributionRecordRepo.listRecentEligibleByScope(scope.scope_id),
+      this.injectionRepo.listRecentResolvedByScope(scope.scope_id)
+    );
   }
 
   restoreRepoPolicy(cwd: string = process.cwd()) {

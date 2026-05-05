@@ -1,4 +1,5 @@
 import type { BenchmarkSummary } from "../evaluation/benchmark-summary.js";
+import type { RepoPolicyInspection } from "../experience-management/repo-policy.js";
 import type { RepoPolicy } from "../types/domain.js";
 import type { ExperienceLastInspection, ExperienceLearningSummary } from "./service.js";
 
@@ -28,6 +29,9 @@ export type ExperienceRepoSummary = {
     updatedAt: string;
     lastTrippedAt?: string;
     restoredAt?: string;
+    evidenceSummary?: RepoPolicyInspection["evidenceSummary"];
+    evidence?: RepoPolicyInspection["evidence"];
+    restoreGuidance?: string;
   };
   recommendedNextAction: string;
 };
@@ -54,30 +58,38 @@ export const buildRepoSummary = (input: {
   latest?: ExperienceLastInspection;
   learning: ExperienceLearningSummary;
   policy?: RepoPolicy;
-}): ExperienceRepoSummary => ({
-  scope: input.scope,
-  recent: {
-    latestSessionId: input.latest?.sessionId,
-    latestTaskSummary: input.latest?.summary,
-    latestActivityAt: input.latest?.createdAt,
-    latestIntervention: input.latest?.intervention,
-    latestAutoFeedback: input.latest?.autoFeedback,
-    latestAutoFeedbackReason: input.latest?.autoFeedbackReason,
-    latestDecisionExplanation: input.latest?.decisionExplanation,
-    latestTrustSummary: input.latest?.trustSummary
-  },
-  benchmark: input.learning.benchmark,
-  policy: input.policy
-    ? {
-        configuredMode: input.policy.configured_mode,
-        effectiveMode: input.policy.effective_mode,
-        circuitState: input.policy.circuit_state,
-        circuitReason: input.policy.circuit_reason,
-        liveDiagnosticsDisabled: input.policy.live_diagnostics_disabled,
-        updatedAt: input.policy.updated_at,
-        lastTrippedAt: input.policy.last_tripped_at,
-        restoredAt: input.policy.restored_at
-      }
-    : undefined,
-  recommendedNextAction: summarizeRecommendation(input.learning.benchmark)
-});
+  policyInspection?: RepoPolicyInspection;
+}): ExperienceRepoSummary => {
+  const policy = input.policyInspection?.policy ?? input.policy;
+
+  return {
+    scope: input.scope,
+    recent: {
+      latestSessionId: input.latest?.sessionId,
+      latestTaskSummary: input.latest?.summary,
+      latestActivityAt: input.latest?.createdAt,
+      latestIntervention: input.latest?.intervention,
+      latestAutoFeedback: input.latest?.autoFeedback,
+      latestAutoFeedbackReason: input.latest?.autoFeedbackReason,
+      latestDecisionExplanation: input.latest?.decisionExplanation,
+      latestTrustSummary: input.latest?.trustSummary
+    },
+    benchmark: input.learning.benchmark,
+    policy: policy
+      ? {
+          configuredMode: policy.configured_mode,
+          effectiveMode: policy.effective_mode,
+          circuitState: policy.circuit_state,
+          circuitReason: policy.circuit_reason,
+          liveDiagnosticsDisabled: policy.live_diagnostics_disabled,
+          updatedAt: policy.updated_at,
+          lastTrippedAt: policy.last_tripped_at,
+          restoredAt: policy.restored_at,
+          evidenceSummary: input.policyInspection?.evidenceSummary,
+          evidence: input.policyInspection?.evidence,
+          restoreGuidance: input.policyInspection?.restoreGuidance
+        }
+      : undefined,
+    recommendedNextAction: summarizeRecommendation(input.learning.benchmark)
+  };
+};

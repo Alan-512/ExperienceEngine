@@ -6,7 +6,9 @@ import { loadConfig } from "../../src/config/load-config.js";
 import {
   buildDefaultRepoPolicy,
   evaluateRepoPolicy,
-  restoreRepoPolicy
+  inspectRepoPolicyEvidence,
+  restoreRepoPolicy,
+  summarizeRepoPolicyEvidence
 } from "../../src/experience-management/repo-policy.js";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
 import { AttributionRecordRepository } from "../../src/store/sqlite/repositories/attribution-record-repo.js";
@@ -227,5 +229,84 @@ describe("repo policy evaluator", () => {
       live_diagnostics_disabled: false,
       restored_at: "2026-05-04T11:00:00.000Z"
     });
+  });
+});
+
+describe("repo policy evidence inspection", () => {
+  it("summarizes a bounded merged evidence window with source and verdict counts", () => {
+    const attribution = Array.from({ length: 15 }, (_, index) =>
+      attributionRecord(index, {
+        attribution_verdict: index < 2 ? "strong_harmed" : "neutral"
+      })
+    );
+    const fallback = Array.from({ length: 10 }, (_, index) =>
+      injectionEvent(index + 15, {
+        was_successful: index < 3 ? false : true,
+        attribution_reason: index < 3 ? "relevant_failure" : "success_outcome"
+      })
+    );
+
+    const result = summarizeRepoPolicyEvidence(attribution, fallback);
+
+    expect(result.entries).toHaveLength(20);
+    expect(result.summary).toMatchObject({
+      windowSize: 20,
+      limit: 20,
+      countsBySource: {
+        attribution: 10,
+        injection_fallback: 10
+      }
+    });
+    expect(result.summary.countsByVerdict.weak_harmed).toBe(3);
+  });
+
+  it("labels manual overrides separately from automatic attribution", () => {
+    const result = summarizeRepoPolicyEvidence([
+      attributionRecord(1, {
+        user_override: "harmed",
+        source: "manual_override",
+        attribution_verdict: "strong_harmed",
+        attribution_reason: "manual_override"
+      }),
+      attributionRecord(2, {
+        source: "automatic",
+        attribution_verdict: "weak_helped"
+      })
+    ]);
+
+    expect(result.summary.manualOverrideCount).toBe(1);
+    expect(result.entries.map((entry) => entry.evidenceLabel)).toEqual([
+      "automatic_attribution",
+      "manual_override"
+    ]);
+  });
+
+  it("suppresses fallback entries when attribution exists for the same injection", () => {
+    const result = summarizeRepoPolicyEvidence(
+      [attributionRecord(1, { injection_id: "inject_shared", attribution_verdict: "strong_harmed" })],
+      [injectionEvent(1, { injection_id: "inject_shared", harm_observed: true })]
+    );
+
+    expect(result.entries).toHaveLength(1);
+    expect(result.entries[0]).toMatchObject({
+      source: "attribution",
+      injectionId: "inject_shared"
+    });
+    expect(result.summary.fallbackSuppressedCount).toBe(1);
+  });
+
+  it("returns no-evidence restore guidance only when the circuit is tripped", () => {
+    const clear = inspectRepoPolicyEvidence(buildDefaultRepoPolicy("scope_repo", "safe"), [], []);
+    const tripped = inspectRepoPolicyEvidence({
+      ...buildDefaultRepoPolicy("scope_repo", "safe"),
+      effective_mode: "strict",
+      circuit_state: "tripped",
+      circuit_reason: "repo_circuit",
+      live_diagnostics_disabled: true
+    }, [], []);
+
+    expect(clear.evidenceSummary.windowSize).toBe(0);
+    expect(clear.restoreGuidance).toBeUndefined();
+    expect(tripped.restoreGuidance).toContain("ee config restore repo-policy");
   });
 });

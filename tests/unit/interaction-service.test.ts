@@ -561,6 +561,121 @@ describe("ExperienceInteractionService", () => {
     expect(injectionRepo.countByScope(scope.scope_id)).toBe(1);
   });
 
+  it("inspects repo policy evidence without mutating policy state", () => {
+    const homeDir = makeTempDir();
+    const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const scope = resolveScope("/repo");
+    const policyRepo = new RepoPolicyRepository(db);
+    const injectionRepo = new InjectionRepository(db);
+    const attributionRepo = new AttributionRecordRepository(db);
+    policyRepo.upsert({
+      scope_id: scope.scope_id,
+      configured_mode: "safe",
+      effective_mode: "strict",
+      circuit_state: "tripped",
+      circuit_reason: "repo_circuit",
+      live_diagnostics_disabled: true,
+      created_at: "2026-05-04T10:00:00.000Z",
+      updated_at: "2026-05-04T10:01:00.000Z",
+      last_tripped_at: "2026-05-04T10:01:00.000Z"
+    });
+    injectionRepo.upsert({
+      injection_id: "inject_attr",
+      scope_id: scope.scope_id,
+      task_type: "test_debug",
+      mode: "inject_conservative",
+      delivery_mode: "live",
+      delivered: true,
+      injected_node_ids: ["node_attr"],
+      injection_count: 1,
+      was_successful: false,
+      harm_observed: true,
+      attribution_reason: "relevant_failure",
+      created_at: "2026-05-04T10:00:00.000Z",
+      resolved_at: "2026-05-04T10:00:10.000Z"
+    });
+    injectionRepo.upsert({
+      injection_id: "inject_fallback",
+      scope_id: scope.scope_id,
+      task_type: "test_debug",
+      mode: "inject_conservative",
+      delivery_mode: "live",
+      delivered: true,
+      injected_node_ids: ["node_fallback"],
+      injection_count: 1,
+      was_successful: false,
+      harm_observed: false,
+      attribution_reason: "relevant_failure",
+      created_at: "2026-05-04T10:02:00.000Z",
+      resolved_at: "2026-05-04T10:02:10.000Z"
+    });
+    attributionRepo.insert({
+      id: "attr_manual",
+      injection_id: "inject_attr",
+      node_id: "node_attr",
+      intervention_strength: "soft_recommendation",
+      injection_mode: "inject_conservative",
+      delivery_mode: "live",
+      delivered: true,
+      outcome: "failure",
+      attribution_verdict: "strong_harmed",
+      confidence: "high",
+      evidence_refs: ["taskrun_attr"],
+      user_override: "harmed",
+      source: "manual_override",
+      attribution_reason: "manual_override",
+      created_at: "2026-05-04T10:01:00.000Z"
+    });
+
+    const service = new ExperienceInteractionService(config);
+    const beforeCount = injectionRepo.countByScope(scope.scope_id);
+    const inspection = service.inspectRepoPolicy("/repo");
+    const summary = service.inspectRepoSummary("/repo");
+
+    expect(inspection).toMatchObject({
+      evidenceSummary: {
+        windowSize: 2,
+        countsBySource: {
+          attribution: 1,
+          injection_fallback: 1
+        },
+        manualOverrideCount: 1,
+        fallbackSuppressedCount: 1
+      },
+      restoreGuidance: expect.stringContaining("ee config restore repo-policy")
+    });
+    expect(inspection.evidence.map((entry) => entry.evidenceLabel)).toEqual([
+      "injection_fallback",
+      "manual_override"
+    ]);
+    expect(summary.policy?.evidenceSummary?.windowSize).toBe(2);
+    expect(injectionRepo.countByScope(scope.scope_id)).toBe(beforeCount);
+    expect(policyRepo.get(scope.scope_id)).toMatchObject({
+      effective_mode: "strict",
+      circuit_state: "tripped"
+    });
+  });
+
+  it("inspects default repo policy without creating policy rows", () => {
+    const homeDir = makeTempDir();
+    const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const scope = resolveScope("/repo");
+    const policyRepo = new RepoPolicyRepository(db);
+    const service = new ExperienceInteractionService(config);
+
+    expect(policyRepo.get(scope.scope_id)).toBeUndefined();
+    expect(service.inspectRepoPolicy("/repo").policy).toMatchObject({
+      configured_mode: "safe",
+      effective_mode: "safe",
+      circuit_state: "clear"
+    });
+    expect(policyRepo.get(scope.scope_id)).toBeUndefined();
+  });
+
   it("updates node lifecycle state through the shared interaction service", () => {
     const homeDir = makeTempDir();
     const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });
