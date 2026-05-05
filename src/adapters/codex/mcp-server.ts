@@ -495,8 +495,9 @@ export const createCodexInteractionSurface = (options: CodexServerOptions = {}) 
       return interaction.inspectRepoSummary(args.cwd);
     },
 
-    async inspectHygiene(args: { type?: HygieneFindingType; severity?: HygieneSeverity; limit?: number } = {}) {
-      return interaction.inspectHygiene(process.cwd(), args);
+    async inspectHygiene(args: { cwd?: string; type?: HygieneFindingType; severity?: HygieneSeverity; limit?: number } = {}) {
+      const { cwd, ...filters } = args;
+      return interaction.inspectHygiene(cwd ?? process.cwd(), filters);
     },
 
     async explainLastDecision(args: { cwd?: string; userMessage: string }) {

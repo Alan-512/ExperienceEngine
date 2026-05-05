@@ -537,7 +537,7 @@ describe("ExperienceInteractionService", () => {
       task_type: "test_debug",
       mode: "inject_conservative",
       delivery_mode: "live",
-      delivered: true,
+      delivered: false,
       injected_node_ids: ["node_policy_history"],
       injection_count: 1,
       was_successful: null,

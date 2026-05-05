@@ -1106,7 +1106,7 @@ export class ExperienceInteractionService {
     return buildHygieneReviewReport({
       nodes: this.nodeRepo.listByScope(scopeId),
       candidates: candidateStates.flatMap((state) => this.candidateRepo.listByLifecycleState(state)).filter((candidate) => candidate.scope_id === scopeId),
-      attributionRecords: this.attributionRecordRepo.listRecentEligibleByScope(scopeId, Math.max(50, filters.limit ?? 20)),
+      attributionRecords: this.attributionRecordRepo.listRecentByScope(scopeId, Math.max(50, filters.limit ?? 20)),
       filters: {
         ...filters,
         scopeId

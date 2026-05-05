@@ -521,7 +521,8 @@ describe("inspect command", () => {
     process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
     const db = openDatabase(loadConfig());
     bootstrapDatabase(db);
-    const scopeId = resolveScope(process.cwd()).scope_id;
+    const cwd = "/repo-hygiene-cli";
+    const scopeId = resolveScope(cwd).scope_id;
     const nodeRepo = new NodeRepository(db);
     const attributionRepo = new AttributionRecordRepository(db);
     nodeRepo.upsert(makeNode({
@@ -542,7 +543,7 @@ describe("inspect command", () => {
       created_at: "2026-05-04T00:00:00.000Z"
     }));
 
-    runInspectCommand("hygiene", "--type", "evidence_drift", "--limit", "5");
+    runInspectCommand("hygiene", "--cwd", cwd, "--type", "evidence_drift", "--limit", "5");
 
     expect(consoleLogSpy.mock.calls).toEqual(
       expect.arrayContaining([

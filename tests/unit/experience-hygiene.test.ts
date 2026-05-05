@@ -170,4 +170,25 @@ describe("experience hygiene review", () => {
     expect(report.summary.total).toBe(0);
     expect(report.findings).toEqual([]);
   });
+
+  it("does not treat short but specific guidance as over-generalized", () => {
+    const report = buildHygieneReviewReport({
+      nodes: [
+        makeNode({
+          id: "node_specific_short",
+          trigger_pattern: "Repo policy drift",
+          compact_hint: "Do not mutate repo_policy.",
+          support_count: 1,
+          helped_count: 0,
+          harmed_count: 0,
+          updated_at: "2026-05-04T00:00:00.000Z"
+        })
+      ],
+      candidates: [],
+      attributionRecords: [],
+      filters: { scopeId: "scope_repo", type: "over_generalized_guidance", now: NOW }
+    });
+
+    expect(report.findings).toEqual([]);
+  });
 });

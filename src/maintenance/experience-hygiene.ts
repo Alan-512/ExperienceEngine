@@ -137,8 +137,9 @@ const tokenSimilarity = (left: Set<string>, right: Set<string>): number => {
 
 const hasGenericGuidance = (entry: Pick<ExperienceNode | ExperienceCandidate, "trigger_pattern" | "compact_hint">): boolean => {
   const tokens = normalizeText(`${entry.trigger_pattern} ${entry.compact_hint}`);
+  const hasSpecificSignal = tokens.some((token) => token.includes("/") || token.includes(".") || token.includes("_") || token.length >= 12);
   if (tokens.length < 8) {
-    return true;
+    return !hasSpecificSignal;
   }
   const genericCount = tokens.filter((token) => GENERIC_TERMS.has(token)).length;
   return genericCount / tokens.length >= 0.45;

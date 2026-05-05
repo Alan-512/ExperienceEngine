@@ -161,11 +161,16 @@ const parseRecentArgs = (arg1?: string, arg2?: string): { injectedOnly: boolean;
 const isVerboseInspect = (arg1?: string, arg2?: string): boolean =>
   arg1 === "--verbose" || arg2 === "--verbose";
 
-const parseHygieneArgs = (args: string[]): { type?: HygieneFindingType; severity?: HygieneSeverity; limit?: number } | null => {
-  const parsed: { type?: HygieneFindingType; severity?: HygieneSeverity; limit?: number } = {};
+const parseHygieneArgs = (args: string[]): { cwd?: string; type?: HygieneFindingType; severity?: HygieneSeverity; limit?: number } | null => {
+  const parsed: { cwd?: string; type?: HygieneFindingType; severity?: HygieneSeverity; limit?: number } = {};
   for (let index = 0; index < args.length; index += 1) {
     const value = args[index];
     const next = args[index + 1];
+    if ((value === "--cwd" || value === "cwd" || value === "--scope" || value === "scope") && next) {
+      parsed.cwd = next;
+      index += 1;
+      continue;
+    }
     if ((value === "--type" || value === "type") && next && HYGIENE_TYPES.includes(next as HygieneFindingType)) {
       parsed.type = next as HygieneFindingType;
       index += 1;
@@ -519,10 +524,11 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string,
   if (target === "hygiene") {
     const filters = parseHygieneArgs([arg1, arg2, ...extraArgs].filter((value): value is string => Boolean(value)));
     if (!filters) {
-      console.log("Usage: ee inspect hygiene [--type <finding_type>] [--severity <high|medium|low>] [--limit <n>]");
+      console.log("Usage: ee inspect hygiene [--cwd <path>] [--type <finding_type>] [--severity <high|medium|low>] [--limit <n>]");
       return;
     }
-    const report = interaction.inspectHygiene(process.cwd(), filters);
+    const { cwd, ...hygieneFilters } = filters;
+    const report = interaction.inspectHygiene(cwd ?? process.cwd(), hygieneFilters);
     console.log("Experience hygiene:");
     console.log(`- Scope: ${report.scopeId ?? "current"}`);
     console.log(`- Findings: ${report.summary.total}`);

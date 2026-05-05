@@ -24,7 +24,7 @@ type RegistryDeps = {
     listNodesByState: (args: { state: ExperienceState }) => Promise<unknown>;
     listNodesByType: (args: { nodeType: ExperienceNodeType }) => Promise<unknown>;
     inspectLearningSummary: () => Promise<unknown>;
-    inspectHygiene: (args?: { type?: HygieneFindingType; severity?: HygieneSeverity; limit?: number }) => Promise<unknown>;
+    inspectHygiene: (args?: { cwd?: string; type?: HygieneFindingType; severity?: HygieneSeverity; limit?: number }) => Promise<unknown>;
     coolNode: (args: { nodeId: string }) => Promise<unknown>;
     retireNode: (args: { nodeId: string }) => Promise<unknown>;
     feedbackNode: (args: { nodeId: string; feedback: "helped" | "harmed" }) => Promise<unknown>;
@@ -291,11 +291,13 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
           "evidence_drift"
         ]).optional(),
         severity: z.enum(["high", "medium", "low"]).optional(),
+        cwd: z.string().min(1).optional(),
         limit: z.number().int().positive().optional()
       }),
-      examplePayload: { severity: "high", limit: 10 },
-      handler: async ({ type, severity, limit }) =>
+      examplePayload: { cwd: "/path/to/repo", severity: "high", limit: 10 },
+      handler: async ({ cwd, type, severity, limit }) =>
         deps.interactionSurface.inspectHygiene({
+          cwd: typeof cwd === "string" ? cwd : undefined,
           type: type as HygieneFindingType | undefined,
           severity: severity as HygieneSeverity | undefined,
           limit: typeof limit === "number" ? limit : undefined
