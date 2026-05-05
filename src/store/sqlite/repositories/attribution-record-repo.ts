@@ -131,13 +131,12 @@ export class AttributionRecordRepository {
       .prepare(
         `SELECT ar.*
          FROM attribution_records ar
-         LEFT JOIN injection_events ie ON ie.injection_id = ar.injection_id
-         LEFT JOIN experience_nodes en ON en.id = ar.node_id
-         WHERE (ie.scope_id = ? OR en.scope_id = ?)
+         INNER JOIN experience_nodes en ON en.id = ar.node_id
+         WHERE en.scope_id = ?
          ORDER BY ar.created_at DESC, ar.id DESC
          LIMIT ?`
       )
-      .all(scopeId, scopeId, limit)
+      .all(scopeId, limit)
       .map((row) => this.mapRow(row as AttributionRecordRow));
   }
 

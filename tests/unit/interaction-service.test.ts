@@ -724,6 +724,62 @@ describe("ExperienceInteractionService", () => {
     expect((db.prepare("SELECT COUNT(*) AS count FROM attribution_records").get() as { count: number }).count).toBe(beforeAttributionCount);
   });
 
+  it("keeps hygiene attribution windows scoped to reviewed nodes", () => {
+    const homeDir = makeTempDir();
+    const cwd = "/repo";
+    const otherCwd = "/other-repo";
+    const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    const attributionRepo = new AttributionRecordRepository(db);
+    seedStrategyNode(nodeRepo, cwd, "2026-01-01T00:00:00.000Z", "node_hygiene_window_target");
+    const target = nodeRepo.getById("node_hygiene_window_target");
+    nodeRepo.upsert({
+      ...target!,
+      delivery_state: "eligible",
+      harmed_count: 1,
+      updated_at: "2026-01-01T00:00:00.000Z"
+    });
+    seedStrategyNode(nodeRepo, otherCwd, "2026-01-01T00:00:00.000Z", "node_hygiene_window_other");
+
+    for (let index = 0; index < 55; index += 1) {
+      attributionRepo.insert({
+        id: `attr_other_${index}`,
+        node_id: "node_hygiene_window_other",
+        delivered: false,
+        outcome: "failure",
+        attribution_verdict: "strong_harmed",
+        confidence: "high",
+        evidence_refs: [`input_other_${index}`],
+        source: "automatic",
+        created_at: `2026-05-04T00:${String(index).padStart(2, "0")}:00.000Z`
+      });
+    }
+    attributionRepo.insert({
+      id: "attr_target_older",
+      node_id: "node_hygiene_window_target",
+      delivered: false,
+      outcome: "failure",
+      attribution_verdict: "strong_harmed",
+      confidence: "high",
+      evidence_refs: ["input_target_older"],
+      source: "automatic",
+      created_at: "2026-05-03T00:00:00.000Z"
+    });
+
+    const service = new ExperienceInteractionService(config);
+    const report = service.inspectHygiene(cwd, { type: "evidence_drift", limit: 5, now: "2026-05-05T00:00:00.000Z" });
+
+    expect(report.findings).toEqual([
+      expect.objectContaining({
+        type: "evidence_drift",
+        affectedNodeIds: ["node_hygiene_window_target"],
+        evidenceRefs: ["input_target_older"]
+      })
+    ]);
+  });
+
   it("updates node lifecycle state through the shared interaction service", () => {
     const homeDir = makeTempDir();
     const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });
