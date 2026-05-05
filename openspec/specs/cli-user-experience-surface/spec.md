@@ -2,9 +2,7 @@
 
 ## Purpose
 Define explicit CLI fallback surfaces for inspecting and managing ExperienceEngine when host-native or MCP interaction is unavailable or insufficient.
-
 ## Requirements
-
 ### Requirement: ExperienceEngine supports on-demand CLI inspection
 The product SHALL expose explicit CLI commands for users who want to inspect recent or active experience behavior.
 
@@ -45,3 +43,10 @@ The product SHALL expose explicit CLI commands for users who want to inspect rec
 - **WHEN** a user runs `ee inspect hygiene`
 - **THEN** ExperienceEngine prints a bounded read-only hygiene report with summary counts and findings
 - **AND** optional filters such as scope, finding type, severity, and limit narrow the report without mutating stored state
+
+#### Scenario: User inspects export drafts
+
+- **WHEN** a user runs `ee inspect export-drafts`
+- **THEN** ExperienceEngine prints bounded read-only guidance export drafts with summary counts and review context
+- **AND** optional filters such as scope, node id, node type, task family, lifecycle state, delivery state, risk, and limit narrow the report without mutating stored state
+

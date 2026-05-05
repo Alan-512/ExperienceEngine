@@ -2,9 +2,7 @@
 
 ## Purpose
 Define ExperienceEngine's long-term MCP-native interaction model across resources, prompts, and tools, with clear risk tiering and CLI fallback semantics.
-
 ## Requirements
-
 ### Requirement: ExperienceEngine uses MCP as its primary day-to-day interaction surface
 ExperienceEngine SHALL define its long-term user interaction model around MCP rather than around standalone CLI commands.
 
@@ -42,6 +40,11 @@ ExperienceEngine SHALL expose different interaction categories through MCP accor
 - **WHEN** ExperienceEngine exposes hygiene findings through MCP or session interaction surfaces
 - **THEN** those findings are exposed as structured read-only state through a resource or read-only action
 - **AND** the payload includes summary counts, bounded findings, affected ids, evidence summaries, and review-only recommendations
+
+#### Scenario: Export draft inspection is exposed as read-only state
+- **WHEN** ExperienceEngine exposes guidance export drafts through MCP or session interaction surfaces
+- **THEN** those drafts are exposed as structured read-only state through a resource or read-only action
+- **AND** the payload includes summary counts, bounded drafts, node ids, lifecycle/delivery state, evidence summaries, risk notes, and review-only suggested targets
 
 #### Scenario: The first low-risk control surface is exposed as tools
 - **WHEN** ExperienceEngine exposes feedback or scope enable/disable actions
@@ -137,3 +140,4 @@ ExperienceEngine SHALL expose richer node provenance and attribution details thr
 #### Scenario: Last-intervention inspection can reference attributed records
 - **WHEN** an MCP client inspects the latest ExperienceEngine intervention
 - **THEN** the response can identify the originating record and attributed node details when available
+
