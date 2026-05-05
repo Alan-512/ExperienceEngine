@@ -18,7 +18,8 @@ ExperienceEngine now has attribution, episode projection, repo policy, and polic
 
 ### Modified Capabilities
 
-- None. Hygiene findings are a separate operator review surface and do not change learning, delivery, or lifecycle behavior by themselves.
+- `cli-user-experience-surface`: Adds a read-only hygiene inspection command/report path.
+- `mcp-native-interaction-surface`: Adds a read-only MCP/session hygiene inspection resource or read-only action.
 
 ## Impact
 
