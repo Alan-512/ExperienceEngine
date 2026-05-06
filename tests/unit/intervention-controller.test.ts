@@ -1126,6 +1126,7 @@ describe("decideIntervention", () => {
       "retrieval_context",
       "hard_filter",
       "shortlist",
+      "semantic_rerank_backfill",
       "policy_enrichment",
       "decision_assembly"
     ]);

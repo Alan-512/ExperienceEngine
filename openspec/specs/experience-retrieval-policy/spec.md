@@ -1,7 +1,7 @@
 # experience-retrieval-policy Specification
 
 ## Purpose
-TBD - created by archiving change stage-retrieval-policy-v2-phase-a. Update Purpose after archive.
+Define ExperienceEngine's staged retrieval-policy contract, keeping retrieval evidence separate from governance authority while supporting lexical-first recall, semantic rerank/backfill, and inspectable diagnostics.
 ## Requirements
 ### Requirement: Retrieval policy uses an explicit staged contract
 
@@ -52,4 +52,3 @@ ExperienceEngine SHALL separate similarity/retrieval evidence from governance/po
 - **WHEN** read-only intent, module paths, tool names, or failure signatures are inferred with limited confidence
 - **THEN** those fields may be recorded as retrieval context evidence
 - **AND** they are not used as mandatory hard filters until a later spec defines stable collection and confidence semantics
-

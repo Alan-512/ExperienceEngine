@@ -58,6 +58,10 @@ export type RetrievedCandidateBundle = {
 };
 
 const DEFAULT_RERANK_WINDOW = 5;
+const LEXICAL_SHORTLIST_LIMIT = 8;
+const SEMANTIC_BACKFILL_LIMIT = 8;
+const MIN_LEXICAL_SHORTLIST_SCORE = 0.12;
+const STRONG_LEXICAL_SHORTLIST_SCORE = 0.35;
 const STRONG_GENERAL_ADJACENT_FAMILY_THRESHOLD = 0.7;
 const STRONG_GENERAL_ADJACENT_SIGNAL_THRESHOLD = 0.45;
 const GENERAL_DEBUG_LIKE_QUERY_PATTERN =
@@ -178,17 +182,30 @@ const hardFilterNodes = (
 };
 
 const buildShortlistDiagnostic = (
-  rankedCount: number,
+  shortlistCount: number,
   filteredCount: number,
-  semanticSkipped: boolean
+  backfillEligible: boolean
 ): RetrievalPolicyStageDiagnostic => retrievalStage("shortlist", {
-  acceptedCount: rankedCount,
-  rejectedCount: filteredCount - rankedCount,
+  acceptedCount: shortlistCount,
+  rejectedCount: filteredCount - shortlistCount,
   reasonCodes: [
-    semanticSkipped ? "semantic_skipped_low_signal_or_missing_context" : "hybrid_semantic_lexical_fusion",
-    "minimum_signal_threshold",
-    "task_family_threshold",
-    "legacy_rank_limit"
+    "lexical_first_shortlist",
+    "minimum_lexical_signal",
+    "bounded_shortlist",
+    backfillEligible ? "semantic_backfill_eligible" : "semantic_rerank_only"
+  ]
+});
+
+const buildSemanticDiagnostic = (
+  mode: "skipped" | "rerank" | "backfill",
+  semanticCandidateCount: number,
+  semanticSkipped: boolean
+): RetrievalPolicyStageDiagnostic => retrievalStage("semantic_rerank_backfill", {
+  passedCount: semanticCandidateCount,
+  reasonCodes: [
+    `semantic_mode:${mode}`,
+    semanticSkipped ? "semantic_skipped_low_signal_input" : "semantic_expression_variant_support",
+    mode === "backfill" ? "bounded_semantic_backfill" : "semantic_not_primary_authority"
   ]
 });
 
@@ -536,6 +553,7 @@ export const retrieveCandidateBundle = async (
             reasonCodes: ["unknown_task_type"]
           }),
           buildShortlistDiagnostic(0, 0, true),
+          buildSemanticDiagnostic("skipped", 0, true),
           buildPolicyEnrichmentDiagnostic(0)
         ]
       }
@@ -558,13 +576,30 @@ export const retrieveCandidateBundle = async (
   const vectorStore = openVectorStore();
   const hardFilterResult = hardFilterNodes(input, nodes, options);
   const scopeLocalNodes = hardFilterResult.nodes;
-  const localSemanticRecords = scopeLocalNodes
+
+  const lexicalScoreDetailsById = computeLexicalRetrievalScores(queryText || input.task_summary, scopeLocalNodes);
+  const lexicalScoreById = new Map(
+    [...lexicalScoreDetailsById.entries()].map(([id, score]) => [id, score.score])
+  );
+  const lexicalShortlist = [...scopeLocalNodes]
+    .filter((node) => (lexicalScoreById.get(node.id) ?? 0) >= MIN_LEXICAL_SHORTLIST_SCORE)
+    .sort((left, right) => (lexicalScoreById.get(right.id) ?? 0) - (lexicalScoreById.get(left.id) ?? 0))
+    .slice(0, LEXICAL_SHORTLIST_LIMIT);
+  const strongestLexicalScore = Math.max(0, ...lexicalShortlist.map((node) => lexicalScoreById.get(node.id) ?? 0));
+  const semanticMode: "skipped" | "rerank" | "backfill" = semanticSkipped
+    ? "skipped"
+    : lexicalShortlist.length === 0 || strongestLexicalScore < STRONG_LEXICAL_SHORTLIST_SCORE
+      ? "backfill"
+      : "rerank";
+  const semanticPool = semanticMode === "backfill" ? scopeLocalNodes : lexicalShortlist;
+
+  const localSemanticRecords = semanticPool
     .filter((node) => localQuery && isMatchingEmbeddingSpace(node, localQuery.space))
     .map((node) => ({
       id: node.id,
       embedding: node.embedding!
     }));
-  const legacyRecords = scopeLocalNodes
+  const legacyRecords = semanticPool
     .filter((node) => !localQuery || !isMatchingEmbeddingSpace(node, localQuery.space))
     .map((node) => ({
       id: node.id,
@@ -582,18 +617,28 @@ export const retrieveCandidateBundle = async (
   for (const match of vectorStore.query(legacyRecords, legacyQuery.embedding, 16)) {
     scoreById.set(match.id, Math.max(scoreById.get(match.id) ?? 0, localQuery ? match.score * 0.78 : match.score));
   }
-  const lexicalScoreById = new Map(
-    [...computeLexicalRetrievalScores(queryText || input.task_summary, scopeLocalNodes).entries()].map(
-      ([id, score]) => [id, score.score]
-    )
+  const semanticBackfillIds = new Set<string>();
+  if (semanticMode === "backfill") {
+    const lexicalShortlistIds = new Set(lexicalShortlist.map((node) => node.id));
+    for (const [id, score] of [...scoreById.entries()]
+      .filter(([, score]) => score >= 0.12)
+      .sort((left, right) => right[1] - left[1])
+      .slice(0, SEMANTIC_BACKFILL_LIMIT)) {
+      if (!lexicalShortlistIds.has(id)) {
+        semanticBackfillIds.add(id);
+      }
+    }
+  }
+  const candidatePool = scopeLocalNodes.filter((node) =>
+    lexicalShortlist.some((entry) => entry.id === node.id) || semanticBackfillIds.has(node.id)
   );
   const fusedScoreById = buildFusedScores(
     scoreById,
     lexicalScoreById,
-    scopeLocalNodes.map((node) => node.id)
+    candidatePool.map((node) => node.id)
   );
 
-  const ranked = scopeLocalNodes
+  const ranked = candidatePool
     .map((node) => {
       const semanticScore = scoreById.get(node.id) ?? 0;
       const lexicalScore = lexicalScoreById.get(node.id) ?? 0;
@@ -770,7 +815,8 @@ export const retrieveCandidateBundle = async (
           ]
         }),
         hardFilterResult.diagnostic,
-        buildShortlistDiagnostic(ranked.length, scopeLocalNodes.length, semanticSkipped),
+        buildShortlistDiagnostic(lexicalShortlist.length, scopeLocalNodes.length, semanticMode === "backfill"),
+        buildSemanticDiagnostic(semanticMode, scoreById.size, semanticSkipped),
         buildPolicyEnrichmentDiagnostic(reranked.length)
       ]
     }

@@ -534,11 +534,81 @@ describe("retrieveCandidates", () => {
       "retrieval_context",
       "hard_filter",
       "shortlist",
+      "semantic_rerank_backfill",
       "policy_enrichment"
     ]);
     expect(
       bundle.retrievalPolicyDiagnostics.stages.find((stage) => stage.stage === "policy_enrichment")?.reasonCodes
     ).toContain("similarity_remains_non_authoritative");
+  });
+
+  it("labels semantic backfill when lexical shortlist evidence is weak", async () => {
+    const bundle = await retrieveCandidateBundle(
+      input({
+        task_type: "test_debug",
+        task_summary: "zzzz qqqq xxxx"
+      }),
+      [
+        node({
+          id: "semantic-backfill",
+          task_type: "test_debug",
+          trigger_pattern: "Resolve the authentication regression after checking the test fixture",
+          compact_hint: "Inspect the fixture setup before changing authentication code.",
+          retrieval_text: "Resolve authentication regression fixture setup before changing code.",
+          embedding: [1, 0, 0],
+          embedding_provider: "local",
+          embedding_model: "Xenova/multilingual-e5-small",
+          embedding_version: "local-e5-v1",
+          embedding_dimensions: 3
+        })
+      ]
+    );
+
+    expect(bundle.candidates.map((candidate) => candidate.node.id)).toContain("semantic-backfill");
+    expect(bundle.retrievalPolicyDiagnostics.stages.find((stage) => stage.stage === "semantic_rerank_backfill")?.reasonCodes).toContain(
+      "semantic_mode:backfill"
+    );
+  });
+
+  it("skips semantic work for low-signal prompt-only input without creating fallback candidates", async () => {
+    const embedQuerySpy = vi.fn(async () => [1, 0, 0]);
+    setEmbeddingProviderForTests({
+      provider: "local",
+      model: "Xenova/multilingual-e5-small",
+      version: "local-e5-v1",
+      dimensions: 3,
+      embedQuery: embedQuerySpy,
+      async embedPassage() {
+        return [1, 0, 0];
+      }
+    });
+
+    const bundle = await retrieveCandidateBundle(
+      input({
+        task_type: "test_debug",
+        task_summary: "ok",
+        context_summary: undefined
+      }),
+      [
+        node({
+          id: "semantic-noise",
+          task_type: "test_debug",
+          trigger_pattern: "Fix the unrelated auth failure",
+          compact_hint: "Inspect auth configuration.",
+          embedding: [1, 0, 0],
+          embedding_provider: "local",
+          embedding_model: "Xenova/multilingual-e5-small",
+          embedding_version: "local-e5-v1",
+          embedding_dimensions: 3
+        })
+      ]
+    );
+
+    expect(embedQuerySpy).not.toHaveBeenCalled();
+    expect(bundle.candidates).toEqual([]);
+    expect(bundle.retrievalPolicyDiagnostics.stages.find((stage) => stage.stage === "semantic_rerank_backfill")?.reasonCodes).toContain(
+      "semantic_mode:skipped"
+    );
   });
 
   it("keeps a strong adjacent-family config candidate available for general investigation tasks", async () => {
