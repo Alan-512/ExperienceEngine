@@ -46,6 +46,11 @@ ExperienceEngine SHALL expose different interaction categories through MCP accor
 - **THEN** those drafts are exposed as structured read-only state through a resource or read-only action
 - **AND** the payload includes summary counts, bounded drafts, node ids, lifecycle/delivery state, evidence summaries, risk notes, and review-only suggested targets
 
+#### Scenario: Operator review flow is exposed as read-only state
+- **WHEN** ExperienceEngine exposes operator review through MCP or session interaction surfaces
+- **THEN** the review flow is exposed as structured read-only state through a resource and brokered inspect action
+- **AND** the payload includes repo policy, hygiene, export-draft summaries, recommended review order, drill-down references, and review-only next actions
+
 #### Scenario: The first low-risk control surface is exposed as tools
 - **WHEN** ExperienceEngine exposes feedback or scope enable/disable actions
 - **THEN** those actions are served as MCP tools

@@ -1,4 +1,9 @@
-## ADDED Requirements
+# openclaw-baseline-signal-quality Specification
+
+## Purpose
+Define signal-quality requirements for OpenClaw baseline evaluations so task classification reflects user intent rather than incidental command text.
+
+## Requirements
 
 ### Requirement: Command text does not dominate task classification
 ExperienceEngine MUST classify baseline tasks from human-readable task intent instead of from shell command tokens embedded in inline code spans.

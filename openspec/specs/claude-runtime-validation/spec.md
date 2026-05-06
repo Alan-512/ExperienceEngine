@@ -1,7 +1,7 @@
 # claude-runtime-validation Specification
 
 ## Purpose
-TBD - created by archiving change capture-claude-posttoolusefailure. Update Purpose after archive.
+Define real Claude Code runtime validation requirements for hook normalization, prompt-time guidance reuse, negative controls, and feedback writeback against ExperienceEngine's core learning loop.
 ## Requirements
 ### Requirement: Claude Failure Hooks Produce Failed Tool Results
 
@@ -52,4 +52,3 @@ ExperienceEngine MUST demonstrate in a real Claude Code runtime that injected Cl
 
 - **WHEN** a Claude task receives prompt-time injection and finalizes with failure evidence
 - **THEN** the injected node's `usage_count` and `harmed_count` increment
-

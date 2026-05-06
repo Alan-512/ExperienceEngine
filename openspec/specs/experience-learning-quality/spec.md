@@ -1,7 +1,7 @@
 # experience-learning-quality Specification
 
 ## Purpose
-Raise ExperienceEngine's core learning quality so extracted experience, candidate retrieval, outcome attribution, harm attribution, and formal experience expression reflect actual task evidence instead of placeholder heuristics.
+Raise ExperienceEngine's core learning quality so extracted experience, candidate retrieval, outcome attribution, harm attribution, and formal experience expression reflect actual task evidence instead of temporary heuristics.
 
 ## Requirements
 
