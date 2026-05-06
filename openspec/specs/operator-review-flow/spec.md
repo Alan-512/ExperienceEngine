@@ -27,6 +27,12 @@ ExperienceEngine SHALL provide a bounded read-only operator review report for on
 - **WHEN** repo policy is clear, hygiene findings are empty, and export drafts are empty
 - **THEN** ExperienceEngine returns a review report with an empty `reviewItems` list and a low-priority next action
 
+#### Scenario: Review report supports operator display
+
+- **WHEN** ExperienceEngine returns an operator review report
+- **THEN** the report includes enough structured data for a caller to display review order, source, priority, title, summary, and drill-down references without scraping terminal output
+- **AND** the report keeps review-only state explicit in next actions or section summaries
+
 ### Requirement: Operator review flow prioritizes risks
 
 ExperienceEngine SHALL prioritize review items by operational risk rather than by report source order alone.
@@ -53,6 +59,12 @@ ExperienceEngine SHALL link summary items to existing detailed inspection surfac
 - **THEN** each major section includes a CLI drill-down command or MCP resource reference for the detailed repo, hygiene, or export-draft report
 - **AND** those references remain advisory and do not execute changes
 
+#### Scenario: Drill-down references are aligned across surfaces
+
+- **WHEN** a review item points to repo policy, hygiene, or export drafts
+- **THEN** its drill-down references use the same source names and command/resource identifiers documented for CLI and MCP inspection
+- **AND** those references do not point to mutation, restore, export, or lifecycle-control actions
+
 ### Requirement: Operator review flow is filterable and bounded
 
 ExperienceEngine SHALL keep the review flow bounded for CLI and MCP use.
@@ -62,3 +74,4 @@ ExperienceEngine SHALL keep the review flow bounded for CLI and MCP use.
 - **WHEN** an operator requests a review report with a scope/cwd and limit
 - **THEN** ExperienceEngine applies the limit to the number of surfaced hygiene findings and export drafts
 - **AND** it still includes summary counts for each source report
+

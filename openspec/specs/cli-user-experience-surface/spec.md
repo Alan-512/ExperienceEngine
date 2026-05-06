@@ -56,3 +56,10 @@ The product SHALL expose explicit CLI commands for users who want to inspect rec
 - **THEN** ExperienceEngine prints a bounded read-only operator review report with repo policy, hygiene, and export-draft summary sections
 - **AND** optional filters such as cwd/scope and limit narrow the report without mutating stored state
 
+#### Scenario: Operator review output is actionable
+
+- **WHEN** a user runs `ee inspect review`
+- **THEN** the CLI output includes repo policy health, hygiene count, export draft count, recommended review order, prioritized review items, and review-only next actions
+- **AND** each displayed review item includes a drill-down command for the detailed read-only inspection surface
+- **AND** the output states that review inspection does not mutate repo policy, nodes, candidates, attribution, review, snapshot, or instruction-file state
+

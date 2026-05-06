@@ -51,6 +51,11 @@ ExperienceEngine SHALL expose different interaction categories through MCP accor
 - **THEN** the review flow is exposed as structured read-only state through a resource and brokered inspect action
 - **AND** the payload includes repo policy, hygiene, export-draft summaries, recommended review order, drill-down references, and review-only next actions
 
+#### Scenario: Operator review metadata explains read-only drill-down
+- **WHEN** ExperienceEngine lists MCP capabilities or brokered inspect actions
+- **THEN** the operator review resource/action descriptions identify the flow as read-only and point to repo policy, hygiene, and export draft drill-down surfaces
+- **AND** they do not describe the review flow as an export writer, policy restore action, node lifecycle action, or console workflow
+
 #### Scenario: The first low-risk control surface is exposed as tools
 - **WHEN** ExperienceEngine exposes feedback or scope enable/disable actions
 - **THEN** those actions are served as MCP tools
@@ -58,12 +63,12 @@ ExperienceEngine SHALL expose different interaction categories through MCP accor
 
 #### Scenario: ExperienceEngine exposes review workflows as prompts
 - **WHEN** ExperienceEngine offers reusable last-intervention or warning-review workflows
-- **THEN** those workflows are exposed as MCP prompts
+- **THEN** those workflows are exposed as MCP prompts when prompts are supported by the host integration
 - **AND** review prompts link to the relevant ExperienceEngine resources when possible
 
 #### Scenario: ExperienceEngine exposes light control workflows as prompts
 - **WHEN** ExperienceEngine offers pause/resume or last-feedback workflows
-- **THEN** those workflows are exposed as MCP prompts
+- **THEN** those workflows are exposed as MCP prompts when prompts are supported by the host integration
 - **AND** the prompt text instructs the agent to confirm before calling the underlying control tool
 
 ### Requirement: ExperienceEngine MCP actions are risk-tiered
