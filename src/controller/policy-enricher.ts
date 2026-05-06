@@ -1,4 +1,10 @@
-import type { ExperienceInput, ExperienceNode, RetrievalContext, TaskType } from "../types/domain.js";
+import type {
+  ExperienceInput,
+  ExperienceNode,
+  PolicyEnrichmentComponent,
+  RetrievalContext,
+  TaskType
+} from "../types/domain.js";
 import {
   deriveNodeManagementSignals,
   deriveTaskManagementSignals
@@ -144,6 +150,7 @@ export type PolicyEnrichment = {
   policyAdjustment: number;
   policyScore: number;
   reasons: string[];
+  components: PolicyEnrichmentComponent[];
 };
 
 export const getFamilyScore = (inputTaskType: TaskType, nodeTaskType: TaskType): number =>
@@ -191,17 +198,77 @@ export const enrichPolicyForCandidate = (
   const failureSignatureBonus = Math.min(0.05, failureSignatureOverlap * 0.08);
   const correctionIntentBonus =
     retrievalContext?.expectationCorrectionIntent && isExpectationCorrectionNode(node) ? 0.03 : 0;
-  const policyAdjustment =
-    familyScore * 0.22 +
-    specificityBonus +
-    feedbackAdjustment +
-    maturityAdjustment -
-    genericPenalty +
-    expectationCorrectionAdjustment +
-    realDevAlignmentBonus +
-    metaTaskAlignmentBonus -
-    metaOriginPenalty;
-  const enrichedPolicyAdjustment = policyAdjustment + failureSignatureBonus + correctionIntentBonus;
+  const components: PolicyEnrichmentComponent[] = [
+    {
+      name: "family",
+      category: "family_fit",
+      value: familyScore * 0.22,
+      reason: "Task-family proximity contributes governance fit."
+    },
+    {
+      name: "specificity",
+      category: "specificity",
+      value: specificityBonus,
+      reason: "Specific triggers, goals, or structured steps increase reuse confidence."
+    },
+    {
+      name: "feedback",
+      category: "feedback",
+      value: feedbackAdjustment,
+      reason: "Helped and harmed counters adjust reuse confidence."
+    },
+    {
+      name: "maturity",
+      category: "maturity",
+      value: maturityAdjustment,
+      reason: "Support count and reuse validation increase maturity."
+    },
+    {
+      name: "generic_penalty",
+      category: "penalty",
+      value: -genericPenalty,
+      reason: "Legacy generic guidance is penalized to avoid noisy reuse."
+    },
+    {
+      name: "expectation_correction",
+      category: "expectation_correction",
+      value: expectationCorrectionAdjustment,
+      reason: "Expectation-correction evidence can improve applicability."
+    },
+    {
+      name: "real_dev_alignment",
+      category: "task_alignment",
+      value: realDevAlignmentBonus,
+      reason: "Real development task signals align with real development guidance."
+    },
+    {
+      name: "meta_task_alignment",
+      category: "task_alignment",
+      value: metaTaskAlignmentBonus,
+      reason: "Meta or validation task signals align with similar guidance."
+    },
+    {
+      name: "meta_origin_penalty",
+      category: "penalty",
+      value: -metaOriginPenalty,
+      reason: "Meta-origin guidance is penalized for real development tasks."
+    },
+    {
+      name: "failure_signature",
+      category: "retrieval_context",
+      value: failureSignatureBonus,
+      reason: "Failure signature overlap is soft retrieval-context evidence."
+    },
+    {
+      name: "correction_intent",
+      category: "retrieval_context",
+      value: correctionIntentBonus,
+      reason: "Correction intent is soft context evidence for expectation corrections."
+    }
+  ];
+  const enrichedPolicyAdjustment = Number(
+    components.reduce((sum, component) => sum + component.value, 0).toFixed(12)
+  );
   const reasons = [
     `family:${familyScore.toFixed(4)}`,
     `specificity:${specificityBonus.toFixed(4)}`,
@@ -226,6 +293,7 @@ export const enrichPolicyForCandidate = (
     familyScore,
     policyAdjustment: enrichedPolicyAdjustment,
     policyScore: enrichedPolicyAdjustment,
-    reasons
+    reasons,
+    components
   };
 };

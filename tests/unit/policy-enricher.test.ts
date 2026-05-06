@@ -65,7 +65,18 @@ describe("enrichPolicyForCandidate", () => {
 
     expect(enrichment.familyScore).toBe(1);
     expect(enrichment.policyAdjustment).toBe(enrichment.policyScore);
+    expect(enrichment.components.reduce((sum, component) => sum + component.value, 0)).toBeCloseTo(
+      enrichment.policyAdjustment,
+      10
+    );
     expect(enrichment.policyScore).toBeGreaterThan(0);
+    expect(enrichment.components).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "family", category: "family_fit" }),
+        expect.objectContaining({ name: "failure_signature", category: "retrieval_context" }),
+        expect.objectContaining({ name: "correction_intent", category: "retrieval_context" })
+      ])
+    );
     expect(enrichment.reasons).toEqual(
       expect.arrayContaining([
         expect.stringContaining("family:"),
@@ -93,6 +104,13 @@ describe("enrichPolicyForCandidate", () => {
     );
 
     expect(enrichment.reasons).toContain("generic_penalty:0.2200");
+    expect(enrichment.components).toContainEqual(
+      expect.objectContaining({
+        name: "generic_penalty",
+        category: "penalty",
+        value: -0.22
+      })
+    );
   });
 
   it("penalizes meta-like guidance for a real bug-fix style task", () => {
@@ -115,6 +133,13 @@ describe("enrichPolicyForCandidate", () => {
     );
 
     expect(enrichment.reasons).toContain("meta_origin_penalty:0.0800");
+    expect(enrichment.components).toContainEqual(
+      expect.objectContaining({
+        name: "meta_origin_penalty",
+        category: "penalty",
+        value: -0.08
+      })
+    );
     expect(enrichment.policyAdjustment).toBeLessThan(0.4);
   });
 

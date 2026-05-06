@@ -3,6 +3,7 @@ import type {
   ExperienceNode,
   MatchBand,
   MatchScorecard,
+  PolicyEnrichmentComponent,
   RetrievalContext,
   RetrievalPolicyDiagnostics,
   RetrievalPolicyStageDiagnostic,
@@ -33,6 +34,7 @@ export type RetrievedCandidate = {
   policyAdjustment: number;
   policyScore: number;
   policyReasons: string[];
+  policyComponents?: PolicyEnrichmentComponent[];
   rerankScore?: number;
   rerankSource?: "heuristic" | "model";
   familyScore: number;
@@ -665,6 +667,7 @@ export const retrieveCandidateBundle = async (
         policyAdjustment: policy.policyAdjustment,
         policyScore: policy.policyScore,
         policyReasons: policy.reasons,
+        policyComponents: policy.components,
         familyScore: policy.familyScore,
         matchScorecard,
         totalScore,
@@ -719,6 +722,7 @@ export const retrieveCandidateBundle = async (
           policyAdjustment,
           policyScore,
           policyReasons,
+          policyComponents,
           familyScore,
           matchScorecard,
           totalScore,
@@ -734,6 +738,7 @@ export const retrieveCandidateBundle = async (
           policyAdjustment,
           policyScore,
           policyReasons,
+          policyComponents,
           familyScore,
           matchScorecard,
           totalScore,

@@ -134,6 +134,7 @@ const toScorecardCandidate = (candidate: RetrievedCandidate): InjectionScorecard
   rerankSource: candidate.rerankSource,
   retrievalReasons: candidate.retrievalReasons,
   policyReasons: candidate.policyReasons,
+  policyComponents: candidate.policyComponents,
   taskFamilyMatch: candidate.taskFamilyMatch
 });
 

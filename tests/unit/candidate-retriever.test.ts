@@ -503,6 +503,9 @@ describe("retrieveCandidates", () => {
       policyAdjustment: expect.any(Number),
       policyScore: expect.any(Number),
       policyReasons: expect.arrayContaining([expect.stringContaining("family:")]),
+      policyComponents: expect.arrayContaining([
+        expect.objectContaining({ name: "family", category: "family_fit" })
+      ]),
       totalScore: expect.any(Number),
       familyScore: expect.any(Number)
     });

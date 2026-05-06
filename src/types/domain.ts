@@ -155,6 +155,23 @@ export type RetrievalPolicyDiagnostics = {
   stages: RetrievalPolicyStageDiagnostic[];
 };
 
+export type PolicyEnrichmentComponentCategory =
+  | "family_fit"
+  | "specificity"
+  | "feedback"
+  | "maturity"
+  | "penalty"
+  | "expectation_correction"
+  | "task_alignment"
+  | "retrieval_context";
+
+export type PolicyEnrichmentComponent = {
+  name: string;
+  category: PolicyEnrichmentComponentCategory;
+  value: number;
+  reason: string;
+};
+
 export type ExperienceInputRecord = {
   record_id: string;
   episode_id?: string;
@@ -417,6 +434,7 @@ export type InjectionScorecardCandidate = {
   rerankSource?: "heuristic" | "model";
   retrievalReasons?: string[];
   policyReasons?: string[];
+  policyComponents?: PolicyEnrichmentComponent[];
   taskFamilyMatch: boolean;
 };
 
