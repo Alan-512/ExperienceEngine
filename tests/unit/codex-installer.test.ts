@@ -6,10 +6,6 @@ import { inspectCodexInstall, installCodexAdapter } from "../../src/install/code
 import { readCurrentPackageVersion } from "../../src/version/package-version.js";
 
 const tempDirs: string[] = [];
-const originalAgentsPath = join(process.cwd(), "AGENTS.md");
-const originalAgentsContent = existsSync(originalAgentsPath)
-  ? readFileSync(originalAgentsPath, "utf8")
-  : null;
 
 const makeTempDir = (): string => {
   const dir = mkdtempSync(join(tmpdir(), "experienceengine-codex-install-"));
@@ -31,12 +27,6 @@ afterEach(() => {
     if (dir) {
       rmSync(dir, { recursive: true, force: true });
     }
-  }
-
-  if (originalAgentsContent === null) {
-    rmSync(originalAgentsPath, { force: true });
-  } else {
-    writeFileSync(originalAgentsPath, originalAgentsContent, "utf8");
   }
 });
 
@@ -63,6 +53,7 @@ env_key = "OPENROUTER_API_KEY"
 
     const report = installCodexAdapter({
       homeDir,
+      cwd: homeDir,
       env,
       runner(command) {
         const key = [command.bin, ...command.args].join(" ");
@@ -89,6 +80,8 @@ env_key = "OPENROUTER_API_KEY"
     expect(report.hostWiring.wired).toBe(true);
     expect(existsSync(report.paths.installStatePath)).toBe(true);
     expect(readFileSync(join(homeDir, ".codex", "config.toml"), "utf8")).toContain("startup_timeout_sec = 60.0");
+    expect(readFileSync(join(homeDir, ".codex", "config.toml"), "utf8")).toContain("codex_hooks = true");
+    expect(readFileSync(join(homeDir, ".codex", "hooks.json"), "utf8")).toContain("experienceengine-codex-hook");
     expect(commands[0]).toBe("codex mcp get experienceengine");
     expect(commands[1]).toContain("codex mcp add experienceengine --env");
     expect(commands[1]).toContain("--env EXPERIENCE_ENGINE_ADAPTER=codex");
@@ -111,6 +104,7 @@ env_key = "OPENROUTER_API_KEY"
 
     installCodexAdapter({
       homeDir,
+      cwd: homeDir,
       runner(command) {
         const key = [command.bin, ...command.args].join(" ");
         if (key === "codex mcp get experienceengine") {
@@ -128,7 +122,7 @@ env_key = "OPENROUTER_API_KEY"
       }
     });
 
-    const agents = readFileSync(originalAgentsPath, "utf8");
+    const agents = readFileSync(join(homeDir, "AGENTS.md"), "utf8");
     expect(agents).toContain("<!-- EXPERIENCEENGINE:CODEX-INSTRUCTION START -->");
     expect(agents).toContain("experienceengine_lookup_hints");
     expect(agents).toContain("experienceengine_finalize_task");
@@ -138,7 +132,7 @@ env_key = "OPENROUTER_API_KEY"
     const homeDir = makeTempDir();
 
     writeFileSync(
-      originalAgentsPath,
+      join(homeDir, "AGENTS.md"),
       ["# Local project guidance", "", "Keep existing content untouched.", ""].join("\n"),
       "utf8"
     );
@@ -159,10 +153,10 @@ env_key = "OPENROUTER_API_KEY"
       return "";
     };
 
-    installCodexAdapter({ homeDir, runner });
-    const first = readFileSync(originalAgentsPath, "utf8");
-    installCodexAdapter({ homeDir, runner });
-    const second = readFileSync(originalAgentsPath, "utf8");
+    installCodexAdapter({ homeDir, cwd: homeDir, runner });
+    const first = readFileSync(join(homeDir, "AGENTS.md"), "utf8");
+    installCodexAdapter({ homeDir, cwd: homeDir, runner });
+    const second = readFileSync(join(homeDir, "AGENTS.md"), "utf8");
 
     expect(first).toContain("# Local project guidance");
     expect(first).toContain("Keep existing content untouched.");
@@ -177,6 +171,7 @@ env_key = "OPENROUTER_API_KEY"
 
     installCodexAdapter({
       homeDir,
+      cwd: homeDir,
       runner(command) {
         const key = [command.bin, ...command.args].join(" ");
         commands.push(key);
@@ -216,6 +211,7 @@ env_key = "OPENROUTER_API_KEY"
     const homeDir = makeTempDir();
     installCodexAdapter({
       homeDir,
+      cwd: homeDir,
       runner(command) {
         const key = [command.bin, ...command.args].join(" ");
         if (key === "codex mcp get experienceengine") {
@@ -235,6 +231,7 @@ env_key = "OPENROUTER_API_KEY"
 
     const status = inspectCodexInstall({
       homeDir,
+      cwd: homeDir,
       cliEnv: {
         PATH: ""
       },
@@ -277,6 +274,7 @@ env_key = "OPENROUTER_API_KEY"
 
     installCodexAdapter({
       homeDir,
+      cwd: homeDir,
       env: {
         CODEX_CONFIG_PATH: configPath
       },
@@ -299,6 +297,7 @@ env_key = "OPENROUTER_API_KEY"
 
     const status = inspectCodexInstall({
       homeDir,
+      cwd: homeDir,
       env: {
         CODEX_CONFIG_PATH: configPath
       },
@@ -357,6 +356,7 @@ env_key = "OPENROUTER_API_KEY"
 
     installCodexAdapter({
       homeDir,
+      cwd: homeDir,
       runner(command) {
         const key = [command.bin, ...command.args].join(" ");
         if (key === "codex mcp get experienceengine") {
@@ -376,6 +376,7 @@ env_key = "OPENROUTER_API_KEY"
 
     const status = inspectCodexInstall({
       homeDir,
+      cwd: homeDir,
       runner(command) {
         const key = [command.bin, ...command.args].join(" ");
         if (key === "codex mcp get experienceengine") {
@@ -403,6 +404,7 @@ env_key = "OPENROUTER_API_KEY"
 
     const report = installCodexAdapter({
       homeDir,
+      cwd: homeDir,
       runtimeTarget: "windows",
       runner(command) {
         const key = [command.bin, ...command.args].join(" ");

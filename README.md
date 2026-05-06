@@ -81,7 +81,7 @@ Do not use ExperienceEngine if:
 |---|---|---|---|
 | `OpenClaw` | native plugin install | host-native | most complete today |
 | `Claude Code` | marketplace plugin, with `ee install claude-code` fallback | MCP + plugin hooks | supported |
-| `Codex` | `ee install codex`, with native MCP fallback | MCP-native | supported |
+| `Codex` | `ee install codex`, with native MCP fallback | hooks + MCP | supported |
 
 ## Why It Exists
 
@@ -329,7 +329,7 @@ codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceeng
 Notes:
 - `OpenClaw` uses plugin/runtime integration (not `src/adapters/`) and CLI fallback for management.
 - `Claude Code` installs both hooks and the shared ExperienceEngine MCP server.
-- `Codex` installs the shared ExperienceEngine MCP server.
+- `Codex` installs Codex-native hooks plus the shared ExperienceEngine MCP server. `ee codex exec` remains the deterministic non-interactive fallback.
 - `ee install ...` and `ee doctor ...` now warn if `npm` or `pnpm` uses a non-official registry, because managed model downloads are most reliable with `https://registry.npmjs.org`.
 - successful `ee install ...` also explains the cold-start expectation: capture starts immediately, but formal experience usually appears after a few similar tasks in the same repo.
 

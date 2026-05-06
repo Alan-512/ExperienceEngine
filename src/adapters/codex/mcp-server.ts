@@ -59,6 +59,7 @@ type CodexFinalizeArgs = {
   cwd?: string;
   prompt?: string;
   contextSummary?: string;
+  injectedNodeIds?: string[];
 };
 
 type CodexServerOptions = {
@@ -452,7 +453,8 @@ export const createCodexBehaviorLoop = (options: CodexServerOptions = {}) => {
         cwd: args.cwd,
         userMessage: args.prompt ?? "",
         taskSummary: args.prompt,
-        contextSummary: args.contextSummary
+        contextSummary: args.contextSummary,
+        injectedNodeIds: args.injectedNodeIds
       });
 
       return {

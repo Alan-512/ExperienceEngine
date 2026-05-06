@@ -114,6 +114,8 @@ export const runInstallCommand = (
     console.log(`Runtime target: ${report.runtimeTarget}`);
     console.log(`Server name: ${report.serverName}`);
     console.log(`Server command: ${report.serverCommand}`);
+    console.log(`Codex hooks: ${report.hooks.state}`);
+    console.log(`Codex hook launcher: ${report.launcherPaths.hook}`);
     console.log(`Capture path: ${report.captureDir}`);
     logRegistryHealth(registryHealth);
     logPostInstallOrientation("codex");

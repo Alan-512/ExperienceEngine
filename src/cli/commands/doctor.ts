@@ -241,6 +241,19 @@ const logCodexRuntimeStatus = (status?: {
   runtimeTarget?: string;
   launcherPaths?: {
     mcpServer?: string;
+    hook?: string;
+  };
+  hooks?: {
+    state: string;
+    hooksPath: string;
+    configPath: string;
+    featureEnabled: boolean;
+    hookFilePresent: boolean;
+    missingEvents: string[];
+    claudeHookCommands: string[];
+    wslPathCommands: string[];
+    codexHookCommands: string[];
+    parseError?: string;
   };
   cliFallback?: {
     command: "ee";
@@ -259,6 +272,32 @@ const logCodexRuntimeStatus = (status?: {
   }
   if (status.launcherPaths?.mcpServer) {
     console.log(`- MCP launcher: ${status.launcherPaths.mcpServer}`);
+  }
+  if (status.launcherPaths?.hook) {
+    console.log(`- Hook launcher: ${status.launcherPaths.hook}`);
+  }
+  if (status.hooks) {
+    console.log("Codex hooks:");
+    console.log(`- State: ${status.hooks.state}`);
+    console.log(`- Feature codex_hooks: ${status.hooks.featureEnabled ? "enabled" : "disabled"}`);
+    console.log(`- Config path: ${status.hooks.configPath}`);
+    console.log(`- Hooks path: ${status.hooks.hooksPath}`);
+    console.log(`- Hooks file present: ${status.hooks.hookFilePresent ? "yes" : "no"}`);
+    if (status.hooks.parseError) {
+      console.log(`- Hook parse error: ${status.hooks.parseError}`);
+      console.log("- Recommended next step: fix the malformed hooks file, then run `ee repair codex`.");
+    }
+    if (status.hooks.missingEvents.length) {
+      console.log(`- Missing ExperienceEngine hook events: ${status.hooks.missingEvents.join(", ")}`);
+    }
+    if (status.hooks.claudeHookCommands.length) {
+      console.log("- Invalid Claude hook entries detected in Codex config.");
+      console.log("- Recommended next step: ee repair codex");
+    }
+    if (status.hooks.wslPathCommands.length) {
+      console.log("- Runtime path mismatch: WSL-style hook paths detected for the selected Codex target.");
+      console.log("- Recommended next step: ee repair codex");
+    }
   }
   if (status.cliFallback) {
     console.log(`- CLI fallback command: ${status.cliFallback.command}`);
@@ -538,6 +577,8 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
         command: status.hostWiring.command ?? "",
         capture_dir: status.captureDir,
         cli_fallback: status.cliFallback?.available ?? false,
+        hook_state: status.hooks?.state ?? "",
+        codex_hooks: status.hooks?.featureEnabled ?? false,
         instruction_state: status.instruction?.state ?? "",
         learning_loop: status.learningLoop?.state ?? ""
       }

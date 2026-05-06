@@ -107,7 +107,8 @@ Install ExperienceEngine through the host setup flow for:
     - `ee install codex`
   - native/manual fallback:
     - `codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y @alan512/experienceengine codex-mcp-server`
-  - after either path, start a new Codex session in this repo so the MCP wiring and `AGENTS.md` instruction block are picked up
+  - after the managed path, start a new Codex session in this repo so Codex-native hooks, MCP wiring, and the `AGENTS.md` instruction block are picked up
+  - the manual MCP fallback only installs the tool surface; use `ee install codex` or `ee repair codex` when hook lifecycle capture/injection is needed
 - `Claude Code`
   - host-native marketplace install:
     - add the bundled marketplace from GitHub:
@@ -595,12 +596,14 @@ codex mcp get experienceengine
 Success looks like:
 - doctor reports the adapter as installed
 - `codex mcp get experienceengine` shows the server as enabled
+- doctor reports Codex hooks as healthy and `codex_hooks` as enabled
 - a new `codex exec` session can call ExperienceEngine MCP resources or tools
 
 Host note:
 - ExperienceEngine installs a longer `startup_timeout_sec` for Codex automatically
 - this avoids MCP handshake failures on slower local startups
-- if Codex still cannot see ExperienceEngine in new sessions, re-run `ee install codex`
+- ExperienceEngine installs Codex-native hooks for prompt-time guidance, tool-result capture, and stop/finalize writeback
+- if Codex still cannot see ExperienceEngine or doctor reports hook drift, run `ee repair codex`
 - `ee codex exec` is a deterministic wrapper for non-interactive runs
 - the wrapper owns `lookup -> child codex exec -> record -> finalize` outside the child process
 - for wrapped runs, ExperienceEngine removes the nested `experienceengine` MCP server from the child Codex config temporarily so lifecycle evidence is not double-written
@@ -915,7 +918,7 @@ Claude Code:
 Codex:
 - run `ee doctor codex`
 - verify `codex mcp get experienceengine`
-- if a new Codex session still cannot see ExperienceEngine, run `ee install codex`
+- if doctor reports disabled hooks, stale Claude hook entries, WSL path drift, or missing MCP wiring, run `ee repair codex`
 - then start a new Codex session so the MCP connection is recreated
 
 ### What ExperienceEngine does not back up

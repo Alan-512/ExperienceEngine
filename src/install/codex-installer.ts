@@ -15,10 +15,18 @@ import {
   type CodexMcpServerInfo
 } from "./codex-cli.js";
 import {
+  buildCodexHookCommandForTarget,
   ensureCodexLaunchers,
+  resolveCodexLauncherPaths,
   resolveCodexRuntimeTarget,
   type CodexRuntimeTarget
 } from "./codex-runtime-target.js";
+import {
+  inspectCodexProjectHooks,
+  repairCodexProjectHooks,
+  type CodexHookInspection,
+  type CodexHookRepairResult
+} from "./codex-hooks.js";
 import {
   CODEX_EXPERIENCEENGINE_INSTRUCTION_END,
   CODEX_EXPERIENCEENGINE_INSTRUCTION_START,
@@ -57,7 +65,9 @@ export type CodexInstallReport = {
   runtimeTarget: CodexRuntimeTarget;
   launcherPaths: {
     mcpServer: string;
+    hook: string;
   };
+  hooks: CodexHookRepairResult;
   captureDir: string;
   hostWiring: {
     wired: boolean;
@@ -103,6 +113,7 @@ type CodexInstallState = {
   runtimeTarget?: CodexRuntimeTarget;
   launcherPaths?: {
     mcpServer?: string;
+    hook?: string;
   };
   captureDir: string;
   hostWiring: {
@@ -113,6 +124,7 @@ type CodexInstallState = {
   instruction?: {
     path: string;
   };
+  hooks?: CodexHookRepairResult | CodexHookInspection;
 };
 
 export type CodexInstructionStatus = {
@@ -278,6 +290,7 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
   });
   const existing = inspectCodexHost(runner, options.cliEnv);
   const instructionPath = resolveCodexInstructionPath(options.cwd);
+  const hookCommand = buildCodexHookCommandForTarget(runtimeTarget, launchers);
 
   mkdirSync(paths.dataDir, { recursive: true });
   mkdirSync(resolveProductStateDir(paths), { recursive: true });
@@ -295,6 +308,11 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
   );
   ensureCodexMcpServerStartupTimeout("experienceengine", CODEX_EXPERIENCEENGINE_STARTUP_TIMEOUT_SEC, {
     homeDir: options.homeDir
+  });
+  const hooks = repairCodexProjectHooks({
+    cwd: options.cwd,
+    hookCommand,
+    runtimeTarget
   });
   const instruction = upsertManagedInstructionBlock(instructionPath);
 
@@ -314,7 +332,8 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
       }).join(" "),
     runtimeTarget,
     launcherPaths: {
-      mcpServer: runtimeTarget === "windows" ? launchers.windowsMcpServer : launchers.mcpServer
+      mcpServer: runtimeTarget === "windows" ? launchers.windowsMcpServer : launchers.mcpServer,
+      hook: runtimeTarget === "windows" ? launchers.windowsHook : launchers.hook
     },
     captureDir: paths.captureDir,
     hostWiring: {
@@ -324,7 +343,8 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
     },
     instruction: {
       path: instruction.path
-    }
+    },
+    hooks
   };
 
   writeFileSync(paths.installStatePath, `${JSON.stringify(state, null, 2)}\n`, "utf8");
@@ -339,8 +359,10 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
     serverCommand: state.serverCommand,
     runtimeTarget,
     launcherPaths: {
-      mcpServer: runtimeTarget === "windows" ? launchers.windowsMcpServer : launchers.mcpServer
+      mcpServer: runtimeTarget === "windows" ? launchers.windowsMcpServer : launchers.mcpServer,
+      hook: runtimeTarget === "windows" ? launchers.windowsHook : launchers.hook
     },
+    hooks,
     captureDir: paths.captureDir,
     hostWiring: state.hostWiring
     ,
@@ -363,6 +385,19 @@ export const inspectCodexInstall = (options: InstallerOptions = {}) => {
     : null;
   const packageRoot = resolveExperienceEnginePackageRoot();
   const hostInfo = inspectCodexHost(runner, options.cliEnv);
+  const runtimeTarget = resolveCodexRuntimeTarget({
+    requested: options.runtimeTarget ?? installState?.runtimeTarget,
+    env: options.env ?? process.env
+  });
+  const launchers = resolveCodexLauncherPaths({
+    productHome: paths.productHome
+  });
+  const hookCommand = buildCodexHookCommandForTarget(runtimeTarget, launchers);
+  const hooks: CodexHookInspection = inspectCodexProjectHooks({
+    cwd: options.cwd,
+    hookCommand,
+    runtimeTarget
+  });
   const instructionPath = resolveCodexInstructionPath(options.cwd);
   const instruction = inspectManagedInstructionBlock(instructionPath);
   const config = loadConfig({}, { env: options.env ?? process.env, homeDir: options.homeDir });
@@ -394,8 +429,17 @@ export const inspectCodexInstall = (options: InstallerOptions = {}) => {
     captureDir: paths.captureDir,
     serverName: installState?.serverName ?? "experienceengine",
     serverCommand: installState?.serverCommand,
-    runtimeTarget: installState?.runtimeTarget,
-    launcherPaths: installState?.launcherPaths,
+    runtimeTarget,
+    launcherPaths: {
+      ...installState?.launcherPaths,
+      mcpServer:
+        installState?.launcherPaths?.mcpServer ??
+        (runtimeTarget === "windows" ? launchers.windowsMcpServer : launchers.mcpServer),
+      hook:
+        installState?.launcherPaths?.hook ??
+        (runtimeTarget === "windows" ? launchers.windowsHook : launchers.hook)
+    },
+    hooks,
     hostWiring: {
       wired: Boolean(hostInfo?.commandDisplay),
       command: hostInfo?.commandDisplay,

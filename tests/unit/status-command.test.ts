@@ -24,6 +24,10 @@ let mockCodexStatus: {
     path?: string;
     recommendation?: string;
   };
+  hooks?: {
+    state: string;
+    featureEnabled: boolean;
+  };
 } = {
   installed: true,
   hostWiring: {
@@ -38,6 +42,10 @@ let mockCodexStatus: {
     command: "ee",
     available: true,
     path: "/usr/local/bin/ee"
+  },
+  hooks: {
+    state: "healthy",
+    featureEnabled: true
   }
 };
 
@@ -141,6 +149,10 @@ afterEach(() => {
       command: "ee",
       available: true,
       path: "/usr/local/bin/ee"
+    },
+    hooks: {
+      state: "healthy",
+      featureEnabled: true
     }
   };
   mockClaudeStatus = {
@@ -259,6 +271,8 @@ describe("status command", () => {
         ["- Codex learning loop: instruction_installed"],
         ["- Codex instruction block: present"],
         ["- Codex task runs in current repo: 0"],
+        ["- Codex hooks: healthy"],
+        ["- Codex hooks feature: enabled"],
         ["- Codex CLI fallback available: yes"],
         ["- OpenClaw learning loop: interaction_only"],
         ["- OpenClaw background learning default: disabled"],

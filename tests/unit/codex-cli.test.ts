@@ -12,6 +12,10 @@ import {
   resolveEffectiveCodexConfigPath,
   stripCodexMcpServerSections
 } from "../../src/install/codex-cli.js";
+import {
+  buildCodexHookCommandForTarget,
+  resolveCodexLauncherPaths
+} from "../../src/install/codex-runtime-target.js";
 
 const tempDirs: string[] = [];
 
@@ -55,12 +59,35 @@ describe("Codex CLI wiring", () => {
       "add",
       "experienceengine",
       "--env",
-      "EXPERIENCE_ENGINE_HOME=/mnt/d/ExperienceEngineData/.experienceengine",
+      "EXPERIENCE_ENGINE_HOME=D:\\ExperienceEngineData\\.experienceengine",
       "--",
       "cmd.exe",
       "/c",
-      "D:\\ExperienceEngineData\\.experienceengine\\bin\\experienceengine-codex-mcp-server.cmd"
+      "\"D:\\ExperienceEngineData\\.experienceengine\\bin\\experienceengine-codex-mcp-server.cmd\""
     ]);
+  });
+
+  it("quotes windows launcher commands when the path contains spaces", () => {
+    const command = buildCodexAddCommand(
+      "/mnt/d/project/ExperienceEngine",
+      "/mnt/d/Experience Engine Data/.experienceengine",
+      undefined,
+      [],
+      "windows"
+    );
+
+    expect(command.args).toContain("EXPERIENCE_ENGINE_HOME=D:\\Experience Engine Data\\.experienceengine");
+    expect(command.args.at(-1)).toBe("\"D:\\Experience Engine Data\\.experienceengine\\bin\\experienceengine-codex-mcp-server.cmd\"");
+  });
+
+  it("quotes windows hook commands when the path contains spaces", () => {
+    const launchers = resolveCodexLauncherPaths({
+      productHome: "/mnt/d/Experience Engine Data/.experienceengine"
+    });
+
+    expect(buildCodexHookCommandForTarget("windows", launchers)).toBe(
+      "cmd.exe /c \"D:\\Experience Engine Data\\.experienceengine\\bin\\experienceengine-codex-hook.cmd\""
+    );
   });
 
   it("adds repeated server env bindings when extra adapter env is provided", () => {

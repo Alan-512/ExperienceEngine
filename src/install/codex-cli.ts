@@ -7,6 +7,7 @@ import {
   buildCodexMcpServerCommandForTarget,
   ensureCodexLaunchers,
   resolveCodexRuntimeTarget,
+  toWindowsRuntimePath,
   type CodexRuntimeTarget
 } from "./codex-runtime-target.js";
 
@@ -74,25 +75,35 @@ export const buildCodexAddCommand = (
   cliEnv?: NodeJS.ProcessEnv,
   serverEnv: Array<[string, string]> = [],
   runtimeTarget?: CodexRuntimeTarget
-): CodexCommand => ({
-  bin: "codex",
-  args: [
-    "mcp",
-    "add",
-    CODEX_EXPERIENCEENGINE_SERVER,
-    "--env",
-    `EXPERIENCE_ENGINE_HOME=${experienceEngineHome}`,
-    ...serverEnv.flatMap(([key, value]) => ["--env", `${key}=${value}`]),
-    "--",
-    ...buildCodexMcpServerCommand(packageRoot, {
-      productHome: experienceEngineHome,
-      runtimeTarget,
-      env: cliEnv
-    })
-  ],
-  description: "Register the ExperienceEngine MCP server with Codex",
-  env: cliEnv
-});
+): CodexCommand => {
+  const resolvedRuntimeTarget = resolveCodexRuntimeTarget({
+    requested: runtimeTarget,
+    env: cliEnv
+  });
+  const runtimeHome = resolvedRuntimeTarget === "windows"
+    ? toWindowsRuntimePath(experienceEngineHome)
+    : experienceEngineHome;
+
+  return {
+    bin: "codex",
+    args: [
+      "mcp",
+      "add",
+      CODEX_EXPERIENCEENGINE_SERVER,
+      "--env",
+      `EXPERIENCE_ENGINE_HOME=${runtimeHome}`,
+      ...serverEnv.flatMap(([key, value]) => ["--env", `${key}=${value}`]),
+      "--",
+      ...buildCodexMcpServerCommand(packageRoot, {
+        productHome: experienceEngineHome,
+        runtimeTarget: resolvedRuntimeTarget,
+        env: cliEnv
+      })
+    ],
+    description: "Register the ExperienceEngine MCP server with Codex",
+    env: cliEnv
+  };
+};
 
 export const buildCodexRemoveCommand = (cliEnv?: NodeJS.ProcessEnv): CodexCommand => ({
   bin: "codex",

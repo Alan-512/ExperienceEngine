@@ -81,7 +81,7 @@ ExperienceEngine 是一个面向编程 Agent 的治理层。它复用真实执�
 |---|---|---|---|
 | `OpenClaw` | 原生插件安装 | 宿主原生 | 当前最完整 |
 | `Claude Code` | marketplace 插件，保留 `ee install claude-code` fallback | MCP + plugin hooks | 已支持 |
-| `Codex` | `ee install codex`，保留原生 MCP fallback | MCP 原生 | 已支持 |
+| `Codex` | `ee install codex`，保留原生 MCP fallback | hooks + MCP | 已支持 |
 
 ## 为什么要做这个
 
@@ -328,7 +328,7 @@ codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceeng
 说明：
 - `OpenClaw` 走 plugin/runtime integration，而不是 `src/adapters/`
 - `Claude Code` 会安装 hooks 和共享 ExperienceEngine MCP 服务
-- `Codex` 会安装共享 ExperienceEngine MCP 服务
+- `Codex` 会安装 Codex 原生 hooks 和共享 ExperienceEngine MCP 服务。`ee codex exec` 仍是确定性的非交互 fallback。
 - `ee install ...` 与 `ee doctor ...` 会在 `npm` / `pnpm` 使用非官方 registry 时给出提示，因为受管模型下载在 `https://registry.npmjs.org` 下最稳定
 - 成功执行 `ee install ...` 后，也会提醒冷启动预期：capture 会立刻开始，但 formal experience 一般需要在同一仓库里出现几次相似任务后才会形成
 

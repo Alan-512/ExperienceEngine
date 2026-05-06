@@ -15,7 +15,7 @@ describe("repair command", () => {
       expect.arrayContaining([
         ["Repair summary:"],
         ["- OpenClaw: automated repair is available with `ee repair openclaw` when doctor reports host drift."],
-        ["- Codex: re-run `ee install codex` if MCP wiring is missing or stale."],
+        ["- Codex: automated repair is available with `ee repair codex` for MCP, hooks, and runtime path drift."],
         ["- Claude Code: re-run the marketplace install flow if hooks or MCP wiring are missing."]
       ])
     );

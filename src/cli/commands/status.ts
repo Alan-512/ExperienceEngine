@@ -97,6 +97,10 @@ export const runStatusCommand = (): void => {
     console.log(`- Codex instruction block: ${codex.learningLoop.instructionState}`);
     console.log(`- Codex task runs in current repo: ${codex.learningLoop.recentTaskRuns}`);
   }
+  if (codex.hooks) {
+    console.log(`- Codex hooks: ${codex.hooks.state}`);
+    console.log(`- Codex hooks feature: ${codex.hooks.featureEnabled ? "enabled" : "disabled"}`);
+  }
   if (codex.cliFallback) {
     console.log(`- Codex CLI fallback available: ${codex.cliFallback.available ? "yes" : "no"}`);
     if (!codex.cliFallback.available && codex.cliFallback.recommendation) {
