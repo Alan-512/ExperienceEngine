@@ -438,7 +438,7 @@ env_key = "OPENROUTER_API_KEY"
     expect(payload.runtimeTarget).toBe("windows");
     expect(payload.launcherPaths?.mcpServer).toContain("experienceengine-codex-mcp-server.cmd");
     expect(report.runtimeTarget).toBe("windows");
-    expect(readFileSync(payload.launcherPaths?.mcpServer ?? "", "utf8")).toContain("wsl.exe bash -lc");
+    expect(readFileSync(payload.launcherPaths?.mcpServer ?? "", "utf8")).toContain("codex-mcp-server");
   });
 });
 

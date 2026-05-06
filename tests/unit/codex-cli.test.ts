@@ -36,7 +36,7 @@ afterEach(() => {
 
 describe("Codex CLI wiring", () => {
   it("builds the documented add command for the ExperienceEngine MCP server", () => {
-    const command = buildCodexAddCommand("/tmp/experienceengine", "/tmp/ee-home");
+    const command = buildCodexAddCommand("/tmp/experienceengine", "/tmp/ee-home", undefined, [], "posix");
 
     expect([command.bin, ...command.args]).toEqual([
       "codex",
@@ -95,7 +95,7 @@ describe("Codex CLI wiring", () => {
       ["EXPERIENCE_ENGINE_ADAPTER", "codex"],
       ["CODEX_CONFIG_PATH", "/tmp/codex.toml"],
       ["OPENROUTER_API_KEY", "token"]
-    ]);
+    ], "posix");
 
     expect([command.bin, ...command.args]).toEqual([
       "codex",

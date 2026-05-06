@@ -1,6 +1,6 @@
 import { chmodSync, existsSync, mkdirSync, realpathSync, writeFileSync } from "node:fs";
 import { execFileSync } from "node:child_process";
-import { join, resolve } from "node:path";
+import { join, posix, resolve } from "node:path";
 
 export type CodexRuntimeTarget = "posix" | "windows";
 
@@ -35,7 +35,11 @@ const normalizeWindowsDrivePath = (value: string): string => {
   return `${drive}:\\${rest}`;
 };
 
-const resolveRealPath = (value: string): string => (existsSync(value) ? realpathSync(value) : resolve(value));
+const isPosixAbsolutePath = (value: string): boolean => value.startsWith("/");
+const joinRuntimePath = (base: string, ...segments: string[]): string =>
+  isPosixAbsolutePath(base) ? posix.join(base, ...segments) : join(base, ...segments);
+const resolveRealPath = (value: string): string =>
+  isPosixAbsolutePath(value) ? value : existsSync(value) ? realpathSync(value) : resolve(value);
 export const resolveRealPathForCodex = resolveRealPath;
 
 export const resolveCodexRuntimeTarget = (
@@ -69,9 +73,17 @@ export const resolveCodexRuntimeTarget = (
 };
 
 export const toWindowsRuntimePath = (value: string): string => {
+  if (isWindowsMountedPath(value)) {
+    return normalizeWindowsDrivePath(value);
+  }
+
   const resolved = resolve(value);
   if (/^[A-Za-z]:\\/.test(resolved)) {
     return resolved;
+  }
+
+  if (isWindowsMountedPath(resolved)) {
+    return normalizeWindowsDrivePath(resolved);
   }
 
   if (process.platform === "linux") {
@@ -94,7 +106,7 @@ export const toWindowsRuntimePath = (value: string): string => {
 const ensurePosixLauncher = (path: string, packageRoot: string, command: "codex-mcp-server" | "codex-hook"): void => {
   const script = `#!/usr/bin/env bash
 set -euo pipefail
-exec node --no-warnings "${join(packageRoot, "dist/cli/index.js")}" ${command} "$@"
+exec node --no-warnings "${joinRuntimePath(packageRoot, "dist/cli/index.js")}" ${command} "$@"
 `;
   writeFileSync(path, script, "utf8");
   chmodSync(path, 0o755);
@@ -106,7 +118,7 @@ const ensureWindowsLauncher = (
   productHome: string,
   command: "codex-mcp-server" | "codex-hook"
 ): void => {
-  const entry = join(packageRoot, "dist/cli/index.js");
+  const entry = joinRuntimePath(packageRoot, "dist/cli/index.js");
   const realHome = resolveRealPath(productHome);
   const script =
     process.platform === "linux"
@@ -125,7 +137,7 @@ export const ensureCodexLaunchers = (options: {
 }): CodexLauncherPaths => {
   const realHome = resolveRealPath(options.productHome);
   const paths = resolveCodexLauncherPaths({ productHome: realHome });
-  mkdirSync(join(realHome, "bin"), { recursive: true });
+  mkdirSync(joinRuntimePath(realHome, "bin"), { recursive: true });
 
   ensurePosixLauncher(paths.mcpServer, options.packageRoot, "codex-mcp-server");
   ensureWindowsLauncher(paths.windowsMcpServer, options.packageRoot, realHome, "codex-mcp-server");
@@ -139,13 +151,13 @@ export const resolveCodexLauncherPaths = (options: {
   productHome: string;
 }): CodexLauncherPaths => {
   const realHome = resolveRealPath(options.productHome);
-  const binDir = join(realHome, "bin");
+  const binDir = joinRuntimePath(realHome, "bin");
 
   return {
-    mcpServer: join(binDir, "experienceengine-codex-mcp-server"),
-    windowsMcpServer: join(binDir, "experienceengine-codex-mcp-server.cmd"),
-    hook: join(binDir, "experienceengine-codex-hook"),
-    windowsHook: join(binDir, "experienceengine-codex-hook.cmd")
+    mcpServer: joinRuntimePath(binDir, "experienceengine-codex-mcp-server"),
+    windowsMcpServer: joinRuntimePath(binDir, "experienceengine-codex-mcp-server.cmd"),
+    hook: joinRuntimePath(binDir, "experienceengine-codex-hook"),
+    windowsHook: joinRuntimePath(binDir, "experienceengine-codex-hook.cmd")
   };
 };
 
