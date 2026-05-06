@@ -135,6 +135,25 @@ export type RetrievalContext = {
   expectationCorrectionIntent?: boolean;
 };
 
+export type RetrievalPolicyStageName =
+  | "retrieval_context"
+  | "hard_filter"
+  | "shortlist"
+  | "policy_enrichment"
+  | "decision_assembly";
+
+export type RetrievalPolicyStageDiagnostic = {
+  stage: RetrievalPolicyStageName;
+  acceptedCount?: number;
+  rejectedCount?: number;
+  passedCount?: number;
+  reasonCodes: string[];
+};
+
+export type RetrievalPolicyDiagnostics = {
+  stages: RetrievalPolicyStageDiagnostic[];
+};
+
 export type ExperienceInputRecord = {
   record_id: string;
   episode_id?: string;
@@ -411,6 +430,7 @@ export type InterventionRejectedCandidate = {
 export type InterventionDecisionDiagnostics = {
   interventionStrength?: InterventionStrength;
   recordOnlyDiagnosticCandidateIds?: string[];
+  retrievalPolicyDiagnostics?: RetrievalPolicyDiagnostics;
   topCandidates: InjectionScorecardCandidate[];
   topCandidateScore?: number;
   scoreMargin?: number;
@@ -461,6 +481,7 @@ export type InjectionScorecard = {
   secondOpinionTrigger?: SyncSecondOpinionTrigger;
   selectedCandidateIds?: string[];
   recordOnlyDiagnosticCandidateIds?: string[];
+  retrievalPolicyDiagnostics?: RetrievalPolicyDiagnostics;
   rejectedCandidates?: InterventionRejectedCandidate[];
   nodes: InjectionScorecardNode[];
   createdAt: string;

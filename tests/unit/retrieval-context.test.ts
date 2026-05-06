@@ -69,6 +69,8 @@ describe("buildRetrievalContext", () => {
 
     expect(context.toolNames).toEqual([]);
     expect(context.failureSignature).toBeUndefined();
+    expect(context.modulePaths).toBeUndefined();
+    expect(context.isReadOnly).toBeUndefined();
   });
 
   it("treats read-only, module-path, and correction-intent fields as optional soft signals", () => {

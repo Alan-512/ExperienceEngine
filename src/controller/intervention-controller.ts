@@ -272,8 +272,25 @@ const withDecisionEnvelope = (input: {
   topCandidateQuality?: TriggerCandidateQuality;
 }): InterventionDecisionDiagnostics => {
   const selectedCandidateIds = input.selected.map((node) => node.id);
+  const retrievalPolicyDiagnostics = input.diagnostics.retrievalPolicyDiagnostics
+    ? {
+        stages: [
+          ...input.diagnostics.retrievalPolicyDiagnostics.stages.filter((stage) => stage.stage !== "decision_assembly"),
+          {
+            stage: "decision_assembly" as const,
+            acceptedCount: selectedCandidateIds.length,
+            rejectedCount: input.scoredCandidates.length - selectedCandidateIds.length,
+            reasonCodes: [
+              input.diagnostics.gateReason,
+              input.diagnostics.decisionReason
+            ]
+          }
+        ]
+      }
+    : undefined;
   return {
     ...input.diagnostics,
+    retrievalPolicyDiagnostics,
     interventionStrength: input.diagnostics.interventionStrength ?? deriveInterventionStrength(input.mode, input.selected),
     confidence: deriveDecisionConfidence(input.mode, input.topCandidateQuality, input.diagnostics.fastPathApplied),
     budgetClass: deriveBudgetClass(input.mode, input.selected.length),
@@ -446,6 +463,7 @@ const decideInterventionInternal = async (
       topCandidates: scoredCandidates.slice(0, 3).map(toScorecardCandidate),
       fastPathApplied: false,
       queryRewriteApplied: retrievalBundle.retrievalQuery.rewriteApplied,
+      retrievalPolicyDiagnostics: retrievalBundle.retrievalPolicyDiagnostics,
       gateReason,
       decisionReason,
       interventionStrength: diagnosticCandidateIds.length ? "diagnostic_hint" : undefined,
@@ -470,6 +488,7 @@ const decideInterventionInternal = async (
             scoreMargin: Number(liveDiagnosticCandidate.scoreMargin.toFixed(4)),
             fastPathApplied: false,
             queryRewriteApplied: retrievalBundle.retrievalQuery.rewriteApplied,
+            retrievalPolicyDiagnostics: retrievalBundle.retrievalPolicyDiagnostics,
             gateReason: "diagnostic_candidate_gate",
             decisionReason: "diagnostic_candidate_high_match",
             interventionStrength: "diagnostic_hint"
@@ -500,6 +519,7 @@ const decideInterventionInternal = async (
         diagnostics: {
         topCandidates: [],
         fastPathApplied: false,
+        retrievalPolicyDiagnostics: retrievalBundle.retrievalPolicyDiagnostics,
         gateReason: "no_candidates",
         decisionReason: "no_matching_candidates"
         }
@@ -526,6 +546,7 @@ const decideInterventionInternal = async (
     scoreMargin: topCandidateQuality ? Number(topCandidateQuality.scoreMargin.toFixed(4)) : undefined,
     fastPathApplied: false,
     queryRewriteApplied: retrievalBundle.retrievalQuery.rewriteApplied,
+    retrievalPolicyDiagnostics: retrievalBundle.retrievalPolicyDiagnostics,
     mergeDecision: selected[0]?.merge_decision,
     mergeReason: selected[0]?.merge_reason,
     promotionSignal: selected[0]?.promotion_signal,
@@ -672,6 +693,7 @@ const decideInterventionInternal = async (
         scoreMargin: Number(liveDiagnosticCandidate.scoreMargin.toFixed(4)),
         fastPathApplied: false,
         queryRewriteApplied: retrievalBundle.retrievalQuery.rewriteApplied,
+        retrievalPolicyDiagnostics: retrievalBundle.retrievalPolicyDiagnostics,
         mergeDecision: liveDiagnosticCandidate.node.merge_decision,
         mergeReason: liveDiagnosticCandidate.node.merge_reason,
         promotionSignal: liveDiagnosticCandidate.node.promotion_signal,

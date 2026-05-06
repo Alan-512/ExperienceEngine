@@ -1,4 +1,13 @@
-import type { ExperienceInput, ExperienceNode, MatchBand, MatchScorecard, RetrievalContext, TaskType } from "../types/domain.js";
+import type {
+  ExperienceInput,
+  ExperienceNode,
+  MatchBand,
+  MatchScorecard,
+  RetrievalContext,
+  RetrievalPolicyDiagnostics,
+  RetrievalPolicyStageDiagnostic,
+  TaskType
+} from "../types/domain.js";
 import {
   buildLegacyEmbedding,
   embedQueryText,
@@ -45,6 +54,7 @@ export type RetrievedCandidateBundle = {
   retrievalQuery: RetrievalQuery;
   queryText: string;
   semanticSkipped: boolean;
+  retrievalPolicyDiagnostics: RetrievalPolicyDiagnostics;
 };
 
 const DEFAULT_RERANK_WINDOW = 5;
@@ -126,6 +136,72 @@ const passesCorrectionScopeGate = (input: ExperienceInput, node: ExperienceNode)
 
   return true;
 };
+
+const retrievalStage = (
+  stage: RetrievalPolicyStageDiagnostic["stage"],
+  input: Omit<RetrievalPolicyStageDiagnostic, "stage">
+): RetrievalPolicyStageDiagnostic => ({
+  stage,
+  ...input
+});
+
+const hardFilterNodes = (
+  input: ExperienceInput,
+  nodes: ExperienceNode[],
+  options: Pick<RetrieveOptions, "includeShadowDiagnosticCandidates">
+): { nodes: ExperienceNode[]; diagnostic: RetrievalPolicyStageDiagnostic } => {
+  const filtered = nodes.filter((node) =>
+    (
+      isInjectableState(node) ||
+      (
+        options.includeShadowDiagnosticCandidates === true &&
+        node.scope_id === input.scope_id &&
+        node.state === "candidate" &&
+        resolveDeliveryState(node) === "shadow_only"
+      )
+    ) &&
+    passesCorrectionScopeGate(input, node)
+  );
+
+  return {
+    nodes: filtered,
+    diagnostic: retrievalStage("hard_filter", {
+      acceptedCount: filtered.length,
+      rejectedCount: nodes.length - filtered.length,
+      reasonCodes: [
+        "delivery_state_gate",
+        "same_scope_shadow_diagnostic_gate",
+        "correction_scope_gate"
+      ]
+    })
+  };
+};
+
+const buildShortlistDiagnostic = (
+  rankedCount: number,
+  filteredCount: number,
+  semanticSkipped: boolean
+): RetrievalPolicyStageDiagnostic => retrievalStage("shortlist", {
+  acceptedCount: rankedCount,
+  rejectedCount: filteredCount - rankedCount,
+  reasonCodes: [
+    semanticSkipped ? "semantic_skipped_low_signal_or_missing_context" : "hybrid_semantic_lexical_fusion",
+    "minimum_signal_threshold",
+    "task_family_threshold",
+    "legacy_rank_limit"
+  ]
+});
+
+const buildPolicyEnrichmentDiagnostic = (
+  candidateCount: number
+): RetrievalPolicyStageDiagnostic => retrievalStage("policy_enrichment", {
+  passedCount: candidateCount,
+  reasonCodes: [
+    "policy_adjustment_applied",
+    "match_scorecard_built",
+    "similarity_remains_non_authoritative"
+  ]
+});
 type RetrieveOptions = {
   config?: Pick<
     ExperienceEngineConfig,
@@ -447,7 +523,22 @@ export const retrieveCandidateBundle = async (
       candidates: [],
       retrievalQuery,
       queryText,
-      semanticSkipped: true
+      semanticSkipped: true,
+      retrievalPolicyDiagnostics: {
+        stages: [
+          retrievalStage("retrieval_context", {
+            passedCount: 1,
+            reasonCodes: ["experience_input_compatible", "unknown_task_type_short_circuit"]
+          }),
+          retrievalStage("hard_filter", {
+            acceptedCount: 0,
+            rejectedCount: nodes.length,
+            reasonCodes: ["unknown_task_type"]
+          }),
+          buildShortlistDiagnostic(0, 0, true),
+          buildPolicyEnrichmentDiagnostic(0)
+        ]
+      }
     };
   }
 
@@ -465,18 +556,8 @@ export const retrieveCandidateBundle = async (
     : null;
   const legacyQuery = buildLegacyEmbedding(queryText || retrievalSource.taskSummary);
   const vectorStore = openVectorStore();
-  const scopeLocalNodes = nodes.filter((node) =>
-    (
-      isInjectableState(node) ||
-      (
-        options.includeShadowDiagnosticCandidates === true &&
-        node.scope_id === input.scope_id &&
-        node.state === "candidate" &&
-        resolveDeliveryState(node) === "shadow_only"
-      )
-    ) &&
-    passesCorrectionScopeGate(input, node)
-  );
+  const hardFilterResult = hardFilterNodes(input, nodes, options);
+  const scopeLocalNodes = hardFilterResult.nodes;
   const localSemanticRecords = scopeLocalNodes
     .filter((node) => localQuery && isMatchingEmbeddingSpace(node, localQuery.space))
     .map((node) => ({
@@ -678,7 +759,21 @@ export const retrieveCandidateBundle = async (
     })),
     retrievalQuery,
     queryText,
-    semanticSkipped
+    semanticSkipped,
+    retrievalPolicyDiagnostics: {
+      stages: [
+        retrievalStage("retrieval_context", {
+          passedCount: 1,
+          reasonCodes: [
+            options.retrievalContext ? "explicit_retrieval_context" : "experience_input_compatible",
+            "opportunistic_fields_soft"
+          ]
+        }),
+        hardFilterResult.diagnostic,
+        buildShortlistDiagnostic(ranked.length, scopeLocalNodes.length, semanticSkipped),
+        buildPolicyEnrichmentDiagnostic(reranked.length)
+      ]
+    }
   };
 };
 

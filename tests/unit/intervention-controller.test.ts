@@ -1100,6 +1100,41 @@ describe("decideIntervention", () => {
     expect(softDecision.text).toContain("Relevant prior experience:");
   });
 
+  it("adds retrieval policy diagnostics without changing live intervention behavior", async () => {
+    const decision = await decideIntervention(
+      input,
+      [
+        node({
+          id: "retrieval-policy-compatible",
+          state: "active",
+          delivery_state: "eligible",
+          helped_count: 3,
+          support_count: 3,
+          validation_state: "validated_by_reuse"
+        })
+      ],
+      stats,
+      0.6,
+      3
+    );
+
+    expect(decision.mode).toBe("inject");
+    expect(decision.selected.map((entry) => entry.id)).toEqual(["retrieval-policy-compatible"]);
+    expect(decision.diagnostics?.interventionStrength).toBe("strong_recommendation");
+    expect(decision.text).toContain("Validated prior experience:");
+    expect(decision.diagnostics?.retrievalPolicyDiagnostics?.stages.map((stage) => stage.stage)).toEqual([
+      "retrieval_context",
+      "hard_filter",
+      "shortlist",
+      "policy_enrichment",
+      "decision_assembly"
+    ]);
+    expect(decision.diagnostics?.retrievalPolicyDiagnostics?.stages.at(-1)?.reasonCodes).toEqual([
+      "strong_candidate_fast_path",
+      "mature_validated_candidate"
+    ]);
+  });
+
   it("delivers at most one same-scope safe shadow candidate as a diagnostic hint", async () => {
     const decision = await decideIntervention(
       input,

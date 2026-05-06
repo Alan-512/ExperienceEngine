@@ -200,6 +200,7 @@ export const buildInjectionScorecard = (
     secondOpinionTrigger: diagnostics?.secondOpinionTrigger,
     selectedCandidateIds: diagnostics?.selectedCandidateIds,
     recordOnlyDiagnosticCandidateIds: diagnostics?.recordOnlyDiagnosticCandidateIds,
+    retrievalPolicyDiagnostics: diagnostics?.retrievalPolicyDiagnostics,
     rejectedCandidates: diagnostics?.rejectedCandidates,
     nodes: scoredNodes,
     createdAt: nowIso()

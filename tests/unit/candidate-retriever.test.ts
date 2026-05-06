@@ -509,6 +509,38 @@ describe("retrieveCandidates", () => {
     expect(candidates[0]!.totalScore).toBeGreaterThan(candidates[1]!.totalScore);
   });
 
+  it("exposes retrieval policy stages without changing candidate order", async () => {
+    const bundle = await retrieveCandidateBundle(input(), [
+      node({
+        id: "strong-match",
+        task_type: "test_debug",
+        trigger_pattern: "Fix the failing payments auth test in ExperienceEngine",
+        compact_hint: "Run the failing payments auth test before editing and rerun it after the fix.",
+        helped_count: 9,
+        support_count: 7
+      }),
+      node({
+        id: "weaker-match",
+        task_type: "test_debug",
+        trigger_pattern: "Check the current workspace before fixing the payments auth test",
+        compact_hint: "Check the current workspace path before attempting the payments auth-test fix.",
+        helped_count: 1,
+        support_count: 1
+      })
+    ]);
+
+    expect(bundle.candidates.map((candidate) => candidate.node.id)).toEqual(["strong-match", "weaker-match"]);
+    expect(bundle.retrievalPolicyDiagnostics.stages.map((stage) => stage.stage)).toEqual([
+      "retrieval_context",
+      "hard_filter",
+      "shortlist",
+      "policy_enrichment"
+    ]);
+    expect(
+      bundle.retrievalPolicyDiagnostics.stages.find((stage) => stage.stage === "policy_enrichment")?.reasonCodes
+    ).toContain("similarity_remains_non_authoritative");
+  });
+
   it("keeps a strong adjacent-family config candidate available for general investigation tasks", async () => {
     const candidates = await retrieveScoredCandidates(
       input({
