@@ -15,6 +15,10 @@ import {
   type ExperienceExportDraftFilters,
   type ExperienceExportDraftReport
 } from "../maintenance/experience-export-drafts.js";
+import {
+  buildOperatorReviewFlow,
+  type OperatorReviewReport
+} from "../maintenance/operator-review-flow.js";
 import { selectHybridRoute, type HybridRouteDecision } from "../hybrid/router.js";
 import { HybridWorkerClient } from "../hybrid/worker-client.js";
 import { resolveScope } from "../input/scope-resolver.js";
@@ -1166,6 +1170,21 @@ export class ExperienceInteractionService {
         ...filters,
         scopeId
       }
+    });
+  }
+
+  inspectReview(cwd: string = process.cwd(), filters: { scopeId?: string; limit?: number } = {}): OperatorReviewReport {
+    const scopeId = filters.scopeId ?? resolveScope(cwd).scope_id;
+    const limit = filters.limit ?? 5;
+    const repo = this.inspectRepoSummary(cwd);
+    const hygiene = this.inspectHygiene(cwd, { scopeId, limit });
+    const exportDrafts = this.inspectExportDrafts(cwd, { scopeId, limit });
+
+    return buildOperatorReviewFlow({
+      repo,
+      hygiene,
+      exportDrafts,
+      limit
     });
   }
 

@@ -284,6 +284,34 @@ const parseExportDraftArgs = (
   return parsed;
 };
 
+const parseReviewArgs = (args: string[]): { cwd?: string; limit?: number } | null => {
+  const parsed: { cwd?: string; limit?: number } = {};
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+    const next = args[index + 1];
+    if ((value === "--cwd" || value === "cwd" || value === "--scope" || value === "scope") && next) {
+      parsed.cwd = next;
+      index += 1;
+      continue;
+    }
+    if ((value === "--limit" || value === "limit") && next) {
+      const limit = Number(next);
+      if (Number.isInteger(limit) && limit > 0) {
+        parsed.limit = limit;
+        index += 1;
+        continue;
+      }
+    }
+    const numericLimit = Number(value);
+    if (Number.isInteger(numericLimit) && numericLimit > 0) {
+      parsed.limit = numericLimit;
+      continue;
+    }
+    return null;
+  }
+  return parsed;
+};
+
 const describeDeliveryStyle = (mode?: string): string | undefined => {
   if (mode === "inject") {
     return "normal hint delivery";
@@ -675,6 +703,42 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string,
         evidence: draft.evidenceSummary
       }))
     );
+    return;
+  }
+
+  if (target === "review") {
+    const filters = parseReviewArgs([arg1, arg2, ...extraArgs].filter((value): value is string => Boolean(value)));
+    if (!filters) {
+      console.log("Usage: ee inspect review [--cwd <path>] [--limit <n>]");
+      return;
+    }
+    const { cwd, ...reviewFilters } = filters;
+    const report = interaction.inspectReview(cwd ?? process.cwd(), reviewFilters);
+    console.log("Operator review:");
+    console.log("- Review-only: no repo policy, node, candidate, attribution, review, snapshot, or instruction-file state was changed.");
+    console.log(`- Scope: ${report.scopeId}`);
+    console.log(`- Generated at: ${report.generatedAt}`);
+    console.log(`- Repo policy health: ${report.sections.repo_policy.health}`);
+    console.log(`- Hygiene findings: ${report.sections.hygiene.total}`);
+    console.log(`- Export drafts: ${report.sections.export_drafts.total}`);
+    console.log(`- Recommended order: ${report.recommendedReviewOrder.join(" -> ")}`);
+    if (!report.reviewItems.length) {
+      console.log("No immediate operator review items found.");
+    } else {
+      console.table(
+        report.reviewItems.map((item) => ({
+          priority: item.priority,
+          source: item.source,
+          title: item.title,
+          summary: item.summary,
+          drill_down: item.drillDown.cli
+        }))
+      );
+    }
+    console.log("Review-only next actions:");
+    for (const action of report.reviewOnlyNextActions) {
+      console.log(`- [${action.priority}] ${action.summary}`);
+    }
     return;
   }
 

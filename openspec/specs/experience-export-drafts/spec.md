@@ -1,7 +1,7 @@
 # experience-export-drafts Specification
 
 ## Purpose
-TBD - created by archiving change add-experience-export-drafts. Update Purpose after archive.
+Define read-only guidance export draft reports that help operators decide which learned experience is ready to carry into instruction files, skills, or documentation without ExperienceEngine writing or publishing those targets automatically.
 ## Requirements
 ### Requirement: Export drafts summarize reviewable learned guidance
 
@@ -90,4 +90,3 @@ ExperienceEngine SHALL use formal experience nodes as the primary source for exp
 - **WHEN** hygiene context references raw candidates near an exportable node
 - **THEN** ExperienceEngine may include candidate ids as context
 - **AND** it does not emit a raw candidate as a primary export draft before promotion or distillation
-

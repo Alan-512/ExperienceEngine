@@ -88,6 +88,7 @@ const buildExperienceCapabilities = () => ({
     "experienceengine://capabilities",
     "experienceengine://last",
     "experienceengine://repo-summary",
+    "experienceengine://review",
     "experienceengine://hygiene",
     "experienceengine://export-drafts"
   ],
@@ -498,6 +499,10 @@ export const createCodexInteractionSurface = (options: CodexServerOptions = {}) 
       return interaction.inspectRepoSummary(args.cwd);
     },
 
+    async inspectReview(args: CodexScopeArgs & { limit?: number } = {}) {
+      return interaction.inspectReview(args.cwd, { limit: args.limit });
+    },
+
     async inspectHygiene(args: { cwd?: string; type?: HygieneFindingType; severity?: HygieneSeverity; limit?: number } = {}) {
       const { cwd, ...filters } = args;
       return interaction.inspectHygiene(cwd ?? process.cwd(), filters);
@@ -627,6 +632,17 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
       mimeType: "application/json"
     },
     async (uri) => toJsonResourceResult(uri.toString(), await interactionSurface.inspectRepoSummary())
+  );
+
+  server.registerResource(
+    "experienceengine_review",
+    "experienceengine://review",
+    {
+      title: "ExperienceEngine Operator Review",
+      description: "Read-only operator review flow across repo policy, hygiene, and export drafts.",
+      mimeType: "application/json"
+    },
+    async (uri) => toJsonResourceResult(uri.toString(), await interactionSurface.inspectReview())
   );
 
   server.registerResource(

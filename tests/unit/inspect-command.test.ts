@@ -606,6 +606,48 @@ describe("inspect command", () => {
     ]);
   });
 
+  it("prints bounded operator review with filters and review-only next actions", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+    const cwd = "/repo-review-cli";
+    const scopeId = resolveScope(cwd).scope_id;
+    const nodeRepo = new NodeRepository(db);
+    nodeRepo.upsert(makeNode({
+      id: "node_review_cli",
+      scope_id: scopeId,
+      delivery_state: "eligible",
+      validation_state: "validated_by_reuse",
+      helped_count: 1,
+      helped_record_ids: ["input_helped_review_cli"],
+      updated_at: "2026-05-04T00:00:00.000Z"
+    }));
+
+    runInspectCommand("review", "--cwd", cwd, "--limit", "1");
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Operator review:"],
+        ["- Review-only: no repo policy, node, candidate, attribution, review, snapshot, or instruction-file state was changed."],
+        [`- Scope: ${scopeId}`],
+        ["- Repo policy health: clear"],
+        ["- Hygiene findings: 0"],
+        ["- Export drafts: 1"],
+        ["- Recommended order: export_drafts -> repo_policy -> hygiene"],
+        ["Review-only next actions:"],
+        [expect.stringContaining("[low] Review export_drafts:")]
+      ])
+    );
+    expect(consoleTableSpy.mock.calls.at(-1)?.[0]).toEqual([
+      expect.objectContaining({
+        priority: "low",
+        source: "export_drafts",
+        drill_down: "ee inspect export-drafts"
+      })
+    ]);
+  });
+
   it("prints persisted skip delivery decisions", () => {
     const home = makeTempDir();
     process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");

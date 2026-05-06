@@ -25,6 +25,7 @@ type RegistryDeps = {
     listNodesByState: (args: { state: ExperienceState }) => Promise<unknown>;
     listNodesByType: (args: { nodeType: ExperienceNodeType }) => Promise<unknown>;
     inspectLearningSummary: () => Promise<unknown>;
+    inspectReview: (args?: { cwd?: string; limit?: number }) => Promise<unknown>;
     inspectHygiene: (args?: { cwd?: string; type?: HygieneFindingType; severity?: HygieneSeverity; limit?: number }) => Promise<unknown>;
     inspectExportDrafts: (args?: {
       cwd?: string;
@@ -285,6 +286,24 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
       requiresConfirmation: false,
       examplePayload: {},
       handler: async () => deps.interactionSurface.inspectLearningSummary()
+    },
+    {
+      id: "inspect_operator_review",
+      title: "Inspect Operator Review",
+      summary: "Inspect the read-only operator review flow across repo policy, hygiene, and export drafts.",
+      category: "inspect",
+      riskLevel: "low",
+      requiresConfirmation: false,
+      inputSchema: z.object({
+        cwd: z.string().min(1).optional(),
+        limit: z.number().int().positive().optional()
+      }),
+      examplePayload: { cwd: "/path/to/repo", limit: 5 },
+      handler: async ({ cwd, limit }) =>
+        deps.interactionSurface.inspectReview({
+          cwd: typeof cwd === "string" ? cwd : undefined,
+          limit: typeof limit === "number" ? limit : undefined
+        })
     },
     {
       id: "inspect_experience_hygiene",

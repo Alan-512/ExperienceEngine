@@ -17,6 +17,7 @@ ExperienceEngine SHALL provide a bounded read-only operator review report for on
 - **AND** `priority` is one of `high`, `medium`, or `low`
 - **AND** `source` is one of `repo_policy`, `hygiene`, or `export_drafts`
 - **AND** the repo policy section health is one of `clear`, `attention`, or `tripped`
+- **AND** each review-only next action includes at least `priority` and `summary`
 
 #### Scenario: No review items exist
 

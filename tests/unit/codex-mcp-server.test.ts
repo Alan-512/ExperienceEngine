@@ -448,6 +448,7 @@ describe("Codex MCP behavior loop", () => {
     const lastResource = getRegisteredResource(server, "experienceengine://last");
     const repoSummaryResource = getRegisteredResource(server, "experienceengine://repo-summary");
     const exportDraftsResource = getRegisteredResource(server, "experienceengine://export-drafts");
+    const reviewResource = getRegisteredResource(server, "experienceengine://review");
     const executeActionTool = getRegisteredTool(server, "experienceengine_execute_action");
 
     const lastPayload = await lastResource.readCallback(new URL("experienceengine://last"), {});
@@ -459,6 +460,7 @@ describe("Codex MCP behavior loop", () => {
       new URL("experienceengine://export-drafts"),
       {}
     );
+    const reviewPayload = await reviewResource.readCallback(new URL("experienceengine://review"), {});
     const recentPayload = parseTextPayload<{ actionId: string; result: unknown[] }>(
       (await executeActionTool.handler({
         actionId: "inspect_recent_history",
@@ -484,6 +486,18 @@ describe("Codex MCP behavior loop", () => {
     }>((await executeActionTool.handler({
       actionId: "inspect_export_drafts",
       payload: { cwd: "/repo", nodeType: "strategy", limit: 5 }
+    })) as {
+      content: Array<{ type: string; text?: string }>;
+    });
+    const reviewActionPayload = parseTextPayload<{
+      actionId: string;
+      result: {
+        sections: { export_drafts: { total: number } };
+        reviewItems: Array<{ source: string; priority: string }>;
+      };
+    }>((await executeActionTool.handler({
+      actionId: "inspect_operator_review",
+      payload: { cwd: "/repo", limit: 5 }
     })) as {
       content: Array<{ type: string; text?: string }>;
     });
@@ -560,6 +574,14 @@ describe("Codex MCP behavior loop", () => {
         total: expect.any(Number)
       }
     });
+    expect(JSON.parse((reviewPayload as { contents: Array<{ text: string }> }).contents[0].text)).toMatchObject({
+      sections: {
+        repo_policy: expect.any(Object),
+        hygiene: expect.any(Object),
+        export_drafts: expect.any(Object)
+      },
+      reviewOnlyNextActions: expect.any(Array)
+    });
     expect(exportDraftsActionPayload).toMatchObject({
       actionId: "inspect_export_drafts",
       result: {
@@ -570,6 +592,22 @@ describe("Codex MCP behavior loop", () => {
           expect.objectContaining({
             draftId: "draft_node_codex_resource_view",
             nodeIds: ["node_codex_resource_view"]
+          })
+        ]
+      }
+    });
+    expect(reviewActionPayload).toMatchObject({
+      actionId: "inspect_operator_review",
+      result: {
+        sections: {
+          export_drafts: {
+            total: 1
+          }
+        },
+        reviewItems: [
+          expect.objectContaining({
+            source: "export_drafts",
+            priority: "low"
           })
         ]
       }

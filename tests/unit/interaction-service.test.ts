@@ -832,6 +832,64 @@ describe("ExperienceInteractionService", () => {
     expect(artifactService.listBackups()).toEqual(beforeBackups);
   });
 
+  it("inspects operator review without mutating governance, policy, attribution, or snapshot state", () => {
+    const homeDir = makeTempDir();
+    const cwd = "/repo";
+    const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const nodeRepo = new NodeRepository(db);
+    const attributionRepo = new AttributionRecordRepository(db);
+    const artifactService = new ExperienceStateArtifactService({ homeDir });
+    seedStrategyNode(nodeRepo, cwd, "2026-05-04T00:00:00.000Z", "node_operator_review");
+    const node = nodeRepo.getById("node_operator_review");
+    nodeRepo.upsert({
+      ...node!,
+      delivery_state: "eligible",
+      validation_state: "validated_by_reuse",
+      helped_count: 1,
+      helped_record_ids: ["input_helped_review"],
+      updated_at: "2026-05-04T00:00:00.000Z"
+    });
+    attributionRepo.insert({
+      id: "attr_operator_review",
+      node_id: "node_operator_review",
+      delivered: true,
+      outcome: "success",
+      attribution_verdict: "strong_helped",
+      confidence: "high",
+      evidence_refs: ["input_helped_review"],
+      source: "automatic",
+      created_at: "2026-05-04T01:00:00.000Z"
+    });
+
+    const scope = resolveScope(cwd);
+    const beforeNode = nodeRepo.getById("node_operator_review");
+    const beforeReviewCount = (db.prepare("SELECT COUNT(*) AS count FROM review_events").get() as { count: number }).count;
+    const beforeAttributionCount = (db.prepare("SELECT COUNT(*) AS count FROM attribution_records").get() as { count: number }).count;
+    const beforeInjectionCount = (db.prepare("SELECT COUNT(*) AS count FROM injection_events").get() as { count: number }).count;
+    const beforePolicyCount = (db.prepare("SELECT COUNT(*) AS count FROM repo_policies").get() as { count: number }).count;
+    const beforeBackups = artifactService.listBackups();
+
+    const service = new ExperienceInteractionService(config);
+    const report = service.inspectReview(cwd, { limit: 2 });
+
+    expect(report.scopeId).toBe(scope.scope_id);
+    expect(report.sections.export_drafts.total).toBe(1);
+    expect(report.reviewItems).toEqual([
+      expect.objectContaining({
+        source: "export_drafts",
+        priority: "low"
+      })
+    ]);
+    expect(nodeRepo.getById("node_operator_review")).toEqual(beforeNode);
+    expect((db.prepare("SELECT COUNT(*) AS count FROM review_events").get() as { count: number }).count).toBe(beforeReviewCount);
+    expect((db.prepare("SELECT COUNT(*) AS count FROM attribution_records").get() as { count: number }).count).toBe(beforeAttributionCount);
+    expect((db.prepare("SELECT COUNT(*) AS count FROM injection_events").get() as { count: number }).count).toBe(beforeInjectionCount);
+    expect((db.prepare("SELECT COUNT(*) AS count FROM repo_policies").get() as { count: number }).count).toBe(beforePolicyCount);
+    expect(artifactService.listBackups()).toEqual(beforeBackups);
+  });
+
   it("keeps export draft attribution context scoped to selected nodes outside the recent scope window", () => {
     const homeDir = makeTempDir();
     const cwd = "/repo";
