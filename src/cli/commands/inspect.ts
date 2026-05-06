@@ -328,6 +328,8 @@ const describeDeliveryStyle = (mode?: string): string | undefined => {
   return mode;
 };
 
+const formatSignedNumber = (value: number): string => `${value >= 0 ? "+" : ""}${value.toFixed(4)}`;
+
 export const runInspectCommand = (target?: string, arg1?: string, arg2?: string, ...extraArgs: string[]): void => {
   const interaction = new ExperienceInteractionService(loadConfig());
 
@@ -499,6 +501,35 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string,
           console.log("- Top candidate policy reasons:");
           for (const reason of topCandidate.policyReasons) {
             console.log(`  - ${reason}`);
+          }
+        }
+        if (record.retrievalPolicySummary) {
+          console.log("- Retrieval policy stages:");
+          for (const stage of record.retrievalPolicySummary.stages) {
+            const counts = [
+              stage.acceptedCount == null ? undefined : `accepted=${stage.acceptedCount}`,
+              stage.rejectedCount == null ? undefined : `rejected=${stage.rejectedCount}`,
+              stage.passedCount == null ? undefined : `passed=${stage.passedCount}`
+            ].filter((value): value is string => Boolean(value));
+            const suffix = stage.reasonCodes.length ? ` reasons=${stage.reasonCodes.join(",")}` : "";
+            console.log(`  - ${stage.stage}: ${counts.join(" ") || "observed"}${suffix}`);
+          }
+          if (record.retrievalPolicySummary.semanticMode) {
+            console.log(`- Semantic retrieval mode: ${record.retrievalPolicySummary.semanticMode}`);
+          }
+          if (record.retrievalPolicySummary.topPolicyComponents.length) {
+            console.log("- Top policy components:");
+            for (const component of record.retrievalPolicySummary.topPolicyComponents) {
+              console.log(
+                `  - ${component.name} (${component.category}) ${formatSignedNumber(component.value)}: ${component.reason}`
+              );
+            }
+          }
+          if (record.retrievalPolicySummary.rejectedCandidates.length) {
+            console.log("- Retrieval policy rejected candidates:");
+            for (const candidate of record.retrievalPolicySummary.rejectedCandidates) {
+              console.log(`  - ${candidate.id}: ${candidate.reasonCodes.join(", ")}`);
+            }
           }
         }
         const retrievalNotes = buildRetrievalNotes(record);

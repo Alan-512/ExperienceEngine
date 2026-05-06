@@ -167,6 +167,15 @@ describe("Codex MCP behavior loop", () => {
         expect.stringContaining("Top retrieval signals:"),
         expect.stringContaining("Top policy signals:")
       ]),
+      retrievalPolicySummary: expect.objectContaining({
+        stages: expect.arrayContaining([
+          expect.objectContaining({ stage: "retrieval_context" }),
+          expect.objectContaining({ stage: "semantic_rerank_backfill" })
+        ]),
+        topPolicyComponents: expect.arrayContaining([
+          expect.objectContaining({ name: "family", category: "family_fit" })
+        ])
+      }),
       confidence: "low",
       budgetClass: "single_hint",
       selectedCandidateIds: ["node_codex_prompt_injection"],

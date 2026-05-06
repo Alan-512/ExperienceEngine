@@ -2,6 +2,7 @@ import { McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mc
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
 import { loadConfig } from "../../config/load-config.js";
+import { buildRetrievalPolicyInspectionSummary } from "../../interaction/retrieval-policy-inspection.js";
 import { resolveExperienceEnginePaths } from "../../config/path-resolver.js";
 import {
   ExperienceInteractionService,
@@ -18,7 +19,14 @@ import {
 } from "../../interaction/operational-actions-service.js";
 import { ExperienceStateArtifactService } from "../../interaction/state-artifact-service.js";
 import { ExperienceRuntimeService } from "../../runtime/service.js";
-import type { DeliveryState, ExperienceNodeType, ExperienceState, TaskType, ToolEventStatus } from "../../types/domain.js";
+import type {
+  DeliveryState,
+  ExperienceNodeType,
+  ExperienceState,
+  InjectionScorecard,
+  TaskType,
+  ToolEventStatus
+} from "../../types/domain.js";
 import type { HygieneFindingType, HygieneSeverity } from "../../maintenance/experience-hygiene.js";
 import type { ExportDraftRisk } from "../../maintenance/experience-export-drafts.js";
 import { fetchLatestGitHubReleaseStatus } from "../../version/remote-release.js";
@@ -356,9 +364,10 @@ const summarizeScorecard = (
     fastPathApplied?: boolean;
     confidence?: string;
     budgetClass?: string;
-    topCandidates?: Array<{ rerankSource?: string; retrievalReasons?: string[]; policyReasons?: string[] }>;
+    topCandidates?: InjectionScorecard["topCandidates"];
     selectedCandidateIds?: string[];
     rejectedCandidates?: Array<{ id: string; reasonCodes?: string[] }>;
+    retrievalPolicyDiagnostics?: InjectionScorecard["retrievalPolicyDiagnostics"];
     nodes?: Array<{ id: string; state?: string; riskLevel?: string; helped?: number; harmed?: number }>;
   } | undefined
 ) =>
@@ -371,6 +380,7 @@ const summarizeScorecard = (
         actionReason: summarizeActionReason(scorecard),
         trustSummary: summarizeTrust(scorecard),
         retrievalNotes: summarizeRetrievalNotes(scorecard),
+        retrievalPolicySummary: buildRetrievalPolicyInspectionSummary(scorecard as InjectionScorecard),
         confidence: scorecard.confidence,
         budgetClass: scorecard.budgetClass,
         selectedCandidateIds: scorecard.selectedCandidateIds,

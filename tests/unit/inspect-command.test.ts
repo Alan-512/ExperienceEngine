@@ -209,6 +209,20 @@ const makeInjectionEvent = (overrides: Partial<InjectionEvent> = {}): InjectionE
           "real_dev_alignment:0.0600",
           "meta_origin_penalty:0.0000"
         ],
+        policyComponents: [
+          {
+            name: "family",
+            category: "family_fit",
+            value: 0.22,
+            reason: "Task-family proximity contributes governance fit."
+          },
+          {
+            name: "generic_penalty",
+            category: "penalty",
+            value: -0.08,
+            reason: "Legacy generic guidance is penalized to avoid noisy reuse."
+          }
+        ],
         taskFamilyMatch: true
       }
     ],
@@ -231,6 +245,20 @@ const makeInjectionEvent = (overrides: Partial<InjectionEvent> = {}): InjectionE
       "The candidate still matches, but recent harm history warrants a cautious single hint.",
     selectedCandidateIds: ["node_inspect"],
     rejectedCandidates: [{ id: "node_runner_up", reasonCodes: ["same_family_runner_up"] }],
+    retrievalPolicyDiagnostics: {
+      stages: [
+        {
+          stage: "retrieval_context",
+          passedCount: 1,
+          reasonCodes: ["context:built"]
+        },
+        {
+          stage: "semantic_rerank_backfill",
+          acceptedCount: 1,
+          reasonCodes: ["semantic_mode:rerank"]
+        }
+      ]
+    },
     createdAt: "2026-03-14T01:00:00.000Z",
     nodes: []
   },
@@ -419,6 +447,15 @@ describe("inspect command", () => {
         ["- Selected candidates: node_inspect"],
         ["- Top candidate retrieval reasons:"],
         ["- Top candidate policy reasons:"],
+        ["- Retrieval policy stages:"],
+        ["  - retrieval_context: passed=1 reasons=context:built"],
+        ["  - semantic_rerank_backfill: accepted=1 reasons=semantic_mode:rerank"],
+        ["- Semantic retrieval mode: rerank"],
+        ["- Top policy components:"],
+        ["  - family (family_fit) +0.2200: Task-family proximity contributes governance fit."],
+        ["  - generic_penalty (penalty) -0.0800: Legacy generic guidance is penalized to avoid noisy reuse."],
+        ["- Retrieval policy rejected candidates:"],
+        ["  - node_runner_up: same_family_runner_up"],
         ["- Governance notes:"],
         ["  - Governance favored real coding-error guidance for this task."],
         ["- Attribution records:"],

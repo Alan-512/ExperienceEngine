@@ -68,6 +68,10 @@ import {
   buildRepoSummary,
   type ExperienceRepoSummary
 } from "./repo-summary.js";
+import {
+  buildRetrievalPolicyInspectionSummary,
+  type RetrievalPolicyInspectionSummary
+} from "./retrieval-policy-inspection.js";
 
 export type ExperienceNodeSummary = {
   id: string;
@@ -140,6 +144,7 @@ export type ExperienceLastInspection = {
   decisionExplanation?: string;
   trustSummary?: string;
   retrievalNotes: string[];
+  retrievalPolicySummary?: RetrievalPolicyInspectionSummary;
   timeline: ExperienceTimelineEntry[];
   learningStatus?: TaskRun["learning_status"];
   learningReason?: string;
@@ -937,6 +942,7 @@ export class ExperienceInteractionService {
       decisionExplanation,
       trustSummary: buildTrustSummary({ scorecard, injectedNodes: injectedNodes.map(toNodeSummary) }),
       retrievalNotes: buildRetrievalNotes(scorecard),
+      retrievalPolicySummary: buildRetrievalPolicyInspectionSummary(scorecard),
       timeline: buildLatestTimeline({
         record,
         taskRunCreatedAt: taskRun?.created_at,
@@ -1012,6 +1018,7 @@ export class ExperienceInteractionService {
       decisionExplanation,
       trustSummary: buildTrustSummary({ scorecard: event.scorecard, injectedNodes: injectedNodes.map(toNodeSummary) }),
       retrievalNotes: buildRetrievalNotes(event.scorecard),
+      retrievalPolicySummary: buildRetrievalPolicyInspectionSummary(event.scorecard),
       timeline: buildLatestTimeline({
         record: {
           record_id: `injection:${event.injection_id}`,
