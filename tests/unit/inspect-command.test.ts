@@ -631,16 +631,23 @@ describe("inspect command", () => {
         ["Operator review:"],
         ["- Review-only: no repo policy, node, candidate, attribution, review, snapshot, or instruction-file state was changed."],
         [`- Scope: ${scopeId}`],
-        ["- Repo policy health: clear"],
-        ["- Hygiene findings: 0"],
-        ["- Export drafts: 1"],
+        ["Summary:"],
+        ["- Repo policy: clear (ee inspect repo)"],
+        ["- Hygiene findings: 0 high=0 medium=0 low=0 (ee inspect hygiene)"],
+        ["- Export drafts: 1 high=0 medium=0 low=1 (ee inspect export-drafts)"],
         ["- Recommended order: export_drafts -> repo_policy -> hygiene"],
+        ["Review items:"],
         ["Review-only next actions:"],
-        [expect.stringContaining("[low] Review export_drafts:")]
+        [expect.stringContaining("[low] Review export_drafts:")],
+        ["Drill-down surfaces:"],
+        ["- repo_policy: ee inspect repo"],
+        ["- hygiene: ee inspect hygiene"],
+        ["- export_drafts: ee inspect export-drafts"]
       ])
     );
     expect(consoleTableSpy.mock.calls.at(-1)?.[0]).toEqual([
       expect.objectContaining({
+        next: 1,
         priority: "low",
         source: "export_drafts",
         drill_down: "ee inspect export-drafts"

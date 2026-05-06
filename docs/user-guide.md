@@ -253,6 +253,53 @@ When you inspect a specific node, ExperienceEngine now also shows a lightweight 
 - the short drivers behind that judgment
 - a compact applicability profile covering best fit, scope validity, confidence, risk, and when to avoid reuse
 
+### Operator Review Workflow
+
+Use the operator review workflow when you want one read-only checkpoint across the current repo before deciding what to inspect next.
+
+The fallback CLI entry point is:
+
+```bash
+ee inspect review
+```
+
+For a specific workspace and a smaller checklist:
+
+```bash
+ee inspect review --cwd /path/to/repo --limit 3
+```
+
+The review report summarizes:
+
+- repo policy health and circuit state
+- hygiene finding counts
+- export draft counts
+- recommended review order
+- prioritized review items
+- review-only next actions
+- drill-down commands for detailed read-only reports
+
+The drill-down commands are manual inspection steps:
+
+```bash
+ee inspect repo
+ee inspect hygiene
+ee inspect export-drafts
+```
+
+In MCP-capable hosts, ask the host agent to inspect the ExperienceEngine operator review or read `experienceengine://review`. The structured payload uses the same source names as the CLI: `repo_policy`, `hygiene`, and `export_drafts`.
+
+This workflow is intentionally read-only. It does not:
+
+- restore repo policy
+- cool or retire nodes
+- write attribution or review events
+- create backups or snapshots
+- write instruction files, skills, or docs
+- export guidance automatically
+- open a console or mutation dashboard
+- coordinate team workflows
+
 ## How MCP Interaction Works
 
 For `Codex` and `Claude Code`, ExperienceEngine is designed to keep routine review and management inside the host session first.
@@ -591,6 +638,10 @@ Useful fallback commands:
 ```bash
 ee inspect --last
 ee inspect recent injected 10
+ee inspect review
+ee inspect repo
+ee inspect hygiene
+ee inspect export-drafts
 ee inspect backups
 ee inspect active
 ee inspect node <id>

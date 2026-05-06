@@ -290,7 +290,8 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
     {
       id: "inspect_operator_review",
       title: "Inspect Operator Review",
-      summary: "Inspect the read-only operator review flow across repo policy, hygiene, and export drafts.",
+      summary:
+        "Inspect the read-only operator review workflow across repo policy, hygiene, and export drafts, with drill-down references only.",
       category: "inspect",
       riskLevel: "low",
       requiresConfirmation: false,

@@ -814,6 +814,7 @@ describe("Codex MCP behavior loop", () => {
       advanced_actions: string[];
       high_risk_actions: string[];
       surface_model: string;
+      routine_read_surface_notes?: Record<string, string>;
       prompts?: unknown;
       resources?: unknown;
       cliFallbacks?: unknown;
@@ -839,6 +840,7 @@ describe("Codex MCP behavior loop", () => {
       advanced_actions: string[];
       high_risk_actions: string[];
       surface_model: string;
+      routine_read_surface_notes?: Record<string, string>;
       prompts?: unknown;
       resources?: unknown;
       cliFallbacks?: unknown;
@@ -857,8 +859,12 @@ describe("Codex MCP behavior loop", () => {
         "experienceengine://doctor/{adapter}",
         "experienceengine://capabilities",
         "experienceengine://last",
-        "experienceengine://repo-summary"
+        "experienceengine://repo-summary",
+        "experienceengine://review"
       ]),
+      routine_read_surface_notes: {
+        "experienceengine://review": expect.stringContaining("Read-only operator workflow summary")
+      },
       advanced_actions: expect.arrayContaining([
         "brokered admin actions",
         "brokered maintenance actions",
@@ -874,6 +880,9 @@ describe("Codex MCP behavior loop", () => {
     expect(capabilitiesResourcePayload.resources).toBeUndefined();
     expect(capabilitiesResourcePayload.cliFallbacks).toBeUndefined();
     expect(capabilitiesToolPayload).toMatchObject(capabilitiesResourcePayload);
+    expect(capabilitiesToolPayload.routine_read_surface_notes?.["experienceengine://review"]).toContain(
+      "does not restore policy"
+    );
     expect(capabilitiesToolPayload.prompts).toBeUndefined();
     expect(capabilitiesToolPayload.resources).toBeUndefined();
     expect(capabilitiesToolPayload.cliFallbacks).toBeUndefined();

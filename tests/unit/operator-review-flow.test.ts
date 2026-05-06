@@ -220,6 +220,17 @@ describe("operator review flow", () => {
       cli: "ee inspect hygiene",
       brokerAction: "inspect_experience_hygiene"
     });
+    expect(report.reviewItems[2].drillDown).toMatchObject({
+      cli: "ee inspect export-drafts",
+      mcpResource: "experienceengine://export-drafts",
+      brokerAction: "inspect_export_drafts"
+    });
+    expect(report.reviewOnlyNextActions[0]).toMatchObject({
+      priority: "high",
+      drillDown: {
+        cli: "ee inspect repo"
+      }
+    });
   });
 
   it("bounds surfaced findings and drafts while preserving source totals", () => {

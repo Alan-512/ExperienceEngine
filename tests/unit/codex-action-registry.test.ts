@@ -89,5 +89,11 @@ describe("codex action registry", () => {
       riskLevel: "low",
       requiresConfirmation: false
     });
+    expect(registry.get("inspect_operator_review")).toMatchObject({
+      category: "inspect",
+      riskLevel: "low",
+      requiresConfirmation: false,
+      summary: expect.stringContaining("read-only operator review workflow")
+    });
   });
 });

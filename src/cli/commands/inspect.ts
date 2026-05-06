@@ -718,15 +718,22 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string,
     console.log("- Review-only: no repo policy, node, candidate, attribution, review, snapshot, or instruction-file state was changed.");
     console.log(`- Scope: ${report.scopeId}`);
     console.log(`- Generated at: ${report.generatedAt}`);
-    console.log(`- Repo policy health: ${report.sections.repo_policy.health}`);
-    console.log(`- Hygiene findings: ${report.sections.hygiene.total}`);
-    console.log(`- Export drafts: ${report.sections.export_drafts.total}`);
+    console.log("Summary:");
+    console.log(`- Repo policy: ${report.sections.repo_policy.health} (${report.sections.repo_policy.drillDown.cli})`);
+    console.log(
+      `- Hygiene findings: ${report.sections.hygiene.total} high=${report.sections.hygiene.high} medium=${report.sections.hygiene.medium} low=${report.sections.hygiene.low} (${report.sections.hygiene.drillDown.cli})`
+    );
+    console.log(
+      `- Export drafts: ${report.sections.export_drafts.total} high=${report.sections.export_drafts.highRisk} medium=${report.sections.export_drafts.mediumRisk} low=${report.sections.export_drafts.lowRisk} (${report.sections.export_drafts.drillDown.cli})`
+    );
     console.log(`- Recommended order: ${report.recommendedReviewOrder.join(" -> ")}`);
     if (!report.reviewItems.length) {
       console.log("No immediate operator review items found.");
     } else {
+      console.log("Review items:");
       console.table(
-        report.reviewItems.map((item) => ({
+        report.reviewItems.map((item, index) => ({
+          next: index + 1,
           priority: item.priority,
           source: item.source,
           title: item.title,
@@ -737,8 +744,13 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string,
     }
     console.log("Review-only next actions:");
     for (const action of report.reviewOnlyNextActions) {
-      console.log(`- [${action.priority}] ${action.summary}`);
+      const suffix = action.drillDown?.cli ? ` (${action.drillDown.cli})` : "";
+      console.log(`- [${action.priority}] ${action.summary}${suffix}`);
     }
+    console.log("Drill-down surfaces:");
+    console.log(`- repo_policy: ${report.sections.repo_policy.drillDown.cli}`);
+    console.log(`- hygiene: ${report.sections.hygiene.drillDown.cli}`);
+    console.log(`- export_drafts: ${report.sections.export_drafts.drillDown.cli}`);
     return;
   }
 

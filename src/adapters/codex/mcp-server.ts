@@ -92,6 +92,10 @@ const buildExperienceCapabilities = () => ({
     "experienceengine://hygiene",
     "experienceengine://export-drafts"
   ],
+  routine_read_surface_notes: {
+    "experienceengine://review":
+      "Read-only operator workflow summary. Coordinates repo policy, hygiene, and export drafts with drill-down references; it does not restore policy, mutate nodes, or write exports."
+  },
   advanced_actions: [
     "brokered admin actions",
     "brokered maintenance actions",
@@ -639,7 +643,8 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
     "experienceengine://review",
     {
       title: "ExperienceEngine Operator Review",
-      description: "Read-only operator review flow across repo policy, hygiene, and export drafts.",
+      description:
+        "Read-only operator review workflow across repo policy, hygiene, and export drafts. Includes advisory drill-down references only.",
       mimeType: "application/json"
     },
     async (uri) => toJsonResourceResult(uri.toString(), await interactionSurface.inspectReview())
