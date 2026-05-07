@@ -204,7 +204,8 @@ Install ExperienceEngine through the host setup flow for the host you want to us
     - `ee install codex`
   - native/manual fallback:
     - see the advanced example below if you need direct MCP wiring
-  - after either path, start a new Codex session in the repo so the MCP wiring and `AGENTS.md` instruction block are picked up
+  - after either path, start a new Codex session in the repo so project hooks, MCP wiring, and the `AGENTS.md` instruction block are picked up
+  - in mixed Windows Codex App + WSL Codex CLI setups, the project `.codex/hooks.json` can be shared by both runtimes, while MCP registration remains runtime/user-level in each Codex home
 - `Claude Code`
   - host-native marketplace install:
     - add the bundled marketplace from GitHub:
@@ -304,6 +305,7 @@ ExperienceEngine separates:
 The host remains the primary interaction surface.
 `ee` remains the explicit operator surface for setup, validation, repair, status, and maintenance.
 For Codex, `ee status` and `ee doctor codex` also report whether the `ee` CLI fallback is available on `PATH`. Codex MCP wiring can still work when the CLI fallback is missing, but commands such as `ee inspect --last` need either a PATH-visible `ee` binary or an explicit package invocation.
+For mixed Windows Codex App + WSL Codex CLI use, treat `.codex/hooks.json` as repo-owned hook wiring and `~/.codex/config.toml` as per-runtime MCP wiring. `ee repair codex` refreshes the project hook launcher and removes stale project-scoped ExperienceEngine MCP config so Windows App and WSL CLI do not fight over one config file.
 
 ## Advanced Per-Host Commands (Operator / Development Only)
 
@@ -330,6 +332,8 @@ Notes:
 - `OpenClaw` uses plugin/runtime integration (not `src/adapters/`) and CLI fallback for management.
 - `Claude Code` installs both hooks and the shared ExperienceEngine MCP server.
 - `Codex` installs Codex-native hooks plus the shared ExperienceEngine MCP server. `ee codex exec` remains the deterministic non-interactive fallback.
+- Codex `UserPromptSubmit` stays synchronous because it owns prompt-time experience injection. `PostToolUse` and `Stop` are queued for background processing by default; `PreToolUse` is kept synchronous for gating semantics.
+- In source-repo validation, the shared Codex project hook launcher was smoke-tested from Windows and WSL Codex CLI. Published-package and host-marketplace validation should still be called out separately when preparing a release.
 - `ee install ...` and `ee doctor ...` now warn if `npm` or `pnpm` uses a non-official registry, because managed model downloads are most reliable with `https://registry.npmjs.org`.
 - successful `ee install ...` also explains the cold-start expectation: capture starts immediately, but formal experience usually appears after a few similar tasks in the same repo.
 

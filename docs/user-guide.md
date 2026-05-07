@@ -570,10 +570,12 @@ ee install codex
 What happens:
 - ExperienceEngine registers its shared MCP server with Codex
 - new Codex MCP sessions can use ExperienceEngine interaction surfaces
+- ExperienceEngine writes Codex-native project hooks and enables `codex_hooks`
 - install ends with a short cold-start note so users know capture is active before the first formal hint appears
 
 Local state changes:
-- Codex MCP config in `~/.codex/config.toml`
+- project hook config in `.codex/hooks.json`
+- Codex MCP config in the active runtime's `~/.codex/config.toml`
 - ExperienceEngine-managed product state under `~/.experienceengine`
 
 Useful commands:
@@ -603,6 +605,10 @@ Host note:
 - ExperienceEngine installs a longer `startup_timeout_sec` for Codex automatically
 - this avoids MCP handshake failures on slower local startups
 - ExperienceEngine installs Codex-native hooks for prompt-time guidance, tool-result capture, and stop/finalize writeback
+- `UserPromptSubmit` is synchronous because it decides prompt-time injection
+- `PostToolUse` and `Stop` are queued for background processing by default; `PreToolUse` remains synchronous for gating semantics
+- in a Windows Codex App + WSL Codex CLI repo, `.codex/hooks.json` is shared project hook wiring, while MCP config is owned by each runtime's Codex home
+- `ee repair codex` refreshes project hooks and removes stale project-scoped ExperienceEngine MCP config
 - if Codex still cannot see ExperienceEngine or doctor reports hook drift, run `ee repair codex`
 - `ee codex exec` is a deterministic wrapper for non-interactive runs
 - the wrapper owns `lookup -> child codex exec -> record -> finalize` outside the child process
@@ -610,6 +616,11 @@ Host note:
 - use prompt `-` when you want the wrapper to read task instructions from stdin; child Codex still receives a wrapped prompt argument and does not inherit stdin
 - use `--ee-session-id <id>` when CI or debugging needs a stable ExperienceEngine session id
 - `codex exec review` is not wrapped yet; keep using native Codex review or the MCP/CLI surfaces for review workflows
+
+Diagnostics note:
+- `ee doctor codex` separates project hook health, `codex_hooks` enablement, MCP registration, and PATH-visible `ee` CLI fallback
+- Windows Codex App can have healthy project hooks even when a Windows `codex` CLI is not installed
+- WSL Codex CLI must have its own MCP registration in the WSL Codex home; it can still reuse the same repo `.codex/hooks.json`
 
 Developer validation docs:
 

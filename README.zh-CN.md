@@ -202,7 +202,8 @@ ExperienceEngine 现在不再把 `ee` CLI 当成适用于所有宿主的统一�
     - `ee install codex`
   - 原生 / 手工 fallback：
     - 如果你需要直接 MCP wiring，可参考后面的高级示例
-  - 无论走哪条路径，首次接入后都建议在仓库里开启一个新的 Codex 会话，让 MCP 配置和 `AGENTS.md` 指令块生效
+  - 无论走哪条路径，首次接入后都建议在仓库里开启一个新的 Codex 会话，让项目 hooks、MCP 配置和 `AGENTS.md` 指令块生效
+  - 如果同一个仓库同时用于 Windows Codex App 和 WSL Codex CLI，项目 `.codex/hooks.json` 可以共享；MCP 注册仍然属于每个运行时自己的 Codex home
 - `Claude Code`
   - 宿主原生 marketplace 安装：
     - 先添加 GitHub marketplace：
@@ -303,6 +304,7 @@ ExperienceEngine 明确拆分：
 宿主仍然是主交互面。
 `ee` 仍然是显式的 operator 面，用于 setup、验证、修复、状态查看和维护。
 对于 Codex，`ee status` 和 `ee doctor codex` 还会显示 `ee` CLI fallback 是否在 `PATH` 上可用。Codex 的 MCP 接入在 CLI fallback 缺失时仍可能正常工作，但 `ee inspect --last` 这类命令需要 PATH 里有 `ee`，或者使用显式的包调用方式。
+如果同一个仓库同时用于 Windows Codex App 和 WSL Codex CLI，请把 `.codex/hooks.json` 当成仓库级 hook wiring，把 `~/.codex/config.toml` 当成每个运行时自己的 MCP wiring。`ee repair codex` 会刷新项目 hook launcher，并移除过期的项目级 ExperienceEngine MCP 配置，避免 Windows App 和 WSL CLI 争用同一个配置文件。
 
 ## 高级按宿主命令（仅限 Operator / 开发者）
 
@@ -329,6 +331,8 @@ codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceeng
 - `OpenClaw` 走 plugin/runtime integration，而不是 `src/adapters/`
 - `Claude Code` 会安装 hooks 和共享 ExperienceEngine MCP 服务
 - `Codex` 会安装 Codex 原生 hooks 和共享 ExperienceEngine MCP 服务。`ee codex exec` 仍是确定性的非交互 fallback。
+- Codex 的 `UserPromptSubmit` 保持同步，因为它负责 prompt-time experience injection。`PostToolUse` 和 `Stop` 默认排队后在后台处理；`PreToolUse` 为了 gating 语义仍保持同步。
+- 在 source repo 本地验证里，共享 Codex 项目 hook launcher 已分别经过 Windows 与 WSL Codex CLI smoke test。准备正式发布时，published package 和 host marketplace 仍需要单独说明验证范围。
 - `ee install ...` 与 `ee doctor ...` 会在 `npm` / `pnpm` 使用非官方 registry 时给出提示，因为受管模型下载在 `https://registry.npmjs.org` 下最稳定
 - 成功执行 `ee install ...` 后，也会提醒冷启动预期：capture 会立刻开始，但 formal experience 一般需要在同一仓库里出现几次相似任务后才会形成
 
