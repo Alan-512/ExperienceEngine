@@ -136,7 +136,9 @@ const ensureWindowsLauncher = (
         )}'${Object.entries(hookEnv)
           .map(([key, value]) => ` ${key}='${escapeSingleQuotedBash(value)}'`)
           .join("")}; node --no-warnings '${escapeSingleQuotedBash(entry)}' ${command}"\r\n`
-      : `@echo off\r\n${Object.entries(hookEnv)
+      : `@echo off\r\nset "EXPERIENCE_ENGINE_HOME=${escapeDoubleQuotedWindows(
+          toWindowsRuntimePath(realHome)
+        )}"\r\n${Object.entries(hookEnv)
           .map(([key, value]) => `set ${key}=${value}\r\n`)
           .join("")}node --no-warnings "${escapeDoubleQuotedWindows(
           toWindowsRuntimePath(entry)

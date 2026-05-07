@@ -111,6 +111,7 @@ describe("Codex CLI wiring", () => {
     });
 
     const script = readFileSync(launcher.path, "utf8");
+    expect(script).toContain("set \"EXPERIENCE_ENGINE_HOME=");
     expect(script).toContain("EXPERIENCE_ENGINE_EMBEDDING_PROVIDER");
     expect(script).toContain("EXPERIENCE_ENGINE_EMBEDDING_API_TIMEOUT_MS");
     expect(script).toContain("EXPERIENCE_ENGINE_DISABLE_LOCAL_EMBEDDING_FALLBACK");
