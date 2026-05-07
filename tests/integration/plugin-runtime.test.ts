@@ -11,6 +11,7 @@ import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js
 import { clearEmbeddingProviderForTests, setEmbeddingProviderForTests } from "../../src/store/vector/embeddings.js";
 import { nowIso } from "../../src/utils/clock.js";
 import { replayScenarios, type ReplayScenario } from "../fixtures/openclaw/index.js";
+import { removeTempDirForTests } from "../unit/temp-cleanup.js";
 
 type Handler = (payload: unknown, context?: unknown) => unknown | Promise<unknown>;
 
@@ -323,7 +324,7 @@ afterEach(() => {
   while (tempDirs.length) {
     const dir = tempDirs.pop();
     if (dir) {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDirForTests(dir);
     }
   }
 });
@@ -599,9 +600,11 @@ describe("OpenClaw plugin runtime", () => {
   it("uses the installed product data home when no explicit plugin config is provided", async () => {
     const homeDir = makeTempDir();
     const originalHome = process.env.HOME;
+    const originalUserProfile = process.env.USERPROFILE;
     const handlers = new Map<string, Handler>();
 
     process.env.HOME = homeDir;
+    process.env.USERPROFILE = homeDir;
     const installReport = installOpenClawAdapter({
       homeDir,
       packageSourceBuilder() {
@@ -637,6 +640,11 @@ describe("OpenClaw plugin runtime", () => {
       expect(inputCount.count).toBe(1);
     } finally {
       process.env.HOME = originalHome;
+      if (originalUserProfile === undefined) {
+        delete process.env.USERPROFILE;
+      } else {
+        process.env.USERPROFILE = originalUserProfile;
+      }
     }
   }, 10_000);
 
