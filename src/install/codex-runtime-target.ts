@@ -24,6 +24,7 @@ const isWindowsMountedPath = (value: string): boolean => /^\/mnt\/[a-z]\//i.test
 const escapeSingleQuotedBash = (value: string): string => value.replace(/'/g, `'\"'\"'`);
 const escapeDoubleQuotedWindows = (value: string): string => value.replace(/"/g, '\\"');
 const quoteWindowsCmdArgument = (value: string): string => `"${escapeDoubleQuotedWindows(value)}"`;
+const toWindowsForwardSlashPath = (value: string): string => value.replace(/\\/g, "/");
 
 const normalizeWindowsDrivePath = (value: string): string => {
   if (!isWindowsMountedPath(value)) {
@@ -120,15 +121,47 @@ const ensureWindowsLauncher = (
 ): void => {
   const entry = joinRuntimePath(packageRoot, "dist/cli/index.js");
   const realHome = resolveRealPath(productHome);
+  const hookEnv =
+    command === "codex-hook"
+      ? {
+          EXPERIENCE_ENGINE_EMBEDDING_PROVIDER: "legacy",
+          EXPERIENCE_ENGINE_EMBEDDING_API_TIMEOUT_MS: "1500",
+          EXPERIENCE_ENGINE_DISABLE_LOCAL_EMBEDDING_FALLBACK: "1"
+        }
+      : {};
   const script =
     process.platform === "linux"
       ? `@echo off\r\nwsl.exe bash -lc "export EXPERIENCE_ENGINE_HOME='${escapeSingleQuotedBash(
           realHome
-        )}'; node --no-warnings '${escapeSingleQuotedBash(entry)}' ${command}"\r\n`
-      : `@echo off\r\nnode --no-warnings "${escapeDoubleQuotedWindows(
+        )}'${Object.entries(hookEnv)
+          .map(([key, value]) => ` ${key}='${escapeSingleQuotedBash(value)}'`)
+          .join("")}; node --no-warnings '${escapeSingleQuotedBash(entry)}' ${command}"\r\n`
+      : `@echo off\r\n${Object.entries(hookEnv)
+          .map(([key, value]) => `set ${key}=${value}\r\n`)
+          .join("")}node --no-warnings "${escapeDoubleQuotedWindows(
           toWindowsRuntimePath(entry)
         )}" ${command} %*\r\n`;
   writeFileSync(path, script, "utf8");
+};
+
+export const ensureCodexProjectHookLauncher = (options: {
+  cwd: string;
+  packageRoot: string;
+  productHome: string;
+}): { path: string; command: string } => {
+  const launcherPath = join(options.cwd, ".codex", "experienceengine-codex-hook.cmd");
+  mkdirSync(join(options.cwd, ".codex"), { recursive: true });
+  ensureWindowsLauncher(launcherPath, options.packageRoot, options.productHome, "codex-hook");
+
+  return {
+    path: launcherPath,
+    command: buildCodexProjectHookCommand(options.cwd)
+  };
+};
+
+export const buildCodexProjectHookCommand = (cwd: string): string => {
+  const launcherPath = join(cwd, ".codex", "experienceengine-codex-hook.cmd");
+  return `cmd.exe /c ${quoteWindowsCmdArgument(toWindowsForwardSlashPath(toWindowsRuntimePath(launcherPath)))}`;
 };
 
 export const ensureCodexLaunchers = (options: {
@@ -166,8 +199,13 @@ export const buildCodexHookCommandForTarget = (
   launcherPaths: CodexLauncherPaths
 ): string =>
   runtimeTarget === "windows"
-    ? `cmd.exe /c ${quoteWindowsCmdArgument(toWindowsRuntimePath(launcherPaths.windowsHook))}`
+    ? `cmd.exe /c ${quoteWindowsCmdArgument(toWindowsForwardSlashPath(toWindowsRuntimePath(launcherPaths.windowsHook)))}`
     : resolveRealPath(launcherPaths.hook);
+
+export const buildCrossRuntimeCodexHookCommand = (
+  launcherPaths: CodexLauncherPaths
+): string =>
+  `cmd.exe /c ${quoteWindowsCmdArgument(toWindowsForwardSlashPath(toWindowsRuntimePath(launcherPaths.windowsHook)))}`;
 
 export const buildCodexMcpServerCommandForTarget = (
   runtimeTarget: CodexRuntimeTarget,

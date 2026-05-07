@@ -20,9 +20,9 @@ import { openVectorStore } from "../store/vector/lancedb.js";
 import { tokenize } from "../utils/text.js";
 import { buildRetrievalQuery, type RetrievalQuery } from "./query-rewrite.js";
 import { computeLexicalRetrievalScores } from "./lexical-retriever.js";
-import { rerankCandidatesWithModel } from "./model-reranker.js";
 import type { DistillerEndpoint } from "../distillation/providers/types.js";
 import { enrichPolicyForCandidate, textOverlapScore } from "./policy-enricher.js";
+import { resolveModelRerankerMode } from "./model-reranker-mode.js";
 
 export type RetrievedCandidate = {
   node: ExperienceNode;
@@ -748,16 +748,21 @@ export const retrieveCandidateBundle = async (
       )
     };
     const defaultRerankScores = computeDefaultRerankScores(rerankInput.queryText, rerankInput.candidates);
-    const modelRerankResults =
-      !options.reranker && options.config
-        ? await rerankCandidatesWithModel(rerankInput.queryText, rerankInput.candidates, {
+    const shouldUseModelReranker =
+      !options.reranker &&
+      options.config &&
+      resolveModelRerankerMode(options.config) === "model";
+    const modelRerankResults = shouldUseModelReranker
+      ? await import("./model-reranker.js").then(({ rerankCandidatesWithModel }) =>
+          rerankCandidatesWithModel(rerankInput.queryText, rerankInput.candidates, {
             config: options.config,
             env: options.env,
             homeDir: options.homeDir,
             fetchImpl: options.fetchImpl,
             resolveEndpoint: options.resolveRerankerEndpoint
           })
-        : null;
+        )
+      : null;
     const rerankResults = options.reranker
       ? await options.reranker(rerankInput)
       : modelRerankResults ??

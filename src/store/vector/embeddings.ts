@@ -215,6 +215,11 @@ const tryLocalFallback = async (
   options: EmbeddingOptions,
   primaryFailureMessage?: string
 ): Promise<EmbeddingResult | null> => {
+  const env = options.env ?? process.env;
+  if (env.EXPERIENCE_ENGINE_DISABLE_LOCAL_EMBEDDING_FALLBACK === "1") {
+    return null;
+  }
+
   try {
     const { getLocalEmbeddingProvider } = await loadLocalEmbeddingProviderModule();
     const provider = await getLocalEmbeddingProvider({
@@ -286,7 +291,9 @@ const resolveProvider = async (options: EmbeddingOptions = {}): Promise<Semantic
     }
   }
 
-  if (options.config?.embeddingProvider === "local" || options.config?.embeddingProvider === "api" || options.config?.embeddingProvider === undefined) {
+  const env = options.env ?? process.env;
+  const localFallbackDisabled = env.EXPERIENCE_ENGINE_DISABLE_LOCAL_EMBEDDING_FALLBACK === "1";
+  if (!localFallbackDisabled && (options.config?.embeddingProvider === "local" || options.config?.embeddingProvider === "api" || options.config?.embeddingProvider === undefined)) {
     try {
       const { getLocalEmbeddingProvider } = await loadLocalEmbeddingProviderModule();
       return await getLocalEmbeddingProvider(options);

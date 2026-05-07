@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { inspectCodexInstall, installCodexAdapter } from "../../src/install/codex-installer.js";
 import { readCurrentPackageVersion } from "../../src/version/package-version.js";
+import { removeTempDirForTests } from "./temp-cleanup.js";
 
 const tempDirs: string[] = [];
 
@@ -25,7 +26,7 @@ afterEach(() => {
   while (tempDirs.length) {
     const dir = tempDirs.pop();
     if (dir) {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDirForTests(dir);
     }
   }
 });
@@ -205,6 +206,52 @@ env_key = "OPENROUTER_API_KEY"
 
     expect(commands).toContain("codex mcp remove experienceengine");
     expect(commands.filter((command) => command === "codex mcp get experienceengine")).toHaveLength(2);
+  });
+
+  it("removes project-scoped ExperienceEngine MCP config before registering Codex globally", () => {
+    const homeDir = makeTempDir();
+    const projectDir = makeTempDir();
+    mkdirSync(join(projectDir, ".codex"), { recursive: true });
+    writeFileSync(
+      join(projectDir, ".codex", "config.toml"),
+      `[mcp_servers.experienceengine]
+command = "cmd.exe"
+args = ["/c", "D:\\\\ExperienceEngineData\\\\.experienceengine\\\\bin\\\\experienceengine-codex-mcp-server.cmd"]
+
+[mcp_servers.experienceengine.env]
+EXPERIENCE_ENGINE_HOME = "D:\\\\ExperienceEngineData\\\\.experienceengine"
+
+[features]
+codex_hooks = true
+`,
+      "utf8"
+    );
+
+    installCodexAdapter({
+      homeDir,
+      cwd: projectDir,
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        if (key === "codex mcp get experienceengine") {
+          return `experienceengine
+  enabled: true
+  transport: stdio
+  command: /home/seed/.experienceengine/bin/experienceengine-codex-mcp-server
+  args: -
+  cwd: -
+  env: EXPERIENCE_ENGINE_HOME=${join(homeDir, ".experienceengine")}
+  startup_timeout_sec: 60
+  remove: codex mcp remove experienceengine`;
+        }
+        return "";
+      }
+    });
+
+    const config = readFileSync(join(projectDir, ".codex", "config.toml"), "utf8");
+    expect(config).not.toContain("[mcp_servers.experienceengine]");
+    expect(config).not.toContain("[mcp_servers.experienceengine.env]");
+    expect(config).toContain("[features]");
+    expect(config).toContain("codex_hooks = true");
   });
 
   it("reports current host wiring for doctor output", () => {

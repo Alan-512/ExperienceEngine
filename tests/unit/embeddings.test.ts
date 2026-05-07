@@ -178,6 +178,48 @@ describe("embedding fallback diagnostics", () => {
     expect(pipelineSpy).toHaveBeenCalledTimes(1);
   });
 
+  it("skips local fallback when the hook fast path disables it", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url, init) => {
+        expect(init?.signal).toBeInstanceOf(AbortSignal);
+        return new Response(JSON.stringify({ error: "busy" }), { status: 503 });
+      })
+    );
+
+    const pipelineSpy = vi.fn(async () =>
+      async () => ({
+        data: [0.91, 0.82, 0.73]
+      })
+    );
+
+    setTransformersModuleLoaderForTests(async () => ({
+      env: {
+        allowRemoteModels: false,
+        allowLocalModels: false,
+        cacheDir: undefined
+      },
+      pipeline: pipelineSpy
+    }));
+
+    const result = await embedQueryText("validate the hook fast path", {
+      config: {
+        embeddingProvider: "api",
+        embeddingModel: "Xenova/multilingual-e5-small",
+        embeddingDtype: "q8",
+        embeddingCacheDir: "./tmp/embeddings"
+      },
+      env: runtimeEnv({
+        OPENAI_API_KEY: "test-openai-key",
+        EXPERIENCE_ENGINE_EMBEDDING_API_TIMEOUT_MS: "1500",
+        EXPERIENCE_ENGINE_DISABLE_LOCAL_EMBEDDING_FALLBACK: "1"
+      })
+    });
+
+    expect(result.space.provider).toBe("legacy");
+    expect(pipelineSpy).not.toHaveBeenCalled();
+  });
+
   it("uses the Jina API provider when api mode is enabled and JINA_API_KEY is present", async () => {
     vi.stubGlobal(
       "fetch",

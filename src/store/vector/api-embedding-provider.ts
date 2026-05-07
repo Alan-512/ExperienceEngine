@@ -21,6 +21,20 @@ const firstNonEmpty = (...values: Array<string | undefined>): string | undefined
 const DEFAULT_TIMEOUT_MS = 5_000;
 const MAX_TRANSIENT_RETRIES = 1;
 
+const resolveTimeoutMs = (options: ApiEmbeddingOptions): number => {
+  if (typeof options.timeoutMs === "number") {
+    return options.timeoutMs;
+  }
+
+  const configured = (options.env ?? process.env).EXPERIENCE_ENGINE_EMBEDDING_API_TIMEOUT_MS;
+  if (!configured) {
+    return DEFAULT_TIMEOUT_MS;
+  }
+
+  const parsed = Number(configured);
+  return Number.isFinite(parsed) && parsed > 0 ? parsed : DEFAULT_TIMEOUT_MS;
+};
+
 const describeApiFailure = (provider: "openai" | "jina" | "gemini", status: number): string => {
   if (status === 401 || status === 403) {
     return `${provider} embedding API authentication failed (${status})`;
@@ -83,7 +97,7 @@ const createOpenAIProvider = (options: ApiEmbeddingOptions = {}): SemanticEmbedd
   }
 
   const fetchImpl = options.fetchImpl ?? fetch;
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const timeoutMs = resolveTimeoutMs(options);
 
   const embed = async (text: string): Promise<number[]> => {
     return withTransientRetry(async () => {
@@ -145,7 +159,7 @@ const createJinaProvider = (options: ApiEmbeddingOptions = {}): SemanticEmbeddin
     throw new Error("Jina embedding provider requires JINA_API_KEY");
   }
   const fetchImpl = options.fetchImpl ?? fetch;
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const timeoutMs = resolveTimeoutMs(options);
 
   const embed = async (text: string, task: keyof typeof JINA_TASK_MAP): Promise<number[]> => {
     const headers: Record<string, string> = {
@@ -211,7 +225,7 @@ const createGeminiProvider = (options: ApiEmbeddingOptions = {}): SemanticEmbedd
   }
 
   const fetchImpl = options.fetchImpl ?? fetch;
-  const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const timeoutMs = resolveTimeoutMs(options);
 
   const embed = async (text: string, taskType: "RETRIEVAL_QUERY" | "RETRIEVAL_DOCUMENT"): Promise<number[]> => {
     const response = await withTransientRetry(async () =>

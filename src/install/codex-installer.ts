@@ -9,14 +9,16 @@ import {
   CODEX_EXPERIENCEENGINE_STARTUP_TIMEOUT_SEC,
   defaultCodexCommandRunner,
   ensureCodexMcpServerStartupTimeout,
+  removeProjectCodexMcpServerSections,
   parseCodexMcpServerInfo,
   runCodexCommand,
   type CodexCommandRunner,
   type CodexMcpServerInfo
 } from "./codex-cli.js";
 import {
-  buildCodexHookCommandForTarget,
+  buildCodexProjectHookCommand,
   ensureCodexLaunchers,
+  ensureCodexProjectHookLauncher,
   resolveCodexLauncherPaths,
   resolveCodexRuntimeTarget,
   type CodexRuntimeTarget
@@ -288,9 +290,17 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
     productHome: paths.productHome,
     packageRoot
   });
+  removeProjectCodexMcpServerSections("experienceengine", {
+    cwd: options.cwd
+  });
   const existing = inspectCodexHost(runner, options.cliEnv);
   const instructionPath = resolveCodexInstructionPath(options.cwd);
-  const hookCommand = buildCodexHookCommandForTarget(runtimeTarget, launchers);
+  const projectHookLauncher = ensureCodexProjectHookLauncher({
+    cwd: options.cwd ?? process.cwd(),
+    packageRoot,
+    productHome: paths.productHome
+  });
+  const hookCommand = projectHookLauncher.command;
 
   mkdirSync(paths.dataDir, { recursive: true });
   mkdirSync(resolveProductStateDir(paths), { recursive: true });
@@ -392,7 +402,7 @@ export const inspectCodexInstall = (options: InstallerOptions = {}) => {
   const launchers = resolveCodexLauncherPaths({
     productHome: paths.productHome
   });
-  const hookCommand = buildCodexHookCommandForTarget(runtimeTarget, launchers);
+  const hookCommand = buildCodexProjectHookCommand(options.cwd ?? process.cwd());
   const hooks: CodexHookInspection = inspectCodexProjectHooks({
     cwd: options.cwd,
     hookCommand,

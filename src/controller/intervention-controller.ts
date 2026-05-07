@@ -25,7 +25,6 @@ import { renderInjection } from "./injection-renderer.js";
 import { rankNodes } from "./node-ranker.js";
 import { evaluateTriggerRoute, type TriggerCandidateQuality } from "./trigger-evaluator.js";
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
-import { deriveSelectiveSecondOpinionTrigger, runSelectiveSecondOpinion } from "./second-opinion-gate.js";
 
 export type InterventionDecision = {
   mode: InjectionMode;
@@ -579,15 +578,20 @@ const decideInterventionInternal = async (
       };
     }
 
-    const trigger = deriveSelectiveSecondOpinionTrigger(input, plannedSelected, scoredCandidates);
+    const secondOpinionModule =
+      config?.syncSecondOpinionMode === "selective"
+        ? await import("./second-opinion-gate.js")
+        : null;
+    const trigger =
+      secondOpinionModule?.deriveSelectiveSecondOpinionTrigger(input, plannedSelected, scoredCandidates) ?? null;
     let finalMode: Exclude<InjectionMode, "skip"> = plannedMode;
     let finalSelected = plannedSelected;
     let secondOpinionApplied = false;
     let secondOpinionDecision: SyncSecondOpinionDecision | undefined;
     let secondOpinionReason: string | undefined;
 
-    if (trigger) {
-      const secondOpinion = await runSelectiveSecondOpinion(
+    if (trigger && secondOpinionModule) {
+      const secondOpinion = await secondOpinionModule.runSelectiveSecondOpinion(
         {
           input,
           plannedMode,

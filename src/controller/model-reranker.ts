@@ -2,6 +2,7 @@ import { resolveDistillerEndpoint } from "../distillation/host-llm.js";
 import type { DistillerEndpoint } from "../distillation/providers/types.js";
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import type { RerankCandidate, RerankResult } from "./candidate-retriever.js";
+import { resolveModelRerankerMode } from "./model-reranker-mode.js";
 
 type ModelRerankerConfig = Pick<
   ExperienceEngineConfig,
@@ -192,20 +193,6 @@ const parseScores = (text: string, allowedIds: Set<string>): RerankResult[] => {
       id: entry.id,
       score: Number.isFinite(entry.score) ? entry.score : 0
     }));
-};
-
-export const resolveModelRerankerMode = (config?: ModelRerankerConfig): "disabled" | "heuristic" | "model" => {
-  const configured = config?.retrievalRerankerMode ?? "auto";
-  if (configured === "disabled") {
-    return "disabled";
-  }
-  if (configured === "heuristic") {
-    return "heuristic";
-  }
-  if (configured === "model") {
-    return "model";
-  }
-  return config?.retrievalRerankerModel?.trim() ? "model" : "heuristic";
 };
 
 export const rerankCandidatesWithModel = async (

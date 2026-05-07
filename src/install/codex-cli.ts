@@ -122,6 +122,9 @@ export const buildCodexGetCommand = (cliEnv?: NodeJS.ProcessEnv): CodexCommand =
 export const resolveCodexConfigPath = (homeDir?: string): string =>
   join(homeDir ?? homedir(), ".codex", "config.toml");
 
+export const resolveProjectCodexConfigPath = (cwd = process.cwd()): string =>
+  join(cwd, ".codex", "config.toml");
+
 export const resolveEffectiveCodexConfigPath = (options: {
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
@@ -193,6 +196,27 @@ export const createTemporaryCodexConfigWithoutServer = (
       rmSync(tempDir, { recursive: true, force: true });
     }
   };
+};
+
+export const removeProjectCodexMcpServerSections = (
+  serverName: string,
+  options: {
+    cwd?: string;
+  } = {}
+): { path: string; removed: boolean } => {
+  const configPath = resolveProjectCodexConfigPath(options.cwd);
+  if (!existsSync(configPath)) {
+    return { path: configPath, removed: false };
+  }
+
+  const existing = readFileSync(configPath, "utf8");
+  const next = stripCodexMcpServerSections(existing, serverName);
+  if (next === existing) {
+    return { path: configPath, removed: false };
+  }
+
+  writeFileSync(configPath, next, "utf8");
+  return { path: configPath, removed: true };
 };
 
 export const ensureCodexMcpServerStartupTimeout = (

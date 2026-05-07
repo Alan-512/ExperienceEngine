@@ -1,7 +1,8 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { createCodexBehaviorLoop } from "../../adapters/codex/mcp-server.js";
+import { spawn } from "node:child_process";
 import { resolveExperienceEnginePaths } from "../../config/path-resolver.js";
+import type { createCodexBehaviorLoop } from "../../adapters/codex/behavior-loop.js";
 
 type CodexHookEventName = "UserPromptSubmit" | "PreToolUse" | "PostToolUse" | "Stop" | string;
 
@@ -19,6 +20,14 @@ type CodexHookPayload = {
 };
 
 type CodexBehaviorLoop = ReturnType<typeof createCodexBehaviorLoop>;
+type CodexQueuedHookEvent = "PostToolUse" | "Stop";
+
+type CodexHookQueueItem = {
+  id: string;
+  event: CodexQueuedHookEvent;
+  payload: CodexHookPayload;
+  enqueuedAt: string;
+};
 
 type CodexHookSession = {
   prompt?: string;
@@ -34,6 +43,13 @@ const sessionPath = (sessionId: string): string => {
   const dir = join(paths.dataDir, "hook-sessions");
   mkdirSync(dir, { recursive: true });
   return join(dir, `${sessionId.replace(/[^a-zA-Z0-9_.-]/g, "_")}.json`);
+};
+
+const queueDir = (): string => {
+  const paths = resolveExperienceEnginePaths({ adapter: "codex" });
+  const dir = join(paths.dataDir, "hook-queue");
+  mkdirSync(dir, { recursive: true });
+  return dir;
 };
 
 const readSession = (sessionId: string): CodexHookSession => {
@@ -99,6 +115,31 @@ const inferExitCode = (toolResponse: unknown): number | undefined => {
     : typeof response.exitCode === "number"
       ? response.exitCode
       : undefined;
+};
+
+const createDefaultBehaviorLoop = async (): Promise<CodexBehaviorLoop> => {
+  const { createCodexBehaviorLoop } = await import("../../adapters/codex/behavior-loop.js");
+  return createCodexBehaviorLoop();
+};
+
+const enqueueHookPayload = (event: CodexQueuedHookEvent, payload: CodexHookPayload): void => {
+  const id = `${Date.now()}-${process.pid}-${Math.random().toString(36).slice(2)}`;
+  const item: CodexHookQueueItem = {
+    id,
+    event,
+    payload,
+    enqueuedAt: new Date().toISOString()
+  };
+  writeFileSync(join(queueDir(), `${id}.json`), `${JSON.stringify(item)}\n`, "utf8");
+};
+
+const spawnQueueDrain = (): void => {
+  const child = spawn(process.execPath, [process.argv[1] ?? "", "codex-hook", "--drain-queue"], {
+    detached: true,
+    stdio: "ignore",
+    env: process.env
+  });
+  child.unref();
 };
 
 const runUserPromptSubmit = async (
@@ -181,19 +222,77 @@ const runStop = async (
   return {};
 };
 
+const processQueuedItem = async (
+  item: CodexHookQueueItem,
+  behaviorLoop: CodexBehaviorLoop
+): Promise<void> => {
+  if (item.event === "PostToolUse") {
+    await runPostToolUse(item.payload, behaviorLoop);
+    return;
+  }
+  if (item.event === "Stop") {
+    await runStop(item.payload, behaviorLoop);
+  }
+};
+
+export const drainCodexHookQueue = async (
+  behaviorLoop?: CodexBehaviorLoop
+): Promise<{ processed: number; failed: number }> => {
+  const dir = queueDir();
+  const loop = behaviorLoop ?? await createDefaultBehaviorLoop();
+  let processed = 0;
+  let failed = 0;
+
+  for (const file of readdirSync(dir).filter((entry) => entry.endsWith(".json")).sort()) {
+    const source = join(dir, file);
+    const processing = join(dir, `${file}.processing`);
+    try {
+      renameSync(source, processing);
+    } catch {
+      continue;
+    }
+
+    try {
+      const item = JSON.parse(readFileSync(processing, "utf8")) as CodexHookQueueItem;
+      await processQueuedItem(item, loop);
+      unlinkSync(processing);
+      processed += 1;
+    } catch {
+      failed += 1;
+      try {
+        renameSync(processing, join(dir, `${file}.failed`));
+      } catch {
+        // Keep draining unrelated queue items.
+      }
+    }
+  }
+
+  return { processed, failed };
+};
+
 export const handleCodexHookPayload = async (
   payload: CodexHookPayload,
-  behaviorLoop: CodexBehaviorLoop = createCodexBehaviorLoop()
+  behaviorLoop?: CodexBehaviorLoop
 ): Promise<Record<string, unknown>> => {
   switch (payload.hook_event_name) {
     case "UserPromptSubmit":
-      return runUserPromptSubmit(payload, behaviorLoop);
+      return runUserPromptSubmit(payload, behaviorLoop ?? await createDefaultBehaviorLoop());
     case "PreToolUse":
-      return runPreToolUse(payload, behaviorLoop);
+      return runPreToolUse(payload, behaviorLoop ?? await createDefaultBehaviorLoop());
     case "PostToolUse":
-      return runPostToolUse(payload, behaviorLoop);
+      if (behaviorLoop) {
+        return runPostToolUse(payload, behaviorLoop);
+      }
+      enqueueHookPayload("PostToolUse", payload);
+      spawnQueueDrain();
+      return {};
     case "Stop":
-      return runStop(payload, behaviorLoop);
+      if (behaviorLoop) {
+        return runStop(payload, behaviorLoop);
+      }
+      enqueueHookPayload("Stop", payload);
+      spawnQueueDrain();
+      return {};
     default:
       return {};
   }
@@ -201,6 +300,11 @@ export const handleCodexHookPayload = async (
 
 export const runCodexHookCommand = async (): Promise<void> => {
   try {
+    if (process.argv.includes("--drain-queue")) {
+      await drainCodexHookQueue();
+      return;
+    }
+
     const raw = readFileSync(0, "utf8");
     const payload = raw.trim() ? JSON.parse(raw) as CodexHookPayload : {};
     const output = await handleCodexHookPayload(payload);

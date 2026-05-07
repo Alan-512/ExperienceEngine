@@ -13,7 +13,9 @@ import {
   stripCodexMcpServerSections
 } from "../../src/install/codex-cli.js";
 import {
+  buildCrossRuntimeCodexHookCommand,
   buildCodexHookCommandForTarget,
+  ensureCodexProjectHookLauncher,
   resolveCodexLauncherPaths
 } from "../../src/install/codex-runtime-target.js";
 
@@ -86,8 +88,33 @@ describe("Codex CLI wiring", () => {
     });
 
     expect(buildCodexHookCommandForTarget("windows", launchers)).toBe(
-      "cmd.exe /c \"D:\\Experience Engine Data\\.experienceengine\\bin\\experienceengine-codex-hook.cmd\""
+      "cmd.exe /c \"D:/Experience Engine Data/.experienceengine/bin/experienceengine-codex-hook.cmd\""
     );
+  });
+
+  it("builds a shared hook command that is safe for Windows cmd and WSL sh", () => {
+    const launchers = resolveCodexLauncherPaths({
+      productHome: "/mnt/d/ExperienceEngineData/.experienceengine"
+    });
+
+    expect(buildCrossRuntimeCodexHookCommand(launchers)).toBe(
+      "cmd.exe /c \"D:/ExperienceEngineData/.experienceengine/bin/experienceengine-codex-hook.cmd\""
+    );
+  });
+
+  it("writes hook-only embedding fast-path environment into project launchers", () => {
+    const projectDir = makeTempDir();
+    const launcher = ensureCodexProjectHookLauncher({
+      cwd: projectDir,
+      packageRoot: "/mnt/d/project/ExperienceEngine",
+      productHome: "/mnt/d/ExperienceEngineData/.experienceengine"
+    });
+
+    const script = readFileSync(launcher.path, "utf8");
+    expect(script).toContain("EXPERIENCE_ENGINE_EMBEDDING_PROVIDER");
+    expect(script).toContain("EXPERIENCE_ENGINE_EMBEDDING_API_TIMEOUT_MS");
+    expect(script).toContain("EXPERIENCE_ENGINE_DISABLE_LOCAL_EMBEDDING_FALLBACK");
+    expect(launcher.command).toContain("experienceengine-codex-hook.cmd");
   });
 
   it("adds repeated server env bindings when extra adapter env is provided", () => {
