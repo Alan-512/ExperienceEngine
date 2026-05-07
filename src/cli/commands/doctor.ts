@@ -654,6 +654,8 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
       restart_recommended: status.hostWiring.restartRecommended,
       install_drift: status.hostState.driftDetected ?? false,
       path_mode: status.pathMode,
+      openclaw_workspace: status.workspace.path ?? "",
+      openclaw_workspace_isolation: status.workspace.isolationBehavior,
       package_root: status.packageRoot ?? "",
       host_source_path: status.hostState.sourcePath ?? "",
       active_home: status.activeHome,
@@ -668,6 +670,12 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
 
   if (status.hostState.driftDetected && status.hostState.driftReason) {
     console.log(`Host drift: ${status.hostState.driftReason}`);
+  }
+
+  if (status.workspace.globalWorkspace) {
+    console.log(
+      "OpenClaw workspace note: default workspace is the global OpenClaw workspace; ExperienceEngine will session-isolate unresolved turns instead of reusing broad workspace experience."
+    );
   }
 
   if (warnings.owned.length) {

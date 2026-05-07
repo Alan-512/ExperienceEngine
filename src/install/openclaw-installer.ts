@@ -24,6 +24,7 @@ import {
   buildOpenClawInfoCommand,
   buildOpenClawLoadPathsSetCommand,
   buildOpenClawPluginsConfigGetCommand,
+  buildOpenClawWorkspaceGetCommand,
   type OpenClawInstallAction,
   parseOpenClawPluginEntryConfig,
   parseOpenClawPluginInfo,
@@ -402,6 +403,9 @@ export type ClassifiedOpenClawWarnings = {
   external: string[];
 };
 
+const isOpenClawGlobalWorkspacePath = (workspacePath?: string): boolean =>
+  Boolean(workspacePath && /(^|[/\\])\.openclaw[/\\]workspace[/\\]?$/.test(workspacePath.trim()));
+
 export const isOpenClawRepairRecommended = (inspection: {
   installed: boolean;
   hostState: Pick<HostState, "status" | "enabled" | "configMatches" | "error" | "driftDetected">;
@@ -739,14 +743,30 @@ export const inspectOpenClawInstall = (options: InstallerOptions = {}) => {
     warnings: [],
     configMatches: false
   };
+  let workspace: {
+    path?: string;
+    globalWorkspace: boolean;
+    isolationBehavior: "project_scope" | "session_isolated";
+  } = {
+    globalWorkspace: false,
+    isolationBehavior: "project_scope"
+  };
 
   try {
     const infoOutput = runOpenClawCommand(buildOpenClawInfoCommand("experienceengine"), options.runner);
     const configOutput = runOpenClawCommand(buildOpenClawConfigGetCommand("experienceengine"), options.runner);
+    const workspaceOutput = runOpenClawCommand(buildOpenClawWorkspaceGetCommand(), options.runner);
     const info = parseOpenClawPluginInfo(infoOutput);
     const config = parseOpenClawPluginEntryConfig(configOutput);
+    const workspacePath = workspaceOutput.trim() || undefined;
+    const globalWorkspace = isOpenClawGlobalWorkspacePath(workspacePath);
     const liveConfig = config.entry?.config;
     const expected = expectedConfig;
+    workspace = {
+      path: workspacePath,
+      globalWorkspace,
+      isolationBehavior: globalWorkspace ? "session_isolated" : "project_scope"
+    };
 
     hostState = {
       status: info.status,
@@ -787,6 +807,7 @@ export const inspectOpenClawInstall = (options: InstallerOptions = {}) => {
       restartRecommended: state?.hostWiring?.restartRecommended ?? false
     },
     runtimeDefaults,
+    workspace,
     hostState
   };
 };

@@ -1024,6 +1024,11 @@ describe("doctor command", () => {
             wired: true,
             restartRecommended: false
           },
+          workspace: {
+            path: "/home/seed/.openclaw/workspace",
+            globalWorkspace: true,
+            isolationBehavior: "session_isolated"
+          },
           hostState: {
             warnings: [],
             configMatches: true,
@@ -1058,6 +1063,7 @@ describe("doctor command", () => {
     expect(consoleLogSpy.mock.calls).toEqual(
       expect.arrayContaining([
         ["Host drift: Installed OpenClaw plugin bundle differs from the current ExperienceEngine package at dist/runtime/service.js."],
+        ["OpenClaw workspace note: default workspace is the global OpenClaw workspace; ExperienceEngine will session-isolate unresolved turns instead of reusing broad workspace experience."],
         ["Recommended next step: ee repair openclaw"]
       ])
     );

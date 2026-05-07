@@ -127,6 +127,12 @@ export const buildOpenClawPluginsConfigGetCommand = (): OpenClawCommand => ({
   description: "Query the full OpenClaw plugins config"
 });
 
+export const buildOpenClawWorkspaceGetCommand = (): OpenClawCommand => ({
+  bin: "openclaw",
+  args: ["config", "get", "agents.defaults.workspace"],
+  description: "Query the default OpenClaw agent workspace"
+});
+
 export const buildOpenClawLoadPathsSetCommand = (paths: string[]): OpenClawCommand => ({
   bin: "openclaw",
   args: ["config", "set", "plugins.load.paths", JSON.stringify(paths), "--json"],

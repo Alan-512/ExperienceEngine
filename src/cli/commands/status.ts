@@ -131,6 +131,10 @@ export const runStatusCommand = (): void => {
     console.log(
       `- OpenClaw async posttask default: ${openclaw.runtimeDefaults.hybridPosttaskEnabled ? "enabled" : "disabled"}`
     );
+    console.log(`- OpenClaw workspace scope mode: ${openclaw.workspace.isolationBehavior}`);
+    if (openclaw.workspace.globalWorkspace) {
+      console.log("- OpenClaw workspace note: global workspace turns are session-isolated until a project root is available");
+    }
   }
   console.log(`- Recent retrieval decisions in current repo: ${decisionHealth.recentDecisions}`);
   console.log(`- Recent standard hints (inject): ${decisionHealth.recentInjects}`);

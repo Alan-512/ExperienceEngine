@@ -73,7 +73,22 @@ let mockClaudeStatus = {
   interactionReady: true
 };
 
-let mockOpenClawStatus = {
+let mockOpenClawStatus: {
+  installed: boolean;
+  runtimeDefaults: {
+    learningLoopState: string;
+    backgroundLearningEnabled: boolean;
+    hybridPosttaskEnabled: boolean;
+  };
+  hostState: {
+    enabled: boolean;
+  };
+  workspace: {
+    path?: string;
+    globalWorkspace: boolean;
+    isolationBehavior: "project_scope" | "session_isolated";
+  };
+} = {
   installed: true,
   runtimeDefaults: {
     learningLoopState: "interaction_only",
@@ -82,6 +97,11 @@ let mockOpenClawStatus = {
   },
   hostState: {
     enabled: true
+  },
+  workspace: {
+    path: "/home/seed/.openclaw/workspace",
+    globalWorkspace: true,
+    isolationBehavior: "session_isolated"
   }
 };
 
@@ -193,6 +213,11 @@ afterEach(() => {
     },
     hostState: {
       enabled: true
+    },
+    workspace: {
+      path: "/home/seed/.openclaw/workspace",
+      globalWorkspace: true,
+      isolationBehavior: "session_isolated"
     }
   };
   mockDecisionHealth = {
@@ -300,6 +325,8 @@ describe("status command", () => {
         ["- OpenClaw learning loop: interaction_only"],
         ["- OpenClaw background learning default: disabled"],
         ["- OpenClaw async posttask default: disabled"],
+        ["- OpenClaw workspace scope mode: session_isolated"],
+        ["- OpenClaw workspace note: global workspace turns are session-isolated until a project root is available"],
         ["- Recent retrieval decisions in current repo: 3"],
         ["- Recent standard hints (inject): 1"],
         ["- Recent cautious hints (inject_conservative): 1"],

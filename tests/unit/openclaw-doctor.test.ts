@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import {
   buildOpenClawConfigGetCommand,
   buildOpenClawInfoCommand,
+  buildOpenClawWorkspaceGetCommand,
   parseOpenClawPluginEntryConfig,
   parseOpenClawPluginInfo
 } from "../../src/install/openclaw-cli.js";
@@ -110,6 +111,10 @@ describe("OpenClaw doctor host-state parsing", () => {
       ),
       pluginConfigOutput
     );
+    commandOutputs.set(
+      [buildOpenClawWorkspaceGetCommand().bin, ...buildOpenClawWorkspaceGetCommand().args].join(" "),
+      "/home/seed/.openclaw/workspace"
+    );
 
     const status = inspectOpenClawInstall({
       homeDir,
@@ -124,6 +129,11 @@ describe("OpenClaw doctor host-state parsing", () => {
     expect(status.hostState.enabled).toBe(true);
     expect(status.hostState.error).toContain("EACCES");
     expect(status.hostState.configMatches).toBe(false);
+    expect(status.workspace).toEqual({
+      path: "/home/seed/.openclaw/workspace",
+      globalWorkspace: true,
+      isolationBehavior: "session_isolated"
+    });
     expect(status.versionStatus.recordedVersion).toBe(currentVersion);
     expect(status.versionStatus.state).toBe("current");
   });
@@ -205,14 +215,14 @@ Status: loaded
 Source path: ${packageRoot}
 Install path: ${installPath}
 `;
-    const pluginConfig = `{
-  "enabled": true,
-  "config": {
-    "dataDir": "${join(homeDir, ".experienceengine")}",
-    "sqlitePath": "${join(homeDir, ".experienceengine", "sqlite", "experienceengine.db")}",
-    "captureDir": "${join(homeDir, ".experienceengine", "captures")}"
-  }
-}`;
+    const pluginConfig = JSON.stringify({
+      enabled: true,
+      config: {
+        dataDir: join(homeDir, ".experienceengine"),
+        sqlitePath: join(homeDir, ".experienceengine", "sqlite", "experienceengine.db"),
+        captureDir: join(homeDir, ".experienceengine", "captures")
+      }
+    });
 
     const status = inspectOpenClawInstall({
       homeDir,
@@ -224,11 +234,19 @@ Install path: ${installPath}
         if (key === "openclaw config get plugins.entries.experienceengine") {
           return pluginConfig;
         }
+        if (key === "openclaw config get agents.defaults.workspace") {
+          return "/mnt/d/project/ExperienceEngine";
+        }
         return "";
       }
     });
 
     expect(status.hostState.configMatches).toBe(true);
+    expect(status.workspace).toEqual({
+      path: "/mnt/d/project/ExperienceEngine",
+      globalWorkspace: false,
+      isolationBehavior: "project_scope"
+    });
     expect(status.hostState.driftDetected).toBe(true);
     expect(status.hostState.driftReason).toMatch(
       /dist\/(plugin\/openclaw-plugin\.js|runtime\/service\.js)/
@@ -287,14 +305,14 @@ Install path: ~/.openclaw/extensions/experienceengine
 `;
         }
         if (key === "openclaw config get plugins.entries.experienceengine") {
-          return `{
-  "enabled": true,
-  "config": {
-    "dataDir": "${join(homeDir, ".experienceengine")}",
-    "sqlitePath": "${join(homeDir, ".experienceengine", "sqlite", "experienceengine.db")}",
-    "captureDir": "${join(homeDir, ".experienceengine", "captures")}"
-  }
-}`;
+          return JSON.stringify({
+            enabled: true,
+            config: {
+              dataDir: join(homeDir, ".experienceengine"),
+              sqlitePath: join(homeDir, ".experienceengine", "sqlite", "experienceengine.db"),
+              captureDir: join(homeDir, ".experienceengine", "captures")
+            }
+          });
         }
         return "";
       }
