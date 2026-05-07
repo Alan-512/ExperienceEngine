@@ -149,14 +149,14 @@ export type CodexCliFallbackStatus = {
   recommendation?: string;
 };
 
-const resolveCodexInstructionPath = (cwd = process.cwd()): string => join(cwd, "AGENTS.md");
+export const resolveCodexInstructionPath = (cwd = process.cwd()): string => join(cwd, "AGENTS.md");
 
 const renderManagedInstructionBlock = (): string =>
   [CODEX_EXPERIENCEENGINE_INSTRUCTION_START, renderCodexExperienceEngineInstruction(), CODEX_EXPERIENCEENGINE_INSTRUCTION_END].join(
     "\n"
   );
 
-const upsertManagedInstructionBlock = (path: string): CodexInstructionStatus => {
+export const upsertManagedInstructionBlock = (path: string): CodexInstructionStatus => {
   const managedBlock = renderManagedInstructionBlock();
   const existing = existsSync(path) ? readFileSync(path, "utf8") : "";
   const blockPattern = new RegExp(
@@ -301,6 +301,7 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
     productHome: paths.productHome
   });
   const hookCommand = projectHookLauncher.command;
+  const includePreToolUse = (options.env ?? process.env).EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED === "1";
 
   mkdirSync(paths.dataDir, { recursive: true });
   mkdirSync(resolveProductStateDir(paths), { recursive: true });
@@ -322,7 +323,8 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
   const hooks = repairCodexProjectHooks({
     cwd: options.cwd,
     hookCommand,
-    runtimeTarget
+    runtimeTarget,
+    includePreToolUse
   });
   const instruction = upsertManagedInstructionBlock(instructionPath);
 
@@ -406,7 +408,8 @@ export const inspectCodexInstall = (options: InstallerOptions = {}) => {
   const hooks: CodexHookInspection = inspectCodexProjectHooks({
     cwd: options.cwd,
     hookCommand,
-    runtimeTarget
+    runtimeTarget,
+    includePreToolUse: (options.env ?? process.env).EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED === "1"
   });
   const instructionPath = resolveCodexInstructionPath(options.cwd);
   const instruction = inspectManagedInstructionBlock(instructionPath);

@@ -15,7 +15,7 @@ Without ExperienceEngine:
 - it opens the DB before running the migration, then wastes turns retrying the wrong path
 
 With ExperienceEngine:
-- before tool use, it injects one short constraint like: `Run the migration before opening the DB connection`
+- at task start, it injects one short constraint like: `Run the migration before opening the DB connection`
 - the host agent avoids the same failed path instead of rediscovering it from scratch
 - after the task, ExperienceEngine usually updates that guidance automatically from the real outcome
 - if the guidance later starts harming similar tasks, ExperienceEngine can cool, quarantine, or retire it
@@ -332,7 +332,7 @@ Notes:
 - `OpenClaw` uses plugin/runtime integration (not `src/adapters/`) and CLI fallback for management.
 - `Claude Code` installs both hooks and the shared ExperienceEngine MCP server.
 - `Codex` installs Codex-native hooks plus the shared ExperienceEngine MCP server. `ee codex exec` remains the deterministic non-interactive fallback.
-- Codex `UserPromptSubmit` stays synchronous because it owns prompt-time experience injection. `PostToolUse` and `Stop` are queued for background processing by default; `PreToolUse` is kept synchronous for gating semantics.
+- Codex `UserPromptSubmit` stays synchronous because it owns prompt-time experience injection. `PostToolUse` and `Stop` are queued for background processing by default. `PreToolUse` is not registered by default; set `EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED=1` only for synchronous gating experiments.
 - In source-repo validation, the shared Codex project hook launcher was smoke-tested from Windows and WSL Codex CLI. Published-package and host-marketplace validation should still be called out separately when preparing a release.
 - `ee install ...` and `ee doctor ...` now warn if `npm` or `pnpm` uses a non-official registry, because managed model downloads are most reliable with `https://registry.npmjs.org`.
 - successful `ee install ...` also explains the cold-start expectation: capture starts immediately, but formal experience usually appears after a few similar tasks in the same repo.

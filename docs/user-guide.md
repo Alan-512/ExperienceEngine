@@ -606,7 +606,8 @@ Host note:
 - this avoids MCP handshake failures on slower local startups
 - ExperienceEngine installs Codex-native hooks for prompt-time guidance, tool-result capture, and stop/finalize writeback
 - `UserPromptSubmit` is synchronous because it decides prompt-time injection
-- `PostToolUse` and `Stop` are queued for background processing by default; `PreToolUse` remains synchronous for gating semantics
+- `PostToolUse` and `Stop` are queued for background processing by default
+- `PreToolUse` is not registered by default; set `EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED=1` only for synchronous gating experiments
 - in a Windows Codex App + WSL Codex CLI repo, `.codex/hooks.json` is shared project hook wiring, while MCP config is owned by each runtime's Codex home
 - `ee repair codex` refreshes project hooks and removes stale project-scoped ExperienceEngine MCP config
 - if Codex still cannot see ExperienceEngine or doctor reports hook drift, run `ee repair codex`

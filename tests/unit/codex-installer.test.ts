@@ -82,7 +82,11 @@ env_key = "OPENROUTER_API_KEY"
     expect(existsSync(report.paths.installStatePath)).toBe(true);
     expect(readFileSync(join(homeDir, ".codex", "config.toml"), "utf8")).toContain("startup_timeout_sec = 60.0");
     expect(readFileSync(join(homeDir, ".codex", "config.toml"), "utf8")).toContain("codex_hooks = true");
-    expect(readFileSync(join(homeDir, ".codex", "hooks.json"), "utf8")).toContain("experienceengine-codex-hook");
+    const hooks = JSON.parse(readFileSync(join(homeDir, ".codex", "hooks.json"), "utf8")) as {
+      hooks: Record<string, unknown>;
+    };
+    expect(JSON.stringify(hooks)).toContain("experienceengine-codex-hook");
+    expect(hooks.hooks.PreToolUse).toBeUndefined();
     expect(commands[0]).toBe("codex mcp get experienceengine");
     expect(commands[1]).toContain("codex mcp add experienceengine --env");
     expect(commands[1]).toContain("--env EXPERIENCE_ENGINE_ADAPTER=codex");

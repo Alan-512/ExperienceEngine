@@ -1,5 +1,9 @@
-import { installCodexAdapter } from "../../install/codex-installer.js";
+import { resolveExperienceEnginePaths } from "../../config/path-resolver.js";
+import { repairCodexProjectHooks } from "../../install/codex-hooks.js";
+import { resolveCodexRuntimeTarget, ensureCodexProjectHookLauncher } from "../../install/codex-runtime-target.js";
 import { repairOpenClawAdapter } from "../../install/openclaw-installer.js";
+import { resolveExperienceEnginePackageRoot } from "../../install/openclaw-cli.js";
+import { resolveCodexInstructionPath, upsertManagedInstructionBlock } from "../../install/codex-installer.js";
 
 export const runRepairCommand = (target?: string): void => {
   if (!target) {
@@ -16,14 +20,29 @@ export const runRepairCommand = (target?: string): void => {
   }
 
   if (target === "codex") {
-    const report = installCodexAdapter();
-    console.log(`Repaired ${report.adapter} adapter wiring.`);
-    console.log(`Runtime target: ${report.runtimeTarget}`);
-    console.log(`MCP registration refreshed: ${report.hostWiring.wired ? "yes" : "unknown"}`);
-    console.log(`Codex hooks feature enabled: ${report.hooks.featureEnabled ? "yes" : "no"}`);
-    console.log(`Codex hook entries installed: ${report.hooks.installedEvents.join(", ") || "none"}`);
-    console.log(`Invalid Claude hook entries removed: ${report.hooks.removedClaudeHookCommands.length}`);
-    console.log(`Managed instructions updated: ${report.instruction?.state === "present" ? "yes" : "unknown"}`);
+    const paths = resolveExperienceEnginePaths({ adapter: "codex" });
+    const packageRoot = resolveExperienceEnginePackageRoot();
+    const runtimeTarget = resolveCodexRuntimeTarget();
+    const hookLauncher = ensureCodexProjectHookLauncher({
+      cwd: process.cwd(),
+      packageRoot,
+      productHome: paths.productHome
+    });
+    const hooks = repairCodexProjectHooks({
+      cwd: process.cwd(),
+      hookCommand: hookLauncher.command,
+      runtimeTarget,
+      includePreToolUse: process.env.EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED === "1"
+    });
+    const instruction = upsertManagedInstructionBlock(resolveCodexInstructionPath(process.cwd()));
+
+    console.log("Repaired codex project wiring.");
+    console.log(`Runtime target: ${runtimeTarget}`);
+    console.log("MCP registration refreshed: skipped (project hooks/instructions only)");
+    console.log(`Codex hooks feature enabled: ${hooks.featureEnabled ? "yes" : "no"}`);
+    console.log(`Codex hook entries installed: ${hooks.installedEvents.join(", ") || "none"}`);
+    console.log(`Invalid Claude hook entries removed: ${hooks.removedClaudeHookCommands.length}`);
+    console.log(`Managed instructions updated: ${instruction.state === "present" ? "yes" : "unknown"}`);
     return;
   }
 

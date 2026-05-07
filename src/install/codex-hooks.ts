@@ -143,10 +143,14 @@ const expectedHookGroup = (eventName: CodexHookEvent, command: string): CodexHoo
 
 const commandForTarget = (commandPath: string): string => commandPath;
 
+const expectedCodexHookEvents = (includePreToolUse = false): CodexHookEvent[] =>
+  CODEX_HOOK_EVENTS.filter((eventName) => includePreToolUse || eventName !== "PreToolUse");
+
 const inspectParsedHooks = (
   parsed: CodexHooksFile | undefined,
   expectedCommand: string,
-  runtimeTarget?: "posix" | "windows"
+  runtimeTarget?: "posix" | "windows",
+  includePreToolUse = false
 ) => {
   const missingEvents: CodexHookEvent[] = [];
   const claudeHookCommands: string[] = [];
@@ -155,7 +159,7 @@ const inspectParsedHooks = (
   let unrelatedHookCount = 0;
   const expectedCommandValue = commandForTarget(expectedCommand);
 
-  for (const eventName of CODEX_HOOK_EVENTS) {
+  for (const eventName of expectedCodexHookEvents(includePreToolUse)) {
     const groups = parsed?.hooks?.[eventName] ?? [];
     const hasExpected = groups.some((group) =>
       (group.hooks ?? []).some((hook) => hook.type === "command" && hook.command === expectedCommandValue)
@@ -199,6 +203,7 @@ export const inspectCodexProjectHooks = (options: {
   cwd?: string;
   hookCommand: string;
   runtimeTarget?: "posix" | "windows";
+  includePreToolUse?: boolean;
 }): CodexHookInspection => {
   const hooksPath = resolveProjectCodexHooksPath(options.cwd);
   const configPath = resolveProjectCodexConfigPath(options.cwd);
@@ -211,7 +216,7 @@ export const inspectCodexProjectHooks = (options: {
       featureEnabled,
       parseError: hooksFile.parseError,
       hookFilePresent: true,
-      missingEvents: [...CODEX_HOOK_EVENTS],
+      missingEvents: expectedCodexHookEvents(options.includePreToolUse),
       claudeHookCommands: [],
       wslPathCommands: [],
       codexHookCommands: [],
@@ -220,7 +225,12 @@ export const inspectCodexProjectHooks = (options: {
     };
   }
 
-  const inspected = inspectParsedHooks(hooksFile.parsed, options.hookCommand, options.runtimeTarget);
+  const inspected = inspectParsedHooks(
+    hooksFile.parsed,
+    options.hookCommand,
+    options.runtimeTarget,
+    options.includePreToolUse
+  );
   const hasDrift =
     inspected.claudeHookCommands.length > 0 ||
     inspected.wslPathCommands.length > 0 ||
@@ -247,6 +257,7 @@ export const repairCodexProjectHooks = (options: {
   cwd?: string;
   hookCommand: string;
   runtimeTarget?: "posix" | "windows";
+  includePreToolUse?: boolean;
 }): CodexHookRepairResult => {
   const hooksPath = resolveProjectCodexHooksPath(options.cwd);
   const configPath = resolveProjectCodexConfigPath(options.cwd);
@@ -293,13 +304,22 @@ export const repairCodexProjectHooks = (options: {
   const installedEvents: CodexHookEvent[] = [];
   for (const eventName of CODEX_HOOK_EVENTS) {
     const groups = next.hooks?.[eventName] ?? [];
-    const withoutOldCodex = groups
+    const keptGroups = groups
       .map((group) => ({
         ...group,
         hooks: (group.hooks ?? []).filter((hook) => !hasAnyMarker(hook.command, EXPERIENCEENGINE_CODEX_HOOK_MARKERS))
       }))
       .filter((group) => (group.hooks ?? []).length > 0);
-    next.hooks![eventName] = [...withoutOldCodex, expectedHookGroup(eventName, command)];
+    if (keptGroups.length > 0) {
+      next.hooks![eventName] = keptGroups;
+    } else {
+      delete next.hooks![eventName];
+    }
+  }
+
+  for (const eventName of expectedCodexHookEvents(options.includePreToolUse)) {
+    const groups = next.hooks?.[eventName] ?? [];
+    next.hooks![eventName] = [...groups, expectedHookGroup(eventName, command)];
     installedEvents.push(eventName);
     hookFileChanged = true;
   }

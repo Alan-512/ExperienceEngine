@@ -46,7 +46,7 @@ describe("Codex hook config helpers", () => {
 
     expect(status.state).toBe("disabled");
     expect(status.featureEnabled).toBe(false);
-    expect(status.missingEvents).toEqual(["UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"]);
+    expect(status.missingEvents).toEqual(["UserPromptSubmit", "PostToolUse", "Stop"]);
   });
 
   it("repairs stale Claude hook drift while preserving unrelated hooks", () => {
@@ -94,7 +94,24 @@ describe("Codex hook config helpers", () => {
     expect(repaired).toContain("node ./custom-hook.js");
     expect(repaired).toContain("/tmp/experienceengine-codex-hook");
     expect(repaired).not.toContain("experienceengine-claude-hook");
+    expect(result.installedEvents).toEqual(["UserPromptSubmit", "PostToolUse", "Stop"]);
+    expect(JSON.parse(repaired).hooks.PreToolUse).toHaveLength(1);
+  });
+
+  it("can opt into PreToolUse registration for synchronous gating experiments", () => {
+    const cwd = makeTempDir();
+    const result = repairCodexProjectHooks({
+      cwd,
+      hookCommand: "/tmp/experienceengine-codex-hook",
+      runtimeTarget: "posix",
+      includePreToolUse: true
+    });
+    const hooks = JSON.parse(readFileSync(join(cwd, ".codex", "hooks.json"), "utf8")) as {
+      hooks: Record<string, unknown[]>;
+    };
+
     expect(result.installedEvents).toEqual(["UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"]);
+    expect(hooks.hooks.PreToolUse).toHaveLength(1);
   });
 
   it("reports malformed hooks without overwriting the file", () => {
