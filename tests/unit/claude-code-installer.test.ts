@@ -244,16 +244,22 @@ To remove this server, run: claude mcp remove "experienceengine" -s project`;
     };
     const hookLauncher = readFileSync(installState.launcherPaths?.hook ?? "", "utf8");
 
-    expect(settings.hooks?.UserPromptSubmit?.[0]?.hooks[0]?.command).toContain("cmd.exe /c");
     expect(settings.hooks?.UserPromptSubmit?.[0]?.hooks[0]?.command).toContain(
       "experienceengine-claude-hook.cmd"
     );
+    expect(settings.hooks?.UserPromptSubmit?.[0]?.hooks[0]?.command).not.toContain("cmd.exe /c");
+    expect(settings.hooks?.UserPromptSubmit?.[0]?.hooks[0]?.command).not.toContain("\\");
     expect(commands[1]).toContain("-- cmd.exe /c");
     expect(commands[1]).toContain("experienceengine-mcp-server.cmd");
     expect(installState.runtimeTarget).toBe("windows");
     expect(installState.launcherPaths?.hook).toContain("experienceengine-claude-hook.cmd");
     expect(installState.launcherPaths?.mcpServer).toContain("experienceengine-mcp-server.cmd");
-    expect(hookLauncher).toContain("wsl.exe bash -lc");
+    if (process.platform === "linux") {
+      expect(hookLauncher).toContain("wsl.exe bash -lc");
+    } else {
+      expect(hookLauncher).toContain("node --no-warnings");
+      expect(hookLauncher).toContain("claude-hook");
+    }
   });
 
   it("disables the marketplace plugin when installing project-local Claude hooks", () => {

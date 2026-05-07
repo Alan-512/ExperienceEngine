@@ -149,7 +149,7 @@ export const buildClaudeHookCommandForTarget = (
   launcherPaths: ClaudeLauncherPaths
 ): string =>
   runtimeTarget === "windows"
-    ? `cmd.exe /c "${toWindowsRuntimePath(launcherPaths.windowsHook)}"`
+    ? toWindowsRuntimePath(launcherPaths.windowsHook).replace(/\\/g, "/")
     : launcherPaths.hook;
 
 export const buildClaudeMcpServerCommandForTarget = (
