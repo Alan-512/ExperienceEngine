@@ -630,7 +630,7 @@ Source-repo host validation matrix:
 | Windows Codex App | Validated | Project hooks are healthy, default events are `UserPromptSubmit`, `PostToolUse`, and `Stop`, and task runs write to the shared project scope. |
 | WSL Codex CLI | Validated | WSL `codex exec` with shared `.codex/hooks.json` writes to the same ExperienceEngine home and `scope_id` as Windows Codex App. |
 | Claude Code on Windows | Validated | Real hooks fired `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, and `SessionEnd`; `SessionEnd` drained through the background queue and wrote to the shared project scope. |
-| OpenClaw | Install-state only in this environment | OpenClaw install state exists, but the local `openclaw` host CLI was unavailable during this validation. Run `ee repair openclaw` and validate in a real OpenClaw session before claiming host-runtime validation. |
+| OpenClaw on WSL | Validated | WSL OpenClaw gateway loaded the 0.2.1 ExperienceEngine plugin, wrote task runs to the shared ExperienceEngine home, and reached the same project `scope_id` after the OpenClaw workspace was set to the repo path. OpenClaw validated with `openrouter/tencent/hy3-preview:free`; the bare `tencent/hy3-preview:free` id is marked missing by OpenClaw's model registry. |
 
 This matrix is source-repo validation only. Published npm package validation and host-native marketplace validation must be called out separately during release preparation.
 
