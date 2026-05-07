@@ -623,6 +623,17 @@ Diagnostics note:
 - Windows Codex App can have healthy project hooks even when a Windows `codex` CLI is not installed
 - WSL Codex CLI must have its own MCP registration in the WSL Codex home; it can still reuse the same repo `.codex/hooks.json`
 
+Source-repo host validation matrix:
+
+| Host path | Source-repo validation status | Notes |
+| --- | --- | --- |
+| Windows Codex App | Validated | Project hooks are healthy, default events are `UserPromptSubmit`, `PostToolUse`, and `Stop`, and task runs write to the shared project scope. |
+| WSL Codex CLI | Validated | WSL `codex exec` with shared `.codex/hooks.json` writes to the same ExperienceEngine home and `scope_id` as Windows Codex App. |
+| Claude Code on Windows | Validated | Real hooks fired `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, and `SessionEnd`; `SessionEnd` drained through the background queue and wrote to the shared project scope. |
+| OpenClaw | Install-state only in this environment | OpenClaw install state exists, but the local `openclaw` host CLI was unavailable during this validation. Run `ee repair openclaw` and validate in a real OpenClaw session before claiming host-runtime validation. |
+
+This matrix is source-repo validation only. Published npm package validation and host-native marketplace validation must be called out separately during release preparation.
+
 Developer validation docs:
 
 - [docs/development/codex-runtime-validation.md](development/codex-runtime-validation.md)
