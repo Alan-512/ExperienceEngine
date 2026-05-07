@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, 
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { processClaudeHookPayload, persistClaudeHookCapture } from "../../src/cli/commands/claude-hook.js";
+import { drainClaudeHookQueue, processClaudeHookPayload, persistClaudeHookCapture } from "../../src/cli/commands/claude-hook.js";
 import { persistClaudeNormalizedEvent } from "../../src/adapters/claude-code/event-store.js";
 import { normalizeClaudeHookPayload } from "../../src/adapters/claude-code/hook-normalizer.js";
 import { loadClaudeSession } from "../../src/adapters/claude-code/session-store.js";
@@ -12,6 +12,17 @@ import { clearEmbeddingProviderForTests, setEmbeddingProviderForTests } from "..
 import { loadConfig } from "../../src/config/load-config.js";
 import { resolveScope } from "../../src/input/scope-resolver.js";
 import { nowIso } from "../../src/utils/clock.js";
+import { removeTempDirForTests } from "./temp-cleanup.js";
+
+const { spawnMock } = vi.hoisted(() => ({
+  spawnMock: vi.fn(() => ({
+    unref: vi.fn()
+  }))
+}));
+
+vi.mock("node:child_process", () => ({
+  spawn: spawnMock
+}));
 
 const tempDirs: string[] = [];
 
@@ -22,6 +33,7 @@ const makeTempDir = (): string => {
 };
 
 beforeEach(() => {
+  spawnMock.mockClear();
   setEmbeddingProviderForTests({
     provider: "local",
     model: "Xenova/multilingual-e5-small",
@@ -41,7 +53,7 @@ afterEach(() => {
   while (tempDirs.length) {
     const dir = tempDirs.pop();
     if (dir) {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDirForTests(dir);
     }
   }
 });
@@ -137,6 +149,7 @@ describe("Claude hook capture", () => {
       }),
       { homeDir, env }
     );
+    await expect(drainClaudeHookQueue({ homeDir, env })).resolves.toEqual({ processed: 1, failed: 0 });
 
     expect(loadClaudeSession("session-replay", { homeDir, env })).toBeNull();
 
@@ -239,6 +252,7 @@ describe("Claude hook capture", () => {
       }),
       { homeDir, env }
     );
+    await expect(drainClaudeHookQueue({ homeDir, env })).resolves.toEqual({ processed: 1, failed: 0 });
 
     const row = db
       .prepare("SELECT injected_node_ids_json FROM experience_input_records WHERE session_id = ?")
@@ -247,7 +261,7 @@ describe("Claude hook capture", () => {
     expect(JSON.parse(row?.injected_node_ids_json ?? "[]")).toEqual(["node_claude_prompt_injection"]);
   });
 
-  it("waits for async hybrid postmortem work before returning from SessionEnd", async () => {
+  it("queues SessionEnd without waiting for async hybrid postmortem work", async () => {
     const homeDir = makeTempDir();
     const env = {
       EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine"),
@@ -329,6 +343,25 @@ describe("Claude hook capture", () => {
       }),
       { homeDir, env }
     );
+    expect(spawnMock).toHaveBeenCalledWith(
+      process.execPath,
+      expect.arrayContaining(["claude-hook", "--drain-queue"]),
+      expect.objectContaining({ detached: true, stdio: "ignore" })
+    );
+    expect(
+      db
+        .prepare("SELECT session_id FROM experience_input_records WHERE session_id = ?")
+        .get("session-async-postmortem")
+    ).toBeUndefined();
+
+    await expect(drainClaudeHookQueue({ homeDir, env })).resolves.toEqual({ processed: 1, failed: 0 });
+
+    const record = db
+      .prepare("SELECT session_id, task_summary FROM experience_input_records WHERE session_id = ?")
+      .get("session-async-postmortem") as { session_id: string; task_summary: string } | undefined;
+
+    expect(record?.session_id).toBe("session-async-postmortem");
+    expect(record?.task_summary).toBe("Diagnose a real bug without editing files.");
 
     const trace = db
       .prepare("SELECT worker_task, route, validation_status, fallback_reason FROM hybrid_invocation_traces WHERE session_id = ? ORDER BY created_at DESC LIMIT 1")
@@ -341,13 +374,10 @@ describe("Claude hook capture", () => {
         }
       | undefined;
 
-    expect(trace?.worker_task).toBe("postmortem_review");
-    expect(trace?.route).toBe("ESCALATE_ASYNC_POSTMORTEM");
-    expect(trace?.validation_status).toBe("fallback");
-    expect(trace?.fallback_reason).toBe("provider_unavailable");
+    expect(trace).toBeUndefined();
   });
 
-  it("awaits runtime background learning during SessionEnd processing", async () => {
+  it("does not await runtime background learning during SessionEnd processing", async () => {
     const homeDir = makeTempDir();
     const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
     const { ExperienceRuntimeService } = await import("../../src/runtime/service.js");
@@ -374,7 +404,9 @@ describe("Claude hook capture", () => {
       { homeDir, env }
     );
 
-    expect(waitSpy).toHaveBeenCalledTimes(1);
+    expect(waitSpy).not.toHaveBeenCalled();
+    await expect(drainClaudeHookQueue({ homeDir, env })).resolves.toEqual({ processed: 1, failed: 0 });
+    expect(waitSpy).not.toHaveBeenCalled();
   });
 
   it("replays the latest pending session for the same cwd when SessionEnd arrives under a different session id", async () => {
@@ -421,6 +453,7 @@ describe("Claude hook capture", () => {
       }),
       { homeDir, env }
     );
+    await expect(drainClaudeHookQueue({ homeDir, env })).resolves.toEqual({ processed: 1, failed: 0 });
 
     const db = openDatabase(loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME }, { env, homeDir }));
     const row = db
@@ -450,6 +483,7 @@ describe("Claude hook capture", () => {
         env
       });
     }
+    await expect(drainClaudeHookQueue({ homeDir, env })).resolves.toEqual({ processed: 1, failed: 0 });
 
     const db = openDatabase(loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME }));
     const row = db
@@ -527,6 +561,7 @@ describe("Claude hook capture", () => {
         firstResult = result;
       }
     }
+    await expect(drainClaudeHookQueue({ homeDir, env })).resolves.toEqual({ processed: 1, failed: 0 });
 
     expect(firstResult?.hookOutput).toContain("Run the auth test first and stop once the failure is confirmed.");
 
@@ -624,6 +659,7 @@ describe("Claude hook capture", () => {
       }),
       { homeDir, env }
     );
+    await expect(drainClaudeHookQueue({ homeDir, env })).resolves.toEqual({ processed: 1, failed: 0 });
 
     const db = openDatabase(loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME }));
     const row = db
@@ -708,6 +744,7 @@ describe("Claude hook capture", () => {
       }),
       { homeDir, env }
     );
+    await expect(drainClaudeHookQueue({ homeDir, env })).resolves.toEqual({ processed: 1, failed: 0 });
 
     const db = openDatabase(loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME }));
     const row = db

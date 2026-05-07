@@ -1,4 +1,5 @@
-import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync, readdirSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { normalizeClaudeHookPayload } from "../../adapters/claude-code/hook-normalizer.js";
 import { persistClaudeNormalizedEvent } from "../../adapters/claude-code/event-store.js";
@@ -32,6 +33,15 @@ export type ClaudeHookCommandResult = {
   notice?: string;
 };
 
+type ClaudeQueuedHookEvent = "SessionEnd";
+
+type ClaudeHookQueueItem = {
+  id: string;
+  event: ClaudeQueuedHookEvent;
+  rawInput: string;
+  enqueuedAt: string;
+};
+
 const sanitizeSegment = (value: string | undefined, fallback: string): string =>
   (value ?? fallback).replace(/[^a-zA-Z0-9_.-]+/g, "_");
 
@@ -56,6 +66,41 @@ const createClaudeRuntime = async (options: ClaudeHookOptions = {}) => {
       }
     )
   );
+};
+
+const queueDir = (options: ClaudeHookOptions = {}): string => {
+  const paths = resolveExperienceEnginePaths({
+    adapter: "claude-code",
+    env: options.env ?? process.env,
+    homeDir: options.homeDir
+  });
+  const dir = join(paths.dataDir, "hook-queue");
+  mkdirSync(dir, { recursive: true });
+  return dir;
+};
+
+const enqueueClaudeHookPayload = (
+  event: ClaudeQueuedHookEvent,
+  rawInput: string,
+  options: ClaudeHookOptions = {}
+): void => {
+  const id = `${Date.now()}-${process.pid}-${Math.random().toString(36).slice(2)}`;
+  const item: ClaudeHookQueueItem = {
+    id,
+    event,
+    rawInput,
+    enqueuedAt: new Date().toISOString()
+  };
+  writeFileSync(join(queueDir(options), `${id}.json`), `${JSON.stringify(item)}\n`, "utf8");
+};
+
+const spawnQueueDrain = (): void => {
+  const child = spawn(process.execPath, [process.argv[1] ?? "", "claude-hook", "--drain-queue"], {
+    detached: true,
+    stdio: "ignore",
+    env: process.env
+  });
+  child.unref();
 };
 
 const buildClaudeHookOutput = (additionalContext: string): string =>
@@ -174,7 +219,8 @@ export const persistClaudeHookCapture = (
 
   const sessionId = sanitizeSegment(payload?.session_id, "unknown-session");
   const eventName = sanitizeSegment(payload?.hook_event_name, "unknown-event");
-  const capturePath = join(paths.captureDir, `${receivedAt}_${sessionId}_${eventName}.json`);
+  const fileTimestamp = sanitizeSegment(receivedAt, "received-at");
+  const capturePath = join(paths.captureDir, `${fileTimestamp}_${sessionId}_${eventName}.json`);
 
   mkdirSync(dirname(capturePath), { recursive: true });
   writeFileSync(
@@ -243,33 +289,100 @@ export const processClaudeHookPayload = async (
   }
 
   if (event.eventName === "SessionEnd" && event.sessionId) {
-    const payloadRecord = payload as ClaudeHookPayload | null;
-    const fallbackCwd = typeof payloadRecord?.cwd === "string" ? payloadRecord.cwd : undefined;
-    const stored = loadClaudeSession(event.sessionId, options) ?? (fallbackCwd ? findClaudeSessionByCwd(fallbackCwd, options) : null);
-    const resolvedSessionId = stored?.sessionId ?? event.sessionId;
-    const promptContext = stored?.promptContext ?? recoverClaudePromptContext(payloadRecord, resolvedSessionId);
-    if (promptContext) {
-      const runtime = await createClaudeRuntime(options);
-      for (const pendingToolResult of stored?.toolResults ?? []) {
-        await runtime.persistToolResult(pendingToolResult);
-      }
-      await runtime.finalizeTask({
-        ...promptContext,
-        host: "claude-code"
-      });
-      await runtime.waitForBackgroundLearning();
-    }
-
-    clearClaudeSession(resolvedSessionId, options);
-    if (resolvedSessionId !== event.sessionId) {
-      clearClaudeSession(event.sessionId, options);
-    }
+    enqueueClaudeHookPayload("SessionEnd", rawInput, options);
+    spawnQueueDrain();
   }
 
   return { capturePath };
 };
 
+const finalizeClaudeSessionEnd = async (
+  rawInput: string,
+  options: ClaudeHookOptions = {}
+): Promise<void> => {
+  let payload: unknown = null;
+  try {
+    payload = JSON.parse(rawInput);
+  } catch {
+    payload = null;
+  }
+
+  const event = normalizeClaudeHookPayload(payload);
+  if (event.eventName !== "SessionEnd" || !event.sessionId) {
+    return;
+  }
+
+  const payloadRecord = payload as ClaudeHookPayload | null;
+  const fallbackCwd = typeof payloadRecord?.cwd === "string" ? payloadRecord.cwd : undefined;
+  const stored = loadClaudeSession(event.sessionId, options) ?? (fallbackCwd ? findClaudeSessionByCwd(fallbackCwd, options) : null);
+  const resolvedSessionId = stored?.sessionId ?? event.sessionId;
+  const promptContext = stored?.promptContext ?? recoverClaudePromptContext(payloadRecord, resolvedSessionId);
+  if (promptContext) {
+    const runtime = await createClaudeRuntime(options);
+    for (const pendingToolResult of stored?.toolResults ?? []) {
+      await runtime.persistToolResult(pendingToolResult);
+    }
+    await runtime.finalizeTask({
+      ...promptContext,
+      host: "claude-code"
+    });
+  }
+
+  clearClaudeSession(resolvedSessionId, options);
+  if (resolvedSessionId !== event.sessionId) {
+    clearClaudeSession(event.sessionId, options);
+  }
+};
+
+const processQueuedItem = async (
+  item: ClaudeHookQueueItem,
+  options: ClaudeHookOptions = {}
+): Promise<void> => {
+  if (item.event === "SessionEnd") {
+    await finalizeClaudeSessionEnd(item.rawInput, options);
+  }
+};
+
+export const drainClaudeHookQueue = async (
+  options: ClaudeHookOptions = {}
+): Promise<{ processed: number; failed: number }> => {
+  const dir = queueDir(options);
+  let processed = 0;
+  let failed = 0;
+
+  for (const file of readdirSync(dir).filter((entry) => entry.endsWith(".json")).sort()) {
+    const source = join(dir, file);
+    const processing = join(dir, `${file}.processing`);
+    try {
+      renameSync(source, processing);
+    } catch {
+      continue;
+    }
+
+    try {
+      const item = JSON.parse(readFileSync(processing, "utf8")) as ClaudeHookQueueItem;
+      await processQueuedItem(item, options);
+      unlinkSync(processing);
+      processed += 1;
+    } catch {
+      failed += 1;
+      try {
+        renameSync(processing, join(dir, `${file}.failed`));
+      } catch {
+        // Keep draining unrelated queue items.
+      }
+    }
+  }
+
+  return { processed, failed };
+};
+
 export const runClaudeHookCommand = async (): Promise<void> => {
+  if (process.argv.includes("--drain-queue")) {
+    await drainClaudeHookQueue();
+    return;
+  }
+
   const rawInput = readFileSync(0, "utf8");
   const result = await processClaudeHookPayload(rawInput);
   if (result.notice) {
