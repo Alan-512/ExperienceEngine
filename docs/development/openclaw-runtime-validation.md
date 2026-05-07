@@ -63,6 +63,28 @@ If OpenClaw is loading ExperienceEngine from `~/.openclaw/extensions/experiencee
 
 `ee doctor openclaw` now reports `install_drift` when the copied bundle no longer matches the current package, and it will recommend `ee repair openclaw` when drift is detected.
 
+## Workspace Scope Validation
+
+OpenClaw can run with either a repository workspace or its global default workspace. ExperienceEngine must not treat the global OpenClaw workspace as a reusable project scope when no project root can be resolved.
+
+Latest local WSL validation:
+
+- repo workspace: `agents.defaults.workspace=/mnt/d/project/ExperienceEngine`
+- session: `ee-openclaw-repo-scope-regression-002`
+- result: task run wrote to `scope_21d15aea1db0` with root `/mnt/d/project/ExperienceEngine`
+- global workspace: `agents.defaults.workspace=/home/seed/.openclaw/workspace`
+- session: `ee-openclaw-global-isolation-regression-002`
+- result: task run wrote to session-isolated root `/home/seed/.openclaw/workspace/.experienceengine-unscoped/ee-openclaw-global-isolation-regression-002`
+
+After this validation, restore the local OpenClaw workspace to the repo path if the developer environment normally uses repo-scoped validation:
+
+```bash
+openclaw config set agents.defaults.workspace /mnt/d/project/ExperienceEngine
+openclaw gateway restart
+```
+
+`ee doctor openclaw` should show `openclaw_workspace_isolation = project_scope` for repo workspace and `session_isolated` for the global workspace fallback.
+
 ## Capturing Payloads
 
 Preferred approach:
