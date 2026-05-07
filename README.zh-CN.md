@@ -180,6 +180,7 @@ ExperienceEngine 工作在 context 层，不会修改宿主模型权重。
 OpenClaw 说明：
 - 需要本机已有可正常工作的 OpenClaw，且支持原生插件安装
 - 下面的 OpenClaw 路径默认要求 `openclaw plugins install` 和 `openclaw gateway restart` 可用
+- ExperienceEngine 会从 OpenClaw hook payload 或附近仓库标记解析真实项目根目录；如果 OpenClaw 只上报全局 workspace，ExperienceEngine 会把该会话隔离起来，避免复用不相干的全局 workspace 经验
 
 通用包要求：
 - 发布包要求 Node.js `>=20`

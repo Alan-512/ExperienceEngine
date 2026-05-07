@@ -180,6 +180,7 @@ Before installing an adapter, make sure the host CLI already works on this machi
 OpenClaw notes:
 - requires a working OpenClaw installation with native plugin support
 - the documented OpenClaw path assumes `openclaw plugins install` and `openclaw gateway restart` are available
+- ExperienceEngine resolves the real project root from OpenClaw hook payloads or nearby repo markers; if OpenClaw only reports its global workspace, ExperienceEngine isolates that session instead of reusing unrelated global-workspace experience
 - OpenClaw now uses the shared background learning loop by default
 - OpenClaw still keeps async hybrid posttask review disabled by default; `ee status` and `ee doctor openclaw` show that explicitly
 

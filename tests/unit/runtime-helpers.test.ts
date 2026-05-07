@@ -1,4 +1,7 @@
 import { describe, expect, it } from "vitest";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import {
   applyInjectionToPayload,
   extractToolResultsFromPayload,
@@ -25,6 +28,55 @@ describe("runtime helpers", () => {
       userMessage: "Fix the failing test",
       taskSummary: "Fix the failing test",
       contextSummary: "Recent failures in auth integration."
+    });
+  });
+
+  it("prefers explicit OpenClaw project roots over the host workspace directory", () => {
+    const payload = {
+      sessionId: "sess_project_root",
+      workspacePath: "/home/seed/.openclaw/workspace",
+      context: {
+        projectRoot: "/mnt/d/project/ExperienceEngine"
+      },
+      message: { content: "Fix project-scoped OpenClaw retrieval" }
+    };
+
+    expect(normalizePromptPayload(payload)).toMatchObject({
+      sessionId: "sess_project_root",
+      cwd: "/mnt/d/project/ExperienceEngine",
+      userMessage: "Fix project-scoped OpenClaw retrieval"
+    });
+  });
+
+  it("resolves OpenClaw workspace paths inside a repo back to the repository root", () => {
+    const repoRoot = mkdtempSync(join(tmpdir(), "experienceengine-openclaw-repo-"));
+    const nestedWorkspace = join(repoRoot, "packages", "agent", "workspace");
+    mkdirSync(join(repoRoot, ".git"), { recursive: true });
+    mkdirSync(nestedWorkspace, { recursive: true });
+    writeFileSync(join(repoRoot, "package.json"), "{\"name\":\"host-repo\"}\n", "utf8");
+
+    const payload = {
+      sessionId: "sess_nested_workspace",
+      workspacePath: nestedWorkspace,
+      message: { content: "Use the current project experience" }
+    };
+
+    expect(normalizePromptPayload(payload)).toMatchObject({
+      sessionId: "sess_nested_workspace",
+      cwd: repoRoot
+    });
+  });
+
+  it("isolates the OpenClaw global workspace when no project root can be resolved", () => {
+    const payload = {
+      sessionId: "sess global workspace/1",
+      workspacePath: "/home/seed/.openclaw/workspace",
+      message: { content: "Use only relevant project experience" }
+    };
+
+    expect(normalizePromptPayload(payload)).toMatchObject({
+      sessionId: "sess global workspace/1",
+      cwd: "/home/seed/.openclaw/workspace/.experienceengine-unscoped/sess-global-workspace-1"
     });
   });
 

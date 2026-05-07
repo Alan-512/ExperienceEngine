@@ -1,3 +1,5 @@
+import { existsSync } from "node:fs";
+import { dirname, join, parse, resolve } from "node:path";
 import type { HostPromptContext, HostToolResult } from "../types/plugin.js";
 import { normalizeWhitespace, truncate } from "../utils/text.js";
 
@@ -49,6 +51,85 @@ const readNested = (payload: UnknownRecord, path: string[]): unknown => {
   }
 
   return current;
+};
+
+const pathExists = (path: string): boolean => {
+  try {
+    return existsSync(path);
+  } catch {
+    return false;
+  }
+};
+
+const discoverProjectRoot = (path: string): string => {
+  let current = resolve(path);
+  const root = parse(current).root;
+
+  while (current !== root) {
+    if (
+      pathExists(join(current, ".git")) ||
+      pathExists(join(current, "AGENTS.md")) ||
+      pathExists(join(current, "package.json")) ||
+      pathExists(join(current, "openspec"))
+    ) {
+      return current;
+    }
+
+    current = dirname(current);
+  }
+
+  return path;
+};
+
+const isOpenClawGlobalWorkspace = (path: string): boolean => /(^|[/\\])\.openclaw[/\\]workspace[/\\]?$/.test(path);
+
+const sanitizeScopeSegment = (value: string): string =>
+  value.trim().replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 80) || "global";
+
+const isolateUnresolvedOpenClawWorkspace = (workspacePath: string, payload: UnknownRecord): string =>
+  `${workspacePath.replace(/[\\/]+$/, "")}/.experienceengine-unscoped/${sanitizeScopeSegment(extractSessionKey(payload))}`;
+
+const resolvePromptCwd = (payload: UnknownRecord): string | undefined => {
+  const explicitProjectRoot = readString(
+    payload.projectRoot,
+    payload.repoRoot,
+    payload.projectDir,
+    payload.projectPath,
+    payload.rootPath,
+    readNested(payload, ["project", "root"]),
+    readNested(payload, ["repo", "root"]),
+    readNested(payload, ["repository", "root"]),
+    readNested(payload, ["workspace", "projectRoot"]),
+    readNested(payload, ["context", "projectRoot"]),
+    readNested(payload, ["context", "repoRoot"]),
+    readNested(payload, ["context", "projectDir"]),
+    readNested(payload, ["context", "project", "root"]),
+    readNested(payload, ["context", "repo", "root"])
+  );
+
+  if (explicitProjectRoot) {
+    return explicitProjectRoot;
+  }
+
+  const workspacePath = readString(
+    payload.cwd,
+    payload.workspaceDir,
+    payload.workspacePath,
+    readNested(payload, ["workspace", "cwd"]),
+    readNested(payload, ["context", "cwd"]),
+    readNested(payload, ["context", "workspaceDir"])
+  );
+
+  if (!workspacePath) {
+    return undefined;
+  }
+
+  const discoveredRoot = pathExists(workspacePath) ? discoverProjectRoot(workspacePath) : workspacePath;
+  if (discoveredRoot === workspacePath && isOpenClawGlobalWorkspace(workspacePath)) {
+    return isolateUnresolvedOpenClawWorkspace(workspacePath, payload);
+  }
+
+  return discoveredRoot;
 };
 
 const extractContentText = (value: unknown): string | undefined => {
@@ -220,15 +301,7 @@ export const normalizePromptPayload = (payload: unknown): HostPromptContext => {
 
   return {
     sessionId: extractSessionKey(payload),
-    cwd: readString(
-      payload.cwd,
-      payload.workspaceDir,
-      payload.workspacePath,
-      readNested(payload, ["workspace", "cwd"]),
-      readNested(payload, ["context", "cwd"]),
-      readNested(payload, ["context", "workspaceDir"]),
-      readNested(payload, ["repo", "root"])
-    ),
+    cwd: resolvePromptCwd(payload),
     userMessage: extractMessageText(payload) ?? "",
     taskSummary: readString(
       payload.taskSummary,
