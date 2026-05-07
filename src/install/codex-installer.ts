@@ -398,7 +398,7 @@ export const inspectCodexInstall = (options: InstallerOptions = {}) => {
   const packageRoot = resolveExperienceEnginePackageRoot();
   const hostInfo = inspectCodexHost(runner, options.cliEnv);
   const runtimeTarget = resolveCodexRuntimeTarget({
-    requested: options.runtimeTarget ?? installState?.runtimeTarget,
+    requested: options.runtimeTarget,
     env: options.env ?? process.env
   });
   const launchers = resolveCodexLauncherPaths({
@@ -437,6 +437,7 @@ export const inspectCodexInstall = (options: InstallerOptions = {}) => {
   return {
     adapter: "codex" as const,
     installed: Boolean(installState),
+    paths,
     versionStatus: buildVersionStatus(Boolean(installState), installState?.installedVersion),
     packageRoot,
     captureDir: paths.captureDir,

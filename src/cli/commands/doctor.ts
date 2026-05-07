@@ -238,6 +238,9 @@ const logClaudeRuntimeStatus = (status?: {
 };
 
 const logCodexRuntimeStatus = (status?: {
+  paths?: {
+    productHome?: string;
+  };
   runtimeTarget?: string;
   launcherPaths?: {
     mcpServer?: string;
@@ -249,10 +252,10 @@ const logCodexRuntimeStatus = (status?: {
     configPath: string;
     featureEnabled: boolean;
     hookFilePresent: boolean;
-    missingEvents: string[];
-    claudeHookCommands: string[];
-    wslPathCommands: string[];
-    codexHookCommands: string[];
+    missingEvents?: string[];
+    claudeHookCommands?: string[];
+    wslPathCommands?: string[];
+    codexHookCommands?: string[];
     parseError?: string;
   };
   cliFallback?: {
@@ -277,6 +280,13 @@ const logCodexRuntimeStatus = (status?: {
     console.log(`- Hook launcher: ${status.launcherPaths.hook}`);
   }
   if (status.hooks) {
+    const missingEvents = status.hooks.missingEvents ?? [];
+    const claudeHookCommands = status.hooks.claudeHookCommands ?? [];
+    const wslPathCommands = status.hooks.wslPathCommands ?? [];
+    const registeredEvents = ["UserPromptSubmit", "PostToolUse", "Stop"].filter(
+      (eventName) => !missingEvents.includes(eventName)
+    );
+
     console.log("Codex hooks:");
     console.log(`- State: ${status.hooks.state}`);
     console.log(`- Feature codex_hooks: ${status.hooks.featureEnabled ? "enabled" : "disabled"}`);
@@ -287,16 +297,26 @@ const logCodexRuntimeStatus = (status?: {
       console.log(`- Hook parse error: ${status.hooks.parseError}`);
       console.log("- Recommended next step: fix the malformed hooks file, then run `ee repair codex`.");
     }
-    if (status.hooks.missingEvents.length) {
-      console.log(`- Missing ExperienceEngine hook events: ${status.hooks.missingEvents.join(", ")}`);
+    if (missingEvents.length) {
+      console.log(`- Missing ExperienceEngine hook events: ${missingEvents.join(", ")}`);
     }
-    if (status.hooks.claudeHookCommands.length) {
+    if (claudeHookCommands.length) {
       console.log("- Invalid Claude hook entries detected in Codex config.");
       console.log("- Recommended next step: ee repair codex");
     }
-    if (status.hooks.wslPathCommands.length) {
+    if (wslPathCommands.length) {
       console.log("- Runtime path mismatch: WSL-style hook paths detected for the selected Codex target.");
       console.log("- Recommended next step: ee repair codex");
+    }
+    console.log("Codex hook behavior:");
+    console.log(`- Registered events: ${registeredEvents.join(", ") || "none"}`);
+    console.log("- PreToolUse: disabled by default; set EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED=1 and run `ee repair codex` for synchronous gating experiments.");
+    console.log("- PostToolUse: per-tool capture; seeing one ExperienceEngine PostToolUse after each tool call is expected.");
+    if (status.paths?.productHome) {
+      console.log(`- Project hook home: ${status.paths.productHome}`);
+    }
+    if (status.runtimeTarget) {
+      console.log(`- Runtime target: ${status.runtimeTarget}`);
     }
   }
   if (status.cliFallback) {

@@ -27,7 +27,13 @@ let mockCodexStatus: {
   hooks?: {
     state: string;
     featureEnabled: boolean;
+    missingEvents?: string[];
+    codexHookCommands?: string[];
   };
+  paths?: {
+    productHome: string;
+  };
+  runtimeTarget?: string;
 } = {
   installed: true,
   hostWiring: {
@@ -45,8 +51,14 @@ let mockCodexStatus: {
   },
   hooks: {
     state: "healthy",
-    featureEnabled: true
-  }
+    featureEnabled: true,
+    missingEvents: [],
+    codexHookCommands: ["cmd.exe /c /repo/.codex/experienceengine-codex-hook.cmd"]
+  },
+  paths: {
+    productHome: "/tmp/.experienceengine"
+  },
+  runtimeTarget: "windows"
 };
 
 let mockClaudeStatus = {
@@ -152,8 +164,14 @@ afterEach(() => {
     },
     hooks: {
       state: "healthy",
-      featureEnabled: true
-    }
+      featureEnabled: true,
+      missingEvents: [],
+      codexHookCommands: ["cmd.exe /c /repo/.codex/experienceengine-codex-hook.cmd"]
+    },
+    paths: {
+      productHome: "/tmp/.experienceengine"
+    },
+    runtimeTarget: "windows"
   };
   mockClaudeStatus = {
     installed: true,
@@ -273,6 +291,11 @@ describe("status command", () => {
         ["- Codex task runs in current repo: 0"],
         ["- Codex hooks: healthy"],
         ["- Codex hooks feature: enabled"],
+        ["- Codex hook events: UserPromptSubmit, PostToolUse, Stop"],
+        ["- Codex PreToolUse: disabled by default; enable only for synchronous gating experiments"],
+        ["- Codex PostToolUse: per-tool capture; one entry after each tool call is expected"],
+        ["- Codex project hook home: /tmp/.experienceengine"],
+        ["- Codex runtime target: windows"],
         ["- Codex CLI fallback available: yes"],
         ["- OpenClaw learning loop: interaction_only"],
         ["- OpenClaw background learning default: disabled"],

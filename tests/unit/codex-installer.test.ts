@@ -491,6 +491,33 @@ codex_hooks = true
     expect(report.runtimeTarget).toBe("windows");
     expect(readFileSync(payload.launcherPaths?.mcpServer ?? "", "utf8")).toContain("codex-mcp-server");
   });
+
+  it("inspects the current runtime target instead of reusing a shared-home install target", () => {
+    const homeDir = makeTempDir();
+
+    installCodexAdapter({
+      homeDir,
+      cwd: homeDir,
+      runtimeTarget: "posix",
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        if (key === "codex mcp get experienceengine") {
+          throw new Error("missing");
+        }
+        return "";
+      }
+    });
+
+    const status = inspectCodexInstall({
+      homeDir,
+      cwd: homeDir,
+      runner() {
+        return "";
+      }
+    });
+
+    expect(status.runtimeTarget).toBe(process.platform === "win32" ? "windows" : "posix");
+  });
 });
 
 const reportPathPlaceholder = (): string => "/tmp/experienceengine/dist/cli/index.js";

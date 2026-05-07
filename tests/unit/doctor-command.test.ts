@@ -60,6 +60,16 @@ const codexStatus = (overrides: Record<string, unknown> = {}) =>
       }
     },
     captureDir: "/tmp/.experienceengine/adapters/codex/captures",
+    paths: {
+      productHome: "/tmp/.experienceengine"
+    },
+    runtimeTarget: "windows",
+    hooks: {
+      state: "healthy",
+      featureEnabled: true,
+      missingEvents: [],
+      codexHookCommands: ["cmd.exe /c /repo/.codex/experienceengine-codex-hook.cmd"]
+    },
     cliFallback: {
       command: "ee",
       available: true,
@@ -824,6 +834,39 @@ describe("doctor command", () => {
         ["- Explicit provider configured: yes"],
         ["- Model: gpt-5.4"],
         ["- Base URL: https://api.openai.com/v1/chat/completions"]
+      ])
+    );
+  });
+
+  it("explains Codex hook events and project hook home", async () => {
+    await runDoctorCommand("codex", {
+      inspectCodexInstall: () => codexStatus(),
+      fetchLatestGitHubReleaseStatus: async () => ({
+        source: "github-releases",
+        repository: "Alan-512/ExperienceEngine",
+        latestVersion: "0.1.0",
+        releaseUrl: null,
+        publishedAt: "2026-03-12T12:00:00Z",
+        state: "current",
+        updateAvailable: false
+      }),
+      inspectFirstValueReadiness: () => ({
+        rawRecords: 3,
+        taskRuns: 1,
+        candidates: 1,
+        nodes: 0,
+        nextStep: "Keep working in the same repo."
+      })
+    });
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Codex hook behavior:"],
+        ["- Registered events: UserPromptSubmit, PostToolUse, Stop"],
+        ["- PreToolUse: disabled by default; set EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED=1 and run `ee repair codex` for synchronous gating experiments."],
+        ["- PostToolUse: per-tool capture; seeing one ExperienceEngine PostToolUse after each tool call is expected."],
+        ["- Project hook home: /tmp/.experienceengine"],
+        ["- Runtime target: windows"]
       ])
     );
   });

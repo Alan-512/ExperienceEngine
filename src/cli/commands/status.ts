@@ -98,8 +98,24 @@ export const runStatusCommand = (): void => {
     console.log(`- Codex task runs in current repo: ${codex.learningLoop.recentTaskRuns}`);
   }
   if (codex.hooks) {
+    const missingEvents = codex.hooks.missingEvents ?? [];
+    const missingEventNames = new Set<string>(missingEvents);
+    const defaultHookEvents: string[] = ["UserPromptSubmit", "PostToolUse", "Stop"];
+    const registeredEvents = defaultHookEvents.filter(
+      (eventName) => !missingEventNames.has(eventName)
+    );
+
     console.log(`- Codex hooks: ${codex.hooks.state}`);
     console.log(`- Codex hooks feature: ${codex.hooks.featureEnabled ? "enabled" : "disabled"}`);
+    console.log(`- Codex hook events: ${registeredEvents.join(", ") || "none"}`);
+    console.log("- Codex PreToolUse: disabled by default; enable only for synchronous gating experiments");
+    console.log("- Codex PostToolUse: per-tool capture; one entry after each tool call is expected");
+    if (codex.paths?.productHome) {
+      console.log(`- Codex project hook home: ${codex.paths.productHome}`);
+    }
+    if (codex.runtimeTarget) {
+      console.log(`- Codex runtime target: ${codex.runtimeTarget}`);
+    }
   }
   if (codex.cliFallback) {
     console.log(`- Codex CLI fallback available: ${codex.cliFallback.available ? "yes" : "no"}`);
