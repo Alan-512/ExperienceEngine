@@ -215,7 +215,9 @@ const normalizeWarningLines = (lines: string[]): string[] => {
 };
 
 export const splitWarningPrefixedOutput = (output: string): { warnings: string[]; body: string } => {
-  const normalizedOutput = output.includes("\n") ? output : output.replace(/\\n/g, "\n");
+  const normalizedOutput = output.includes("\n")
+    ? output
+    : output.replace(/^Config warnings:\\n/, "Config warnings:\n");
   const lines = normalizedOutput
     .split(/\r?\n/)
     .map((line) => line.trimEnd())
