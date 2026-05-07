@@ -6,16 +6,32 @@ import { stableId } from "../utils/ids.js";
 const WINDOWS_DRIVE_PATH_RE = /^[A-Za-z]:[\\/]/;
 const WSL_MOUNT_PATH_RE = /^\/mnt\/[A-Za-z]\//;
 
+const isWindowsOrWslAbsolutePath = (path: string): boolean =>
+  WINDOWS_DRIVE_PATH_RE.test(path) || WSL_MOUNT_PATH_RE.test(path);
+
+const normalizeSlashes = (path: string): string => path.replace(/\\/g, "/");
+
 export const normalizeScopeIdentityPath = (rootPath: string): string => {
-  if (WINDOWS_DRIVE_PATH_RE.test(rootPath) || WSL_MOUNT_PATH_RE.test(rootPath)) {
-    return rootPath.toLowerCase();
+  const slashPath = normalizeSlashes(rootPath);
+  const wslMatch = /^\/mnt\/([A-Za-z])\/(.*)$/.exec(slashPath);
+  if (wslMatch) {
+    return `${wslMatch[1].toLowerCase()}:/${wslMatch[2]}`.toLowerCase();
+  }
+  if (WINDOWS_DRIVE_PATH_RE.test(rootPath)) {
+    return slashPath.toLowerCase();
   }
   return rootPath;
 };
 
+const scopeNameFromPath = (rootPath: string): string => {
+  const slashPath = normalizeSlashes(rootPath).replace(/\/+$/, "");
+  return slashPath.split("/").filter(Boolean).at(-1) ?? basename(rootPath);
+};
+
 export const resolveScope = (cwd?: string): Scope => {
-  const rootPath = resolve(cwd ?? process.cwd());
-  const scopeName = basename(rootPath);
+  const inputPath = cwd ?? process.cwd();
+  const rootPath = isWindowsOrWslAbsolutePath(inputPath) ? inputPath : resolve(inputPath);
+  const scopeName = scopeNameFromPath(rootPath);
   const timestamp = nowIso();
   const identityPath = normalizeScopeIdentityPath(rootPath);
 

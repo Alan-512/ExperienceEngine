@@ -1,6 +1,7 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { resolveExperienceEnginePaths } from "../../config/path-resolver.js";
 import type { createCodexBehaviorLoop } from "../../adapters/codex/behavior-loop.js";
 
@@ -67,6 +68,67 @@ const readSession = (sessionId: string): CodexHookSession => {
 
 const writeSession = (sessionId: string, session: CodexHookSession): void => {
   writeFileSync(sessionPath(sessionId), `${JSON.stringify(session, null, 2)}\n`, "utf8");
+};
+
+const stableJson = (value: unknown): string => {
+  if (value === undefined) {
+    return "undefined";
+  }
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value) ?? "undefined";
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map((entry) => stableJson(entry)).join(",")}]`;
+  }
+
+  const record = value as Record<string, unknown>;
+  return `{${Object.keys(record).sort().map((key) => `${JSON.stringify(key)}:${stableJson(record[key])}`).join(",")}}`;
+};
+
+const hashJson = (value: unknown): string =>
+  createHash("sha256").update(stableJson(value)).digest("hex").slice(0, 16);
+
+const codexHookTracePath = (): string | undefined => {
+  const explicitPath = process.env.EXPERIENCE_ENGINE_CODEX_HOOK_TRACE_PATH?.trim();
+  if (explicitPath) {
+    return explicitPath;
+  }
+  if (process.env.EXPERIENCE_ENGINE_CODEX_HOOK_TRACE === "1") {
+    const paths = resolveExperienceEnginePaths({ adapter: "codex" });
+    mkdirSync(paths.dataDir, { recursive: true });
+    return join(paths.dataDir, "hook-trace.jsonl");
+  }
+  return undefined;
+};
+
+const traceCodexHookPayload = (payload: CodexHookPayload, queued: boolean): void => {
+  const tracePath = codexHookTracePath();
+  if (!tracePath) {
+    return;
+  }
+
+  mkdirSync(dirname(tracePath), { recursive: true });
+  const event = payload.hook_event_name ?? "unknown";
+  const record = {
+    ts: new Date().toISOString(),
+    event,
+    sessionId: payload.session_id,
+    turnId: payload.turn_id,
+    cwd: payload.cwd,
+    toolName: payload.tool_name,
+    toolUseId: payload.tool_use_id,
+    queued,
+    fingerprint: hashJson({
+      event,
+      sessionId: payload.session_id,
+      turnId: payload.turn_id,
+      toolName: payload.tool_name,
+      toolUseId: payload.tool_use_id,
+      toolInput: payload.tool_input,
+      toolResponse: payload.hook_event_name === "PostToolUse" ? payload.tool_response : undefined
+    })
+  };
+  appendFileSync(tracePath, `${JSON.stringify(record)}\n`, "utf8");
 };
 
 const summarizeJson = (value: unknown): string | undefined => {
@@ -274,6 +336,9 @@ export const handleCodexHookPayload = async (
   payload: CodexHookPayload,
   behaviorLoop?: CodexBehaviorLoop
 ): Promise<Record<string, unknown>> => {
+  const willQueue = !behaviorLoop && (payload.hook_event_name === "PostToolUse" || payload.hook_event_name === "Stop");
+  traceCodexHookPayload(payload, willQueue);
+
   switch (payload.hook_event_name) {
     case "UserPromptSubmit":
       return runUserPromptSubmit(payload, behaviorLoop ?? await createDefaultBehaviorLoop());

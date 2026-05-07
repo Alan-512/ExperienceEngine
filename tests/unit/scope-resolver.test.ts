@@ -10,4 +10,13 @@ describe("resolveScope", () => {
     expect(upper.root_path).toBe("/mnt/d/project/ExperienceEngine");
     expect(lower.root_path).toBe("/mnt/d/project/experienceengine");
   });
+
+  it("uses the same scope identity for Windows and WSL paths pointing to the same project", () => {
+    const windows = resolveScope("D:\\project\\ExperienceEngine");
+    const wsl = resolveScope("/mnt/d/project/ExperienceEngine");
+
+    expect(windows.scope_id).toBe(wsl.scope_id);
+    expect(windows.root_path).toBe("D:\\project\\ExperienceEngine");
+    expect(wsl.root_path).toBe("/mnt/d/project/ExperienceEngine");
+  });
 });
