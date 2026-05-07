@@ -88,6 +88,19 @@ export const toWindowsRuntimePath = (value: string): string => {
   return normalizeWindowsDrivePath(resolved);
 };
 
+export const toPosixRuntimePath = (value: string): string => {
+  const resolved = resolve(value);
+  if (isWindowsMountedPath(resolved)) {
+    return resolved;
+  }
+  if (/^[A-Za-z]:\\/.test(resolved)) {
+    const drive = resolved[0].toLowerCase();
+    const rest = resolved.slice(3).replace(/\\/g, "/");
+    return `/mnt/${drive}/${rest}`;
+  }
+  return resolved;
+};
+
 const resolveRealPath = (value: string): string => (existsSync(value) ? realpathSync(value) : resolve(value));
 
 const ensurePosixLauncher = (path: string, packageRoot: string, command: "claude-hook" | "mcp-server"): void => {

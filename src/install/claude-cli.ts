@@ -5,6 +5,8 @@ import {
   buildClaudeMcpServerCommandForTarget,
   ensureClaudeLaunchers,
   resolveClaudeRuntimeTarget,
+  toPosixRuntimePath,
+  toWindowsRuntimePath,
   type ClaudeRuntimeTarget
 } from "./claude-runtime-target.js";
 
@@ -63,26 +65,44 @@ export const buildClaudeAddCommand = (
   experienceEngineHome: string,
   cliEnv?: NodeJS.ProcessEnv,
   runtimeTarget?: ClaudeRuntimeTarget
-): ClaudeCommand => ({
-  bin: "claude",
-  args: [
-    "mcp",
-    "add",
-    "-s",
-    "project",
-    CLAUDE_EXPERIENCEENGINE_SERVER,
-    "-e",
-    `EXPERIENCE_ENGINE_HOME=${experienceEngineHome}`,
-    "--",
-    ...buildExperienceEngineMcpServerCommand(packageRoot, {
-      productHome: experienceEngineHome,
-      runtimeTarget,
-      env: cliEnv
-    })
-  ],
-  description: "Register the ExperienceEngine MCP server with Claude Code",
-  env: cliEnv
-});
+): ClaudeCommand => {
+  const launcher = [
+    "const cp=require('node:child_process');",
+    "const path=require('node:path');",
+    "const win=process.platform==='win32';",
+    "const home=win?process.env.EXPERIENCE_ENGINE_HOME_WINDOWS:process.env.EXPERIENCE_ENGINE_HOME_POSIX;",
+    "const root=win?process.env.EXPERIENCE_ENGINE_PACKAGE_ROOT_WINDOWS:process.env.EXPERIENCE_ENGINE_PACKAGE_ROOT_POSIX;",
+    "if(!home||!root){console.error('[ExperienceEngine] Missing Claude MCP launcher environment.');process.exit(1);}",
+    "process.env.EXPERIENCE_ENGINE_HOME=home;",
+    "const child=cp.spawn(process.execPath,['--no-warnings',path.join(root,'dist/cli/index.js'),'mcp-server'],{stdio:'inherit',env:process.env});",
+    "child.on('exit',(code,signal)=>process.exit(code??(signal?1:0)));"
+  ].join("");
+
+  return {
+    bin: "claude",
+    args: [
+      "mcp",
+      "add",
+      "-s",
+      "project",
+      CLAUDE_EXPERIENCEENGINE_SERVER,
+      "-e",
+      `EXPERIENCE_ENGINE_HOME_WINDOWS=${toWindowsRuntimePath(experienceEngineHome)}`,
+      "-e",
+      `EXPERIENCE_ENGINE_HOME_POSIX=${toPosixRuntimePath(experienceEngineHome)}`,
+      "-e",
+      `EXPERIENCE_ENGINE_PACKAGE_ROOT_WINDOWS=${toWindowsRuntimePath(packageRoot)}`,
+      "-e",
+      `EXPERIENCE_ENGINE_PACKAGE_ROOT_POSIX=${toPosixRuntimePath(packageRoot)}`,
+      "--",
+      "node",
+      "-e",
+      launcher
+    ],
+    description: "Register the ExperienceEngine MCP server with Claude Code",
+    env: cliEnv
+  };
+};
 
 export const buildClaudeGetCommand = (cliEnv?: NodeJS.ProcessEnv): ClaudeCommand => ({
   bin: "claude",

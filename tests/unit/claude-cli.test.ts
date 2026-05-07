@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   buildClaudeAddCommand,
-  buildExperienceEngineMcpServerCommand,
   parseClaudeMcpServerInfo
 } from "../../src/install/claude-cli.js";
 
@@ -9,20 +8,16 @@ describe("Claude CLI wiring", () => {
   it("builds the documented add command for the ExperienceEngine MCP server", () => {
     const command = buildClaudeAddCommand("/tmp/experienceengine", "/tmp/ee-home");
 
-    expect([command.bin, ...command.args]).toEqual([
-      "claude",
-      "mcp",
-      "add",
-      "-s",
-      "project",
-      "experienceengine",
-      "-e",
-      "EXPERIENCE_ENGINE_HOME=/tmp/ee-home",
-      "--",
-      ...buildExperienceEngineMcpServerCommand("/tmp/experienceengine", {
-        productHome: "/tmp/ee-home"
-      })
-    ]);
+    expect(command.bin).toBe("claude");
+    expect(command.args.slice(0, 5)).toEqual(["mcp", "add", "-s", "project", "experienceengine"]);
+    expect(command.args).toContain("EXPERIENCE_ENGINE_HOME_WINDOWS=D:\\tmp\\ee-home");
+    expect(command.args).toContain("EXPERIENCE_ENGINE_HOME_POSIX=/mnt/d/tmp/ee-home");
+    expect(command.args).toContain("EXPERIENCE_ENGINE_PACKAGE_ROOT_WINDOWS=D:\\tmp\\experienceengine");
+    expect(command.args).toContain("EXPERIENCE_ENGINE_PACKAGE_ROOT_POSIX=/mnt/d/tmp/experienceengine");
+    expect(command.args.slice(-3)[0]).toBe("node");
+    expect(command.args.slice(-3)[1]).toBe("-e");
+    expect(command.args.slice(-3)[2]).toContain("process.platform==='win32'");
+    expect(command.args.slice(-3)[2]).toContain("'mcp-server'");
   });
 
   it("parses `claude mcp get` output", () => {
