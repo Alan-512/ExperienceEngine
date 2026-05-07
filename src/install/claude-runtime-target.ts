@@ -112,7 +112,9 @@ const ensureWindowsLauncher = (
       ? `@echo off\r\nwsl.exe bash -lc "export EXPERIENCE_ENGINE_HOME='${escapeSingleQuotedBash(
           realHome
         )}'; node --no-warnings '${escapeSingleQuotedBash(entry)}' ${command}"\r\n`
-      : `@echo off\r\nnode --no-warnings "${escapeDoubleQuotedWindows(
+      : `@echo off\r\nset "EXPERIENCE_ENGINE_HOME=${escapeDoubleQuotedWindows(
+          toWindowsRuntimePath(realHome)
+        )}"\r\nnode --no-warnings "${escapeDoubleQuotedWindows(
           toWindowsRuntimePath(entry)
         )}" ${command} %*\r\n`;
   writeFileSync(path, script, "utf8");

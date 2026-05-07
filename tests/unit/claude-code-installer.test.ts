@@ -259,6 +259,7 @@ To remove this server, run: claude mcp remove "experienceengine" -s project`;
     } else {
       expect(hookLauncher).toContain("node --no-warnings");
       expect(hookLauncher).toContain("claude-hook");
+      expect(hookLauncher).toContain("set \"EXPERIENCE_ENGINE_HOME=");
     }
   });
 
