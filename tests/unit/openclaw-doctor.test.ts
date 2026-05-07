@@ -62,6 +62,21 @@ const pluginConfigOutput = `Config warnings:\\n- plugins.entries.feishu: plugin 
 }
 `;
 
+const boxedWarningsOutput = `\u2502
+\u25c7  Config warnings \u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256e
+\u2502
+\u2502  - plugins.entries.feishu: plugin feishu: duplicate plugin id detected;
+\u2502    global plugin will be overridden by bundled plugin
+\u2502    (/home/seed/.openclaw/extensions/feishu/index.ts)
+\u2502  - plugins.entries.qwen-portal-auth: plugin not found: qwen-portal-auth
+\u2502    (stale config entry ignored; remove it from plugins config)
+\u2502
+\u251c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u256f
+ExperienceEngine
+id: experienceengine
+Status: loaded
+`;
+
 describe("OpenClaw doctor host-state parsing", () => {
   const currentVersion = readCurrentPackageVersion();
 
@@ -72,7 +87,17 @@ describe("OpenClaw doctor host-state parsing", () => {
     expect(parsed.status).toBe("error");
     expect(parsed.error).toContain("EACCES");
     expect(parsed.installPath).toBe("~/openclaw-dev/ExperienceEngine-git");
-    expect(parsed.warnings[0]).toContain("Config warnings:");
+    expect(parsed.warnings[0]).toContain("plugins.entries.feishu");
+  });
+
+  it("normalizes OpenClaw boxed warning output into concise warning entries", () => {
+    const parsed = parseOpenClawPluginInfo(boxedWarningsOutput);
+
+    expect(parsed.status).toBe("loaded");
+    expect(parsed.warnings).toEqual([
+      "plugins.entries.feishu: plugin feishu: duplicate plugin id detected; global plugin will be overridden by bundled plugin (/home/seed/.openclaw/extensions/feishu/index.ts)",
+      "plugins.entries.qwen-portal-auth: plugin not found: qwen-portal-auth (stale config entry ignored; remove it from plugins config)"
+    ]);
   });
 
   it("parses warning-prefixed plugin entry config JSON", () => {
@@ -82,7 +107,7 @@ describe("OpenClaw doctor host-state parsing", () => {
     expect(parsed.entry?.config?.sqlitePath).toBe(
       "/home/seed/.openclaw/experienceengine/sqlite/experienceengine.db"
     );
-    expect(parsed.warnings[0]).toContain("Config warnings:");
+    expect(parsed.warnings[0]).toContain("plugins.entries.feishu");
   });
 
   it("inspects live host state and reports config matches", () => {

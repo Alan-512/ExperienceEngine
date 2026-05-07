@@ -2,7 +2,11 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
-import { inspectCodexInstall, installCodexAdapter } from "../../src/install/codex-installer.js";
+import {
+  classifyCodexCliPath,
+  inspectCodexInstall,
+  installCodexAdapter
+} from "../../src/install/codex-installer.js";
 import { readCurrentPackageVersion } from "../../src/version/package-version.js";
 import { removeTempDirForTests } from "./temp-cleanup.js";
 
@@ -33,6 +37,27 @@ afterEach(() => {
 
 describe("Codex installer", () => {
   const currentVersion = readCurrentPackageVersion();
+
+  it("classifies WSL WindowsApps Codex shims as a PATH risk", () => {
+    const status = classifyCodexCliPath(
+      "/mnt/c/Users/seed/AppData/Local/Microsoft/WindowsApps/codex",
+      "posix"
+    );
+
+    expect(status.windowsAppsShim).toBe(true);
+    expect(status.warning).toContain("WindowsApps shim");
+    expect(status.recommendation).toContain("Linux Codex CLI");
+  });
+
+  it("does not warn for a Linux Codex binary on WSL PATH", () => {
+    const status = classifyCodexCliPath(
+      "/home/seed/.nvm/versions/node/v24.13.0/bin/codex",
+      "posix"
+    );
+
+    expect(status.windowsAppsShim).toBe(false);
+    expect(status.warning).toBeUndefined();
+  });
 
   it("writes install state and registers the MCP server", () => {
     const homeDir = makeTempDir();

@@ -622,6 +622,11 @@ Diagnostics note:
 - `ee doctor codex` separates project hook health, `codex_hooks` enablement, MCP registration, and PATH-visible `ee` CLI fallback
 - Windows Codex App can have healthy project hooks even when a Windows `codex` CLI is not installed
 - WSL Codex CLI must have its own MCP registration in the WSL Codex home; it can still reuse the same repo `.codex/hooks.json`
+- on WSL, `ee doctor codex` also warns when `codex` resolves to a WindowsApps shim instead of the Linux Codex CLI
+
+Developer source-repo host validation lives at:
+
+- [docs/development/source-repo-host-validation.md](development/source-repo-host-validation.md)
 
 Source-repo host validation matrix:
 

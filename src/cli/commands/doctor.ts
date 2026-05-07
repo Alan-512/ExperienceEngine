@@ -264,8 +264,16 @@ const logCodexRuntimeStatus = (status?: {
     path?: string;
     recommendation?: string;
   };
+  codexCli?: {
+    command: "codex";
+    available: boolean;
+    path?: string;
+    windowsAppsShim: boolean;
+    warning?: string;
+    recommendation?: string;
+  };
 }): void => {
-  if (!status?.runtimeTarget && !status?.cliFallback) {
+  if (!status?.runtimeTarget && !status?.cliFallback && !status?.codexCli) {
     return;
   }
 
@@ -327,6 +335,19 @@ const logCodexRuntimeStatus = (status?: {
     }
     if (!status.cliFallback.available && status.cliFallback.recommendation) {
       console.log(`- CLI fallback note: ${status.cliFallback.recommendation}`);
+    }
+  }
+  if (status.codexCli) {
+    console.log(`- Codex CLI command: ${status.codexCli.command}`);
+    console.log(`- Codex CLI available on PATH: ${status.codexCli.available ? "yes" : "no"}`);
+    if (status.codexCli.path) {
+      console.log(`- Codex CLI path: ${status.codexCli.path}`);
+    }
+    if (status.codexCli.warning) {
+      console.log(`- Codex CLI PATH warning: ${status.codexCli.warning}`);
+    }
+    if (status.codexCli.recommendation && (!status.codexCli.available || status.codexCli.warning)) {
+      console.log(`- Codex CLI PATH note: ${status.codexCli.recommendation}`);
     }
   }
 };
@@ -597,6 +618,8 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
         command: status.hostWiring.command ?? "",
         capture_dir: status.captureDir,
         cli_fallback: status.cliFallback?.available ?? false,
+        codex_cli_path: status.codexCli?.path ?? "",
+        codex_cli_warning: Boolean(status.codexCli?.warning),
         hook_state: status.hooks?.state ?? "",
         codex_hooks: status.hooks?.featureEnabled ?? false,
         instruction_state: status.instruction?.state ?? "",

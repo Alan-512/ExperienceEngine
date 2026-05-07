@@ -24,6 +24,14 @@ let mockCodexStatus: {
     path?: string;
     recommendation?: string;
   };
+  codexCli?: {
+    command: string;
+    available: boolean;
+    path?: string;
+    windowsAppsShim: boolean;
+    warning?: string;
+    recommendation?: string;
+  };
   hooks?: {
     state: string;
     featureEnabled: boolean;
@@ -364,6 +372,30 @@ describe("status command", () => {
     expect(consoleLogSpy).toHaveBeenCalledWith("- Codex CLI fallback available: no");
     expect(consoleLogSpy).toHaveBeenCalledWith(
       "- Codex CLI fallback note: Codex MCP can still run ExperienceEngine, but CLI fallback commands like `ee inspect --last` need the `ee` binary on PATH or an explicit npx invocation."
+    );
+  });
+
+  it("prints WSL Codex CLI PATH shim warnings", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    writeSharedSettings(process.env.EXPERIENCE_ENGINE_HOME);
+    mockCodexStatus.codexCli = {
+      command: "codex",
+      available: true,
+      path: "/mnt/c/Users/seed/AppData/Local/Microsoft/WindowsApps/codex",
+      windowsAppsShim: true,
+      warning: "WSL PATH resolves `codex` to the WindowsApps shim, which can fail with permission errors inside Linux.",
+      recommendation:
+        "Install or use the Linux Codex CLI earlier on PATH, or invoke the Linux binary directly before running EE host validation."
+    };
+
+    runStatusCommand();
+
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      "- Codex CLI PATH warning: WSL PATH resolves `codex` to the WindowsApps shim, which can fail with permission errors inside Linux."
+    );
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      "- Codex CLI PATH note: Install or use the Linux Codex CLI earlier on PATH, or invoke the Linux binary directly before running EE host validation."
     );
   });
 

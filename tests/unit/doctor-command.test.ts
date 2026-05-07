@@ -360,6 +360,48 @@ describe("doctor command", () => {
     );
   });
 
+  it("reports WSL Codex CLI PATH shim warnings separately from the ee fallback", async () => {
+    await runDoctorCommand("codex", {
+      inspectCodexInstall: () =>
+        codexStatus({
+          runtimeTarget: "posix",
+          codexCli: {
+            command: "codex",
+            available: true,
+            path: "/mnt/c/Users/seed/AppData/Local/Microsoft/WindowsApps/codex",
+            windowsAppsShim: true,
+            warning: "WSL PATH resolves `codex` to the WindowsApps shim, which can fail with permission errors inside Linux.",
+            recommendation:
+              "Install or use the Linux Codex CLI earlier on PATH, or invoke the Linux binary directly before running EE host validation."
+          }
+        }),
+      fetchLatestGitHubReleaseStatus: async () => ({
+        source: "github-releases",
+        repository: "Alan-512/ExperienceEngine",
+        latestVersion: null,
+        releaseUrl: null,
+        publishedAt: null,
+        state: "current",
+        updateAvailable: false
+      })
+    });
+
+    expect(consoleTableSpy).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        expect.objectContaining({
+          adapter: "codex",
+          codex_cli_warning: true
+        })
+      ])
+    );
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      "- Codex CLI PATH warning: WSL PATH resolves `codex` to the WindowsApps shim, which can fail with permission errors inside Linux."
+    );
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      "- Codex CLI PATH note: Install or use the Linux Codex CLI earlier on PATH, or invoke the Linux binary directly before running EE host validation."
+    );
+  });
+
   it("suggests the next codex action when the instruction exists but no codex task runs are recorded yet", async () => {
     await runDoctorCommand("codex", {
       inspectCodexInstall: () =>

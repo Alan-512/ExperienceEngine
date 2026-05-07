@@ -149,6 +149,15 @@ export type CodexCliFallbackStatus = {
   recommendation?: string;
 };
 
+export type CodexCliPathStatus = {
+  command: "codex";
+  available: boolean;
+  path?: string;
+  windowsAppsShim: boolean;
+  warning?: string;
+  recommendation?: string;
+};
+
 export const resolveCodexInstructionPath = (cwd = process.cwd()): string => join(cwd, "AGENTS.md");
 
 const renderManagedInstructionBlock = (): string =>
@@ -270,6 +279,66 @@ const inspectCliFallback = (env: NodeJS.ProcessEnv = process.env): CodexCliFallb
     available: false,
     recommendation:
       "Codex MCP can still run ExperienceEngine, but CLI fallback commands like `ee inspect --last` need the `ee` binary on PATH or an explicit npx invocation."
+  };
+};
+
+export const classifyCodexCliPath = (
+  path: string | undefined,
+  runtimeTarget: CodexRuntimeTarget
+): Pick<CodexCliPathStatus, "windowsAppsShim" | "warning" | "recommendation"> => {
+  const normalized = (path ?? "").replace(/\\/g, "/").toLowerCase();
+  const windowsAppsShim =
+    runtimeTarget === "posix" &&
+    (normalized.includes("/windowsapps/") || normalized.includes("microsoft/windowsapps"));
+
+  if (!windowsAppsShim) {
+    return {
+      windowsAppsShim: false
+    };
+  }
+
+  return {
+    windowsAppsShim: true,
+    warning: "WSL PATH resolves `codex` to the WindowsApps shim, which can fail with permission errors inside Linux.",
+    recommendation:
+      "Install or use the Linux Codex CLI earlier on PATH, or invoke the Linux binary directly before running EE host validation."
+  };
+};
+
+const inspectCodexCliPath = (
+  runtimeTarget: CodexRuntimeTarget,
+  env: NodeJS.ProcessEnv = process.env
+): CodexCliPathStatus => {
+  const result =
+    runtimeTarget === "posix"
+      ? spawnSync("sh", ["-c", "command -v codex"], {
+          encoding: "utf8",
+          env
+        })
+      : spawnSync("where", ["codex"], {
+          encoding: "utf8",
+          env
+        });
+  const path = result.status === 0 ? result.stdout.split(/\r?\n/).find(Boolean)?.trim() : undefined;
+  const classified = classifyCodexCliPath(path, runtimeTarget);
+
+  if (path) {
+    return {
+      command: "codex",
+      available: true,
+      path,
+      ...classified
+    };
+  }
+
+  return {
+    command: "codex",
+    available: false,
+    path,
+    ...classified,
+    recommendation:
+      classified.recommendation ??
+      "Codex host validation needs the `codex` binary on PATH for the selected runtime target."
   };
 };
 
@@ -420,6 +489,7 @@ export const inspectCodexInstall = (options: InstallerOptions = {}) => {
     instruction
   });
   const cliFallback = inspectCliFallback(options.cliEnv ?? options.env ?? process.env);
+  const codexCli = inspectCodexCliPath(runtimeTarget, options.cliEnv ?? options.env ?? process.env);
   const resolutionEnv: NodeJS.ProcessEnv = {
     ...(options.env ?? process.env),
     EXPERIENCE_ENGINE_ADAPTER: "codex"
@@ -460,6 +530,7 @@ export const inspectCodexInstall = (options: InstallerOptions = {}) => {
       transport: hostInfo?.transport,
       enabled: hostInfo?.enabled ?? false
     },
+    codexCli,
     cliFallback,
     instruction,
     learningLoop,

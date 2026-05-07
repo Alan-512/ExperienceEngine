@@ -163,8 +163,60 @@ export const runOpenClawCommand = (
   return typeof result === "string" ? result : "";
 };
 
+const normalizeWarningLine = (line: string): string => {
+  const withoutBox = line
+    .replace(/^[\s│┃║┆┊┋╎╏┆┊┌┐└┘├┤┬┴┼╭╮╰╯◇◆]+/, "")
+    .replace(/[\s│┃║┆┊┋╎╏┌┐└┘├┤┬┴┼╭╮╰╯]+$/, "")
+    .trim();
+
+  return withoutBox.replace(/\s+/g, " ");
+};
+
+const isWarningFrameLine = (line: string): boolean => {
+  const normalized = normalizeWarningLine(line);
+  return (
+    normalized.length === 0 ||
+    normalized === "Config warnings" ||
+    normalized.startsWith("Config warnings ") ||
+    /^[─━═\-]+$/.test(normalized)
+  );
+};
+
+const normalizeWarningLines = (lines: string[]): string[] => {
+  const warnings: string[] = [];
+
+  for (const line of lines) {
+    const normalized = normalizeWarningLine(line);
+    if (isWarningFrameLine(line)) {
+      continue;
+    }
+
+    if (normalized.startsWith("Config warnings:")) {
+      const rest = normalized.slice("Config warnings:".length).trim();
+      if (rest) {
+        warnings.push(rest.replace(/^-+\s*/, ""));
+      }
+      continue;
+    }
+
+    if (normalized.startsWith("- ")) {
+      warnings.push(normalized.slice(2).trim());
+      continue;
+    }
+
+    if (warnings.length > 0) {
+      warnings[warnings.length - 1] = `${warnings[warnings.length - 1]} ${normalized}`.trim();
+    } else {
+      warnings.push(normalized);
+    }
+  }
+
+  return warnings;
+};
+
 export const splitWarningPrefixedOutput = (output: string): { warnings: string[]; body: string } => {
-  const lines = output
+  const normalizedOutput = output.includes("\n") ? output : output.replace(/\\n/g, "\n");
+  const lines = normalizedOutput
     .split(/\r?\n/)
     .map((line) => line.trimEnd())
     .filter((line) => line.length > 0);
@@ -180,11 +232,11 @@ export const splitWarningPrefixedOutput = (output: string): { warnings: string[]
   });
 
   if (bodyStart < 0) {
-    return { warnings: lines, body: "" };
+    return { warnings: normalizeWarningLines(lines), body: "" };
   }
 
   return {
-    warnings: lines.slice(0, bodyStart),
+    warnings: normalizeWarningLines(lines.slice(0, bodyStart)),
     body: lines.slice(bodyStart).join("\n")
   };
 };

@@ -123,6 +123,12 @@ export const runStatusCommand = (): void => {
       console.log(`- Codex CLI fallback note: ${codex.cliFallback.recommendation}`);
     }
   }
+  if (codex.codexCli?.warning) {
+    console.log(`- Codex CLI PATH warning: ${codex.codexCli.warning}`);
+    if (codex.codexCli.recommendation) {
+      console.log(`- Codex CLI PATH note: ${codex.codexCli.recommendation}`);
+    }
+  }
   if (openclaw.runtimeDefaults) {
     console.log(`- OpenClaw learning loop: ${openclaw.runtimeDefaults.learningLoopState}`);
     console.log(
