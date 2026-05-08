@@ -199,8 +199,7 @@ const summarizeScorecard = (
 export const createCodexBehaviorLoop = (options: CodexServerOptions = {}) => {
   let promptRuntime: ExperiencePromptRuntimeService | undefined;
   let runtime: Promise<ExperienceRuntimeService> | undefined;
-  const promptContexts = new Map<string, HostPromptContext>();
-  const replayedPromptContexts = new Set<string>();
+  const promptLookups = new Map<string, { context: HostPromptContext; injectedNodeIds: string[] }>();
 
   const getPromptRuntime = () => {
     promptRuntime ??= createCodexPromptRuntime(options);
@@ -209,15 +208,7 @@ export const createCodexBehaviorLoop = (options: CodexServerOptions = {}) => {
 
   const getRuntime = async () => {
     runtime ??= createCodexRuntime(options);
-    const fullRuntime = await runtime;
-    for (const [sessionId, context] of promptContexts) {
-      if (replayedPromptContexts.has(sessionId)) {
-        continue;
-      }
-      await fullRuntime.beforePromptBuild(context);
-      replayedPromptContexts.add(sessionId);
-    }
-    return fullRuntime;
+    return runtime;
   };
 
   return {
@@ -230,7 +221,10 @@ export const createCodexBehaviorLoop = (options: CodexServerOptions = {}) => {
         taskSummary: args.prompt
       };
       const result = await getPromptRuntime().beforePromptBuild(context);
-      promptContexts.set(args.sessionId ?? "global", context);
+      promptLookups.set(args.sessionId ?? "global", {
+        context,
+        injectedNodeIds: result.input.injected_node_ids
+      });
 
       return {
         mode: result.mode,
@@ -266,14 +260,15 @@ export const createCodexBehaviorLoop = (options: CodexServerOptions = {}) => {
 
     async finalizeTask(args: CodexFinalizeArgs) {
       const fullRuntime = await getRuntime();
+      const promptLookup = promptLookups.get(args.sessionId);
       const input = await fullRuntime.finalizeTask({
         host: "codex",
         sessionId: args.sessionId,
-        cwd: args.cwd,
+        cwd: args.cwd ?? promptLookup?.context.cwd,
         userMessage: args.prompt ?? "",
-        taskSummary: args.prompt,
+        taskSummary: args.prompt ?? promptLookup?.context.taskSummary,
         contextSummary: args.contextSummary,
-        injectedNodeIds: args.injectedNodeIds
+        injectedNodeIds: args.injectedNodeIds ?? promptLookup?.injectedNodeIds
       });
 
       return {

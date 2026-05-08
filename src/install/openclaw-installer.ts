@@ -13,7 +13,7 @@ import {
   writeFileSync
 } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join, posix, resolve } from "node:path";
 import { loadConfig } from "../config/load-config.js";
 import { defaultConfig } from "../config/default-config.js";
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
@@ -249,8 +249,8 @@ const isOpenClawExcludedRuntimePath = (relativePath: string): boolean =>
 
 const resolveOpenClawPackagedRuntimeImport = (fromFile: string, specifier: string): string | null => {
   const normalizedFromFile = normalizeOpenClawPackagedRuntimePath(fromFile);
-  const baseDir = dirname(normalizedFromFile);
-  const resolvedPath = normalizeOpenClawPackagedRuntimePath(resolve("/", baseDir, specifier));
+  const baseDir = posix.dirname(normalizedFromFile);
+  const resolvedPath = normalizeOpenClawPackagedRuntimePath(posix.resolve("/", baseDir, specifier));
   const relativePath = resolvedPath.startsWith("/") ? resolvedPath.slice(1) : resolvedPath;
   return isOpenClawPackagedRuntimeFile(relativePath) ? relativePath : null;
 };
@@ -790,6 +790,13 @@ export const inspectOpenClawInstall = (options: InstallerOptions = {}) => {
     };
   }
 
+  const hostRestartSatisfied =
+    hostState.status === "loaded" &&
+    hostState.enabled !== false &&
+    hostState.configMatches &&
+    hostState.driftDetected !== true &&
+    !hostState.error;
+
   return {
     adapter: "openclaw" as const,
     installed: paths.usedInstallState,
@@ -804,7 +811,7 @@ export const inspectOpenClawInstall = (options: InstallerOptions = {}) => {
     installMode: state?.installMode,
     hostWiring: {
       wired: state?.hostWiring?.wired ?? false,
-      restartRecommended: state?.hostWiring?.restartRecommended ?? false
+      restartRecommended: Boolean(state?.hostWiring?.restartRecommended) && !hostRestartSatisfied
     },
     runtimeDefaults,
     workspace,

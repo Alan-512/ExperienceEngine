@@ -19,6 +19,9 @@ describe("maintenance command", () => {
         targetToolName: "mcp__experienceengine__experienceengine_get_capabilities",
         toolSeen: true,
         toolResultSeen: true,
+        mcpServerToolAvailable: true,
+        mcpServerToolNames: ["experienceengine_get_capabilities"],
+        mcpServerError: null,
         assistantText: "Capabilities loaded.",
         usedTranscriptConclusion: true
       })
@@ -32,6 +35,7 @@ describe("maintenance command", () => {
         ["[ExperienceEngine] Transcript: /tmp/claude-session.jsonl"],
         ["[ExperienceEngine] Target tool seen: yes (mcp__experienceengine__experienceengine_get_capabilities)"],
         ["[ExperienceEngine] Tool result seen: yes"],
+        ["[ExperienceEngine] MCP server exposes target tool: yes"],
         ["[ExperienceEngine] Transcript conclusion: Capabilities loaded."]
       ])
     );

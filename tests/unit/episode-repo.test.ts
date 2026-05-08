@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -11,6 +11,7 @@ import { InputRecordRepository } from "../../src/store/sqlite/repositories/input
 import { OutcomeRecordRepository } from "../../src/store/sqlite/repositories/outcome-record-repo.js";
 import { ReviewEventRepository } from "../../src/store/sqlite/repositories/review-event-repo.js";
 import { TaskRunRepository } from "../../src/store/sqlite/repositories/task-run-repo.js";
+import { removeTempDirForTests } from "./temp-cleanup.js";
 
 const tempDirs: string[] = [];
 
@@ -30,7 +31,7 @@ const makeDb = () => {
 
 afterEach(() => {
   while (tempDirs.length) {
-    rmSync(tempDirs.pop()!, { recursive: true, force: true });
+    removeTempDirForTests(tempDirs.pop()!);
   }
 });
 

@@ -12,7 +12,7 @@ describe("Claude plugin assets", () => {
 
     expect(manifest.name).toBe("experienceengine");
     expect(manifest.description).toBeTypeOf("string");
-    expect(manifest.version).toBe("0.2.1");
+    expect(manifest.version).toBe("0.3.0");
   });
 
   it("defines hooks that bootstrap dependencies and route Claude hook events into EE", () => {
@@ -54,7 +54,7 @@ describe("Claude plugin assets", () => {
     expect(hookScript).toContain("claude-marketplace-state.json");
   });
 
-  it("defines an MCP server that uses the installed product launcher and shared EE home", () => {
+  it("defines an MCP server that uses the plugin bootstrap launcher without local paths", () => {
     const mcp = JSON.parse(readFileSync(join(repoRoot, ".mcp.json"), "utf8")) as {
       mcpServers: Record<
         string,
@@ -67,12 +67,28 @@ describe("Claude plugin assets", () => {
     };
 
     const server = mcp.mcpServers.experienceengine;
-    expect(server.command).toContain("/.experienceengine/bin/experienceengine-mcp-server");
-    expect(server.args).toEqual([]);
-    expect(server.env).toEqual(
-      expect.objectContaining({
-        EXPERIENCE_ENGINE_HOME: "/home/seed/.experienceengine"
-      })
+    expect(server.command).toBe("bash");
+    expect(server.args).toEqual(["${CLAUDE_PLUGIN_ROOT}/scripts/claude-plugin/mcp-server.sh"]);
+    expect(server.env).toBeUndefined();
+
+    const serialized = JSON.stringify(mcp);
+    expect(serialized).not.toContain("D:\\");
+    expect(serialized).not.toContain("/mnt/");
+    expect(serialized).not.toContain("/home/");
+  });
+
+  it("ships Claude plugin MCP scripts that bootstrap dependencies and record MCP liveness", () => {
+    const sourceScript = readFileSync(join(repoRoot, "scripts", "claude-plugin", "mcp-server.sh"), "utf8");
+    const bundledScript = readFileSync(
+      join(repoRoot, "plugins", "claude-code-experienceengine", "scripts", "mcp-server.sh"),
+      "utf8"
     );
+
+    expect(sourceScript).toContain("install-deps.sh");
+    expect(sourceScript).toContain("last_mcp_seen_at");
+    expect(sourceScript).toContain("mcp-server");
+    expect(bundledScript).toContain("install-deps.sh");
+    expect(bundledScript).toContain("last_mcp_seen_at");
+    expect(bundledScript).toContain("mcp-server");
   });
 });

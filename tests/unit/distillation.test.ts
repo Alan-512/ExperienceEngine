@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -17,6 +17,7 @@ import { CandidateRepository } from "../../src/store/sqlite/repositories/candida
 import { DistillationJobRepository } from "../../src/store/sqlite/repositories/distillation-job-repo.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
 import type { DistillationJob, ExperienceCandidate } from "../../src/types/domain.js";
+import { removeTempDirForTests } from "./temp-cleanup.js";
 
 const tempDirs: string[] = [];
 
@@ -40,7 +41,7 @@ afterEach(() => {
   clearEmbeddingProviderForTests();
   clearEmbeddingRuntimeCaches();
   while (tempDirs.length) {
-    rmSync(tempDirs.pop()!, { recursive: true, force: true });
+    removeTempDirForTests(tempDirs.pop()!);
   }
 });
 

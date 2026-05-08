@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -20,6 +20,7 @@ import { ReviewEventRepository } from "../../src/store/sqlite/repositories/revie
 import { RepoPolicyRepository } from "../../src/store/sqlite/repositories/repo-policy-repo.js";
 import { ScopeRepository } from "../../src/store/sqlite/repositories/scope-repo.js";
 import { nowIso } from "../../src/utils/clock.js";
+import { removeTempDirForTests } from "./temp-cleanup.js";
 
 const tempDirs: string[] = [];
 
@@ -33,7 +34,7 @@ afterEach(() => {
   while (tempDirs.length) {
     const dir = tempDirs.pop();
     if (dir) {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDirForTests(dir);
     }
   }
 });

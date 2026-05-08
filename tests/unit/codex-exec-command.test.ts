@@ -1,4 +1,5 @@
 import type { SpawnSyncReturns } from "node:child_process";
+import { resolve } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runCodexCommand } from "../../src/cli/commands/codex.js";
 
@@ -10,6 +11,8 @@ afterEach(() => {
 });
 
 describe("codex exec wrapper command", () => {
+  const repoPath = resolve("/repo");
+
   it("prints usage when no prompt is provided", async () => {
     await runCodexCommand("exec", ["-C", "/repo"]);
 
@@ -70,7 +73,7 @@ describe("codex exec wrapper command", () => {
     );
 
     expect(lookupHints).toHaveBeenCalledWith({
-      cwd: "/repo",
+      cwd: repoPath,
       prompt: "Fix the failing auth test from stdin",
       sessionId: "codex_exec_stdin_session"
     });
@@ -85,7 +88,7 @@ describe("codex exec wrapper command", () => {
     });
     expect(finalizeTask).toHaveBeenCalledWith({
       sessionId: "codex_exec_stdin_session",
-      cwd: "/repo",
+      cwd: repoPath,
       prompt: "Fix the failing auth test from stdin",
       contextSummary: "Wrapped codex exec completed with exit code 0."
     });
@@ -142,7 +145,7 @@ describe("codex exec wrapper command", () => {
     );
 
     expect(lookupHints).toHaveBeenCalledWith({
-      cwd: "/repo",
+      cwd: repoPath,
       prompt: "Fix the failing auth test",
       sessionId: "codex_exec_test_session"
     });
@@ -157,7 +160,7 @@ describe("codex exec wrapper command", () => {
         expect.stringContaining("ExperienceEngine lifecycle is managed externally for this run.")
       ],
       expect.objectContaining({
-        cwd: "/repo",
+        cwd: repoPath,
         stdio: ["ignore", "inherit", "inherit"],
         env: expect.objectContaining({
           CODEX_CONFIG_PATH: "/tmp/codex-wrapper.toml"
@@ -176,7 +179,7 @@ describe("codex exec wrapper command", () => {
     });
     expect(finalizeTask).toHaveBeenCalledWith({
       sessionId: "codex_exec_test_session",
-      cwd: "/repo",
+      cwd: repoPath,
       prompt: "Fix the failing auth test",
       contextSummary: "Wrapped codex exec completed with exit code 0."
     });
@@ -300,7 +303,7 @@ describe("codex exec wrapper command", () => {
     );
 
     expect(lookupHints).toHaveBeenCalledWith({
-      cwd: "/repo",
+      cwd: repoPath,
       prompt: "Say ok",
       sessionId: "custom-session"
     });

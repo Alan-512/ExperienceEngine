@@ -594,9 +594,10 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     input: ExperienceInput,
     sessionId: string,
     session: SessionState,
-    episodeId?: string
+    episodeId?: string,
+    cwd?: string
   ): ExperienceInputRecord {
-    const resolvedScope = resolveScope(session.context?.cwd);
+    const resolvedScope = resolveScope(cwd ?? session.context?.cwd);
     const existingScope = this.scopeRepo.getById(resolvedScope.scope_id);
     this.scopeRepo.upsert({
       ...resolvedScope,
@@ -1412,17 +1413,18 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       | undefined;
     withTransaction(this.db, () => {
       const episodeId = resolveEpisodeId(session, sessionId, input);
-      const record = this.persistFinalizedInput(input, sessionId, session, episodeId);
+      const record = this.persistFinalizedInput(input, sessionId, session, episodeId, context.cwd);
       const taskRun = toTaskRun(input, sessionId, context, episodeId);
       this.taskRunRepo.upsert(taskRun);
       this.outcomeRepo.upsert(toOutcomeRecord(taskRun, input, episodeId));
-      this.updateInjectedNodes(input, record.record_id, taskRun.id, session.lastInjectionEvent, episodeId);
-      if (session.lastInjectionEvent) {
-        const touchedNodes = session.lastInjectionEvent.injected_node_ids
+      const injectionEvent = session.lastInjectionEvent ?? this.injectionRepo.getLatestBySessionId(sessionId);
+      this.updateInjectedNodes(input, record.record_id, taskRun.id, injectionEvent, episodeId);
+      if (injectionEvent) {
+        const touchedNodes = injectionEvent.injected_node_ids
           .map((id) => this.nodeRepo.getById(id))
           .filter((node): node is ExperienceNode => Boolean(node));
         const harmObserved = touchedNodes.some((node) => detectHarm(input, node));
-        const attributionReason = !session.lastInjectionEvent.delivered
+        const attributionReason = !injectionEvent.delivered
           ? "suppressed_delivery"
           : input.outcome_signal === "success"
             ? "success_outcome"
@@ -1431,9 +1433,9 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
                   .map((node) => classifyFailureAttributionReason(input, node))
                   .find((reason) => reason === "relevant_failure")
                   ?? classifyFailureAttributionReason(input)
-              : "unknown_outcome";
+                : "unknown_outcome";
         const resolvedInjectionEvent: InjectionEvent = {
-          ...session.lastInjectionEvent,
+          ...injectionEvent,
           was_successful: input.outcome_signal === "success",
           harm_observed: harmObserved,
           attribution_reason: attributionReason,

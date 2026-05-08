@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { afterEach, describe, expect, it } from "vitest";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
 import { CandidateRepository } from "../../src/store/sqlite/repositories/candidate-repo.js";
@@ -8,6 +8,7 @@ import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js
 import { loadConfig } from "../../src/config/load-config.js";
 import { redistillRuleNodes } from "../../src/maintenance/redistill-rule-nodes.js";
 import type { ExperienceCandidate, ExperienceNode } from "../../src/types/domain.js";
+import { removeTempDirForTests } from "./temp-cleanup.js";
 import {
   clearEmbeddingProviderForTests,
   setEmbeddingProviderForTests
@@ -33,7 +34,7 @@ const makeDb = (overrides: Partial<ReturnType<typeof loadConfig>> = {}) => {
 afterEach(() => {
   clearEmbeddingProviderForTests();
   while (tempDirs.length) {
-    rmSync(tempDirs.pop()!, { recursive: true, force: true });
+    removeTempDirForTests(tempDirs.pop()!);
   }
 });
 

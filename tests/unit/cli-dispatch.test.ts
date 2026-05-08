@@ -54,7 +54,7 @@ describe("CLI dispatch", () => {
     expect(output).toContain("ee inspect --last");
     expect(output).toContain("Fix a problem:");
     expect(output).toContain("ee upgrade <openclaw|claude-code|codex>");
-    expect(output).toContain("Only OpenClaw currently supports automated `ee repair`.");
+    expect(output).toContain("ee repair <openclaw|codex>");
     expect(output).toContain("Routine review/feedback stays in the host first for OpenClaw, Codex, and Claude Code.");
     expect(output).toContain("CLI/operator fallback remains the path for deeper inspection, repair, and advanced management.");
     expect(output).toContain("Advanced operator commands:");

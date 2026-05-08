@@ -18,7 +18,7 @@ import {
 } from "./claude-cli.js";
 import { readCurrentPackageVersion } from "../version/package-version.js";
 import {
-  buildClaudeHookCommandForTarget,
+  buildCrossRuntimeClaudeHookCommand,
   ensureClaudeLaunchers,
   resolveClaudeRuntimeTarget,
   type ClaudeRuntimeTarget
@@ -218,7 +218,10 @@ export const installClaudeCodeAdapter = (options: InstallerOptions = {}): Claude
     productHome: paths.productHome,
     packageRoot
   });
-  const hookCommand = buildClaudeHookCommandForTarget(runtimeTarget, launcherPaths);
+  const hookCommand = buildCrossRuntimeClaudeHookCommand({
+    packageRoot,
+    productHome: paths.productHome
+  });
   const settings = readJsonFile<ClaudeSettings>(settingsPath) ?? {};
   const mergedSettings = mergeExperienceEngineHooks(settings, hookCommand);
   const globalSettings = disableMarketplaceExperienceEnginePlugin(readClaudeGlobalSettings(options.homeDir).settings);

@@ -43,6 +43,14 @@ describe("OpenClaw warning cleanup helpers", () => {
 
     normalizeTreePermissions(root);
 
+    if (process.platform === "win32") {
+      expect(statSync(root).isDirectory()).toBe(true);
+      expect(statSync(join(root, "src")).isDirectory()).toBe(true);
+      expect(statSync(nestedDir).isDirectory()).toBe(true);
+      expect(statSync(nestedFile).isFile()).toBe(true);
+      return;
+    }
+
     expect(statSync(root).mode & 0o777).toBe(0o755);
     expect(statSync(join(root, "src")).mode & 0o777).toBe(0o755);
     expect(statSync(nestedDir).mode & 0o777).toBe(0o755);

@@ -1,12 +1,12 @@
 {
   "name": "@alan512/experienceengine",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "type": "module",
   "description": "Experience governance for coding agents: learn from real task outcomes, inject reusable hints, and retire low-value guidance.",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Alan-512/ExperienceEngine.git"
+    "url": "git+https://github.com/Alan-512/ExperienceEngine.git"
   },
   "openclaw": {
     "extensions": [

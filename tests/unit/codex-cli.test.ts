@@ -93,13 +93,16 @@ describe("Codex CLI wiring", () => {
   });
 
   it("builds a shared hook command that is safe for Windows cmd and WSL sh", () => {
-    const launchers = resolveCodexLauncherPaths({
+    const command = buildCrossRuntimeCodexHookCommand({
+      packageRoot: "/mnt/d/project/ExperienceEngine",
       productHome: "/mnt/d/ExperienceEngineData/.experienceengine"
     });
 
-    expect(buildCrossRuntimeCodexHookCommand(launchers)).toBe(
-      "cmd.exe /c \"D:/ExperienceEngineData/.experienceengine/bin/experienceengine-codex-hook.cmd\""
-    );
+    expect(command).toContain("node -e");
+    expect(command).toContain("process.platform==='win32'");
+    expect(command).toContain("D:\\\\ExperienceEngineData\\\\.experienceengine");
+    expect(command).toContain("/mnt/d/ExperienceEngineData/.experienceengine");
+    expect(command).toContain("codex-hook");
   });
 
   it("writes hook-only embedding fast-path environment into project launchers", () => {
@@ -115,7 +118,10 @@ describe("Codex CLI wiring", () => {
     expect(script).toContain("EXPERIENCE_ENGINE_EMBEDDING_PROVIDER");
     expect(script).toContain("EXPERIENCE_ENGINE_EMBEDDING_API_TIMEOUT_MS");
     expect(script).toContain("EXPERIENCE_ENGINE_DISABLE_LOCAL_EMBEDDING_FALLBACK");
-    expect(launcher.command).toContain("experienceengine-codex-hook.cmd");
+    expect(launcher.command).toContain("node -e");
+    expect(launcher.command).toContain("dist/cli/index.js");
+    expect(launcher.command).toContain("codex-hook");
+    expect(launcher.command).toContain("EXPERIENCE_ENGINE_EMBEDDING_PROVIDER");
   });
 
   it("adds repeated server env bindings when extra adapter env is provided", () => {

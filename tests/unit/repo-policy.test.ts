@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -15,6 +15,7 @@ import { AttributionRecordRepository } from "../../src/store/sqlite/repositories
 import { InjectionRepository } from "../../src/store/sqlite/repositories/injection-repo.js";
 import { RepoPolicyRepository } from "../../src/store/sqlite/repositories/repo-policy-repo.js";
 import type { AttributionRecord, InjectionEvent } from "../../src/types/domain.js";
+import { removeTempDirForTests } from "./temp-cleanup.js";
 
 const tempDirs: string[] = [];
 
@@ -34,7 +35,7 @@ const makeDb = () => {
 
 afterEach(() => {
   while (tempDirs.length) {
-    rmSync(tempDirs.pop()!, { recursive: true, force: true });
+    removeTempDirForTests(tempDirs.pop()!);
   }
 });
 

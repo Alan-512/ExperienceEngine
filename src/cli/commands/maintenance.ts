@@ -120,6 +120,12 @@ export const runMaintenanceCommand = async (
       `[ExperienceEngine] Target tool seen: ${report.toolSeen ? "yes" : "no"} (${report.targetToolName})`
     );
     console.log(`[ExperienceEngine] Tool result seen: ${report.toolResultSeen ? "yes" : "no"}`);
+    console.log(
+      `[ExperienceEngine] MCP server exposes target tool: ${report.mcpServerToolAvailable ? "yes" : "no"}`
+    );
+    if (report.mcpServerError) {
+      console.log(`[ExperienceEngine] MCP server check error: ${report.mcpServerError}`);
+    }
     if (report.usedTranscriptConclusion && report.assistantText) {
       console.log(`[ExperienceEngine] Transcript conclusion: ${report.assistantText}`);
     }

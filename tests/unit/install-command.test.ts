@@ -17,7 +17,9 @@ describe("install command", () => {
           packageRoot: "/tmp/experienceengine",
           serverName: "experienceengine",
           serverCommand: "node dist/cli/index.js codex-mcp-server",
-          captureDir: "/tmp/.experienceengine/adapters/codex/captures"
+          captureDir: "/tmp/.experienceengine/adapters/codex/captures",
+          hooks: { state: "installed" },
+          launcherPaths: { hook: "/tmp/.codex/experienceengine-codex-hook.sh" }
         }) as never,
       readRegistryHealth: () => ({
         checks: [],
@@ -49,7 +51,9 @@ describe("install command", () => {
           packageRoot: "/tmp/experienceengine",
           serverName: "experienceengine",
           serverCommand: "node dist/cli/index.js codex-mcp-server",
-          captureDir: "/tmp/.experienceengine/adapters/codex/captures"
+          captureDir: "/tmp/.experienceengine/adapters/codex/captures",
+          hooks: { state: "installed" },
+          launcherPaths: { hook: "/tmp/.codex/experienceengine-codex-hook.sh" }
         }) as never,
       readRegistryHealth: () => ({
         checks: [

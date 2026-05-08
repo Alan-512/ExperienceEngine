@@ -10,6 +10,7 @@ import {
   installOpenClawAdapter
 } from "../../src/install/openclaw-installer.js";
 import { readCurrentPackageVersion } from "../../src/version/package-version.js";
+import { removeTempDirForTests } from "./temp-cleanup.js";
 
 const tempDirs: string[] = [];
 let cachedPackagedTarball:
@@ -32,11 +33,13 @@ const makeTempDir = (): string => {
   return dir;
 };
 
+const jsonString = (value: string): string => JSON.stringify(value);
+
 afterEach(() => {
   while (tempDirs.length) {
     const dir = tempDirs.pop();
     if (dir) {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDirForTests(dir);
     }
   }
   for (const [key, value] of Object.entries(originalHybridEnv)) {
@@ -114,7 +117,7 @@ describe("OpenClaw installer", () => {
   },
   "installs": {
     "experienceengine": {
-      "installPath": "${join(homeDir, ".openclaw", "extensions", "experienceengine")}"
+      "installPath": ${jsonString(join(homeDir, ".openclaw", "extensions", "experienceengine"))}
     }
   }
 }`;
@@ -190,7 +193,7 @@ describe("OpenClaw installer", () => {
   },
   "installs": {
     "experienceengine": {
-      "installPath": "${join(homeDir, ".openclaw", "extensions", "experienceengine")}"
+      "installPath": ${jsonString(join(homeDir, ".openclaw", "extensions", "experienceengine"))}
     }
   }
 }`;
@@ -220,9 +223,9 @@ Recorded version: 0.2.0`;
           return `{
   "enabled": true,
   "config": {
-    "dataDir": "${join(homeDir, ".experienceengine")}",
-    "sqlitePath": "${join(homeDir, ".experienceengine", "sqlite", "experienceengine.db")}",
-    "captureDir": "${join(homeDir, ".experienceengine", "captures")}"
+    "dataDir": ${jsonString(join(homeDir, ".experienceengine"))},
+    "sqlitePath": ${jsonString(join(homeDir, ".experienceengine", "sqlite", "experienceengine.db"))},
+    "captureDir": ${jsonString(join(homeDir, ".experienceengine", "captures"))}
   }
 }`;
         }
@@ -249,9 +252,9 @@ Recorded version: 0.2.0`;
           return `{
   "enabled": true,
   "config": {
-    "dataDir": "${join(homeDir, ".experienceengine")}",
-    "sqlitePath": "${join(homeDir, ".experienceengine", "sqlite", "experienceengine.db")}",
-    "captureDir": "${join(homeDir, ".experienceengine", "captures")}",
+    "dataDir": ${jsonString(join(homeDir, ".experienceengine"))},
+    "sqlitePath": ${jsonString(join(homeDir, ".experienceengine", "sqlite", "experienceengine.db"))},
+    "captureDir": ${jsonString(join(homeDir, ".experienceengine", "captures"))},
     "distillerProvider": "gemini",
     "distillerModel": "gemini-3.1-flash-lite-preview",
     "hybridEnabled": true,
@@ -274,7 +277,7 @@ Recorded version: 0.2.0`;
   "installs": {
     "experienceengine": {
       "source": "npm",
-      "installPath": "${join(homeDir, ".openclaw", "extensions", "experienceengine")}"
+      "installPath": ${jsonString(join(homeDir, ".openclaw", "extensions", "experienceengine"))}
     }
   }
 }`;
@@ -311,9 +314,9 @@ Recorded version: 0.2.0`;
           return `{
   "enabled": true,
   "config": {
-    "dataDir": "${join(homeDir, ".experienceengine")}",
-    "sqlitePath": "${join(homeDir, ".experienceengine", "sqlite", "experienceengine.db")}",
-    "captureDir": "${join(homeDir, ".experienceengine", "captures")}",
+    "dataDir": ${jsonString(join(homeDir, ".experienceengine"))},
+    "sqlitePath": ${jsonString(join(homeDir, ".experienceengine", "sqlite", "experienceengine.db"))},
+    "captureDir": ${jsonString(join(homeDir, ".experienceengine", "captures"))},
     "distillerProvider": "gemini",
     "distillerModel": "old-model",
     "hybridEnabled": false,
@@ -336,7 +339,7 @@ Recorded version: 0.2.0`;
   "installs": {
     "experienceengine": {
       "source": "npm",
-      "installPath": "${join(homeDir, ".openclaw", "extensions", "experienceengine")}"
+      "installPath": ${jsonString(join(homeDir, ".openclaw", "extensions", "experienceengine"))}
     }
   }
 }`;
@@ -426,7 +429,7 @@ Recorded version: 0.2.0`;
   },
   "installs": {
     "experienceengine": {
-      "installPath": "${join(homeDir, ".openclaw", "extensions", "experienceengine")}"
+      "installPath": ${jsonString(join(homeDir, ".openclaw", "extensions", "experienceengine"))}
     }
   }
 }`;
@@ -494,7 +497,7 @@ Recorded version: 0.2.0`;
     "experienceengine": {
       "source": "path",
       "sourcePath": "/mnt/d/project/ExperienceEngine",
-      "installPath": "${join(homeDir, ".openclaw", "extensions", "experienceengine")}"
+      "installPath": ${jsonString(join(homeDir, ".openclaw", "extensions", "experienceengine"))}
     }
   }
 }`;
@@ -530,7 +533,7 @@ Recorded version: 0.2.0`;
   "installs": {
     "experienceengine": {
       "source": "npm",
-      "installPath": "${join(homeDir, ".openclaw", "extensions", "experienceengine")}"
+      "installPath": ${jsonString(join(homeDir, ".openclaw", "extensions", "experienceengine"))}
     }
   }
 }`;
@@ -602,8 +605,8 @@ Recorded version: 0.2.0`;
   "installs": {
     "experienceengine": {
       "source": "path",
-      "sourcePath": "${packageRoot}",
-      "installPath": "${packageRoot}"
+      "sourcePath": ${jsonString(packageRoot)},
+      "installPath": ${jsonString(packageRoot)}
     }
   }
 }`;

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -11,6 +11,7 @@ import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
 import { ScopeRepository } from "../../src/store/sqlite/repositories/scope-repo.js";
 import type { ExperienceNode } from "../../src/types/domain.js";
+import { removeTempDirForTests } from "./temp-cleanup.js";
 
 const tempDirs: string[] = [];
 const originalHome = process.env.EXPERIENCE_ENGINE_HOME;
@@ -61,7 +62,7 @@ afterEach(() => {
   while (tempDirs.length) {
     const dir = tempDirs.pop();
     if (dir) {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDirForTests(dir);
     }
   }
 
@@ -123,10 +124,11 @@ describe("management commands", () => {
 
     runDisableCommand("scope");
 
-    const scope = scopeRepo.getById(resolveScope("/repo").scope_id);
+    const resolvedScope = resolveScope("/repo");
+    const scope = scopeRepo.getById(resolvedScope.scope_id);
     expect(scope?.is_disabled).toBe(true);
     expect(consoleLogSpy).toHaveBeenCalledWith(
-      `[ExperienceEngine] Disabled interventions for scope ${resolveScope("/repo").scope_id} (/repo).`
+      `[ExperienceEngine] Disabled interventions for scope ${resolvedScope.scope_id} (${resolvedScope.root_path}).`
     );
 
     cwdSpy.mockRestore();

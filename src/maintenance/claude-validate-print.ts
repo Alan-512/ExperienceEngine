@@ -2,8 +2,11 @@ import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { spawnSync as nodeSpawnSync } from "node:child_process";
+import { Client } from "@modelcontextprotocol/sdk/client/index.js";
+import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 
 type SpawnSyncLike = typeof nodeSpawnSync;
+type McpServerCheck = (targetToolName: string, cwd: string) => Promise<ClaudeMcpServerAnalysis>;
 
 export type ClaudePrintValidationOptions = {
   prompt?: string;
@@ -11,6 +14,7 @@ export type ClaudePrintValidationOptions = {
   cwd?: string;
   homeDir?: string;
   spawnSync?: SpawnSyncLike;
+  mcpServerCheck?: McpServerCheck;
 };
 
 export type ClaudeTranscriptAnalysis = {
@@ -21,20 +25,27 @@ export type ClaudeTranscriptAnalysis = {
   usedTranscriptConclusion: boolean;
 };
 
+export type ClaudeMcpServerAnalysis = {
+  mcpServerToolAvailable: boolean;
+  mcpServerToolNames: string[];
+  mcpServerError: string | null;
+};
+
 export type ClaudePrintValidationReport = ClaudeTranscriptAnalysis & {
   command: string[];
   exitCode: number | null;
   stdout: string;
   stderr: string;
   targetToolName: string;
-};
+} & ClaudeMcpServerAnalysis;
 
 const DEFAULT_PROMPT = "Call experienceengine_get_capabilities and summarize the direct tools in one sentence.";
 const DEFAULT_TARGET_TOOL = "mcp__experienceengine__experienceengine_get_capabilities";
+const MCP_TOOL_PREFIX = "mcp__experienceengine__";
 
 const toClaudeProjectSlug = (cwd: string): string => {
   const absolute = resolve(cwd);
-  return absolute.replace(/[\\/]+/g, "-");
+  return absolute.replace(/[<>:"/\\|?*]+/g, "-");
 };
 
 const listTranscriptPaths = (transcriptDir: string): string[] => {
@@ -138,6 +149,52 @@ export const analyzeClaudeTranscript = (
   };
 };
 
+const normalizeClaudeMcpToolName = (targetToolName: string): string =>
+  targetToolName.startsWith(MCP_TOOL_PREFIX) ? targetToolName.slice(MCP_TOOL_PREFIX.length) : targetToolName;
+
+const checkExperienceEngineMcpServerTools: McpServerCheck = async (targetToolName, cwd) => {
+  const cliEntry = process.argv[1];
+  if (!cliEntry) {
+    return {
+      mcpServerToolAvailable: false,
+      mcpServerToolNames: [],
+      mcpServerError: "CLI entrypoint is unavailable."
+    };
+  }
+
+  const target = normalizeClaudeMcpToolName(targetToolName);
+  const client = new Client({ name: "experienceengine-claude-print-validation", version: "0.0.0" });
+  const transport = new StdioClientTransport({
+    command: process.execPath,
+    args: [cliEntry, "mcp-server"],
+    cwd,
+    env: Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined))
+  });
+
+  try {
+    await client.connect(transport);
+    const result = await client.listTools();
+    const names = result.tools.map((tool) => tool.name).filter((name) => name.startsWith("experienceengine_"));
+    return {
+      mcpServerToolAvailable: names.includes(target),
+      mcpServerToolNames: names,
+      mcpServerError: null
+    };
+  } catch (error) {
+    return {
+      mcpServerToolAvailable: false,
+      mcpServerToolNames: [],
+      mcpServerError: error instanceof Error ? error.message : String(error)
+    };
+  } finally {
+    try {
+      await client.close();
+    } catch {
+      // Ignore cleanup failures after collecting diagnostics.
+    }
+  }
+};
+
 export const runClaudePrintValidation = async (
   options: ClaudePrintValidationOptions = {}
 ): Promise<ClaudePrintValidationReport> => {
@@ -147,6 +204,7 @@ export const runClaudePrintValidation = async (
   const targetToolName = options.targetToolName ?? DEFAULT_TARGET_TOOL;
   const transcriptDir = join(homeDir, ".claude", "projects", toClaudeProjectSlug(cwd));
   const spawnSync = options.spawnSync ?? nodeSpawnSync;
+  const mcpServerCheck = options.mcpServerCheck ?? checkExperienceEngineMcpServerTools;
 
   const command = ["claude", "-p", "--permission-mode", "bypassPermissions", prompt];
   const result = spawnSync(command[0], command.slice(1), {
@@ -156,6 +214,7 @@ export const runClaudePrintValidation = async (
 
   const transcriptPath = findLatestTranscript(transcriptDir);
   const analysis = analyzeClaudeTranscript(transcriptPath, targetToolName);
+  const mcpServerAnalysis = await mcpServerCheck(targetToolName, cwd);
 
   return {
     command,
@@ -163,6 +222,7 @@ export const runClaudePrintValidation = async (
     stdout: typeof result.stdout === "string" ? result.stdout : "",
     stderr: typeof result.stderr === "string" ? result.stderr : "",
     targetToolName,
-    ...analysis
+    ...analysis,
+    ...mcpServerAnalysis
   };
 };

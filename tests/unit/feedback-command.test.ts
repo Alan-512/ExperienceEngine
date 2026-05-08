@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -10,6 +10,7 @@ import { InputRecordRepository } from "../../src/store/sqlite/repositories/input
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
 import { nowIso } from "../../src/utils/clock.js";
 import type { ExperienceInputRecord, ExperienceNode } from "../../src/types/domain.js";
+import { removeTempDirForTests } from "./temp-cleanup.js";
 
 const tempDirs: string[] = [];
 const originalHome = process.env.EXPERIENCE_ENGINE_HOME;
@@ -74,7 +75,7 @@ afterEach(() => {
   while (tempDirs.length) {
     const dir = tempDirs.pop();
     if (dir) {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDirForTests(dir);
     }
   }
 

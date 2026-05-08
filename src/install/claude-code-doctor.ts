@@ -19,7 +19,7 @@ import {
 } from "./claude-marketplace-state.js";
 import { resolveDistillationResolution } from "../distillation/host-llm.js";
 import {
-  buildClaudeHookCommandForTarget,
+  buildCrossRuntimeClaudeHookCommand,
   ensureClaudeLaunchers,
   resolveClaudeRuntimeTarget,
   type ClaudeRuntimeTarget
@@ -77,7 +77,12 @@ const hasHookCommand = (
   return entries.some(
     (entry) =>
       (entry.matcher ?? undefined) === matcher &&
-      (entry.hooks ?? []).some((hook) => hook.type === "command" && hook.command === expectedCommand)
+      (entry.hooks ?? []).some(
+        (hook) =>
+          hook.type === "command" &&
+          (hook.command === expectedCommand ||
+            Boolean(hook.command?.includes("dist/cli/index.js") && hook.command.includes("claude-hook")))
+      )
   );
 };
 
@@ -136,7 +141,10 @@ export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
       installState?.launcherPaths?.mcpServer ??
       (runtimeTarget === "windows" ? launcherPaths.windowsMcpServer : launcherPaths.mcpServer)
   };
-  const expectedCommand = buildClaudeHookCommandForTarget(runtimeTarget, launcherPaths);
+  const expectedCommand = buildCrossRuntimeClaudeHookCommand({
+    packageRoot,
+    productHome: paths.productHome
+  });
   const hostInfo = inspectClaudeHost(runner, options.cliEnv);
   const marketplaceHome = extractClaudeHostEnvValue(hostInfo?.env, "EXPERIENCE_ENGINE_HOME");
   const marketplaceState = readClaudeMarketplaceRuntimeState(marketplaceHome);

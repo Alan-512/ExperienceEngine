@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PLUGIN_DATA="${CLAUDE_PLUGIN_DATA:-${CLAUDE_PLUGIN_ROOT:-}}"
-if [[ -z "${PLUGIN_DATA}" ]]; then
-  echo "CLAUDE_PLUGIN_DATA or CLAUDE_PLUGIN_ROOT is required" >&2
-  exit 1
+PLUGIN_ROOT="${CLAUDE_PLUGIN_ROOT:-$(cd "$(dirname "$0")/../.." && pwd)}"
+PLUGIN_DATA="${CLAUDE_PLUGIN_DATA:-$PLUGIN_ROOT/.claude-plugin-data}"
+INSTALL_SCRIPT="${PLUGIN_ROOT}/scripts/claude-plugin/install-deps.sh"
+
+if [[ -x "$INSTALL_SCRIPT" ]]; then
+  "$INSTALL_SCRIPT" >&2
 fi
 
 export NODE_PATH="${PLUGIN_DATA}/node_modules${NODE_PATH:+:${NODE_PATH}}"
@@ -27,12 +29,17 @@ const next = {
   hook_source: "marketplace",
   package_version: current.package_version,
   written_at: current.written_at ?? new Date().toISOString(),
-  last_hook_seen_at: new Date().toISOString(),
-  last_mcp_seen_at: current.last_mcp_seen_at
+  last_hook_seen_at: current.last_hook_seen_at,
+  last_mcp_seen_at: new Date().toISOString()
 };
 
 fs.mkdirSync(path.dirname(statePath), { recursive: true });
 fs.writeFileSync(statePath, `${JSON.stringify(next, null, 2)}\n`);
 NODE
 
-exec node --no-warnings "${PLUGIN_DATA}/node_modules/@alan512/experienceengine/dist/cli/index.js" claude-hook "$@"
+PACKAGE_ENTRY="${PLUGIN_DATA}/node_modules/@alan512/experienceengine/dist/cli/index.js"
+if [[ -f "$PACKAGE_ENTRY" ]]; then
+  exec node --no-warnings "$PACKAGE_ENTRY" mcp-server "$@"
+fi
+
+exec node --no-warnings "${PLUGIN_ROOT}/dist/cli/index.js" mcp-server "$@"

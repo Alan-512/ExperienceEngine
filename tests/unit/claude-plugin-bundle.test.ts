@@ -12,7 +12,7 @@ describe("Claude plugin bundle", () => {
     ) as Record<string, unknown>;
 
     expect(manifest.name).toBe("experienceengine");
-    expect(manifest.version).toBe("0.2.1");
+    expect(manifest.version).toBe("0.3.0");
   });
 
   it("uses plugin-local hooks and runtime scripts", () => {
@@ -36,17 +36,8 @@ describe("Claude plugin bundle", () => {
       >;
     };
 
-    expect(mcp.mcpServers.experienceengine.command).toBe("node");
-    expect(mcp.mcpServers.experienceengine.args).toEqual([
-      "${CLAUDE_PLUGIN_ROOT}/node_modules/@alan512/experienceengine/dist/cli/index.js",
-      "mcp-server"
-    ]);
-    expect(mcp.mcpServers.experienceengine.env).toEqual(
-      expect.objectContaining({
-        NODE_PATH: "${CLAUDE_PLUGIN_ROOT}/node_modules",
-        EXPERIENCE_ENGINE_HOME: "${CLAUDE_PLUGIN_ROOT}/experienceengine-home",
-        EXPERIENCE_ENGINE_CLAUDE_HOOK_SOURCE: "marketplace"
-      })
-    );
+    expect(mcp.mcpServers.experienceengine.command).toBe("bash");
+    expect(mcp.mcpServers.experienceengine.args).toEqual(["${CLAUDE_PLUGIN_ROOT}/scripts/mcp-server.sh"]);
+    expect(mcp.mcpServers.experienceengine.env).toBeUndefined();
   });
 });

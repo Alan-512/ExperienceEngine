@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
@@ -13,6 +13,7 @@ import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js
 import { RepoPolicyRepository } from "../../src/store/sqlite/repositories/repo-policy-repo.js";
 import { clearEmbeddingProviderForTests, setEmbeddingProviderForTests } from "../../src/store/vector/embeddings.js";
 import { nowIso } from "../../src/utils/clock.js";
+import { removeTempDirForTests } from "./temp-cleanup.js";
 
 const tempDirs: string[] = [];
 
@@ -88,7 +89,7 @@ const seedStrategyNode = (
 afterEach(() => {
   clearEmbeddingProviderForTests();
   while (tempDirs.length) {
-    rmSync(tempDirs.pop()!, { recursive: true, force: true });
+    removeTempDirForTests(tempDirs.pop()!);
   }
 });
 

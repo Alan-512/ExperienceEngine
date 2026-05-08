@@ -10,6 +10,7 @@ import { loadConfig } from "../../src/config/load-config.js";
 import { writeExperienceEngineSettings } from "../../src/config/settings-store.js";
 import { ExperienceStateArtifactService } from "../../src/interaction/state-artifact-service.js";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
+import { removeTempDirForTests } from "./temp-cleanup.js";
 
 const tempDirs: string[] = [];
 const originalHome = process.env.EXPERIENCE_ENGINE_HOME;
@@ -60,7 +61,7 @@ afterEach(() => {
   while (tempDirs.length) {
     const dir = tempDirs.pop();
     if (dir) {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDirForTests(dir);
     }
   }
 

@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -7,6 +7,7 @@ import { loadConfig } from "../../src/config/load-config.js";
 import { resolveScope } from "../../src/input/scope-resolver.js";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
 import { ScopeRepository } from "../../src/store/sqlite/repositories/scope-repo.js";
+import { removeTempDirForTests } from "./temp-cleanup.js";
 
 const tempDirs: string[] = [];
 const originalHome = process.env.EXPERIENCE_ENGINE_HOME;
@@ -22,7 +23,7 @@ afterEach(() => {
   while (tempDirs.length) {
     const dir = tempDirs.pop();
     if (dir) {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDirForTests(dir);
     }
   }
 
@@ -54,7 +55,7 @@ describe("enable command", () => {
 
     expect(scopeRepo.getById(scope.scope_id)?.is_disabled).toBe(false);
     expect(consoleLogSpy).toHaveBeenCalledWith(
-      `[ExperienceEngine] Enabled interventions for scope ${scope.scope_id} (/repo).`
+      `[ExperienceEngine] Enabled interventions for scope ${scope.scope_id} (${scope.root_path}).`
     );
 
     cwdSpy.mockRestore();
@@ -66,9 +67,10 @@ describe("enable command", () => {
     const cwdSpy = vi.spyOn(process, "cwd").mockReturnValue("/repo");
 
     runEnableCommand("scope");
+    const scope = resolveScope("/repo");
 
     expect(consoleLogSpy).toHaveBeenCalledWith(
-      `[ExperienceEngine] Interventions are already enabled for scope ${resolveScope("/repo").scope_id} (/repo).`
+      `[ExperienceEngine] Interventions are already enabled for scope ${scope.scope_id} (${scope.root_path}).`
     );
 
     cwdSpy.mockRestore();

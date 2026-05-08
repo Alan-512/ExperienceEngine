@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { resolve } from "node:path";
 import { runEvaluateCommand } from "../../src/cli/commands/evaluate.js";
 import type { CodexLifecycleValidationRunResult } from "../../src/evaluation/codex-lifecycle-validation.js";
 
@@ -9,6 +10,9 @@ afterEach(() => {
 });
 
 describe("evaluate command", () => {
+  const repoPath = resolve("/repo");
+  const codexOutPath = resolve("/tmp/codex-out");
+
   it("prints usage for unsupported targets", async () => {
     await runEvaluateCommand("unknown");
 
@@ -79,8 +83,8 @@ describe("evaluate command", () => {
     );
 
     expect(runCodexLifecycle).toHaveBeenCalledWith({
-      repoRoot: "/repo",
-      outputDir: "/tmp/codex-out"
+      repoRoot: repoPath,
+      outputDir: codexOutPath
     });
     expect(consoleLogSpy).toHaveBeenCalledWith("Codex lifecycle: lookup=inject outcome=success reviews=2 artifacts=1");
     expect(consoleLogSpy).toHaveBeenCalledWith("Output directory: /tmp/codex-out");
@@ -300,7 +304,7 @@ describe("evaluate command", () => {
 
     expect(runScenarios).toHaveBeenCalledWith({
       pack: "high-confidence",
-      repoRoot: "/repo",
+      repoRoot: repoPath,
       outputDir: undefined,
       dryRun: true
     });

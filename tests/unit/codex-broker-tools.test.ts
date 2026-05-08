@@ -1,9 +1,11 @@
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
-import { afterEach, describe, expect, it } from "vitest";
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { createCodexBehaviorLoop, createCodexMcpServer } from "../../src/adapters/codex/mcp-server.js";
 import { ExperienceStateArtifactService } from "../../src/interaction/state-artifact-service.js";
+import { clearEmbeddingProviderForTests, setEmbeddingProviderForTests } from "../../src/store/vector/embeddings.js";
+import { removeTempDirForTests } from "./temp-cleanup.js";
 
 const tempDirs: string[] = [];
 
@@ -13,11 +15,27 @@ const makeTempDir = (): string => {
   return dir;
 };
 
+beforeEach(() => {
+  setEmbeddingProviderForTests({
+    provider: "local",
+    model: "Xenova/multilingual-e5-small",
+    version: "local-e5-v1",
+    dimensions: 3,
+    async embedQuery() {
+      return [1, 0, 0];
+    },
+    async embedPassage() {
+      return [1, 0, 0];
+    }
+  });
+});
+
 afterEach(() => {
+  clearEmbeddingProviderForTests();
   while (tempDirs.length) {
     const dir = tempDirs.pop();
     if (dir) {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDirForTests(dir);
     }
   }
 });

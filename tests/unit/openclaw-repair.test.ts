@@ -10,9 +10,10 @@ import {
   isOpenClawRepairRecommended,
   repairOpenClawAdapter
 } from "../../src/install/openclaw-installer.js";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
+import { removeTempDirForTests } from "./temp-cleanup.js";
 
 const tempDirs: string[] = [];
 
@@ -26,10 +27,12 @@ const cleanup = (): void => {
   while (tempDirs.length) {
     const dir = tempDirs.pop();
     if (dir) {
-      rmSync(dir, { recursive: true, force: true });
+      removeTempDirForTests(dir);
     }
   }
 };
+
+const jsonString = (value: string): string => JSON.stringify(value);
 
 describe("OpenClaw repair recommendation", () => {
   afterEach(() => {
@@ -140,7 +143,7 @@ describe("OpenClaw repair recommendation", () => {
   },
   "installs": {
     "experienceengine": {
-      "installPath": "${join(homeDir, ".openclaw", "extensions", "experienceengine")}"
+      "installPath": ${jsonString(join(homeDir, ".openclaw", "extensions", "experienceengine"))}
     }
   }
 }`;
@@ -180,15 +183,16 @@ Install path: ${packageRoot}
 
         return `{
   "enabled": true,
-  "config": {
-    "dataDir": "${join(homeDir, ".experienceengine")}",
-    "sqlitePath": "${join(homeDir, ".experienceengine", "sqlite", "experienceengine.db")}",
-    "captureDir": "${join(homeDir, ".experienceengine", "captures")}"
+    "config": {
+    "dataDir": ${jsonString(join(homeDir, ".experienceengine"))},
+    "sqlitePath": ${jsonString(join(homeDir, ".experienceengine", "sqlite", "experienceengine.db"))},
+    "captureDir": ${jsonString(join(homeDir, ".experienceengine", "captures"))}
   }
 }`;
       }
     });
 
     expect(isOpenClawRepairRecommended(status)).toBe(false);
+    expect(status.hostWiring.restartRecommended).toBe(false);
   });
 });

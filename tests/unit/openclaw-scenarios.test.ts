@@ -1,4 +1,4 @@
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -22,6 +22,7 @@ import type {
   ReviewEvent,
   TaskRun
 } from "../../src/types/domain.js";
+import { removeTempDirForTests } from "./temp-cleanup.js";
 
 const tempDirs: string[] = [];
 
@@ -189,7 +190,7 @@ const review = (taskRunId: string, overrides: Partial<ReviewEvent> = {}): Review
 
 afterEach(() => {
   while (tempDirs.length > 0) {
-    rmSync(tempDirs.pop()!, { recursive: true, force: true });
+    removeTempDirForTests(tempDirs.pop()!);
   }
 });
 
@@ -214,19 +215,23 @@ describe("runOpenClawScenarioEvaluation", () => {
   it("applies a hard timeout to the default OpenClaw invoker", () => {
     const { env, runtimeDir } = createRuntime();
     const binDir = join(runtimeDir, "bin");
-    const fakeOpenClaw = join(binDir, "openclaw");
+    const fakeOpenClaw = join(binDir, process.platform === "win32" ? "openclaw.cmd" : "openclaw");
     mkdirSync(binDir, { recursive: true });
     writeFileSync(
       fakeOpenClaw,
-      "#!/usr/bin/env bash\nsleep 2\nprintf '{\"ok\":true}\\n'\n",
+      process.platform === "win32"
+        ? "@echo off\r\nnode -e \"setTimeout(() => console.log('{\\\"ok\\\":true}'), 2000)\"\r\n"
+        : "#!/usr/bin/env bash\nsleep 2\nprintf '{\"ok\":true}\\n'\n",
       "utf8"
     );
-    chmodSync(fakeOpenClaw, 0o755);
+    if (process.platform !== "win32") {
+      chmodSync(fakeOpenClaw, 0o755);
+    }
 
     const result = runOpenClawScenarioEvaluation({
       env: {
         ...env,
-        PATH: `${binDir}:${env.PATH ?? ""}`
+        PATH: `${binDir}${process.platform === "win32" ? ";" : ":"}${env.PATH ?? ""}`
       },
       homeDir: runtimeDir,
       pack: "high-confidence",

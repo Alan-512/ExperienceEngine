@@ -70,7 +70,7 @@ describe("claude print validation", () => {
       root,
       ".claude",
       "projects",
-      cwd.replace(/[\\/]+/g, "-")
+      cwd.replace(/[<>:"/\\|?*]+/g, "-")
     );
     mkdirSync(transcriptDir, { recursive: true });
     const transcriptPath = join(transcriptDir, "session-b.jsonl");
@@ -131,7 +131,12 @@ describe("claude print validation", () => {
       prompt: "Load capabilities.",
       targetToolName: "mcp__experienceengine__experienceengine_get_capabilities",
       homeDir: root,
-      spawnSync
+      spawnSync,
+      mcpServerCheck: async () => ({
+        mcpServerToolAvailable: true,
+        mcpServerToolNames: ["experienceengine_get_capabilities"],
+        mcpServerError: null
+      })
     });
 
     expect(spawnSync).toHaveBeenCalledWith(
@@ -146,5 +151,7 @@ describe("claude print validation", () => {
     expect(report.toolResultSeen).toBe(true);
     expect(report.assistantText).toBe("Capabilities loaded.");
     expect(report.usedTranscriptConclusion).toBe(true);
+    expect(report.mcpServerToolAvailable).toBe(true);
+    expect(report.mcpServerToolNames).toContain("experienceengine_get_capabilities");
   });
 });

@@ -25,6 +25,7 @@ const escapeSingleQuotedBash = (value: string): string => value.replace(/'/g, `'
 const escapeDoubleQuotedWindows = (value: string): string => value.replace(/"/g, '\\"');
 const quoteWindowsCmdArgument = (value: string): string => `"${escapeDoubleQuotedWindows(value)}"`;
 const toWindowsForwardSlashPath = (value: string): string => value.replace(/\\/g, "/");
+const quoteJsString = (value: string): string => JSON.stringify(value);
 
 const normalizeWindowsDrivePath = (value: string): string => {
   if (!isWindowsMountedPath(value)) {
@@ -157,7 +158,10 @@ export const ensureCodexProjectHookLauncher = (options: {
 
   return {
     path: launcherPath,
-    command: buildCodexProjectHookCommand(options.cwd)
+    command: buildCrossRuntimeCodexHookCommand({
+      packageRoot: options.packageRoot,
+      productHome: options.productHome
+    })
   };
 };
 
@@ -204,10 +208,28 @@ export const buildCodexHookCommandForTarget = (
     ? `cmd.exe /c ${quoteWindowsCmdArgument(toWindowsForwardSlashPath(toWindowsRuntimePath(launcherPaths.windowsHook)))}`
     : resolveRealPath(launcherPaths.hook);
 
-export const buildCrossRuntimeCodexHookCommand = (
-  launcherPaths: CodexLauncherPaths
-): string =>
-  `cmd.exe /c ${quoteWindowsCmdArgument(toWindowsForwardSlashPath(toWindowsRuntimePath(launcherPaths.windowsHook)))}`;
+export const buildCrossRuntimeCodexHookCommand = (options: {
+  packageRoot: string;
+  productHome: string;
+}): string => {
+  const windowsHome = toWindowsRuntimePath(options.productHome);
+  const posixHome = options.productHome.replace(/\\/g, "/").replace(/^([A-Za-z]):\//, (_, drive: string) => `/mnt/${drive.toLowerCase()}/`);
+  const windowsRoot = toWindowsRuntimePath(options.packageRoot);
+  const posixRoot = options.packageRoot.replace(/\\/g, "/").replace(/^([A-Za-z]):\//, (_, drive: string) => `/mnt/${drive.toLowerCase()}/`);
+  const script = [
+    "const cp=require('node:child_process')",
+    "const path=require('node:path')",
+    "const win=process.platform==='win32'",
+    `process.env.EXPERIENCE_ENGINE_HOME=win?${quoteJsString(windowsHome)}:${quoteJsString(posixHome)}`,
+    "process.env.EXPERIENCE_ENGINE_EMBEDDING_PROVIDER='legacy'",
+    "process.env.EXPERIENCE_ENGINE_EMBEDDING_API_TIMEOUT_MS='1500'",
+    "process.env.EXPERIENCE_ENGINE_DISABLE_LOCAL_EMBEDDING_FALLBACK='1'",
+    `const root=win?${quoteJsString(windowsRoot)}:${quoteJsString(posixRoot)}`,
+    "const child=cp.spawn(process.execPath,['--no-warnings',path.join(root,'dist/cli/index.js'),'codex-hook'],{stdio:'inherit',env:process.env})",
+    "child.on('exit',(code,signal)=>process.exit(code??(signal?1:0)))"
+  ].join(";");
+  return `node -e ${quoteWindowsCmdArgument(script)}`;
+};
 
 export const buildCodexMcpServerCommandForTarget = (
   runtimeTarget: CodexRuntimeTarget,

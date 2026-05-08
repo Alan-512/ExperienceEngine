@@ -24,6 +24,8 @@ const isWindowsMountedPath = (value: string): boolean => /^\/mnt\/[a-z]\//i.test
 
 const escapeDoubleQuotedWindows = (value: string): string => value.replace(/"/g, '\\"');
 const escapeSingleQuotedBash = (value: string): string => value.replace(/'/g, `'\"'\"'`);
+const quoteJsString = (value: string): string => JSON.stringify(value);
+const quoteWindowsCmdArgument = (value: string): string => `"${escapeDoubleQuotedWindows(value)}"`;
 
 const normalizeWindowsDrivePath = (value: string): string => {
   if (!isWindowsMountedPath(value)) {
@@ -166,6 +168,26 @@ export const buildClaudeHookCommandForTarget = (
   runtimeTarget === "windows"
     ? toWindowsRuntimePath(launcherPaths.windowsHook).replace(/\\/g, "/")
     : launcherPaths.hook;
+
+export const buildCrossRuntimeClaudeHookCommand = (options: {
+  packageRoot: string;
+  productHome: string;
+}): string => {
+  const windowsHome = toWindowsRuntimePath(options.productHome);
+  const posixHome = toPosixRuntimePath(options.productHome);
+  const windowsRoot = toWindowsRuntimePath(options.packageRoot);
+  const posixRoot = toPosixRuntimePath(options.packageRoot);
+  const script = [
+    "const cp=require('node:child_process')",
+    "const path=require('node:path')",
+    "const win=process.platform==='win32'",
+    `process.env.EXPERIENCE_ENGINE_HOME=win?${quoteJsString(windowsHome)}:${quoteJsString(posixHome)}`,
+    `const root=win?${quoteJsString(windowsRoot)}:${quoteJsString(posixRoot)}`,
+    "const child=cp.spawn(process.execPath,['--no-warnings',path.join(root,'dist/cli/index.js'),'claude-hook'],{stdio:'inherit',env:process.env})",
+    "child.on('exit',(code,signal)=>process.exit(code??(signal?1:0)))"
+  ].join(";");
+  return `node -e ${quoteWindowsCmdArgument(script)}`;
+};
 
 export const buildClaudeMcpServerCommandForTarget = (
   runtimeTarget: ClaudeRuntimeTarget,

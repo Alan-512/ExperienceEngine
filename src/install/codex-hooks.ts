@@ -42,7 +42,7 @@ export type CodexHookRepairResult = CodexHookInspection & {
   deletedHookFile: boolean;
 };
 
-const EXPERIENCEENGINE_CODEX_HOOK_MARKERS = ["experienceengine-codex-hook", " codex-hook"];
+const EXPERIENCEENGINE_CODEX_HOOK_MARKERS = ["experienceengine-codex-hook", " codex-hook", "'codex-hook'"];
 const EXPERIENCEENGINE_CLAUDE_HOOK_MARKERS = ["experienceengine-claude-hook", " claude-hook"];
 
 export const resolveProjectCodexDir = (cwd = process.cwd()): string => join(cwd, ".codex");
@@ -51,6 +51,13 @@ export const resolveProjectCodexConfigPath = (cwd = process.cwd()): string => jo
 
 const hasAnyMarker = (value: string | undefined, markers: string[]): boolean =>
   Boolean(value && markers.some((marker) => value.includes(marker)));
+
+const isExperienceEngineCodexHookCommand = (value: string | undefined): boolean =>
+  Boolean(
+    value &&
+      (value.includes("experienceengine-codex-hook") ||
+        (value.includes("dist/cli/index.js") && value.includes("codex-hook")))
+  );
 
 const isWslPathCommand = (value: string | undefined): boolean =>
   Boolean(value && (/\/mnt\/[a-z]\//i.test(value) || value.includes("/home/")));
@@ -162,7 +169,11 @@ const inspectParsedHooks = (
   for (const eventName of expectedCodexHookEvents(includePreToolUse)) {
     const groups = parsed?.hooks?.[eventName] ?? [];
     const hasExpected = groups.some((group) =>
-      (group.hooks ?? []).some((hook) => hook.type === "command" && hook.command === expectedCommandValue)
+      (group.hooks ?? []).some(
+        (hook) =>
+          hook.type === "command" &&
+          (hook.command === expectedCommandValue || isExperienceEngineCodexHookCommand(hook.command))
+      )
     );
     if (!hasExpected) {
       missingEvents.push(eventName);
@@ -178,12 +189,12 @@ const inspectParsedHooks = (
         }
         if (hasAnyMarker(hook.command, EXPERIENCEENGINE_CLAUDE_HOOK_MARKERS)) {
           claudeHookCommands.push(hook.command);
-        } else if (hasAnyMarker(hook.command, EXPERIENCEENGINE_CODEX_HOOK_MARKERS)) {
+        } else if (isExperienceEngineCodexHookCommand(hook.command)) {
           codexHookCommands.push(hook.command);
         } else {
           unrelatedHookCount += 1;
         }
-        if (runtimeTarget === "windows" && isWslPathCommand(hook.command)) {
+        if (runtimeTarget === "windows" && !isExperienceEngineCodexHookCommand(hook.command) && isWslPathCommand(hook.command)) {
           wslPathCommands.push(hook.command);
         }
       }
@@ -307,7 +318,7 @@ export const repairCodexProjectHooks = (options: {
     const keptGroups = groups
       .map((group) => ({
         ...group,
-        hooks: (group.hooks ?? []).filter((hook) => !hasAnyMarker(hook.command, EXPERIENCEENGINE_CODEX_HOOK_MARKERS))
+        hooks: (group.hooks ?? []).filter((hook) => !isExperienceEngineCodexHookCommand(hook.command))
       }))
       .filter((group) => (group.hooks ?? []).length > 0);
     if (keptGroups.length > 0) {

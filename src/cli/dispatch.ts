@@ -34,7 +34,7 @@ export const printCliUsage = (): void => {
   console.log("Fix a problem:");
   console.log("- Validate the current host: ee doctor <openclaw|claude-code|codex>");
   console.log("- Refresh host wiring when needed: ee upgrade <openclaw|claude-code|codex>");
-  console.log("- Only OpenClaw currently supports automated `ee repair`.");
+  console.log("- Refresh recoverable host wiring: ee repair <openclaw|codex>");
   console.log("- Routine review/feedback stays in the host first for OpenClaw, Codex, and Claude Code.");
   console.log("- CLI/operator fallback remains the path for deeper inspection, repair, and advanced management.");
   console.log("- CLI fallback/operator path: ee inspect --last | ee helped | ee harmed");

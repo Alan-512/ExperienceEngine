@@ -1,5 +1,5 @@
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { resolveExperienceEnginePaths } from "../../src/config/path-resolver.js";
@@ -31,9 +31,10 @@ describe("resolveExperienceEnginePaths", () => {
     });
 
     expect(paths.mode).toBe("explicit");
-    expect(paths.dataDir).toBe("/tmp/custom-root");
-    expect(paths.sqlitePath).toBe("/tmp/custom-root/sqlite/experienceengine.db");
-    expect(paths.captureDir).toBe("/tmp/custom-root/captures");
+    const dataDir = resolve("/tmp/custom-root");
+    expect(paths.dataDir).toBe(dataDir);
+    expect(paths.sqlitePath).toBe(join(dataDir, "sqlite", "experienceengine.db"));
+    expect(paths.captureDir).toBe(join(dataDir, "captures"));
   });
 
   it("uses compatibility mode when legacy OpenClaw data exists and no install state is present", () => {

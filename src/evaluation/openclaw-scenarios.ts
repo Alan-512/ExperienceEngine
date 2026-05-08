@@ -230,11 +230,20 @@ const defaultOutputDir = (): string =>
 
 const DEFAULT_OPENCLAW_SCENARIO_TIMEOUT_MS = 120_000;
 
+const quoteWindowsCmdArg = (value: string): string =>
+  `"${value.replace(/(["^&|<>()%])/g, "^$1")}"`;
+
 const defaultInvoker = (
   args: string[],
   options: { env?: NodeJS.ProcessEnv; timeoutMs?: number } = {}
 ): OpenClawScenarioInvocation => {
-  const result = spawnSync("openclaw", args, {
+  const result = process.platform === "win32"
+    ? spawnSync("cmd.exe", ["/d", "/s", "/c", ["openclaw", ...args].map(quoteWindowsCmdArg).join(" ")], {
+        encoding: "utf8",
+        env: options.env,
+        timeout: options.timeoutMs ?? DEFAULT_OPENCLAW_SCENARIO_TIMEOUT_MS
+      })
+    : spawnSync("openclaw", args, {
     encoding: "utf8",
     env: options.env,
     timeout: options.timeoutMs ?? DEFAULT_OPENCLAW_SCENARIO_TIMEOUT_MS
