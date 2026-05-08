@@ -45,6 +45,12 @@ ExperienceEngine 是一个面向编程 Agent 的治理层。它复用真实执�
 
 最快的宿主安装路径：
 
+如果你需要使用 `ee init`、`ee install ...` 或其他 operator 命令，请先安装 CLI：
+
+```bash
+npm install -g @alan512/experienceengine
+```
+
 - `OpenClaw`
   - `openclaw plugins install @alan512/experienceengine`
   - `openclaw gateway restart`
@@ -153,9 +159,9 @@ ExperienceEngine 工作在 context 层，不会修改宿主模型权重。
 ## 当前状态
 
 - Stable：核心经验生命周期、inspect/helped/harmed loop、宿主集成、CLI/operator fallback
-- 当前最顺滑的路径：`OpenClaw` 原生插件安装
+- 推荐优先路径：使用你已经在用的宿主；如果从零开始，`OpenClaw` 目前是最完整的原生插件路径
 - 仍在演进：retrieval 调优、provider 策略、更高级的宿主 UX
-- 如果你想最快拿到第一份顺滑体验，建议先从 `OpenClaw` 开始
+- 如果你还没有固定宿主，建议先从 `OpenClaw` 开始。
 
 ## 什么叫第一次真正成功
 
@@ -333,7 +339,6 @@ codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceeng
 - `Claude Code` 会安装 hooks 和共享 ExperienceEngine MCP 服务
 - `Codex` 会安装 Codex 原生 hooks 和共享 ExperienceEngine MCP 服务。`ee codex exec` 仍是确定性的非交互 fallback。
 - Codex 的 `UserPromptSubmit` 保持同步，因为它负责 prompt-time experience injection。`PostToolUse` 和 `Stop` 默认排队后在后台处理。`PreToolUse` 默认不注册；只有同步 gating 实验需要时才设置 `EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED=1` 启用。
-- 在 source repo 本地验证里，共享 Codex 项目 hook launcher 已分别经过 Windows 与 WSL Codex CLI smoke test。准备正式发布时，published package 和 host marketplace 仍需要单独说明验证范围。
 - `ee install ...` 与 `ee doctor ...` 会在 `npm` / `pnpm` 使用非官方 registry 时给出提示，因为受管模型下载在 `https://registry.npmjs.org` 下最稳定
 - 成功执行 `ee install ...` 后，也会提醒冷启动预期：capture 会立刻开始，但 formal experience 一般需要在同一仓库里出现几次相似任务后才会形成
 

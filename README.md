@@ -45,6 +45,12 @@ Host agent: Yes. It reused a repo-local success pattern before the next tool cal
 
 Fastest host-specific install paths:
 
+If you plan to use `ee init`, `ee install ...`, or other operator commands, install the CLI first:
+
+```bash
+npm install -g @alan512/experienceengine
+```
+
 - `OpenClaw`
   - `openclaw plugins install @alan512/experienceengine`
   - `openclaw gateway restart`
@@ -153,9 +159,9 @@ For a more detailed explanation of what ExperienceEngine records and how an expe
 ## Current Status
 
 - Stable: core experience lifecycle, inspect/helped/harmed loop, host integrations, CLI/operator fallback
-- Good path today: `OpenClaw` native plugin install
+- Recommended first path: use the host you already work in; `OpenClaw` currently has the deepest host-native integration
 - Evolving: retrieval tuning, provider strategy, advanced host UX
-- If you want the smoothest first experience today, start with `OpenClaw`.
+- If you are starting from scratch and do not already have a preferred host, `OpenClaw` is the most complete native-plugin path.
 
 ## What First Success Looks Like
 
@@ -181,7 +187,7 @@ OpenClaw notes:
 - requires a working OpenClaw installation with native plugin support
 - the documented OpenClaw path assumes `openclaw plugins install` and `openclaw gateway restart` are available
 - ExperienceEngine resolves the real project root from OpenClaw hook payloads or nearby repo markers; if OpenClaw only reports its global workspace, ExperienceEngine isolates that session instead of reusing unrelated global-workspace experience
-- OpenClaw now uses the shared background learning loop by default
+- OpenClaw uses the shared background learning loop by default
 - OpenClaw still keeps async hybrid posttask review disabled by default; `ee status` and `ee doctor openclaw` show that explicitly
 
 General package requirement:
@@ -334,7 +340,6 @@ Notes:
 - `Claude Code` installs both hooks and the shared ExperienceEngine MCP server.
 - `Codex` installs Codex-native hooks plus the shared ExperienceEngine MCP server. `ee codex exec` remains the deterministic non-interactive fallback.
 - Codex `UserPromptSubmit` stays synchronous because it owns prompt-time experience injection. `PostToolUse` and `Stop` are queued for background processing by default. `PreToolUse` is not registered by default; set `EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED=1` only for synchronous gating experiments.
-- In source-repo validation, the shared Codex project hook launcher was smoke-tested from Windows and WSL Codex CLI. Published-package and host-marketplace validation should still be called out separately when preparing a release.
 - `ee install ...` and `ee doctor ...` now warn if `npm` or `pnpm` uses a non-official registry, because managed model downloads are most reliable with `https://registry.npmjs.org`.
 - successful `ee install ...` also explains the cold-start expectation: capture starts immediately, but formal experience usually appears after a few similar tasks in the same repo.
 
