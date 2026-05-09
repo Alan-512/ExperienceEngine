@@ -90,7 +90,29 @@ export const isCodexHooksFeatureEnabled = (configText: string): boolean => {
       continue;
     }
 
-    if (inFeatures && /^\s*codex_hooks\s*=\s*true\s*(?:#.*)?$/i.test(line)) {
+    if (
+      inFeatures &&
+      (/^\s*hooks\s*=\s*true\s*(?:#.*)?$/i.test(line) ||
+        /^\s*codex_hooks\s*=\s*true\s*(?:#.*)?$/i.test(line))
+    ) {
+      return true;
+    }
+  }
+
+  return false;
+};
+
+const hasDeprecatedCodexHooksFlag = (configText: string): boolean => {
+  const lines = configText.split(/\r?\n/);
+  let inFeatures = false;
+
+  for (const line of lines) {
+    if (/^\s*\[.+\]\s*$/.test(line)) {
+      inFeatures = line.trim() === "[features]";
+      continue;
+    }
+
+    if (inFeatures && /^\s*codex_hooks\s*=/.test(line)) {
       return true;
     }
   }
@@ -100,7 +122,7 @@ export const isCodexHooksFeatureEnabled = (configText: string): boolean => {
 
 export const ensureCodexHooksFeatureEnabled = (configPath: string): { updated: boolean; path: string } => {
   const existing = existsSync(configPath) ? readFileSync(configPath, "utf8") : "";
-  if (isCodexHooksFeatureEnabled(existing)) {
+  if (isCodexHooksFeatureEnabled(existing) && !hasDeprecatedCodexHooksFlag(existing)) {
     return { updated: false, path: configPath };
   }
 
@@ -110,7 +132,7 @@ export const ensureCodexHooksFeatureEnabled = (configPath: string): { updated: b
 
   if (featuresIndex < 0) {
     const prefix = existing.trimEnd();
-    next = prefix ? `${prefix}\n\n[features]\ncodex_hooks = true\n` : "[features]\ncodex_hooks = true\n";
+    next = prefix ? `${prefix}\n\n[features]\nhooks = true\n` : "[features]\nhooks = true\n";
   } else {
     let insertIndex = lines.length;
     for (let index = featuresIndex + 1; index < lines.length; index += 1) {
@@ -121,12 +143,18 @@ export const ensureCodexHooksFeatureEnabled = (configPath: string): { updated: b
     }
 
     const existingFlagIndex = lines.findIndex(
-      (line, index) => index > featuresIndex && index < insertIndex && /^\s*codex_hooks\s*=/.test(line)
+      (line, index) => index > featuresIndex && index < insertIndex && /^\s*hooks\s*=/.test(line)
     );
     if (existingFlagIndex >= 0) {
-      lines[existingFlagIndex] = "codex_hooks = true";
+      lines[existingFlagIndex] = "hooks = true";
     } else {
-      lines.splice(insertIndex, 0, "codex_hooks = true");
+      lines.splice(insertIndex, 0, "hooks = true");
+      insertIndex += 1;
+    }
+    for (let index = insertIndex - 1; index > featuresIndex; index -= 1) {
+      if (/^\s*codex_hooks\s*=/.test(lines[index] ?? "")) {
+        lines.splice(index, 1);
+      }
     }
     next = `${lines.join("\n").replace(/\n*$/, "")}\n`;
   }

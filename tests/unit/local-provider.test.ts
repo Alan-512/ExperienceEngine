@@ -47,6 +47,25 @@ describe("local embedding provider", () => {
     });
   });
 
+  it("explains how to enable local embeddings when transformers is not installed", async () => {
+    setTransformersModuleLoaderForTests(async () => {
+      const error = new Error("Cannot find package '@huggingface/transformers'");
+      (error as NodeJS.ErrnoException).code = "ERR_MODULE_NOT_FOUND";
+      throw error;
+    });
+
+    await expect(
+      createLocalEmbeddingProvider({
+        config: {
+          embeddingProvider: "local",
+          embeddingModel: "Xenova/multilingual-e5-small"
+        }
+      })
+    ).rejects.toThrow(
+      "Local embeddings require installing @huggingface/transformers separately"
+    );
+  });
+
   it("clears a corrupted cached model and retries once", async () => {
     const cacheDir = mkdtempSync(join(tmpdir(), "ee-local-provider-"));
     const modelDir = join(cacheDir, "Xenova", "multilingual-e5-small", "onnx");

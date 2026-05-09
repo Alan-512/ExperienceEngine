@@ -2,6 +2,7 @@ import { inspectClaudeCodeInstall } from "../../install/claude-code-doctor.js";
 import { installClaudeCodeAdapter } from "../../install/claude-code-installer.js";
 import { inspectCodexInstall, installCodexAdapter } from "../../install/codex-installer.js";
 import { inspectOpenClawInstall, installOpenClawAdapter } from "../../install/openclaw-installer.js";
+import { buildCodexHookReviewGuidance } from "../../install/public-install.js";
 
 type UpgradeDeps = {
   inspectOpenClawInstall?: typeof inspectOpenClawInstall;
@@ -75,6 +76,7 @@ export const runUpgradeCommand = (
     console.log(`Runtime target: ${report.runtimeTarget}`);
     console.log(`Server name: ${report.serverName}`);
     console.log("New Codex MCP connections will use the updated server command.");
+    console.log(`[ExperienceEngine] Codex hook review: ${buildCodexHookReviewGuidance(report.hooks.installedEvents)}`);
     return;
   }
 

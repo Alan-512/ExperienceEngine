@@ -140,7 +140,7 @@ describe("embedding fallback diagnostics", () => {
     });
   });
 
-  it("falls back to the local provider when the API provider fails", async () => {
+  it("falls back to legacy when the API provider fails in api mode", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response(JSON.stringify({ error: "busy" }), { status: 503 }))
@@ -173,9 +173,8 @@ describe("embedding fallback diagnostics", () => {
       })
     });
 
-    expect(result.space.provider).toBe("local");
-    expect(result.embedding).toEqual([0.91, 0.82, 0.73]);
-    expect(pipelineSpy).toHaveBeenCalledTimes(1);
+    expect(result.space.provider).toBe("legacy");
+    expect(pipelineSpy).not.toHaveBeenCalled();
   });
 
   it("skips local fallback when the hook fast path disables it", async () => {
@@ -220,6 +219,46 @@ describe("embedding fallback diagnostics", () => {
     expect(pipelineSpy).not.toHaveBeenCalled();
   });
 
+  it("does not bootstrap local embeddings in default api mode when no API provider is configured", async () => {
+    const fetchSpy = vi.fn(async () => {
+      throw new Error("should not call remote embedding API");
+    });
+    vi.stubGlobal("fetch", fetchSpy);
+
+    const pipelineSpy = vi.fn(async () =>
+      async () => ({
+        data: [0.41, 0.52, 0.63]
+      })
+    );
+
+    setTransformersModuleLoaderForTests(async () => ({
+      env: {
+        allowRemoteModels: false,
+        allowLocalModels: false,
+        cacheDir: undefined
+      },
+      pipeline: pipelineSpy
+    }));
+
+    const result = await embedQueryText("narrow the root cause before editing code", {
+      config: {
+        embeddingProvider: "api",
+        embeddingModel: "Xenova/multilingual-e5-small",
+        embeddingDtype: "q8",
+        embeddingCacheDir: "./tmp/embeddings"
+      },
+      env: runtimeEnv({
+        OPENAI_API_KEY: undefined,
+        EXPERIENCE_ENGINE_EMBEDDING_API_KEY: undefined,
+        JINA_API_KEY: undefined
+      })
+    });
+
+    expect(result.space.provider).toBe("legacy");
+    expect(fetchSpy).not.toHaveBeenCalled();
+    expect(pipelineSpy).not.toHaveBeenCalled();
+  });
+
   it("uses the Jina API provider when api mode is enabled and JINA_API_KEY is present", async () => {
     vi.stubGlobal(
       "fetch",
@@ -257,7 +296,7 @@ describe("embedding fallback diagnostics", () => {
     });
   });
 
-  it("skips the Jina API provider entirely when no JINA_API_KEY is available", async () => {
+  it("skips semantic providers when no API key is available in api mode", async () => {
     const fetchSpy = vi.fn(async () => {
       throw new Error("should not call remote embedding API");
     });
@@ -292,9 +331,9 @@ describe("embedding fallback diagnostics", () => {
       })
     });
 
-    expect(result.space.provider).toBe("local");
+    expect(result.space.provider).toBe("legacy");
     expect(fetchSpy).not.toHaveBeenCalled();
-    expect(pipelineSpy).toHaveBeenCalledTimes(1);
+    expect(pipelineSpy).not.toHaveBeenCalled();
   });
 
   it("caches repeated query embeddings for the same API provider and input", async () => {
@@ -465,11 +504,11 @@ describe("embedding fallback diagnostics", () => {
       })
     });
 
-    expect(result.space.provider).toBe("local");
-    expect(pipelineSpy).toHaveBeenCalledTimes(1);
+    expect(result.space.provider).toBe("legacy");
+    expect(pipelineSpy).not.toHaveBeenCalled();
   });
 
-  it("includes both API and local failures in the warning when all providers fail", async () => {
+  it("does not try local embeddings after an API failure in api mode", async () => {
     vi.stubGlobal(
       "fetch",
       vi.fn(async () => new Response(JSON.stringify({ error: "rate limited" }), { status: 429 }))
@@ -501,7 +540,7 @@ describe("embedding fallback diagnostics", () => {
     expect(result.space.provider).toBe("legacy");
     expect(warnSpy).toHaveBeenCalledTimes(1);
     expect(warnSpy.mock.calls[0]?.[0]).toContain("429");
-    expect(warnSpy.mock.calls[0]?.[0]).toContain("local bootstrap failed");
+    expect(warnSpy.mock.calls[0]?.[0]).not.toContain("local bootstrap failed");
   });
 
   it("retries a transient API rate limit once before succeeding", async () => {
@@ -565,9 +604,9 @@ describe("embedding fallback diagnostics", () => {
       })
     });
 
-    expect(result.space.provider).toBe("local");
+    expect(result.space.provider).toBe("legacy");
     expect(fetchSpy).toHaveBeenCalledTimes(1);
-    expect(pipelineSpy).toHaveBeenCalledTimes(1);
+    expect(pipelineSpy).not.toHaveBeenCalled();
   });
 
   it("uses the first non-empty OpenAI embedding key when OPENAI_API_KEY is blank", async () => {

@@ -71,10 +71,22 @@ const formatInput = (prefix: "query" | "passage", text: string): string => {
 };
 
 const loadTransformers = async (): Promise<TransformersModule> => {
-  if (testLoader) {
-    return testLoader();
+  try {
+    if (testLoader) {
+      return await testLoader();
+    }
+    return (await import("@huggingface/transformers")) as unknown as TransformersModule;
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException | undefined)?.code;
+    const message = error instanceof Error ? error.message : String(error);
+    if (code === "ERR_MODULE_NOT_FOUND" && message.includes("@huggingface/transformers")) {
+      throw new Error(
+        "Local embeddings require installing @huggingface/transformers separately. " +
+          "Install it only when you set EXPERIENCE_ENGINE_EMBEDDING_PROVIDER=local."
+      );
+    }
+    throw error;
   }
-  return (await import("@huggingface/transformers")) as unknown as TransformersModule;
 };
 
 const isCorruptedModelCacheError = (error: unknown): boolean => {

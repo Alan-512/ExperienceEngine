@@ -58,7 +58,10 @@ describe("repair command", () => {
     expect(consoleLogSpy.mock.calls).toEqual(
       expect.arrayContaining([
         ["Repaired codex project wiring."],
-        ["MCP registration refreshed: skipped (project hooks/instructions only)"]
+        ["MCP registration refreshed: skipped (project hooks/instructions only)"],
+        [
+          "[ExperienceEngine] Codex hook review: Open /hooks in Codex and approve the ExperienceEngine hooks (UserPromptSubmit, PostToolUse, Stop)."
+        ]
       ])
     );
   });

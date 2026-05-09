@@ -4,6 +4,7 @@ import { resolveCodexRuntimeTarget, ensureCodexProjectHookLauncher } from "../..
 import { repairOpenClawAdapter } from "../../install/openclaw-installer.js";
 import { resolveExperienceEnginePackageRoot } from "../../install/openclaw-cli.js";
 import { resolveCodexInstructionPath, upsertManagedInstructionBlock } from "../../install/codex-installer.js";
+import { buildCodexHookReviewGuidance } from "../../install/public-install.js";
 
 export const runRepairCommand = (target?: string): void => {
   if (!target) {
@@ -41,6 +42,7 @@ export const runRepairCommand = (target?: string): void => {
     console.log("MCP registration refreshed: skipped (project hooks/instructions only)");
     console.log(`Codex hooks feature enabled: ${hooks.featureEnabled ? "yes" : "no"}`);
     console.log(`Codex hook entries installed: ${hooks.installedEvents.join(", ") || "none"}`);
+    console.log(`[ExperienceEngine] Codex hook review: ${buildCodexHookReviewGuidance(hooks.installedEvents)}`);
     console.log(`Invalid Claude hook entries removed: ${hooks.removedClaudeHookCommands.length}`);
     console.log(`Managed instructions updated: ${instruction.state === "present" ? "yes" : "unknown"}`);
     return;

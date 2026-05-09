@@ -428,8 +428,8 @@ Default behavior (`embeddingProvider = "api"`):
 - if `OPENAI_API_KEY` is present, it prefers OpenAI `text-embedding-3-small`
 - otherwise it tries Gemini `gemini-embedding-001` when `GEMINI_API_KEY` is present
 - otherwise it tries Jina `jina-embeddings-v3` when `JINA_API_KEY` is present
-- if the API provider fails, ExperienceEngine falls back to the managed local model
-- if the local model fails, ExperienceEngine falls back to legacy hash-based retrieval
+- if no API provider is available, or the selected API provider fails, ExperienceEngine falls back to legacy hash-based retrieval
+- the managed local model is optional and is no longer installed by default
 
 Prompt-time behavior:
 
@@ -439,6 +439,7 @@ Prompt-time behavior:
 
 Offline behavior (`embeddingProvider = "local"`):
 
+- install the optional local runtime first: `npm install -g @huggingface/transformers`
 - the default local model is `Xenova/multilingual-e5-small`
 - the default dtype is `q8`, so ExperienceEngine prefers the quantized ONNX artifact
 - the first semantic retrieval may trigger a one-time model download
@@ -458,7 +459,7 @@ Environment variables:
 
 Notes:
 
-- The default embedding strategy on this branch is now `api` instead of `local`. Users who want fully local retrieval should set `embeddingProvider = "local"` explicitly.
+- The default embedding strategy on this branch is now `api` instead of `local`. Users who want fully local retrieval should install the optional local runtime and set `embeddingProvider = "local"` explicitly.
 - `ee install ...` and `ee doctor ...` warn when `npm` or `pnpm` is pointed at a non-official registry
 - the recommended registry for managed model downloads is `https://registry.npmjs.org`
 - `ee doctor ...` reports a first-value readiness summary so users can see how much captured evidence exists before the first durable node is promoted
@@ -570,7 +571,8 @@ ee install codex
 What happens:
 - ExperienceEngine registers its shared MCP server with Codex
 - new Codex MCP sessions can use ExperienceEngine interaction surfaces
-- ExperienceEngine writes Codex-native project hooks and enables `codex_hooks`
+- ExperienceEngine writes Codex-native project hooks and enables the `hooks` feature
+- first use after managed setup may require manual Codex hook approval; open `/hooks` and approve `UserPromptSubmit`, `PostToolUse`, and `Stop`
 - install ends with a short cold-start note so users know capture is active before the first formal hint appears
 
 Local state changes:
@@ -598,7 +600,7 @@ codex mcp get experienceengine
 Success looks like:
 - doctor reports the adapter as installed
 - `codex mcp get experienceengine` shows the server as enabled
-- doctor reports Codex hooks as healthy and `codex_hooks` as enabled
+- doctor reports Codex hooks as healthy and the hooks feature as enabled
 - a new `codex exec` session can call ExperienceEngine MCP resources or tools
 
 Host note:
@@ -609,6 +611,7 @@ Host note:
 - `PostToolUse` and `Stop` are queued for background processing by default
 - `PreToolUse` is not registered by default; set `EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED=1` only for synchronous gating experiments
 - in a Windows Codex App + WSL Codex CLI repo, `.codex/hooks.json` is shared project hook wiring, while MCP config is owned by each runtime's Codex home
+- Codex hook review is not CLI-only: any Codex surface that loads the repo project hooks can ask for approval; approve `UserPromptSubmit`, `PostToolUse`, and `Stop`, plus `PreToolUse` only when explicitly enabled
 - `ee repair codex` refreshes project hooks and removes stale project-scoped ExperienceEngine MCP config
 - if Codex still cannot see ExperienceEngine or doctor reports hook drift, run `ee repair codex`
 - `ee codex exec` is a deterministic wrapper for non-interactive runs
@@ -619,7 +622,7 @@ Host note:
 - `codex exec review` is not wrapped yet; keep using native Codex review or the MCP/CLI surfaces for review workflows
 
 Diagnostics note:
-- `ee doctor codex` separates project hook health, `codex_hooks` enablement, MCP registration, and PATH-visible `ee` CLI fallback
+- `ee doctor codex` separates project hook health, hooks feature enablement, MCP registration, and PATH-visible `ee` CLI fallback
 - Windows Codex App can have healthy project hooks even when a Windows `codex` CLI is not installed
 - WSL Codex CLI must have its own MCP registration in the WSL Codex home; it can still reuse the same repo `.codex/hooks.json`
 - on WSL, `ee doctor codex` also warns when `codex` resolves to a WindowsApps shim instead of the Linux Codex CLI

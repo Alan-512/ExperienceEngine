@@ -52,6 +52,31 @@ describe("upgrade command", () => {
     expect(consoleLogSpy).toHaveBeenCalledWith("New Claude Code sessions will use the updated hook command.");
   });
 
+  it("upgrades Codex and prints hook review guidance", () => {
+    runUpgradeCommand("codex", {
+      inspectCodexInstall: () =>
+        ({
+          versionStatus: {
+            recordedVersion: "0.2.0"
+          }
+        }) as never,
+      installCodexAdapter: () =>
+        ({
+          adapter: "codex",
+          installedVersion: "0.3.1",
+          runtimeTarget: "posix",
+          serverName: "experienceengine",
+          hooks: { installedEvents: ["UserPromptSubmit", "PostToolUse", "Stop"] }
+        }) as never
+    });
+
+    expect(consoleLogSpy).toHaveBeenCalledWith("Upgraded codex adapter.");
+    expect(consoleLogSpy).toHaveBeenCalledWith("Version: 0.2.0 -> 0.3.1");
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      "[ExperienceEngine] Codex hook review: Open /hooks in Codex and approve the ExperienceEngine hooks (UserPromptSubmit, PostToolUse, Stop)."
+    );
+  });
+
   it("shows usage for unsupported targets", () => {
     runUpgradeCommand(undefined);
 

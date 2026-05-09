@@ -297,7 +297,7 @@ const logCodexRuntimeStatus = (status?: {
 
     console.log("Codex hooks:");
     console.log(`- State: ${status.hooks.state}`);
-    console.log(`- Feature codex_hooks: ${status.hooks.featureEnabled ? "enabled" : "disabled"}`);
+    console.log(`- Feature hooks: ${status.hooks.featureEnabled ? "enabled" : "disabled"}`);
     console.log(`- Config path: ${status.hooks.configPath}`);
     console.log(`- Hooks path: ${status.hooks.hooksPath}`);
     console.log(`- Hooks file present: ${status.hooks.hookFilePresent ? "yes" : "no"}`);

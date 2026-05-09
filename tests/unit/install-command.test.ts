@@ -18,7 +18,7 @@ describe("install command", () => {
           serverName: "experienceengine",
           serverCommand: "node dist/cli/index.js codex-mcp-server",
           captureDir: "/tmp/.experienceengine/adapters/codex/captures",
-          hooks: { state: "installed" },
+          hooks: { state: "installed", installedEvents: ["UserPromptSubmit", "PostToolUse", "Stop"] },
           launcherPaths: { hook: "/tmp/.codex/experienceengine-codex-hook.sh" }
         }) as never,
       readRegistryHealth: () => ({
@@ -31,6 +31,9 @@ describe("install command", () => {
     expect(consoleLogSpy.mock.calls).toEqual(
       expect.arrayContaining([
         ["[ExperienceEngine] Setup state: Installed."],
+        [
+          "[ExperienceEngine] Codex hook review: Open /hooks in Codex and approve the ExperienceEngine hooks (UserPromptSubmit, PostToolUse, Stop)."
+        ],
         [
           "[ExperienceEngine] Next step: Start a new Codex session in this repo. If shared ExperienceEngine state is not initialized yet, run `ee init` before your first real task."
         ],
@@ -52,7 +55,7 @@ describe("install command", () => {
           serverName: "experienceengine",
           serverCommand: "node dist/cli/index.js codex-mcp-server",
           captureDir: "/tmp/.experienceengine/adapters/codex/captures",
-          hooks: { state: "installed" },
+          hooks: { state: "installed", installedEvents: ["UserPromptSubmit", "PostToolUse", "Stop"] },
           launcherPaths: { hook: "/tmp/.codex/experienceengine-codex-hook.sh" }
         }) as never,
       readRegistryHealth: () => ({

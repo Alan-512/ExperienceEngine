@@ -212,6 +212,7 @@ Install ExperienceEngine through the host setup flow for the host you want to us
   - native/manual fallback:
     - see the advanced example below if you need direct MCP wiring
   - after either path, start a new Codex session in the repo so project hooks, MCP wiring, and the `AGENTS.md` instruction block are picked up
+  - on first use after managed setup, open `/hooks` in Codex and approve the ExperienceEngine hooks: `UserPromptSubmit`, `PostToolUse`, and `Stop`
   - in mixed Windows Codex App + WSL Codex CLI setups, the project `.codex/hooks.json` can be shared by both runtimes, while MCP registration remains runtime/user-level in each Codex home
 - `Claude Code`
   - host-native marketplace install:
@@ -340,6 +341,7 @@ Notes:
 - `Claude Code` installs both hooks and the shared ExperienceEngine MCP server.
 - `Codex` installs Codex-native hooks plus the shared ExperienceEngine MCP server. `ee codex exec` remains the deterministic non-interactive fallback.
 - Codex `UserPromptSubmit` stays synchronous because it owns prompt-time experience injection. `PostToolUse` and `Stop` are queued for background processing by default. `PreToolUse` is not registered by default; set `EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED=1` only for synchronous gating experiments.
+- Codex App and Codex CLI both load repo-level project hooks when they open the same repo. If Codex says hooks need review, open `/hooks` and approve ExperienceEngine's `UserPromptSubmit`, `PostToolUse`, and `Stop` hooks. If `EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED=1` was used, approve `PreToolUse` too.
 - `ee install ...` and `ee doctor ...` now warn if `npm` or `pnpm` uses a non-official registry, because managed model downloads are most reliable with `https://registry.npmjs.org`.
 - successful `ee install ...` also explains the cold-start expectation: capture starts immediately, but formal experience usually appears after a few similar tasks in the same repo.
 
@@ -357,7 +359,7 @@ That managed state includes:
 - SQLite database
 - product settings
 - per-adapter install state
-- managed local embedding model cache under `~/.experienceengine/models/embeddings`
+- optional local embedding model cache under `~/.experienceengine/models/embeddings`
 - managed backups and exports
 
 ## Embedding Defaults
@@ -366,12 +368,14 @@ Current default behavior:
 
 - `embeddingProvider = "api"`
 - provider priority: OpenAI -> Gemini -> Jina
-- if no API provider is available, ExperienceEngine falls back to the managed local embedding model
+- if no API provider is available, ExperienceEngine falls back to legacy hash-based retrieval
+- local semantic embeddings are an optional enhancement and are not installed by default
 
 Useful environment variables:
 
 - `EXPERIENCE_ENGINE_EMBEDDING_PROVIDER=local`
-  - force fully local embedding behavior
+  - force fully local embedding behavior after installing the optional local runtime:
+    `npm install -g @huggingface/transformers`
 - `EXPERIENCE_ENGINE_EMBEDDING_API_PROVIDER=openai|gemini|jina`
   - force a specific API embedding provider
 

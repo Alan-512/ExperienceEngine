@@ -22,7 +22,7 @@ describe("remote release resolver", () => {
   });
 
   it("reads the repository URL from package metadata", () => {
-    expect(readRepositoryUrl()).toBe("https://github.com/Alan-512/ExperienceEngine.git");
+    expect(readRepositoryUrl()).toBe("git+https://github.com/Alan-512/ExperienceEngine.git");
   });
 
   it("reports remote update availability from the latest GitHub release", async () => {

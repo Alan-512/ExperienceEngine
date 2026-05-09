@@ -209,50 +209,6 @@ const isMissingLocalEmbeddingModule = (error: unknown): boolean => {
   return message.includes("local-provider.js");
 };
 
-const tryLocalFallback = async (
-  value: string,
-  mode: "query" | "passage",
-  options: EmbeddingOptions,
-  primaryFailureMessage?: string
-): Promise<EmbeddingResult | null> => {
-  const env = options.env ?? process.env;
-  if (env.EXPERIENCE_ENGINE_DISABLE_LOCAL_EMBEDDING_FALLBACK === "1") {
-    return null;
-  }
-
-  try {
-    const { getLocalEmbeddingProvider } = await loadLocalEmbeddingProviderModule();
-    const provider = await getLocalEmbeddingProvider({
-      ...options,
-      config: {
-        ...options.config,
-        embeddingProvider: "local"
-      }
-    });
-    const embedding = mode === "query" ? await provider.embedQuery(value) : await provider.embedPassage(value);
-    return {
-      embedding,
-      space: {
-        provider: provider.provider,
-        model: provider.model,
-        version: provider.version,
-        dimensions: provider.dimensions
-      }
-    };
-  } catch (error) {
-    if (isMissingLocalEmbeddingModule(error)) {
-      return null;
-    }
-    const message = error instanceof Error ? error.message : String(error);
-    warnLocalEmbeddingFallback(
-      primaryFailureMessage
-        ? `${primaryFailureMessage}; local fallback failed: ${message}`
-        : message
-    );
-    return null;
-  }
-};
-
 export const setEmbeddingProviderForTests = (provider: SemanticEmbeddingProvider | null): void => {
   testProvider = provider;
 };
@@ -293,7 +249,7 @@ const resolveProvider = async (options: EmbeddingOptions = {}): Promise<Semantic
 
   const env = options.env ?? process.env;
   const localFallbackDisabled = env.EXPERIENCE_ENGINE_DISABLE_LOCAL_EMBEDDING_FALLBACK === "1";
-  if (!localFallbackDisabled && (options.config?.embeddingProvider === "local" || options.config?.embeddingProvider === "api" || options.config?.embeddingProvider === undefined)) {
+  if (!localFallbackDisabled && options.config?.embeddingProvider === "local") {
     try {
       const { getLocalEmbeddingProvider } = await loadLocalEmbeddingProviderModule();
       return await getLocalEmbeddingProvider(options);
@@ -339,14 +295,7 @@ export const embedQueryText = async (
     return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (provider.provider !== "local") {
-      const localResult = await tryLocalFallback(value, "query", options, message);
-      if (localResult) {
-        return localResult;
-      }
-    } else {
-      warnLocalEmbeddingFallback(message);
-    }
+    warnLocalEmbeddingFallback(message);
     return toLegacyResult(value);
   }
 };
@@ -378,14 +327,7 @@ export const embedPassageText = async (
     return result;
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    if (provider.provider !== "local") {
-      const localResult = await tryLocalFallback(value, "passage", options, message);
-      if (localResult) {
-        return localResult;
-      }
-    } else {
-      warnLocalEmbeddingFallback(message);
-    }
+    warnLocalEmbeddingFallback(message);
     return toLegacyResult(value);
   }
 };

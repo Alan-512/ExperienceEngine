@@ -6,7 +6,7 @@ import {
 
 describe("Claude CLI wiring", () => {
   it("builds the documented add command for the ExperienceEngine MCP server", () => {
-    const command = buildClaudeAddCommand("/tmp/experienceengine", "/tmp/ee-home");
+    const command = buildClaudeAddCommand("/mnt/d/tmp/experienceengine", "/mnt/d/tmp/ee-home");
 
     expect(command.bin).toBe("claude");
     expect(command.args.slice(0, 5)).toEqual(["mcp", "add", "-s", "project", "experienceengine"]);

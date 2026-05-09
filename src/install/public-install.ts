@@ -30,6 +30,13 @@ export const buildCodexManualFallbackCommand = (
 ): string =>
   `codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=${productHome} -- npx -y ${packageSpec} codex-mcp-server`;
 
+export const buildCodexHookReviewGuidance = (events: readonly string[] = [
+  "UserPromptSubmit",
+  "PostToolUse",
+  "Stop"
+]): string =>
+  `Open /hooks in Codex and approve the ExperienceEngine hooks (${events.join(", ")}).`;
+
 export const buildClaudeMarketplaceAddCommand = (
   repo = "https://github.com/Alan-512/ExperienceEngine.git"
 ): string =>

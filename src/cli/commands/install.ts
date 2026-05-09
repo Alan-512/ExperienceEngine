@@ -1,7 +1,7 @@
 import { installClaudeCodeAdapter } from "../../install/claude-code-installer.js";
 import { installCodexAdapter } from "../../install/codex-installer.js";
 import { installOpenClawAdapter } from "../../install/openclaw-installer.js";
-import { buildHostPostInstallOrientation } from "../../install/public-install.js";
+import { buildCodexHookReviewGuidance, buildHostPostInstallOrientation } from "../../install/public-install.js";
 import {
   buildRegistryRecommendationCommands,
   readRegistryHealth,
@@ -116,6 +116,7 @@ export const runInstallCommand = (
     console.log(`Server command: ${report.serverCommand}`);
     console.log(`Codex hooks: ${report.hooks.state}`);
     console.log(`Codex hook launcher: ${report.launcherPaths.hook}`);
+    console.log(`[ExperienceEngine] Codex hook review: ${buildCodexHookReviewGuidance(report.hooks.installedEvents)}`);
     console.log(`Capture path: ${report.captureDir}`);
     logRegistryHealth(registryHealth);
     logPostInstallOrientation("codex");

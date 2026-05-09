@@ -106,7 +106,7 @@ env_key = "OPENROUTER_API_KEY"
     expect(report.hostWiring.wired).toBe(true);
     expect(existsSync(report.paths.installStatePath)).toBe(true);
     expect(readFileSync(join(homeDir, ".codex", "config.toml"), "utf8")).toContain("startup_timeout_sec = 60.0");
-    expect(readFileSync(join(homeDir, ".codex", "config.toml"), "utf8")).toContain("codex_hooks = true");
+    expect(readFileSync(join(homeDir, ".codex", "config.toml"), "utf8")).toContain("hooks = true");
     const hooks = JSON.parse(readFileSync(join(homeDir, ".codex", "hooks.json"), "utf8")) as {
       hooks: Record<string, unknown>;
     };
@@ -282,7 +282,8 @@ codex_hooks = true
     expect(config).not.toContain("[mcp_servers.experienceengine]");
     expect(config).not.toContain("[mcp_servers.experienceengine.env]");
     expect(config).toContain("[features]");
-    expect(config).toContain("codex_hooks = true");
+    expect(config).toContain("hooks = true");
+    expect(config).not.toContain("codex_hooks");
   });
 
   it("reports current host wiring for doctor output", () => {

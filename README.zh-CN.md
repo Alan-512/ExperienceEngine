@@ -210,6 +210,7 @@ ExperienceEngine 现在不再把 `ee` CLI 当成适用于所有宿主的统一�
   - 原生 / 手工 fallback：
     - 如果你需要直接 MCP wiring，可参考后面的高级示例
   - 无论走哪条路径，首次接入后都建议在仓库里开启一个新的 Codex 会话，让项目 hooks、MCP 配置和 `AGENTS.md` 指令块生效
+  - 托管安装后的首次使用，需要在 Codex 里打开 `/hooks`，批准 ExperienceEngine 的 `UserPromptSubmit`、`PostToolUse`、`Stop` hooks
   - 如果同一个仓库同时用于 Windows Codex App 和 WSL Codex CLI，项目 `.codex/hooks.json` 可以共享；MCP 注册仍然属于每个运行时自己的 Codex home
 - `Claude Code`
   - 宿主原生 marketplace 安装：
@@ -339,6 +340,7 @@ codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceeng
 - `Claude Code` 会安装 hooks 和共享 ExperienceEngine MCP 服务
 - `Codex` 会安装 Codex 原生 hooks 和共享 ExperienceEngine MCP 服务。`ee codex exec` 仍是确定性的非交互 fallback。
 - Codex 的 `UserPromptSubmit` 保持同步，因为它负责 prompt-time experience injection。`PostToolUse` 和 `Stop` 默认排队后在后台处理。`PreToolUse` 默认不注册；只有同步 gating 实验需要时才设置 `EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED=1` 启用。
+- Codex App 和 Codex CLI 打开同一个仓库时都会读取仓库级 project hooks。如果 Codex 提示 hooks 需要 review，打开 `/hooks`，批准 ExperienceEngine 的 `UserPromptSubmit`、`PostToolUse`、`Stop`；如果启用了 `EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED=1`，再批准 `PreToolUse`。
 - `ee install ...` 与 `ee doctor ...` 会在 `npm` / `pnpm` 使用非官方 registry 时给出提示，因为受管模型下载在 `https://registry.npmjs.org` 下最稳定
 - 成功执行 `ee install ...` 后，也会提醒冷启动预期：capture 会立刻开始，但 formal experience 一般需要在同一仓库里出现几次相似任务后才会形成
 
@@ -356,7 +358,7 @@ codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceeng
 - SQLite 数据库
 - 产品设置
 - 各 adapter 的 install state
-- 受管本地 embedding 模型缓存，默认位于 `~/.experienceengine/models/embeddings`
+- 可选本地 embedding 模型缓存，默认位于 `~/.experienceengine/models/embeddings`
 - 受管备份与导出快照
 
 ## Embedding 默认行为
@@ -365,12 +367,14 @@ codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceeng
 
 - `embeddingProvider = "api"`
 - provider 优先级：OpenAI -> Gemini -> Jina
-- 如果没有任何 API provider 可用，会自动回退到受管本地 embedding
+- 如果没有任何 API provider 可用，会回退到 legacy hash-based retrieval
+- 本地语义 embedding 是可选增强，默认安装不再包含本地模型运行时
 
 常用环境变量：
 
 - `EXPERIENCE_ENGINE_EMBEDDING_PROVIDER=local`
-  - 强制完全本地 embedding
+  - 安装可选本地运行时后，强制完全本地 embedding：
+    `npm install -g @huggingface/transformers`
 - `EXPERIENCE_ENGINE_EMBEDDING_API_PROVIDER=openai|gemini|jina`
   - 强制指定某个 API embedding provider
 

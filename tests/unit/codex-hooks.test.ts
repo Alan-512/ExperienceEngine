@@ -26,14 +26,28 @@ afterEach(() => {
 });
 
 describe("Codex hook config helpers", () => {
-  it("enables the codex_hooks feature flag in project config", () => {
+  it("enables the hooks feature flag in project config", () => {
     const cwd = makeTempDir();
     const configPath = join(cwd, ".codex", "config.toml");
     const result = ensureCodexHooksFeatureEnabled(configPath);
 
     expect(result.updated).toBe(true);
     expect(readFileSync(configPath, "utf8")).toContain("[features]");
-    expect(readFileSync(configPath, "utf8")).toContain("codex_hooks = true");
+    expect(readFileSync(configPath, "utf8")).toContain("hooks = true");
+  });
+
+  it("migrates the deprecated codex_hooks feature flag", () => {
+    const cwd = makeTempDir();
+    const configPath = join(cwd, ".codex", "config.toml");
+    mkdirSync(join(cwd, ".codex"), { recursive: true });
+    writeFileSync(configPath, "[features]\ncodex_hooks = true\n", "utf8");
+
+    const result = ensureCodexHooksFeatureEnabled(configPath);
+    const config = readFileSync(configPath, "utf8");
+
+    expect(result.updated).toBe(true);
+    expect(config).toContain("hooks = true");
+    expect(config).not.toContain("codex_hooks");
   });
 
   it("inspects missing hook entries and disabled feature state", () => {

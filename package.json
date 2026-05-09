@@ -1,6 +1,6 @@
 {
   "name": "@alan512/experienceengine",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "type": "module",
   "description": "Experience governance for coding agents: learn from real task outcomes, inject reusable hints, and retire low-value guidance.",
   "license": "MIT",
@@ -56,7 +56,6 @@
     "check": "pnpm typecheck && pnpm test && pnpm build"
   },
   "dependencies": {
-    "@huggingface/transformers": "^3.8.1",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "zod": "^3.25.76"
   },
