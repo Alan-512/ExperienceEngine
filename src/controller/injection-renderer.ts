@@ -1,53 +1,106 @@
-import type { ExperienceNode, InjectionMode, InterventionStrength } from "../types/domain.js";
+import type {
+  ExperienceNode,
+  InjectionMode,
+  InterventionConfidence,
+  InterventionStrength,
+  MatchBand
+} from "../types/domain.js";
 
 const MAX_RENDERED_STEPS = 3;
 const MAX_RENDERED_AVOID_STEPS = 2;
+const DEFAULT_MAX_RENDERED_HINTS = 1;
+
+export type InjectionRenderingPolicy = {
+  confidence?: InterventionConfidence;
+  overallMatchBand?: MatchBand;
+};
+
+const resolveDeliveryState = (node: ExperienceNode): NonNullable<ExperienceNode["delivery_state"]> => {
+  if (node.delivery_state) {
+    return node.delivery_state;
+  }
+
+  switch (node.state) {
+    case "candidate":
+      return "shadow_only";
+    case "priority_candidate":
+    case "cooling":
+      return "conservative_only";
+    case "retired":
+      return "quarantined";
+    case "active":
+    default:
+      return "eligible";
+  }
+};
+
+const hasStructuredGuidance = (node: ExperienceNode): boolean =>
+  Boolean(node.goal?.trim()) ||
+  (node.recommended_steps?.length ?? 0) > 0 ||
+  (node.avoid_steps?.length ?? 0) > 0;
 
 const shouldExpandStructuredGuidance = (
   mode: Exclude<InjectionMode, "skip">,
-  node: ExperienceNode
+  node: ExperienceNode,
+  policy: InjectionRenderingPolicy
 ): boolean => {
   if (mode === "inject_conservative") {
-    return (
-      node.state === "active" &&
-      ((node.recommended_steps?.length ?? 0) > 0 || (node.avoid_steps?.length ?? 0) > 0 || Boolean(node.goal?.trim())) &&
-      (
-        node.validation_state === "validated_by_reuse" ||
-        node.helped_count >= 2 ||
-        node.experience_kind === "expectation_correction"
-      ) &&
-      node.harmed_count <= node.helped_count
-    );
+    return false;
   }
 
   if (mode !== "inject") {
     return false;
   }
 
-  if (node.state === "candidate" || node.state === "priority_candidate") {
+  if (!hasStructuredGuidance(node)) {
     return false;
   }
 
-  const hasStructuredGuidance =
-    Boolean(node.goal?.trim()) ||
-    (node.recommended_steps?.length ?? 0) > 0 ||
-    (node.avoid_steps?.length ?? 0) > 0;
-
-  if (!hasStructuredGuidance) {
+  if (node.state !== "active" || resolveDeliveryState(node) !== "eligible") {
     return false;
   }
+
+  if (node.harmed_count > 0 || (node.consecutive_harmed_count ?? 0) > 0) {
+    return false;
+  }
+
+  const validatedOrHistoricallySupported =
+    node.validation_state === "validated_by_reuse" ||
+    (!node.validation_state && node.helped_count >= 2 && node.support_count >= 2);
 
   return (
-    node.validation_state === "validated_by_reuse" ||
-    node.helped_count > 0 ||
-    node.experience_kind === "expectation_correction"
+    validatedOrHistoricallySupported &&
+    policy.confidence === "high" &&
+    (policy.overallMatchBand === undefined || policy.overallMatchBand === "high")
   );
 };
 
-const renderNode = (mode: Exclude<InjectionMode, "skip">, node: ExperienceNode): string => {
+export const explainInjectionRenderingPolicy = (
+  mode: Exclude<InjectionMode, "skip">,
+  nodes: ExperienceNode[],
+  policy: InjectionRenderingPolicy = {}
+): string => {
+  const primary = nodes[0];
+  if (!primary) {
+    return "no_renderable_node";
+  }
+  if (mode === "inject_conservative") {
+    return "compact_conservative_injection";
+  }
+  if (!shouldExpandStructuredGuidance(mode, primary, policy)) {
+    return "compact_until_mature_high_confidence";
+  }
+  return "expanded_mature_high_confidence";
+};
+
+const renderNode = (
+  mode: Exclude<InjectionMode, "skip">,
+  node: ExperienceNode,
+  policy: InjectionRenderingPolicy
+): string => {
   const lines = [`- ${node.compact_hint}`];
 
-  if (!shouldExpandStructuredGuidance(mode, node)) {
+  if (!shouldExpandStructuredGuidance(mode, node, policy)) {
     return lines.join("\n");
   }
 
@@ -98,11 +151,12 @@ const policyHeaderByStrength: Record<InterventionStrength, { title: string; inst
 export const renderInjection = (
   mode: Exclude<InjectionMode, "skip">,
   nodes: ExperienceNode[],
-  maxHints = 3,
-  strength?: InterventionStrength
+  maxHints = DEFAULT_MAX_RENDERED_HINTS,
+  strength?: InterventionStrength,
+  policy: InjectionRenderingPolicy = {}
 ): string => {
   const selected = nodes.slice(0, maxHints);
-  const body = selected.map((node) => renderNode(mode, node)).join("\n");
+  const body = selected.map((node) => renderNode(mode, node, policy)).join("\n");
   const fallbackTitle =
     mode === "inject" ? "Execution hints from prior similar tasks:" : "Conservative execution hints:";
   const policyHeader = strength ? policyHeaderByStrength[strength] : undefined;

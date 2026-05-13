@@ -40,6 +40,34 @@ describe("renderInjection", () => {
     );
   });
 
+  it("emits at most one compact hint by default", () => {
+    const output = renderInjection("inject", [
+      node({ id: "first", compact_hint: "First compact hint." }),
+      node({ id: "second", compact_hint: "Second compact hint." })
+    ]);
+
+    expect(output).toContain("- First compact hint.");
+    expect(output).not.toContain("Second compact hint.");
+  });
+
+  it("does not render raw retrieval text, task history, or candidate evidence", () => {
+    const output = renderInjection("inject", [
+      node({
+        compact_hint: "Use the compact public hint only.",
+        trigger_pattern: "RAW_TRIGGER_SHOULD_STAY_DIAGNOSTIC",
+        retrieval_text: "RAW_RETRIEVAL_TEXT_SHOULD_NOT_RENDER",
+        evidence_summary: "RAW_TASK_HISTORY_SHOULD_NOT_RENDER",
+        origin_record_ids: ["candidate_record_should_not_render"]
+      })
+    ]);
+
+    expect(output).toContain("Use the compact public hint only.");
+    expect(output).not.toContain("RAW_TRIGGER_SHOULD_STAY_DIAGNOSTIC");
+    expect(output).not.toContain("RAW_RETRIEVAL_TEXT_SHOULD_NOT_RENDER");
+    expect(output).not.toContain("RAW_TASK_HISTORY_SHOULD_NOT_RENDER");
+    expect(output).not.toContain("candidate_record_should_not_render");
+  });
+
   it("expands structured steps for mature injected guidance", () => {
     const output = renderInjection(
       "inject",
@@ -56,7 +84,10 @@ describe("renderInjection", () => {
           ],
           avoid_steps: ["Do not edit unrelated schema files before reproducing the failure."]
         })
-      ]
+      ],
+      1,
+      "strong_recommendation",
+      { confidence: "high", overallMatchBand: "high" }
     );
 
     expect(output).toContain("Goal: Narrow the failing migration before touching unrelated schema code.");
@@ -84,6 +115,31 @@ describe("renderInjection", () => {
     expect(output).not.toContain("Steps:");
     expect(output).not.toContain("Goal:");
     expect(output).not.toContain("  1.");
+  });
+
+  it("keeps conservative injection compact even for mature validated nodes", () => {
+    const output = renderInjection(
+      "inject_conservative",
+      [
+        node({
+          node_type: "strategy",
+          helped_count: 4,
+          validation_state: "validated_by_reuse",
+          goal: "Narrow the migration issue before touching unrelated files.",
+          recommended_steps: ["Run the focused migration once to reproduce the failure."],
+          avoid_steps: ["Do not edit unrelated migration files before reproduction."]
+        })
+      ],
+      1,
+      "soft_recommendation",
+      { confidence: "high", overallMatchBand: "high" }
+    );
+
+    expect(output).toContain("Relevant prior experience:");
+    expect(output).toContain("- Validate the failing migration before changing unrelated schema code.");
+    expect(output).not.toContain("Goal:");
+    expect(output).not.toContain("Steps:");
+    expect(output).not.toContain("Avoid:");
   });
 
   it("renders diagnostic hints as non-authoritative leads", () => {
@@ -116,28 +172,27 @@ describe("renderInjection", () => {
     expect(output).toContain("Do not violate this without explicit user approval.");
   });
 
-  it("expands mature conservative guidance when the node is validated and low risk", () => {
+  it("does not expand when high retrieval quality is present but node maturity is insufficient", () => {
     const output = renderInjection(
-      "inject_conservative",
+      "inject",
       [
         node({
           node_type: "strategy",
-          helped_count: 4,
-          validation_state: "validated_by_reuse",
+          helped_count: 0,
+          support_count: 1,
           goal: "Narrow the migration issue before touching unrelated files.",
-          recommended_steps: [
-            "Run the focused migration once to reproduce the failure.",
-            "Inspect the ordering mismatch in the migration under test.",
-            "Change only the migration under test and rerun it."
-          ],
+          recommended_steps: ["Run the focused migration once to reproduce the failure."],
           avoid_steps: ["Do not edit unrelated migration files before reproduction."]
         })
-      ]
+      ],
+      1,
+      "strong_recommendation",
+      { confidence: "high", overallMatchBand: "high" }
     );
 
-    expect(output).toContain("Conservative execution hints:");
-    expect(output).toContain("Goal:");
-    expect(output).toContain("Steps:");
-    expect(output).toContain("Avoid:");
+    expect(output).toContain("- Validate the failing migration before changing unrelated schema code.");
+    expect(output).not.toContain("Goal:");
+    expect(output).not.toContain("Steps:");
+    expect(output).not.toContain("Avoid:");
   });
 });

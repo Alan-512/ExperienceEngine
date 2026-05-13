@@ -21,7 +21,7 @@ import {
   retrieveScoredCandidates,
   type RetrievedCandidate
 } from "./candidate-retriever.js";
-import { renderInjection } from "./injection-renderer.js";
+import { explainInjectionRenderingPolicy, renderInjection } from "./injection-renderer.js";
 import { rankNodes } from "./node-ranker.js";
 import { evaluateTriggerRoute, type TriggerCandidateQuality } from "./trigger-evaluator.js";
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
@@ -644,11 +644,16 @@ const decideInterventionInternal = async (
     }
 
     const finalStrength = deriveInterventionStrength(finalMode, finalSelected);
+    const finalConfidence = deriveDecisionConfidence(finalMode, topCandidateQuality, diagnostics.fastPathApplied);
+    const renderingPolicy = {
+      confidence: finalConfidence,
+      overallMatchBand: topCandidateQuality?.matchScorecard?.overallMatchBand
+    };
 
     return {
       mode: finalMode,
       selected: finalSelected,
-      text: renderInjection(finalMode, finalSelected, finalMode === "inject_conservative" ? 1 : maxHints, finalStrength),
+      text: renderInjection(finalMode, finalSelected, 1, finalStrength, renderingPolicy),
       diagnostics: withDecisionEnvelope({
         mode: finalMode,
         selected: finalSelected,
@@ -656,6 +661,7 @@ const decideInterventionInternal = async (
         topCandidateQuality,
           diagnostics: {
             ...diagnostics,
+          renderingPolicyReason: explainInjectionRenderingPolicy(finalMode, finalSelected, renderingPolicy),
           secondOpinionApplied: secondOpinionApplied || undefined,
           secondOpinionDecision,
           secondOpinionReason,

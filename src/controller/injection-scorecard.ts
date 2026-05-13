@@ -178,6 +178,7 @@ export const buildInjectionScorecard = (
     taskSummary: input.task_summary,
     mode,
     interventionStrength: diagnostics?.interventionStrength,
+    renderingPolicyReason: diagnostics?.renderingPolicyReason,
     riskLevel,
     recommendation: recommendationForRisk(riskLevel),
     reasons: summarizeReasons(scoredNodes, mode),

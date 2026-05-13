@@ -448,6 +448,7 @@ export type InterventionRejectedCandidate = {
 
 export type InterventionDecisionDiagnostics = {
   interventionStrength?: InterventionStrength;
+  renderingPolicyReason?: string;
   recordOnlyDiagnosticCandidateIds?: string[];
   retrievalPolicyDiagnostics?: RetrievalPolicyDiagnostics;
   topCandidates: InjectionScorecardCandidate[];
@@ -478,6 +479,7 @@ export type InjectionScorecard = {
   taskSummary: string;
   mode: InjectionMode;
   interventionStrength?: InterventionStrength;
+  renderingPolicyReason?: string;
   riskLevel: InjectionRiskLevel;
   recommendation: string;
   reasons: string[];

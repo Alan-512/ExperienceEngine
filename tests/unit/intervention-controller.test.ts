@@ -1100,6 +1100,37 @@ describe("decideIntervention", () => {
     expect(softDecision.text).toContain("Relevant prior experience:");
   });
 
+  it("renders only one ordinary injection hint even when several nodes are selected for diagnostics", async () => {
+    const decision = await decideIntervention(
+      input,
+      [
+        node({
+          id: "cluster-primary",
+          helped_count: 4,
+          support_count: 4,
+          compact_hint: "Run the focused auth test before editing.",
+          validation_state: "validated_by_reuse"
+        }),
+        node({
+          id: "cluster-secondary",
+          helped_count: 3,
+          support_count: 3,
+          compact_hint: "Inspect the auth fixture before touching unrelated files.",
+          validation_state: "validated_by_reuse"
+        })
+      ],
+      stats,
+      0.6,
+      3
+    );
+
+    expect(decision.mode).toBe("inject");
+    expect(decision.selected.length).toBeGreaterThan(1);
+    expect(decision.text).toContain("Run the focused auth test before editing.");
+    expect(decision.text).not.toContain("Inspect the auth fixture before touching unrelated files.");
+    expect(decision.diagnostics?.renderingPolicyReason).toBe("compact_until_mature_high_confidence");
+  });
+
   it("adds retrieval policy diagnostics without changing live intervention behavior", async () => {
     const decision = await decideIntervention(
       input,
