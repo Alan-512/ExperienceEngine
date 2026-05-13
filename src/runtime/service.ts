@@ -3,7 +3,6 @@ import { buildInjectionScorecard } from "../controller/injection-scorecard.js";
 import { classifyFailureAttributionReason } from "../feedback/automatic-attribution.js";
 import { applyFeedback } from "../feedback/feedback-manager.js";
 import { detectHarm } from "../feedback/harm-detector.js";
-import { createEmptyStats, updateStats } from "../feedback/stats-updater.js";
 import { buildExperienceInput } from "../input/input-adapter.js";
 import { buildRetrievalContext } from "../controller/retrieval-context.js";
 import { resolveScope } from "../input/scope-resolver.js";
@@ -19,13 +18,8 @@ import { selectHybridRoute, type HybridRouteDecision, type HybridRouteSignals } 
 import { nowIso } from "../utils/clock.js";
 import { createId, stableId } from "../utils/ids.js";
 import type {
-  CandidateSourceSignal,
-  DistillationJob,
   EvaluationMode,
-  ExperienceCandidate,
-  ExperienceCandidateDraft,
   ExperienceInput,
-  ExperienceInputRecord,
   HybridReviewArtifact,
   InterventionDecisionDiagnostics,
   InjectionEvent,
@@ -33,7 +27,6 @@ import type {
   AttributionRecord,
   AttributionVerdict,
   ExperienceNode,
-  OutcomeRecord,
   TaskRun,
   ToolEvent
 } from "../types/domain.js";
@@ -62,6 +55,8 @@ import { RuntimeCaptureWriter } from "../plugin/runtime-capture.js";
 import { normalizeToolResult } from "../plugin/hooks/tool-result-persist.js";
 import { extractToolResultsFromPayload } from "../plugin/runtime-helpers.js";
 import { HybridReviewArtifactRepository } from "../store/sqlite/repositories/hybrid-review-artifact-repo.js";
+import { LearningPipelineService } from "./learning-pipeline-service.js";
+import { mergeContext, TaskFinalizationService } from "./task-finalization-service.js";
 import type { LlmLearningGate } from "../analyzer/llm-learning-gate.js";
 import type { DistillationQueueWorker } from "../distillation/queue-worker.js";
 import type { DistillerEndpoint } from "../distillation/providers/types.js";
@@ -108,244 +103,10 @@ type SessionState = {
   lastInjectionEvent?: InjectionEvent;
 };
 
-const toEvidence = (input: ExperienceInput): string[] =>
-  input.tool_events.map((event) =>
-    [event.tool_name, event.status, event.error_signature ?? event.output_summary]
-      .filter(Boolean)
-      .join(": ")
-  );
-
-const toInputRecord = (input: ExperienceInput, sessionId?: string, episodeId?: string): ExperienceInputRecord => ({
-  record_id: createId("input"),
-  episode_id: episodeId,
-  scope_id: input.scope_id,
-  session_id: sessionId,
-  task_type: input.task_type,
-  task_summary: input.task_summary,
-  outcome_signal: input.outcome_signal,
-  context_summary: input.context_summary,
-  evidence: toEvidence(input),
-  injected_node_ids: input.injected_node_ids,
-  created_at: nowIso()
-});
-
-const toTaskRun = (input: ExperienceInput, sessionId: string, context: HostPromptContext, episodeId?: string): TaskRun => {
-  const timestamp = nowIso();
-  const signals = buildCandidateSignals(input);
-
-  return {
-    id: stableId("taskrun", `${sessionId}:${input.task_summary}:${timestamp}`),
-    episode_id: episodeId,
-    host: context.host ?? "openclaw",
-    scope_id: input.scope_id,
-    session_id: sessionId,
-    task_type: input.task_type,
-    task_summary: input.task_summary,
-    prompt_excerpt: context.userMessage,
-    context_summary: input.context_summary,
-    started_at: timestamp,
-    ended_at: timestamp,
-    final_status:
-      input.outcome_signal === "success" ? "success" : input.outcome_signal === "failure" ? "failure" : "unknown",
-    failure_signature: signals.failure_signature,
-    learning_status: undefined,
-    learning_reason: undefined,
-    created_at: timestamp,
-    updated_at: timestamp
-  };
-};
-
-const toOutcomeRecord = (taskRun: TaskRun, input: ExperienceInput, episodeId?: string): OutcomeRecord => ({
-  id: createId("outcome"),
-  episode_id: episodeId,
-  task_run_id: taskRun.id,
-  outcome_signal: input.outcome_signal,
-  failure_signature: taskRun.failure_signature,
-  summary: input.task_summary,
-  created_at: nowIso()
-});
-
-const buildCandidateSourceSignal = (input: ExperienceInput): CandidateSourceSignal => {
-  const signals = buildCandidateSignals(input);
-
-  return {
-    task_summary: input.task_summary,
-    context_summary: input.context_summary,
-    outcome_signal: input.outcome_signal,
-    tool_events: input.tool_events,
-    evidence: toEvidence(input),
-    failure_signature: signals.failure_signature,
-    retry_count: signals.retry_count,
-    correction_signals: signals.correction_signals,
-    directional_correction: signals.directional_correction,
-    evidence_driven_reversal: signals.evidence_driven_reversal,
-    tool_event_summary: signals.tool_event_summary
-  };
-};
-
 const resolveEpisodeId = (session: SessionState, sessionId: string, input: Pick<ExperienceInput, "scope_id" | "task_summary">): string => {
   session.episodeId ??= stableId("episode", `${sessionId}:${input.scope_id}:${input.task_summary}`);
   return session.episodeId;
 };
-
-const mergeDirectionalCorrectionIntoSourceSignal = (
-  sourceSignal: CandidateSourceSignal,
-  draft: ExperienceCandidateDraft
-): CandidateSourceSignal => {
-  const directionalCorrection = sourceSignal.directional_correction;
-  if (!directionalCorrection) {
-    return sourceSignal;
-  }
-
-  const semanticDetected = Boolean(
-    draft.experience_kind === "expectation_correction" &&
-      draft.correction_category &&
-      draft.deviation_pattern &&
-      draft.corrected_constraint
-  );
-
-  if (!semanticDetected) {
-    return sourceSignal;
-  }
-
-  return {
-    ...sourceSignal,
-    directional_correction: {
-      ...directionalCorrection,
-      semantic_detected: true,
-      correction_category: draft.correction_category,
-      deviation_pattern: draft.deviation_pattern,
-      corrected_constraint: draft.corrected_constraint
-    }
-  };
-};
-
-const mergeEvidenceDrivenReversalIntoSourceSignal = (
-  sourceSignal: CandidateSourceSignal,
-  draft: ExperienceCandidateDraft
-): CandidateSourceSignal => {
-  const reversal = sourceSignal.evidence_driven_reversal;
-  if (!reversal) {
-    return sourceSignal;
-  }
-
-  const semanticDetected = Boolean(
-    draft.experience_kind === "expectation_correction" &&
-      draft.correction_category &&
-      draft.deviation_pattern &&
-      draft.corrected_constraint
-  );
-
-  if (!semanticDetected) {
-    return sourceSignal;
-  }
-
-  return {
-    ...sourceSignal,
-    evidence_driven_reversal: {
-      ...reversal,
-      semantic_detected: true,
-      correction_category: draft.correction_category,
-      deviation_pattern: draft.deviation_pattern,
-      corrected_constraint: draft.corrected_constraint
-    }
-  };
-};
-
-const summarizeRawCandidate = (sourceSignal: CandidateSourceSignal): string => {
-  const fragments = [...sourceSignal.tool_event_summary];
-  if (sourceSignal.failure_signature) {
-    fragments.unshift(`failure signature: ${sourceSignal.failure_signature}`);
-  }
-  return fragments.slice(0, 3).join(" | ");
-};
-
-const resolveCandidateKind = (
-  input: ExperienceInput,
-  sourceSignal: CandidateSourceSignal
-): NonNullable<ExperienceCandidate["candidate_kind"]> => {
-  if (input.outcome_signal === "success") {
-    return "successful_fix";
-  }
-  if (sourceSignal.retry_count > 1) {
-    return "retry_pattern";
-  }
-  if (sourceSignal.correction_signals.length > 0) {
-    return "correction";
-  }
-  return "failure";
-};
-
-const draftToCandidate = (
-  draft: ExperienceCandidateDraft,
-  input: ExperienceInput,
-  originRecordId: string,
-  taskRunId?: string,
-  directionalCorrectionSignal?: CandidateSourceSignal["directional_correction"],
-  evidenceDrivenReversalSignal?: CandidateSourceSignal["evidence_driven_reversal"]
-): ExperienceCandidate => {
-  const timestamp = nowIso();
-  const baseSourceSignal = buildCandidateSourceSignal(input);
-  const sourceSignal = mergeEvidenceDrivenReversalIntoSourceSignal(
-    mergeDirectionalCorrectionIntoSourceSignal(
-      {
-        ...baseSourceSignal,
-        directional_correction: directionalCorrectionSignal ?? baseSourceSignal.directional_correction,
-        evidence_driven_reversal: evidenceDrivenReversalSignal ?? baseSourceSignal.evidence_driven_reversal
-      },
-      draft
-    ),
-    draft
-  );
-  const candidateId = stableId(
-    "candidate",
-    [draft.scope_id, draft.task_type, draft.node_type, draft.compact_hint, originRecordId].join(":")
-  );
-
-  return {
-    id: candidateId,
-    task_run_id: taskRunId ?? originRecordId,
-    candidate_kind: resolveCandidateKind(input, sourceSignal),
-    ...draft,
-    source_record_id: originRecordId,
-    source_context_summary: input.context_summary,
-    source_outcome_signal: input.outcome_signal,
-    raw_summary: summarizeRawCandidate(sourceSignal),
-    failure_signature: sourceSignal.failure_signature,
-    source_signal: sourceSignal,
-    lifecycle_state: "pending",
-    retry_count: 0,
-    created_at: timestamp,
-    updated_at: timestamp
-  };
-};
-
-const candidateToInitialJob = (
-  candidate: ExperienceCandidate,
-  extractorProfile: string
-): DistillationJob => {
-  const timestamp = nowIso();
-
-  return {
-    id: stableId("distill", candidate.id),
-    candidate_id: candidate.id,
-    status: "pending",
-    extractor_profile: extractorProfile,
-    retry_count: candidate.retry_count,
-    created_at: timestamp,
-    updated_at: timestamp
-  };
-};
-
-const mergeContext = (existing: HostPromptContext | undefined, incoming: HostPromptContext): HostPromptContext => ({
-  host: incoming.host ?? existing?.host,
-  sessionId: incoming.sessionId ?? existing?.sessionId,
-  cwd: incoming.cwd ?? existing?.cwd,
-  userMessage: incoming.userMessage || existing?.userMessage || "",
-  taskSummary: incoming.taskSummary ?? existing?.taskSummary,
-  contextSummary: incoming.contextSummary ?? existing?.contextSummary,
-  injectedNodeIds: incoming.injectedNodeIds ?? existing?.injectedNodeIds
-});
 
 const buildToolEventKey = (toolEvent: ToolEvent, toolCallId?: string): string =>
   toolCallId ??
@@ -485,6 +246,8 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly repoPolicyRepo;
   private readonly hybridReviewArtifactRepo;
   private readonly hybridTraceRepo;
+  private readonly learningPipeline;
+  private readonly taskFinalization;
   private readonly runtimeOptions: ExperienceRuntimeServiceOptions;
   private readonly backgroundLearningEnabled: boolean;
   private readonly hybridPosttaskEnabled: boolean;
@@ -519,6 +282,23 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     this.repoPolicyRepo = new RepoPolicyRepository(this.db);
     this.hybridReviewArtifactRepo = new HybridReviewArtifactRepository(this.db);
     this.hybridTraceRepo = new HybridInvocationTraceRepository(this.db);
+    this.learningPipeline = new LearningPipelineService({
+      config: this.config,
+      db: this.db,
+      candidateRepo: this.candidateRepo,
+      jobRepo: this.jobRepo,
+      taskRunRepo: this.taskRunRepo,
+      logger: this.logger,
+      getLearningGate: () => this.getLearningGate(),
+      getDistillationWorker: () => this.getDistillationWorker()
+    });
+    this.taskFinalization = new TaskFinalizationService({
+      scopeRepo: this.scopeRepo,
+      inputRepo: this.inputRepo,
+      taskRunRepo: this.taskRunRepo,
+      outcomeRepo: this.outcomeRepo,
+      statsRepo: this.statsRepo
+    });
     this.captureWriter = new RuntimeCaptureWriter(config, this.logger);
   }
 
@@ -574,46 +354,6 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
         this.orphanToolEvents.delete(toolResult.toolCallId);
       }
     }
-  }
-
-  private buildFinalizedInput(context: HostPromptContext, session: SessionState): ExperienceInput {
-    const mergedContext = mergeContext(session.context, context);
-    const injectedNodeIds =
-      session.injectedNodeIds.length > 0 ? session.injectedNodeIds : mergedContext.injectedNodeIds ?? [];
-    const input = buildExperienceInput(
-      {
-        ...mergedContext,
-        injectedNodeIds
-      },
-      session.toolEvents
-    );
-    return input;
-  }
-
-  private persistFinalizedInput(
-    input: ExperienceInput,
-    sessionId: string,
-    session: SessionState,
-    episodeId?: string,
-    cwd?: string
-  ): ExperienceInputRecord {
-    const resolvedScope = resolveScope(cwd ?? session.context?.cwd);
-    const existingScope = this.scopeRepo.getById(resolvedScope.scope_id);
-    this.scopeRepo.upsert({
-      ...resolvedScope,
-      is_disabled: existingScope?.is_disabled ?? resolvedScope.is_disabled
-    });
-
-    const record = toInputRecord(input, sessionId, episodeId);
-    this.inputRepo.upsert(record);
-
-    if (input.task_type !== "unknown") {
-      const currentStats =
-        this.statsRepo.get(input.scope_id, input.task_type) ?? createEmptyStats(input.scope_id, input.task_type);
-      this.statsRepo.upsert(updateStats(currentStats, input.outcome_signal, input.injected_node_ids.length > 0));
-    }
-
-    return record;
   }
 
   private trackLearningTask(task: Promise<void>): void {
@@ -946,86 +686,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     taskRunId?: string,
     sessionId?: string
   ): Promise<void> {
-    const learningGate = await this.getLearningGate();
-    if (!learningGate) {
-      if (taskRunId) {
-        const taskRun = this.taskRunRepo.getById(taskRunId);
-        if (taskRun) {
-          this.taskRunRepo.upsert({
-            ...taskRun,
-            learning_status: "not_applicable",
-            learning_reason: "background learning disabled",
-            updated_at: nowIso()
-          });
-        }
-      }
-      return;
-    }
-
-    const result = await learningGate.generateCandidateDrafts(input);
-    if (taskRunId) {
-      const taskRun = this.taskRunRepo.getById(taskRunId);
-      if (taskRun) {
-        this.taskRunRepo.upsert({
-          ...taskRun,
-          learning_status: result.drafts.length
-            ? "captured"
-            : result.source === "disabled" && result.reason === "distillation disabled"
-              ? "not_applicable"
-              : "rejected",
-          learning_reason: result.reason,
-          updated_at: nowIso()
-        });
-      }
-    }
-    if (!result.drafts.length) {
-      this.logger.debug?.("experienceengine.learning_skipped", {
-        sessionId,
-        taskType: input.task_type,
-        reason: result.reason,
-        source: result.source
-      });
-      return;
-    }
-
-    const persistedCandidates = result.drafts.map((draft) =>
-      draftToCandidate(
-        draft,
-        input,
-        originRecordId,
-        taskRunId,
-        result.directionalCorrectionSignal,
-        result.evidenceDrivenReversalSignal
-      )
-    );
-    withTransaction(this.db, () => {
-      for (const candidate of persistedCandidates) {
-        this.candidateRepo.upsert(candidate);
-        this.jobRepo.upsert(candidateToInitialJob(candidate, this.config.distillerProfile));
-      }
-    });
-
-    this.logger.info?.("experienceengine.learning_captured", {
-      sessionId,
-      taskType: input.task_type,
-      candidateCount: persistedCandidates.length,
-      source: result.source,
-      reason: result.reason
-    });
-
-    if (this.config.distillationAutoDrain) {
-      const distillationWorker = await this.getDistillationWorker();
-      if (!distillationWorker) {
-        return;
-      }
-
-      await distillationWorker.drain().catch((error) => {
-        this.logger.error?.("experienceengine.distillation_drain_failed", {
-          sessionId,
-          error: error instanceof Error ? error.message : String(error)
-        });
-      });
-    }
+    await this.learningPipeline.persistCandidatesAsync(input, originRecordId, taskRunId, sessionId);
   }
 
   private updateInjectedNodes(
@@ -1400,7 +1061,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   async finalizeTask(context: HostPromptContext) {
     const sessionId = context.sessionId ?? "global";
     const session = this.getSession(sessionId);
-    const input = this.buildFinalizedInput(context, session);
+    const input = this.taskFinalization.buildFinalizedInput(context, session);
     let learningTaskContext:
       | {
           input: ExperienceInput;
@@ -1413,10 +1074,14 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       | undefined;
     withTransaction(this.db, () => {
       const episodeId = resolveEpisodeId(session, sessionId, input);
-      const record = this.persistFinalizedInput(input, sessionId, session, episodeId, context.cwd);
-      const taskRun = toTaskRun(input, sessionId, context, episodeId);
-      this.taskRunRepo.upsert(taskRun);
-      this.outcomeRepo.upsert(toOutcomeRecord(taskRun, input, episodeId));
+      const { record, taskRun } = this.taskFinalization.persistFinalizedRun({
+        experienceInput: input,
+        sessionId,
+        session,
+        episodeId,
+        context,
+        cwd: context.cwd
+      });
       const injectionEvent = session.lastInjectionEvent ?? this.injectionRepo.getLatestBySessionId(sessionId);
       this.updateInjectedNodes(input, record.record_id, taskRun.id, injectionEvent, episodeId);
       if (injectionEvent) {
