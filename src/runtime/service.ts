@@ -8,6 +8,7 @@ import { buildRetrievalContext } from "../controller/retrieval-context.js";
 import { resolveScope } from "../input/scope-resolver.js";
 import { decideIntervention } from "../controller/intervention-controller.js";
 import { renderInlineNotice } from "../controller/inline-notice.js";
+import { buildSkipScorecard } from "../controller/skip-scorecard.js";
 import {
   applyGovernedNodeFeedback,
   deriveNodeOriginProfileForNode
@@ -21,9 +22,7 @@ import type {
   EvaluationMode,
   ExperienceInput,
   HybridReviewArtifact,
-  InterventionDecisionDiagnostics,
   InjectionEvent,
-  InjectionScorecard,
   AttributionRecord,
   AttributionVerdict,
   ExperienceNode,
@@ -164,36 +163,6 @@ const resolveDeliveryMode = (
     delivered: true
   };
 };
-
-const buildRecordOnlyDiagnosticScorecard = (
-  input: ExperienceInput,
-  sessionId: string,
-  diagnostics: InterventionDecisionDiagnostics
-): InjectionScorecard => ({
-  sessionId,
-  scopeId: input.scope_id,
-  taskType: input.task_type === "unknown" ? "general" : input.task_type,
-  taskSummary: input.task_summary,
-  mode: "skip",
-  interventionStrength: "diagnostic_hint",
-  riskLevel: "high",
-  recommendation: "Record-only diagnostic candidate matched; keep it out of prompt text until the live gate clears.",
-  reasons: ["A same-scope shadow candidate matched this task but was not delivered."],
-  topCandidates: diagnostics.topCandidates,
-  topCandidateScore: diagnostics.topCandidateScore,
-  scoreMargin: diagnostics.scoreMargin,
-  fastPathApplied: diagnostics.fastPathApplied,
-  queryRewriteApplied: diagnostics.queryRewriteApplied,
-  gateReason: diagnostics.gateReason,
-  decisionReason: diagnostics.decisionReason,
-  confidence: diagnostics.confidence,
-  budgetClass: diagnostics.budgetClass,
-  selectedCandidateIds: [],
-  recordOnlyDiagnosticCandidateIds: diagnostics.recordOnlyDiagnosticCandidateIds,
-  rejectedCandidates: diagnostics.rejectedCandidates,
-  nodes: [],
-  createdAt: nowIso()
-});
 
 const HYBRID_LIGHTWEIGHT_PATTERN = /\b(wording-only|wording only|copy-only|copy only|copy pass|inline notice wording|expression-layer refinement)\b/i;
 
@@ -907,11 +876,35 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
 
     if (existingScope?.is_disabled) {
       session.injectedNodeIds = [];
-      session.lastInjectionEvent = undefined;
       session.context = {
         ...session.context,
         injectedNodeIds: []
       };
+      const disabledInput = {
+        ...input,
+        scope_id: existingScope.scope_id,
+        injected_node_ids: []
+      };
+      const scorecard = buildSkipScorecard(disabledInput, sessionId, undefined, true);
+      const injectionEvent: InjectionEvent = {
+        injection_id: createId("decision"),
+        episode_id: resolveEpisodeId(session, sessionId, disabledInput),
+        session_id: sessionId,
+        scope_id: disabledInput.scope_id,
+        task_type: disabledInput.task_type === "unknown" ? "general" : disabledInput.task_type,
+        task_summary: disabledInput.task_summary,
+        mode: "skip",
+        delivery_mode: "live",
+        delivered: false,
+        injected_node_ids: [],
+        injection_count: 0,
+        scorecard,
+        was_successful: null,
+        harm_observed: null,
+        created_at: nowIso()
+      };
+      this.injectionRepo.upsert(injectionEvent);
+      session.lastInjectionEvent = injectionEvent;
 
       this.logger.info?.("experienceengine.scope_disabled", {
         sessionId,
@@ -922,12 +915,9 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
         mode: "skip" as const,
         text: undefined,
         notice: undefined,
+        scorecard,
         retrievalContext,
-        input: {
-          ...input,
-          scope_id: existingScope.scope_id,
-          injected_node_ids: []
-        }
+        input: disabledInput
       };
     }
 
@@ -990,9 +980,16 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
         sessionId,
         decision.diagnostics
       )
-        : decision.diagnostics?.recordOnlyDiagnosticCandidateIds?.length
-          ? buildRecordOnlyDiagnosticScorecard(input, sessionId, decision.diagnostics)
-          : undefined;
+        : buildSkipScorecard(input, sessionId, decision.diagnostics);
+    if (scorecard && decision.mode !== "skip" && !delivery.delivered) {
+      if (delivery.deliveryMode === "holdout") {
+        scorecard.skipReasonCode = "holdout_suppressed";
+        scorecard.skipReasonExplanation = "ExperienceEngine found a usable match but withheld it for holdout evaluation.";
+      } else {
+        scorecard.skipReasonCode = "shadow_suppressed";
+        scorecard.skipReasonExplanation = "ExperienceEngine found a usable match but shadow mode suppressed prompt delivery.";
+      }
+    }
     const injectionEvent: InjectionEvent = {
       injection_id: createId(decision.mode === "skip" ? "decision" : "inject"),
       episode_id: episodeId,

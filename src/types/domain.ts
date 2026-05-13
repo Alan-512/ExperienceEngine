@@ -53,6 +53,19 @@ export type MatchScorecard = {
 };
 export type InterventionConfidence = "low" | "medium" | "high";
 export type InterventionBudgetClass = "none" | "single_hint" | "multi_hint";
+export type SkipReasonCode =
+  | "scope_disabled"
+  | "repo_policy_blocked_or_circuit_open"
+  | "holdout_suppressed"
+  | "shadow_suppressed"
+  | "no_candidate"
+  | "candidate_not_mature"
+  | "delivery_state_shadow_only"
+  | "recent_harm_or_quarantined"
+  | "semantic_match_policy_rejected"
+  | "task_family_mismatch"
+  | "low_confidence_or_score_margin"
+  | "record_only_diagnostic_candidate";
 export type SyncSecondOpinionDecision = "allow" | "allow_conservative" | "skip";
 export type SyncSecondOpinionTrigger =
   | "conservative_delivery_state"
@@ -449,6 +462,8 @@ export type InterventionRejectedCandidate = {
 export type InterventionDecisionDiagnostics = {
   interventionStrength?: InterventionStrength;
   renderingPolicyReason?: string;
+  skipReasonCode?: SkipReasonCode;
+  skipReasonExplanation?: string;
   recordOnlyDiagnosticCandidateIds?: string[];
   retrievalPolicyDiagnostics?: RetrievalPolicyDiagnostics;
   topCandidates: InjectionScorecardCandidate[];
@@ -480,6 +495,8 @@ export type InjectionScorecard = {
   mode: InjectionMode;
   interventionStrength?: InterventionStrength;
   renderingPolicyReason?: string;
+  skipReasonCode?: SkipReasonCode;
+  skipReasonExplanation?: string;
   riskLevel: InjectionRiskLevel;
   recommendation: string;
   reasons: string[];

@@ -50,6 +50,10 @@ const describeInterventionReason = (record: ExperienceLastInspection): string | 
     return "ExperienceEngine injected the best available reusable guidance for this task.";
   }
 
+  if (scorecard.mode === "skip" && scorecard.skipReasonExplanation) {
+    return scorecard.skipReasonExplanation;
+  }
+
   if (record.intervention === "shadow") {
     return "ExperienceEngine found a usable match, but delivery was suppressed because this run was in shadow mode.";
   }
@@ -420,6 +424,12 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string,
         }
         if (record.scorecard.interventionStrength) {
           console.log(`- Intervention strength: ${record.scorecard.interventionStrength}`);
+        }
+        if (record.scorecard.skipReasonCode) {
+          console.log(`- Skip reason: ${record.scorecard.skipReasonCode}`);
+        }
+        if (record.scorecard.skipReasonExplanation) {
+          console.log(`- Skip explanation: ${record.scorecard.skipReasonExplanation}`);
         }
         if (record.scorecard.budgetClass) {
           console.log(`- Budget class: ${record.scorecard.budgetClass}`);

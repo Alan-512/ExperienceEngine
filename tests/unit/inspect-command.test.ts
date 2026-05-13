@@ -711,6 +711,28 @@ describe("inspect command", () => {
       delivered: true,
       injected_node_ids: [],
       injection_count: 0,
+      scorecard: {
+        sessionId: "session_skip",
+        scopeId,
+        taskType: "test_debug",
+        taskSummary: "Fix the failing auth test",
+        mode: "skip",
+        skipReasonCode: "no_candidate",
+        skipReasonExplanation: "ExperienceEngine skipped because no relevant experience candidate was available.",
+        riskLevel: "low",
+        recommendation: "ExperienceEngine skipped because no relevant experience candidate was available.",
+        reasons: ["ExperienceEngine skipped because no relevant experience candidate was available."],
+        topCandidates: [],
+        fastPathApplied: false,
+        gateReason: "no_candidates",
+        decisionReason: "no_matching_candidates",
+        confidence: "low",
+        budgetClass: "none",
+        selectedCandidateIds: [],
+        rejectedCandidates: [],
+        nodes: [],
+        createdAt: "2026-03-14T02:00:00.000Z"
+      },
       was_successful: null,
       harm_observed: null,
       created_at: "2026-03-14T02:00:00.000Z"
@@ -725,6 +747,7 @@ describe("inspect command", () => {
         ["Task type: test_debug"],
         ["Intervention: skip"],
         ["Delivery style: no hint delivered"],
+        ["- Why ExperienceEngine acted: ExperienceEngine skipped because no relevant experience candidate was available."],
         ["Automatic feedback: none"]
       ])
     );

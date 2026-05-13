@@ -567,6 +567,10 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     expect(prompt.mode).toBe("skip");
     expect(prompt.text).toBeUndefined();
     expect(prompt.input.injected_node_ids).toEqual([]);
+    expect(prompt.scorecard).toMatchObject({
+      mode: "skip",
+      skipReasonCode: "record_only_diagnostic_candidate"
+    });
 
     const latestDecision = new InjectionRepository(db).getLatestBySessionId("shadow-only-session");
     expect(latestDecision).toMatchObject({
@@ -615,6 +619,7 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     expect(prompt.scorecard).toMatchObject({
       mode: "skip",
       interventionStrength: "diagnostic_hint",
+      skipReasonCode: "record_only_diagnostic_candidate",
       recordOnlyDiagnosticCandidateIds: ["node_record_only_diagnostic"]
     });
 
@@ -629,11 +634,13 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     };
     const scorecard = JSON.parse(injectionRow.scorecard_json ?? "{}") as {
       recordOnlyDiagnosticCandidateIds?: string[];
+      skipReasonCode?: string;
     };
 
     expect(injectionRow.mode).toBe("skip");
     expect(injectionRow.delivered).toBe(0);
     expect(JSON.parse(injectionRow.injected_node_ids_json)).toEqual([]);
+    expect(scorecard.skipReasonCode).toBe("record_only_diagnostic_candidate");
     expect(scorecard.recordOnlyDiagnosticCandidateIds).toEqual(["node_record_only_diagnostic"]);
 
     await service.finalizeTask({
@@ -1758,12 +1765,14 @@ describe("ExperienceRuntimeService finalize transaction", () => {
 
     const db = new DatabaseSync(sqlitePath);
     const injectionRow = db.prepare(
-      "SELECT delivery_mode, delivered, attribution_reason FROM injection_events LIMIT 1"
+      "SELECT delivery_mode, delivered, attribution_reason, scorecard_json FROM injection_events LIMIT 1"
     ).get() as {
       delivery_mode: string;
       delivered: number;
       attribution_reason: string | null;
+      scorecard_json: string | null;
     };
+    const scorecard = JSON.parse(injectionRow.scorecard_json ?? "{}") as { skipReasonCode?: string };
     const latestRecord = db.prepare(
       "SELECT injected_node_ids_json FROM experience_input_records LIMIT 1"
     ).get() as { injected_node_ids_json: string };
@@ -1772,6 +1781,7 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     expect(injectionRow.delivery_mode).toBe("holdout");
     expect(injectionRow.delivered).toBe(0);
     expect(injectionRow.attribution_reason).toBe("suppressed_delivery");
+    expect(scorecard.skipReasonCode).toBe("holdout_suppressed");
     expect(JSON.parse(latestRecord.injected_node_ids_json)).toEqual([]);
     expect(reviewCount.count).toBe(0);
   });

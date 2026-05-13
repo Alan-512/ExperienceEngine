@@ -179,6 +179,8 @@ export const buildInjectionScorecard = (
     mode,
     interventionStrength: diagnostics?.interventionStrength,
     renderingPolicyReason: diagnostics?.renderingPolicyReason,
+    skipReasonCode: diagnostics?.skipReasonCode,
+    skipReasonExplanation: diagnostics?.skipReasonExplanation,
     riskLevel,
     recommendation: recommendationForRisk(riskLevel),
     reasons: summarizeReasons(scoredNodes, mode),

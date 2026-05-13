@@ -675,6 +675,10 @@ const buildDecisionExplanation = (input: {
     return "ExperienceEngine injected the best available reusable guidance for this task.";
   }
 
+  if (scorecard.mode === "skip" && scorecard.skipReasonExplanation) {
+    return scorecard.skipReasonExplanation;
+  }
+
   if (input.intervention === "shadow") {
     return "ExperienceEngine found a usable match, but delivery was suppressed because this run was in shadow mode.";
   }
