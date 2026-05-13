@@ -151,17 +151,22 @@ export const ensureCodexProjectHookLauncher = (options: {
   cwd: string;
   packageRoot: string;
   productHome: string;
+  runtimeTarget?: CodexRuntimeTarget;
 }): { path: string; command: string } => {
   const launcherPath = join(options.cwd, ".codex", "experienceengine-codex-hook.cmd");
   mkdirSync(join(options.cwd, ".codex"), { recursive: true });
   ensureWindowsLauncher(launcherPath, options.packageRoot, options.productHome, "codex-hook");
 
+  const runtimeTarget = options.runtimeTarget ?? resolveCodexRuntimeTarget();
   return {
     path: launcherPath,
-    command: buildCrossRuntimeCodexHookCommand({
-      packageRoot: options.packageRoot,
-      productHome: options.productHome
-    })
+    command:
+      runtimeTarget === "windows"
+        ? buildCodexProjectHookCommand(options.cwd)
+        : buildCrossRuntimeCodexHookCommand({
+            packageRoot: options.packageRoot,
+            productHome: options.productHome
+          })
   };
 };
 

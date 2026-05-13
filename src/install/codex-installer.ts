@@ -367,7 +367,8 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
   const projectHookLauncher = ensureCodexProjectHookLauncher({
     cwd: options.cwd ?? process.cwd(),
     packageRoot,
-    productHome: paths.productHome
+    productHome: paths.productHome,
+    runtimeTarget
   });
   const hookCommand = projectHookLauncher.command;
   const includePreToolUse = (options.env ?? process.env).EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED === "1";

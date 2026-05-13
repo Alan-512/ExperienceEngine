@@ -112,6 +112,69 @@ describe("Codex hook config helpers", () => {
     expect(JSON.parse(repaired).hooks.PreToolUse).toHaveLength(1);
   });
 
+  it("replaces stale inline Codex node launchers with the project hook launcher", () => {
+    const cwd = makeTempDir();
+    const hooksPath = join(cwd, ".codex", "hooks.json");
+    rmSync(join(cwd, ".codex"), { recursive: true, force: true });
+    mkdirSync(join(cwd, ".codex"), { recursive: true });
+    writeFileSync(
+      hooksPath,
+      JSON.stringify(
+        {
+          hooks: {
+            UserPromptSubmit: [
+              {
+                hooks: [
+                  {
+                    type: "command",
+                    command:
+                      "node -e \"const cp=require('node:child_process'); cp.spawn(process.execPath,['dist/cli/index.js','codex-hook'])\""
+                  }
+                ]
+              }
+            ],
+            Stop: [
+              {
+                hooks: [
+                  {
+                    type: "command",
+                    command:
+                      "node -e \"const cp=require('node:child_process'); cp.spawn(process.execPath,['dist/cli/index.js','codex-hook'])\""
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        null,
+        2
+      ),
+      { encoding: "utf8", flag: "w" }
+    );
+
+    const result = repairCodexProjectHooks({
+      cwd,
+      hookCommand: "cmd.exe /c \"D:/project/.codex/experienceengine-codex-hook.cmd\"",
+      runtimeTarget: "windows"
+    });
+    const repaired = readFileSync(hooksPath, "utf8");
+    const hooks = JSON.parse(repaired) as {
+      hooks: Record<string, Array<{ hooks: Array<{ command: string }> }>>;
+    };
+
+    expect(result.state).toBe("healthy");
+    expect(repaired).not.toContain("node -e");
+    expect(hooks.hooks.UserPromptSubmit[0].hooks[0].command).toBe(
+      "cmd.exe /c \"D:/project/.codex/experienceengine-codex-hook.cmd\""
+    );
+    expect(hooks.hooks.PostToolUse[0].hooks[0].command).toBe(
+      "cmd.exe /c \"D:/project/.codex/experienceengine-codex-hook.cmd\""
+    );
+    expect(hooks.hooks.Stop[0].hooks[0].command).toBe(
+      "cmd.exe /c \"D:/project/.codex/experienceengine-codex-hook.cmd\""
+    );
+  });
+
   it("can opt into PreToolUse registration for synchronous gating experiments", () => {
     const cwd = makeTempDir();
     const result = repairCodexProjectHooks({

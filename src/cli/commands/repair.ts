@@ -27,7 +27,8 @@ export const runRepairCommand = (target?: string): void => {
     const hookLauncher = ensureCodexProjectHookLauncher({
       cwd: process.cwd(),
       packageRoot,
-      productHome: paths.productHome
+      productHome: paths.productHome,
+      runtimeTarget
     });
     const hooks = repairCodexProjectHooks({
       cwd: process.cwd(),

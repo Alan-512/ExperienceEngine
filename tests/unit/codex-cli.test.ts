@@ -110,7 +110,8 @@ describe("Codex CLI wiring", () => {
     const launcher = ensureCodexProjectHookLauncher({
       cwd: projectDir,
       packageRoot: "/mnt/d/project/ExperienceEngine",
-      productHome: "/mnt/d/ExperienceEngineData/.experienceengine"
+      productHome: "/mnt/d/ExperienceEngineData/.experienceengine",
+      runtimeTarget: "windows"
     });
 
     const script = readFileSync(launcher.path, "utf8");
@@ -118,10 +119,9 @@ describe("Codex CLI wiring", () => {
     expect(script).toContain("EXPERIENCE_ENGINE_EMBEDDING_PROVIDER");
     expect(script).toContain("EXPERIENCE_ENGINE_EMBEDDING_API_TIMEOUT_MS");
     expect(script).toContain("EXPERIENCE_ENGINE_DISABLE_LOCAL_EMBEDDING_FALLBACK");
-    expect(launcher.command).toContain("node -e");
-    expect(launcher.command).toContain("dist/cli/index.js");
-    expect(launcher.command).toContain("codex-hook");
-    expect(launcher.command).toContain("EXPERIENCE_ENGINE_EMBEDDING_PROVIDER");
+    expect(launcher.command).toContain("cmd.exe /c");
+    expect(launcher.command).toContain("experienceengine-codex-hook.cmd");
+    expect(launcher.command).not.toContain("node -e");
   });
 
   it("adds repeated server env bindings when extra adapter env is provided", () => {
