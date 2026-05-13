@@ -3,8 +3,8 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { loadConfig } from "../../src/config/load-config.js";
-import { LlmLearningGate } from "../../src/analyzer/llm-learning-gate.js";
-import type { ExperienceInput } from "../../src/types/domain.js";
+import { evaluateLearningEligibility, LlmLearningGate } from "../../src/analyzer/llm-learning-gate.js";
+import type { ExperienceInput, ToolEvent } from "../../src/types/domain.js";
 
 const tempDirs: string[] = [];
 
@@ -40,7 +40,197 @@ const makeInput = (overrides: Partial<ExperienceInput> = {}): ExperienceInput =>
   ...overrides
 });
 
+const event = (overrides: Partial<ToolEvent> = {}): ToolEvent => ({
+  event_id: "evt_test",
+  tool_name: "vitest",
+  status: "success",
+  output_summary: "Tests passed.",
+  started_at: "2026-03-20T10:00:00.000Z",
+  ...overrides
+});
+
+const llmCaptureResponse = () => ({
+  ok: true,
+  json: async () => ({
+    choices: [
+      {
+        message: {
+          content: JSON.stringify({
+            worth_capturing: true,
+            experience_kind: "verification_loop",
+            reason: "The run contains reusable execution evidence.",
+            candidate: {
+              node_type: "strategy",
+              task_type: "test_debug",
+              trigger_pattern: "When a targeted verification loop exposes a reusable constraint",
+              compact_hint: "Keep the targeted verification loop tied to the concrete failure or corrected constraint.",
+              success_signal: "The final targeted verification passes.",
+              evidence_summary: "The task included concrete failure, correction, or verification evidence."
+            }
+          })
+        }
+      }
+    ]
+  })
+});
+
 describe("LlmLearningGate", () => {
+  it("applies deterministic eligibility reason precedence before llm capture", () => {
+    const expressionOnly = evaluateLearningEligibility(
+      makeInput({
+        task_summary: "Rewrite the inline notice wording so it sounds lighter.",
+        context_summary: "This is a wording-only pass for notice copy.",
+        tool_events: [event({ tool_name: "apply_patch", output_summary: "Updated notice wording." })],
+        outcome_signal: "success"
+      })
+    );
+    expect(expressionOnly).toMatchObject({
+      eligible: false,
+      reasonCode: "expression_layer_only"
+    });
+
+    const lowEvidence = evaluateLearningEligibility(
+      makeInput({
+        task_summary: "Inspect the repository structure.",
+        context_summary: "Only exploratory reads happened.",
+        tool_events: [event({ tool_name: "rg", output_summary: "Listed matching files." })],
+        outcome_signal: "success"
+      })
+    );
+    expect(lowEvidence).toMatchObject({
+      eligible: false,
+      reasonCode: "insufficient_substantive_evidence"
+    });
+  });
+
+  it("classifies accepted learning signals with stable reason codes", () => {
+    expect(
+      evaluateLearningEligibility(
+        makeInput({
+          task_type: "test_debug",
+          outcome_signal: "success",
+          tool_events: [
+            event({ status: "failure", error_signature: "Auth spec assertion failed" }),
+            event({ status: "success", output_summary: "Auth spec passed after the fix." })
+          ]
+        })
+      )
+    ).toMatchObject({ eligible: true, reasonCode: "failure_repair_success" });
+
+    expect(
+      evaluateLearningEligibility(
+        makeInput({
+          outcome_signal: "failure",
+          tool_events: [
+            event({ event_id: "evt_1", tool_name: "doctor", status: "failure", error_signature: "429 rate limit" }),
+            event({ event_id: "evt_2", tool_name: "doctor", status: "failure", error_signature: "429 rate limit" })
+          ]
+        })
+      )
+    ).toMatchObject({ eligible: true, reasonCode: "retry_pattern" });
+
+    expect(
+      evaluateLearningEligibility(
+        makeInput({
+          outcome_signal: "success",
+          context_summary:
+            "The user corrected the direction: the fix belongs in provider routing instead of the UI layer.",
+          tool_events: [
+            event({
+              tool_name: "user-feedback",
+              output_summary: "The problem is in provider routing, not the UI layer."
+            }),
+            event({ tool_name: "targeted-probe", output_summary: "The targeted provider probe succeeded." })
+          ]
+        })
+      )
+    ).toMatchObject({ eligible: true, reasonCode: "directional_correction" });
+
+    expect(
+      evaluateLearningEligibility(
+        makeInput({
+          task_type: "integration_fix",
+          outcome_signal: "success",
+          context_summary: "Updated the host compatibility repair and verified the Codex lifecycle hook path.",
+          tool_events: [
+            event({ tool_name: "codex-lifecycle", output_summary: "Codex UserPromptSubmit and Stop verification passed." })
+          ]
+        })
+      )
+    ).toMatchObject({ eligible: true, reasonCode: "verified_project_constraint" });
+  });
+
+  it("rejects ordinary successful verification before calling the llm gate", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(llmCaptureResponse());
+    const gate = new LlmLearningGate(
+      loadConfig({
+        distillerProvider: "openai",
+        distillerModel: "gpt-5.4-nano",
+        distillationMode: "llm"
+      }),
+      {
+        env: {
+          EXPERIENCE_ENGINE_DISTILLER_PROVIDER: "openai",
+          EXPERIENCE_ENGINE_DISTILLER_MODEL: "gpt-5.4-nano",
+          OPENAI_API_KEY: "secret"
+        },
+        fetchImpl: fetchImpl as unknown as typeof fetch
+      }
+    );
+
+    const result = await gate.generateCandidateDrafts(
+      makeInput({
+        task_type: "feature_add",
+        task_summary: "Add a small settings toggle.",
+        context_summary: "The toggle was implemented and tests passed.",
+        tool_events: [event({ tool_name: "vitest", output_summary: "Settings toggle tests passed." })],
+        outcome_signal: "success"
+      })
+    );
+
+    expect(fetchImpl).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      source: "disabled",
+      worthCapturing: false
+    });
+    expect(result.reason).toContain("no_transferable_execution_value");
+  });
+
+  it("allows objective verification changes through to the llm gate", async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(llmCaptureResponse());
+    const gate = new LlmLearningGate(
+      loadConfig({
+        distillerProvider: "openai",
+        distillerModel: "gpt-5.4-nano",
+        distillationMode: "llm"
+      }),
+      {
+        env: {
+          EXPERIENCE_ENGINE_DISTILLER_PROVIDER: "openai",
+          EXPERIENCE_ENGINE_DISTILLER_MODEL: "gpt-5.4-nano",
+          OPENAI_API_KEY: "secret"
+        },
+        fetchImpl: fetchImpl as unknown as typeof fetch
+      }
+    );
+
+    const result = await gate.generateCandidateDrafts(
+      makeInput({
+        task_type: "build_debug",
+        task_summary: "Repair the build script after the compiler check exposed the wrong output path.",
+        context_summary: "Changed the build output path and verified it with tsc.",
+        tool_events: [
+          event({ tool_name: "apply_patch", output_summary: "Updated the build output path." }),
+          event({ tool_name: "tsc", output_summary: "Typecheck passed after the output path change." })
+        ],
+        outcome_signal: "success"
+      })
+    );
+
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+    expect(result.worthCapturing).toBe(true);
+  });
+
   it("falls back to rule analysis when no explicit provider is configured", async () => {
     const homeDir = makeTempDir();
     const gate = new LlmLearningGate(
@@ -99,10 +289,18 @@ describe("LlmLearningGate", () => {
         outcome_signal: "success",
         tool_events: [
           {
-            event_id: "evt_probe",
+            event_id: "evt_failure",
+            tool_name: "targeted-probe",
+            status: "failure",
+            error_signature: "provider probe failed before the repair",
+            output_summary: "The provider probe failed before the repair.",
+            started_at: "2026-03-20T10:04:00.000Z"
+          },
+          {
+            event_id: "evt_probe_success",
             tool_name: "targeted-probe",
             status: "success",
-            output_summary: "The targeted provider probe succeeded, but no reusable lesson emerged.",
+            output_summary: "The targeted provider probe succeeded after the repair, but no reusable lesson emerged.",
             started_at: "2026-03-20T10:05:00.000Z"
           }
         ]
@@ -470,7 +668,7 @@ describe("LlmLearningGate", () => {
     expect(result.source).toBe("disabled");
     expect(result.worthCapturing).toBe(false);
     expect(result.drafts).toEqual([]);
-    expect(result.reason).toContain("insufficient substantive evidence");
+    expect(result.reason).toContain("expression_layer_only");
   });
 
   it("rejects expression-layer expectation corrections without objective verification", async () => {

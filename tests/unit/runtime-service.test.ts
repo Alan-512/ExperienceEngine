@@ -1586,6 +1586,59 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     expect(candidateCount.count).toBe(0);
   });
 
+  it("rejects ordinary successful tasks without creating candidates or distillation jobs", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const service = new ExperienceRuntimeService(
+      loadConfig(
+        {
+          dataDir: join(runtimeDir, "data"),
+          sqlitePath,
+          captureDir: join(runtimeDir, "captures"),
+          distillationMode: "llm"
+        },
+        { homeDir: runtimeDir }
+      ),
+      undefined,
+      {
+        homeDir: runtimeDir,
+        env: {}
+      }
+    );
+
+    await service.persistToolResult({
+      sessionId: "ordinary-success-session",
+      toolName: "vitest",
+      outputSummary: "Settings toggle tests passed.",
+      status: "success"
+    });
+
+    await service.finalizeTask({
+      sessionId: "ordinary-success-session",
+      cwd: "/repo",
+      userMessage: "Add a small settings toggle.",
+      taskSummary: "Add a small settings toggle.",
+      contextSummary: "The toggle was implemented and tests passed."
+    });
+
+    await service.waitForBackgroundLearning();
+
+    const db = new DatabaseSync(sqlitePath);
+    const taskRunRow = db.prepare(
+      "SELECT learning_status, learning_reason FROM task_runs WHERE session_id = 'ordinary-success-session' LIMIT 1"
+    ).get() as {
+      learning_status: string | null;
+      learning_reason: string | null;
+    };
+    const candidateCount = db.prepare("SELECT COUNT(*) AS count FROM experience_candidates").get() as { count: number };
+    const jobCount = db.prepare("SELECT COUNT(*) AS count FROM distillation_jobs").get() as { count: number };
+
+    expect(taskRunRow.learning_status).toBe("rejected");
+    expect(taskRunRow.learning_reason).toContain("no_transferable_execution_value");
+    expect(candidateCount.count).toBe(0);
+    expect(jobCount.count).toBe(0);
+  });
+
   it("suppresses delivery in shadow mode but persists the evaluated intervention", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");

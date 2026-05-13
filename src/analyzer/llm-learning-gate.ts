@@ -15,7 +15,7 @@ import { analyzeExperience } from "./experience-analyzer.js";
 import { buildCandidateSignals } from "./candidate-signals.js";
 import { dedupeCandidates } from "./node-deduper.js";
 import { normalizeCandidate } from "./node-normalizer.js";
-import { isSubstantiveToolEvent } from "../input/tool-event-significance.js";
+import { isEditTool, isSubstantiveToolEvent } from "../input/tool-event-significance.js";
 import { deriveTaskManagementSignals } from "../experience-management/task-management-signals.js";
 import {
   resolveDistillationResolution,
@@ -51,6 +51,25 @@ type LearningGateResult = {
   source: "llm" | "rule" | "disabled";
   directionalCorrectionSignal?: NonNullable<CandidateSourceSignal["directional_correction"]>;
   evidenceDrivenReversalSignal?: NonNullable<CandidateSourceSignal["evidence_driven_reversal"]>;
+};
+
+export type LearningEligibilityReasonCode =
+  | "scope_disabled_or_policy_blocked"
+  | "expression_layer_only"
+  | "insufficient_substantive_evidence"
+  | "failure_repair_success"
+  | "retry_pattern"
+  | "directional_correction"
+  | "objective_verification_change"
+  | "repeated_task_family"
+  | "reusable_error_signature"
+  | "verified_project_constraint"
+  | "no_transferable_execution_value";
+
+export type LearningEligibilityDecision = {
+  eligible: boolean;
+  reasonCode: LearningEligibilityReasonCode;
+  reason: string;
 };
 
 type ExpectationCorrectionRepair = {
@@ -365,13 +384,14 @@ const isPromotionSignal = (value: unknown): value is PromotionSignal =>
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
 
-const hasSubstantiveLearningEvidence = (input: ExperienceInput): boolean =>
-  input.tool_events.some((event) => isSubstantiveToolEvent(event));
-
 const EXPRESSION_LAYER_PATTERN =
   /\b(wording|phrasing|copy|label|labels|notice|message|messages|tooltip|readme|documentation|docs|format|formatting|presentation|tone|style|styling|inline notice)\b/i;
 const OBJECTIVE_VERIFICATION_PATTERN =
-  /\b(test|probe|verify|verification|build|compile|lint|typecheck|doctor|assert|request|response|endpoint|routing|fixture|mock|integration)\b/i;
+  /\b(test|probe|verify|verification|build|compile|lint|typecheck|doctor|assert|request|response|endpoint|routing|fixture|mock|integration|exec|process)\b/i;
+const NON_OBVIOUS_VERIFICATION_PATTERN =
+  /\b(targeted|flaky|isolat(?:e|ed|es|ing)|probe-driven|non-obvious|regression|root-cause|narrow(?:ed|ing)?|reproduc(?:e|ed|es|ing))\b/i;
+const PROJECT_CONSTRAINT_PATTERN =
+  /\b(codex|claude|openclaw|host|hook|lifecycle|mcp|marketplace|clawhub|npm|sqlite|migration|schema|compatibility|installer|repair)\b/i;
 
 const looksLikeExpressionLayerOnlyTask = (input: ExperienceInput): boolean => {
   const text = [input.task_summary, input.context_summary, ...input.tool_events.map((event) => event.output_summary ?? "")]
@@ -384,16 +404,112 @@ const looksLikeExpressionLayerOnlyTask = (input: ExperienceInput): boolean => {
   return !OBJECTIVE_VERIFICATION_PATTERN.test(text);
 };
 
-const resolveEligibilityRejectionReason = (input: ExperienceInput): string | undefined => {
-  if (!hasSubstantiveLearningEvidence(input)) {
-    return "insufficient substantive evidence: only edit or exploratory events were observed";
-  }
+const hasSubstantiveLearningEvidence = (input: ExperienceInput): boolean =>
+  input.tool_events.some((event) => isSubstantiveToolEvent(event));
 
+const eligibilityDecision = (
+  eligible: boolean,
+  reasonCode: LearningEligibilityReasonCode,
+  reason: string
+): LearningEligibilityDecision => ({
+  eligible,
+  reasonCode,
+  reason: `${reasonCode}: ${reason}`
+});
+
+const hasObjectiveVerificationSuccess = (input: ExperienceInput): boolean =>
+  input.tool_events.some(
+    (event) =>
+      event.status === "success" &&
+      OBJECTIVE_VERIFICATION_PATTERN.test([event.tool_name, event.output_summary, event.error_signature].filter(Boolean).join(" "))
+  );
+
+const hasFailureRepairSuccess = (input: ExperienceInput): boolean => {
+  if (input.outcome_signal !== "success") {
+    return false;
+  }
+  const firstFailureIndex = input.tool_events.findIndex((event) => event.status === "failure");
+  return firstFailureIndex >= 0 && input.tool_events.slice(firstFailureIndex + 1).some((event) => event.status === "success");
+};
+
+const hasRepeatedTaskFamilySignal = (input: ExperienceInput): boolean => {
+  const substantiveEvents = input.tool_events.filter(isSubstantiveToolEvent);
+  const counts = new Map<string, number>();
+  for (const event of substantiveEvents) {
+    counts.set(event.tool_name, (counts.get(event.tool_name) ?? 0) + 1);
+  }
+  return [...counts.values()].some((count) => count > 1);
+};
+
+const hasVerifiedProjectConstraint = (input: ExperienceInput): boolean => {
+  if (input.outcome_signal !== "success" || !hasObjectiveVerificationSuccess(input)) {
+    return false;
+  }
+  const text = [input.task_summary, input.context_summary, ...input.tool_events.map((event) => event.output_summary ?? "")]
+    .filter(Boolean)
+    .join("\n");
+  return PROJECT_CONSTRAINT_PATTERN.test(text);
+};
+
+export const evaluateLearningEligibility = (input: ExperienceInput): LearningEligibilityDecision => {
   if (looksLikeExpressionLayerOnlyTask(input)) {
-    return "task stayed in expression-layer refinement: wording, copy, or presentation changes are recorded but not learned";
+    return eligibilityDecision(
+      false,
+      "expression_layer_only",
+      "expression-layer refinement for wording, copy, labels, formatting, or presentation-only changes is recorded but not learned"
+    );
   }
 
-  return undefined;
+  if (!hasSubstantiveLearningEvidence(input)) {
+    return eligibilityDecision(
+      false,
+      "insufficient_substantive_evidence",
+      "only edit or exploratory events were observed"
+    );
+  }
+
+  const signals = buildCandidateSignals(input);
+  if (hasFailureRepairSuccess(input)) {
+    return eligibilityDecision(true, "failure_repair_success", "a concrete failure was followed by successful repair evidence");
+  }
+
+  if (signals.retry_count >= 2) {
+    return eligibilityDecision(true, "retry_pattern", "repeated failed attempts expose a reusable retry or narrowing pattern");
+  }
+
+  const directionalCorrection = signals.directional_correction;
+  if (
+    directionalCorrection?.detected &&
+    (directionalCorrection.objective_support ||
+      directionalCorrection.user_confirmation ||
+      directionalCorrection.correction_strength === "high" ||
+      directionalCorrection.correction_strength === "medium")
+  ) {
+    return eligibilityDecision(true, "directional_correction", "a corrected task direction has support from user feedback or objective evidence");
+  }
+
+  const text = [input.task_summary, input.context_summary, ...input.tool_events.map((event) => event.output_summary ?? "")]
+    .filter(Boolean)
+    .join("\n");
+  const hasEditOrCorrection = input.tool_events.some((event) => isEditTool(event) || signals.correction_signals.includes(event.tool_name));
+  const hasNonObviousVerificationLoop = NON_OBVIOUS_VERIFICATION_PATTERN.test(text);
+  if (input.outcome_signal === "success" && (hasEditOrCorrection || hasNonObviousVerificationLoop) && hasObjectiveVerificationSuccess(input)) {
+    return eligibilityDecision(true, "objective_verification_change", "a concrete change was followed by objective verification");
+  }
+
+  if (hasRepeatedTaskFamilySignal(input)) {
+    return eligibilityDecision(true, "repeated_task_family", "the same substantive task-family tool recurred during the run");
+  }
+
+  if (signals.failure_signature) {
+    return eligibilityDecision(true, "reusable_error_signature", "the run contains a concrete failure signature");
+  }
+
+  if (hasVerifiedProjectConstraint(input)) {
+    return eligibilityDecision(true, "verified_project_constraint", "a project or host constraint was verified successfully");
+  }
+
+  return eligibilityDecision(false, "no_transferable_execution_value", "ordinary success lacks a reusable failure, correction, retry, or constraint signal");
 };
 
 const isTransientProviderFailure = (error: unknown): boolean => {
@@ -1536,11 +1652,11 @@ export class LlmLearningGate {
       };
     }
 
-    const ineligibleReason = resolveEligibilityRejectionReason(input);
-    if (ineligibleReason) {
+    const eligibility = evaluateLearningEligibility(input);
+    if (!eligibility.eligible) {
       return {
         worthCapturing: false,
-        reason: ineligibleReason,
+        reason: eligibility.reason,
         drafts: [],
         source: "disabled"
       };

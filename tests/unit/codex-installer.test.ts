@@ -110,8 +110,8 @@ env_key = "OPENROUTER_API_KEY"
     const hooks = JSON.parse(readFileSync(join(homeDir, ".codex", "hooks.json"), "utf8")) as {
       hooks: Record<string, unknown>;
     };
-    expect(JSON.stringify(hooks)).toContain("node -e");
-    expect(JSON.stringify(hooks)).toContain("dist/cli/index.js");
+    expect(JSON.stringify(hooks)).toContain("experienceengine-codex-hook.cmd");
+    expect(JSON.stringify(hooks)).not.toContain("node -e");
     expect(JSON.stringify(hooks)).toContain("codex-hook");
     expect(hooks.hooks.PreToolUse).toBeUndefined();
     expect(commands[0]).toBe("codex mcp get experienceengine");

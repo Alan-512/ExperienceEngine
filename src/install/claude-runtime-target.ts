@@ -68,6 +68,10 @@ export const resolveClaudeRuntimeTarget = (
 };
 
 export const toWindowsRuntimePath = (value: string): string => {
+  if (isWindowsMountedPath(value)) {
+    return normalizeWindowsDrivePath(value);
+  }
+
   const resolved = resolve(value);
   if (/^[A-Za-z]:\\/.test(resolved)) {
     return resolved;
@@ -91,6 +95,10 @@ export const toWindowsRuntimePath = (value: string): string => {
 };
 
 export const toPosixRuntimePath = (value: string): string => {
+  if (isWindowsMountedPath(value)) {
+    return value;
+  }
+
   const resolved = resolve(value);
   if (isWindowsMountedPath(resolved)) {
     return resolved;
