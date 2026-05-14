@@ -346,7 +346,7 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
   const brokerFacade = createCodexBrokerFacade(actionRegistry);
   const server = new McpServer({
     name: "experienceengine",
-    version: "0.3.1"
+    version: "0.3.3"
   });
 
   server.registerResource(

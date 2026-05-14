@@ -5,7 +5,10 @@ import { describe, expect, it } from "vitest";
 const repoRoot = resolve(import.meta.dirname, "..", "..");
 
 describe("OpenClaw plugin manifest", () => {
-  it("tracks the current public release version", () => {
+  it("tracks the package release version", () => {
+    const packageJson = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")) as {
+      version?: string;
+    };
     const manifest = JSON.parse(
       readFileSync(join(repoRoot, "openclaw.plugin.json"), "utf8")
     ) as {
@@ -16,7 +19,7 @@ describe("OpenClaw plugin manifest", () => {
 
     expect(manifest.id).toBe("experienceengine");
     expect(manifest.name).toBe("ExperienceEngine");
-    expect(manifest.version).toBe("0.3.2");
+    expect(manifest.version).toBe(packageJson.version);
   });
 
   it("declares hybrid phase1, phase2, and phase3 config fields for OpenClaw runtime wiring", () => {

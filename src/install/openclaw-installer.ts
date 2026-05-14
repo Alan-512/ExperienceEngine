@@ -361,7 +361,9 @@ export const createOpenClawInstallTarball = (packageRoot: string, paths: Resolve
 
   const pluginManifestPath = join(packageRoot, "openclaw.plugin.json");
   if (existsSync(pluginManifestPath)) {
-    cpSync(pluginManifestPath, join(stageDir, "openclaw.plugin.json"));
+    const pluginManifest = JSON.parse(readFileSync(pluginManifestPath, "utf8")) as Record<string, unknown>;
+    pluginManifest.version = rawPackageJson.version;
+    writeFileSync(join(stageDir, "openclaw.plugin.json"), `${JSON.stringify(pluginManifest, null, 2)}\n`, "utf8");
   }
 
   for (const filename of ["README.md", "LICENSE", "LICENSE.md"]) {

@@ -373,12 +373,17 @@ Recorded version: 0.2.0`;
     const { stageDir } = getCachedPackagedTarball();
     const manifestPath = join(stageDir, "package.json");
     const packagedManifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
+      version?: string;
       openclaw?: {
         compat?: { pluginApi?: string; minGatewayVersion?: string };
         build?: { openclawVersion?: string; pluginSdkVersion?: string };
       };
     };
+    const pluginManifest = JSON.parse(readFileSync(join(stageDir, "openclaw.plugin.json"), "utf8")) as {
+      version?: string;
+    };
 
+    expect(pluginManifest.version).toBe(packagedManifest.version);
     expect(packagedManifest.openclaw?.compat?.pluginApi).toBe(">=2026.4.1");
     expect(packagedManifest.openclaw?.compat?.minGatewayVersion).toBe("2026.4.1");
     expect(packagedManifest.openclaw?.build?.openclawVersion).toBe("2026.4.1");
