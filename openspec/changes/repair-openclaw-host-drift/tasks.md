@@ -12,3 +12,4 @@
 
 - [x] 3.1 Add unit coverage for repair recommendation and repair execution
 - [x] 3.2 Keep the existing install/doctor/plugin suite green
+- [x] 3.3 Add regression coverage for stale OpenClaw install directories and missing npm install directories

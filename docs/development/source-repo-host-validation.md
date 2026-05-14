@@ -1,6 +1,6 @@
 # Source Repo Host Validation
 
-This document records the May 7, 2026 source-repo validation snapshot for ExperienceEngine host integrations.
+This document records source-repo validation snapshots for ExperienceEngine host integrations.
 
 This is local source validation only. It does not prove published npm, Claude marketplace, or ClawHub distribution behavior.
 
@@ -11,6 +11,29 @@ This is local source validation only. It does not prove published npm, Claude ma
 - shared ExperienceEngine home: `D:\ExperienceEngineData\.experienceengine`
 - WSL shared home link: `/home/seed/.experienceengine`
 - project scope: `scope_21d15aea1db0`
+
+## Latest Maintenance Snapshot
+
+Date: May 14, 2026
+
+Scope:
+
+- local source-repo validation for OpenClaw upgrade/repair behavior
+- package metadata validation for the prepared `0.3.3` npm package
+- no published-package validation, because the npm token available in this run could not authenticate for `@alan512/experienceengine`
+
+Validated:
+
+| Area | Command or evidence | Result |
+| --- | --- | --- |
+| OpenClaw repair regression | `pnpm exec vitest run tests/unit/openclaw-installer.test.ts tests/unit/openclaw-repair.test.ts tests/unit/upgrade-command.test.ts` | passed |
+| OpenSpec consistency | `pnpm exec openspec validate --all --strict` | passed |
+| TypeScript source consistency | `pnpm exec tsc -p tsconfig.json --noEmit` | passed |
+| npm package metadata | `npm publish --access public` prepack output for `@alan512/experienceengine@0.3.3` | package builds as `0.3.3`; publish blocked by npm auth |
+
+Release blocker:
+
+- The npm publish attempt failed with `E401` on `npm whoami` and `E404` on package publish. Treat this as an npm token/account permission blocker, not a package build failure.
 
 ## Host Matrix
 
@@ -38,3 +61,13 @@ Before claiming distribution readiness, run separate validation for:
 - ClawHub or host-native OpenClaw install
 - Claude marketplace or plugin install flow
 - Codex install and repair from the published package
+
+Minimum release validation matrix:
+
+| Channel | Required check | Pass condition |
+| --- | --- | --- |
+| npm | `npm view @alan512/experienceengine version` after publish | reports the intended release version |
+| npm | install the published package in a temp project and run `ee --help` plus `ee doctor` | CLI starts from the published artifact |
+| OpenClaw host-native | install or update through the host-native plugin path | `ee doctor openclaw` reports installed, enabled, and config-matched |
+| Claude Code | install or update through the supported marketplace/plugin path | `ee doctor claude-code` reports hook and MCP wiring according to the chosen install mode |
+| Codex | install or repair from the published package | `ee doctor codex` reports MCP wiring, project hooks, and runtime target without drift |

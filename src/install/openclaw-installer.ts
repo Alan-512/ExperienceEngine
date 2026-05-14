@@ -8,7 +8,6 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
-  rmSync,
   statSync,
   writeFileSync
 } from "node:fs";
@@ -173,7 +172,7 @@ const inferOpenClawInstallAction = (
   }
 
   if (install.source === "npm") {
-    return "update";
+    return install.installPath && !existsSync(expandHomePath(install.installPath)) ? "install" : "update";
   }
 
   const normalizedCurrentRoot = packageRoot.trim();
@@ -183,12 +182,6 @@ const inferOpenClawInstallAction = (
   }
 
   return normalizedSourcePath === normalizedCurrentRoot ? "reinstall" : "reinstall";
-};
-
-const removeExistingOpenClawInstallPath = (installPath: string): void => {
-  if (existsSync(installPath)) {
-    rmSync(installPath, { recursive: true, force: true });
-  }
 };
 
 export const buildOpenClawPackagedDependencies = (rawPackageJson: Record<string, unknown>): Record<string, string> => {
@@ -645,7 +638,6 @@ export const installOpenClawAdapter = (options: InstallerOptions = {}): OpenClaw
   const installAction = inferOpenClawInstallAction(existingPluginsConfig, packageRoot, expectedInstallPath);
   if (installAction === "reinstall") {
     protectOpenClawReinstallPath(expectedInstallPath, packageRoot, options.homeDir);
-    removeExistingOpenClawInstallPath(expectedInstallPath);
   }
   const installSource = (options.packageSourceBuilder ?? createOpenClawInstallTarball)(packageRoot, paths);
   const commands = buildOpenClawInstallCommands(installSource, "experienceengine", installAction, pluginConfig);
