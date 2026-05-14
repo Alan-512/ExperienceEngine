@@ -4,7 +4,10 @@ import { inspectCodexInstall } from "../../install/codex-installer.js";
 import { inspectOpenClawInstall } from "../../install/openclaw-installer.js";
 import { loadConfig } from "../../config/load-config.js";
 import { detectAvailableHosts } from "../../install/host-detection.js";
-import type { ExperienceDecisionHealth } from "../../interaction/service.js";
+import type {
+  ExperienceDecisionHealth,
+  ExperienceLearningQualityHealth
+} from "../../interaction/service.js";
 import {
   deriveSetupState,
   deriveValueState,
@@ -50,10 +53,30 @@ const summarizeGovernancePattern = (decisionHealth: ExperienceDecisionHealth): s
 
   return undefined;
 };
+
+const formatRate = (value: number): string => `${Math.round(value * 100)}%`;
+
+const logLearningQualityHealth = (health: ExperienceLearningQualityHealth): void => {
+  const rejectionSummary = Object.entries(health.rejectionReasons)
+    .filter(([, count]) => count > 0)
+    .map(([bucket, count]) => `${bucket}:${count}`)
+    .join(", ") || "none";
+
+  console.log("Learning quality:");
+  console.log(`- Recent task runs considered: ${health.recentTaskRuns}`);
+  console.log(`- Learning outcomes: captured ${health.capturedRuns}, rejected ${health.rejectedRuns}, not applicable ${health.notApplicableRuns}`);
+  console.log(`- Candidate admission rate: ${formatRate(health.candidateAdmissionRate)}`);
+  console.log(`- Rejection reason distribution: ${rejectionSummary}`);
+  console.log(`- Generic/non-transferable rejections: ${health.genericAdviceRejections}`);
+  console.log(
+    `- Feedback closure: helped ${health.feedbackClosure.helped}, harmed ${health.feedbackClosure.harmed}, unresolved ${health.feedbackClosure.unresolved} of ${health.feedbackClosure.recentResolvedInterventions} resolved interventions`
+  );
+};
 export const runStatusCommand = (): void => {
   const config = loadConfig();
   const interaction = new ExperienceInteractionService(config);
   const decisionHealth = interaction.inspectDecisionHealth();
+  const learningQuality = interaction.inspectLearningQualityHealth();
   const firstValueReadiness = interaction.inspectFirstValueReadiness();
   const sharedSetup = inspectSharedSetupState();
   const availableHosts = detectAvailableHosts().map((host) => host.id);
@@ -166,4 +189,5 @@ export const runStatusCommand = (): void => {
   if (governancePattern) {
     console.log(`- Governance pattern: ${governancePattern}`);
   }
+  logLearningQualityHealth(learningQuality);
 };

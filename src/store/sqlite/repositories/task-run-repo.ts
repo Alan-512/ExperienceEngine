@@ -108,6 +108,13 @@ export class TaskRunRepository {
     return row ? this.mapRow(row) : undefined;
   }
 
+  listRecentByScope(scopeId: string, limit = 50): TaskRun[] {
+    return this.db
+      .prepare("SELECT * FROM task_runs WHERE scope_id = ? ORDER BY updated_at DESC, id DESC LIMIT ?")
+      .all(scopeId, limit)
+      .map((row) => this.mapRow(row as TaskRunRow));
+  }
+
   count(): number {
     return (this.db.prepare("SELECT COUNT(*) AS count FROM task_runs").get() as { count: number }).count;
   }

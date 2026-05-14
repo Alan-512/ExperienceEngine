@@ -134,6 +134,33 @@ let mockDecisionHealth = {
   lastDecisionMode: "inject_conservative"
 };
 
+let mockLearningQualityHealth = {
+  scopeId: "scope_repo",
+  recentTaskRuns: 5,
+  learningApplicableRuns: 4,
+  capturedRuns: 1,
+  rejectedRuns: 3,
+  notApplicableRuns: 1,
+  candidateAdmissionRate: 0.25,
+  rejectionReasons: {
+    expression_only: 1,
+    no_transferable_value: 1,
+    insufficient_evidence: 0,
+    generic_advice: 1,
+    gate_failure: 0,
+    ordinary_success: 0,
+    other: 0
+  },
+  topRejectionReasons: [],
+  genericAdviceRejections: 2,
+  feedbackClosure: {
+    recentResolvedInterventions: 3,
+    helped: 1,
+    harmed: 1,
+    unresolved: 1
+  }
+};
+
 let mockFirstValueReadiness = {
   rawRecords: 2,
   taskRuns: 2,
@@ -248,6 +275,32 @@ afterEach(() => {
     recentPriorityPromotions: 1,
     lastDecisionMode: "inject_conservative"
   };
+  mockLearningQualityHealth = {
+    scopeId: "scope_repo",
+    recentTaskRuns: 5,
+    learningApplicableRuns: 4,
+    capturedRuns: 1,
+    rejectedRuns: 3,
+    notApplicableRuns: 1,
+    candidateAdmissionRate: 0.25,
+    rejectionReasons: {
+      expression_only: 1,
+      no_transferable_value: 1,
+      insufficient_evidence: 0,
+      generic_advice: 1,
+      gate_failure: 0,
+      ordinary_success: 0,
+      other: 0
+    },
+    topRejectionReasons: [],
+    genericAdviceRejections: 2,
+    feedbackClosure: {
+      recentResolvedInterventions: 3,
+      helped: 1,
+      harmed: 1,
+      unresolved: 1
+    }
+  };
   mockFirstValueReadiness = {
     rawRecords: 2,
     taskRuns: 2,
@@ -292,6 +345,10 @@ vi.mock("../../src/interaction/service.js", () => ({
   ExperienceInteractionService: class {
     inspectDecisionHealth() {
       return mockDecisionHealth;
+    }
+
+    inspectLearningQualityHealth() {
+      return mockLearningQualityHealth;
     }
 
     inspectFirstValueReadiness() {
@@ -351,7 +408,14 @@ describe("status command", () => {
         ["- Current rising patterns (priority candidates): 2"],
         ["- Recent merged refinements (converged updates): 3"],
         ["- Recent newly promoted hints (priority promotions): 1"],
-        ["- Retrieval pattern: ExperienceEngine is finding matches in this repo, but some tasks still need smaller hints or no hint yet."]
+        ["- Retrieval pattern: ExperienceEngine is finding matches in this repo, but some tasks still need smaller hints or no hint yet."],
+        ["Learning quality:"],
+        ["- Recent task runs considered: 5"],
+        ["- Learning outcomes: captured 1, rejected 3, not applicable 1"],
+        ["- Candidate admission rate: 25%"],
+        ["- Rejection reason distribution: expression_only:1, no_transferable_value:1, generic_advice:1"],
+        ["- Generic/non-transferable rejections: 2"],
+        ["- Feedback closure: helped 1, harmed 1, unresolved 1 of 3 resolved interventions"]
       ])
     );
   });

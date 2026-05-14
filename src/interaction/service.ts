@@ -256,11 +256,82 @@ export type ExperienceDecisionHealth = {
   lastDecisionMode?: "inject" | "inject_conservative" | "skip";
 };
 
+export type LearningRejectionBucket =
+  | "expression_only"
+  | "no_transferable_value"
+  | "insufficient_evidence"
+  | "generic_advice"
+  | "gate_failure"
+  | "ordinary_success"
+  | "other";
+
+export type ExperienceLearningQualityHealth = {
+  scopeId: string;
+  recentTaskRuns: number;
+  learningApplicableRuns: number;
+  capturedRuns: number;
+  rejectedRuns: number;
+  notApplicableRuns: number;
+  candidateAdmissionRate: number;
+  rejectionReasons: Record<LearningRejectionBucket, number>;
+  topRejectionReasons: Array<{
+    reason: string;
+    count: number;
+  }>;
+  genericAdviceRejections: number;
+  feedbackClosure: {
+    recentResolvedInterventions: number;
+    helped: number;
+    harmed: number;
+    unresolved: number;
+  };
+};
+
 const normalizeHybridExplainPrompt = (value: string): string =>
   value
     .toLowerCase()
     .replace(/\s+/g, " ")
     .trim();
+
+const LEARNING_REJECTION_BUCKETS: LearningRejectionBucket[] = [
+  "expression_only",
+  "no_transferable_value",
+  "insufficient_evidence",
+  "generic_advice",
+  "gate_failure",
+  "ordinary_success",
+  "other"
+];
+
+const classifyLearningRejectionReason = (reason: string | undefined): LearningRejectionBucket => {
+  const normalized = (reason ?? "").toLowerCase();
+
+  if (normalized.includes("expression-layer") || normalized.includes("expression only")) {
+    return "expression_only";
+  }
+
+  if (normalized.includes("generic advice") || normalized.includes("generic") || normalized.includes("non-transferable")) {
+    return "generic_advice";
+  }
+
+  if (normalized.includes("no_transferable_execution_value") || normalized.includes("transferable execution")) {
+    return "no_transferable_value";
+  }
+
+  if (normalized.includes("insufficient_substantive_evidence") || normalized.includes("insufficient substantive evidence")) {
+    return "insufficient_evidence";
+  }
+
+  if (normalized.includes("llm gate failed") || normalized.includes("rule fallback rejected") || normalized.includes("gate failed")) {
+    return "gate_failure";
+  }
+
+  if (normalized.includes("ordinary successful") || normalized.includes("ordinary success")) {
+    return "ordinary_success";
+  }
+
+  return "other";
+};
 
 export const isExplicitHybridExplanationRequest = (userMessage: string): boolean => {
   const message = normalizeHybridExplainPrompt(userMessage);
@@ -1423,6 +1494,68 @@ export class ExperienceInteractionService {
       recentConvergedUpdates,
       recentPriorityPromotions,
       lastDecisionMode
+    };
+  }
+
+  inspectLearningQualityHealth(cwd: string = process.cwd(), limit = 50): ExperienceLearningQualityHealth {
+    const scope = resolveScope(cwd);
+    const recentTaskRuns = this.taskRunRepo.listRecentByScope(scope.scope_id, limit);
+    const capturedRuns = recentTaskRuns.filter((run) => run.learning_status === "captured").length;
+    const rejectedRuns = recentTaskRuns.filter((run) => run.learning_status === "rejected").length;
+    const notApplicableRuns = recentTaskRuns.filter((run) => run.learning_status === "not_applicable").length;
+    const learningApplicableRuns = capturedRuns + rejectedRuns;
+    const rejectionReasons = Object.fromEntries(
+      LEARNING_REJECTION_BUCKETS.map((bucket) => [bucket, 0])
+    ) as Record<LearningRejectionBucket, number>;
+    const rawReasonCounts = new Map<string, number>();
+
+    for (const run of recentTaskRuns) {
+      if (run.learning_status !== "rejected") {
+        continue;
+      }
+
+      const bucket = classifyLearningRejectionReason(run.learning_reason);
+      rejectionReasons[bucket] += 1;
+      const rawReason = run.learning_reason?.trim() || "unknown";
+      rawReasonCounts.set(rawReason, (rawReasonCounts.get(rawReason) ?? 0) + 1);
+    }
+
+    const recentResolvedInterventions = this.injectionRepo.listRecentResolvedByScope(scope.scope_id, limit);
+    const attributionRecords = this.attributionRecordRepo.listRecentEligibleByScope(scope.scope_id, Math.max(limit, 50));
+    const helpedInjectionIds = new Set(
+      attributionRecords
+        .filter((record) => record.injection_id && record.attribution_verdict.includes("helped"))
+        .map((record) => record.injection_id as string)
+    );
+    const harmedInjectionIds = new Set(
+      attributionRecords
+        .filter((record) => record.injection_id && record.attribution_verdict.includes("harmed"))
+        .map((record) => record.injection_id as string)
+    );
+    const resolvedInjectionIds = new Set(recentResolvedInterventions.map((event) => event.injection_id));
+    const closedInjectionIds = new Set([...helpedInjectionIds, ...harmedInjectionIds]);
+    const unresolved = [...resolvedInjectionIds].filter((id) => !closedInjectionIds.has(id)).length;
+
+    return {
+      scopeId: scope.scope_id,
+      recentTaskRuns: recentTaskRuns.length,
+      learningApplicableRuns,
+      capturedRuns,
+      rejectedRuns,
+      notApplicableRuns,
+      candidateAdmissionRate: learningApplicableRuns > 0 ? capturedRuns / learningApplicableRuns : 0,
+      rejectionReasons,
+      topRejectionReasons: [...rawReasonCounts.entries()]
+        .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))
+        .slice(0, 3)
+        .map(([reason, count]) => ({ reason, count })),
+      genericAdviceRejections: rejectionReasons.generic_advice + rejectionReasons.no_transferable_value,
+      feedbackClosure: {
+        recentResolvedInterventions: recentResolvedInterventions.length,
+        helped: helpedInjectionIds.size,
+        harmed: harmedInjectionIds.size,
+        unresolved
+      }
     };
   }
 

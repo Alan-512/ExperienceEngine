@@ -19,6 +19,7 @@ import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js
 import { ReviewEventRepository } from "../../src/store/sqlite/repositories/review-event-repo.js";
 import { RepoPolicyRepository } from "../../src/store/sqlite/repositories/repo-policy-repo.js";
 import { ScopeRepository } from "../../src/store/sqlite/repositories/scope-repo.js";
+import { TaskRunRepository } from "../../src/store/sqlite/repositories/task-run-repo.js";
 import { nowIso } from "../../src/utils/clock.js";
 import { removeTempDirForTests } from "./temp-cleanup.js";
 
@@ -220,6 +221,122 @@ describe("ExperienceInteractionService", () => {
       originRecordIds: ["input_origin"],
       helpedRecordIds: ["input_helped"],
       harmedRecordIds: ["input_harmed"]
+    });
+  });
+
+  it("derives learning quality health from scoped task, injection, and attribution records", () => {
+    const homeDir = makeTempDir();
+    const cwd = "/repo";
+    const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const scope = resolveScope(cwd);
+    const taskRunRepo = new TaskRunRepository(db);
+    const injectionRepo = new InjectionRepository(db);
+    const attributionRepo = new AttributionRecordRepository(db);
+    const nodeRepo = new NodeRepository(db);
+    const timestamp = nowIso();
+
+    seedStrategyNode(nodeRepo, cwd, timestamp, "node_learning_quality");
+
+    for (const [id, learningStatus, learningReason] of [
+      ["run_captured", "captured", "candidate captured by learning gate"],
+      ["run_expression", "rejected", "expression-layer refinement without substantive execution evidence"],
+      ["run_generic", "rejected", "generic advice with no concrete trigger or verification signal"],
+      ["run_none", "rejected", "no_transferable_execution_value"],
+      ["run_na", "not_applicable", "routine inspection turn"]
+    ] as const) {
+      taskRunRepo.upsert({
+        id,
+        host: "codex",
+        scope_id: scope.scope_id,
+        session_id: id,
+        task_type: "test_debug",
+        task_summary: id,
+        started_at: timestamp,
+        ended_at: timestamp,
+        final_status: "success",
+        learning_status: learningStatus,
+        learning_reason: learningReason,
+        created_at: timestamp,
+        updated_at: timestamp
+      });
+    }
+
+    for (const [injectionId, sessionId] of [
+      ["inject_helped", "run_captured"],
+      ["inject_harmed", "run_expression"],
+      ["inject_unresolved", "run_generic"]
+    ] as const) {
+      injectionRepo.upsert({
+        injection_id: injectionId,
+        session_id: sessionId,
+        scope_id: scope.scope_id,
+        task_type: "test_debug",
+        task_summary: sessionId,
+        mode: "inject",
+        delivery_mode: "live",
+        delivered: true,
+        injected_node_ids: ["node_learning_quality"],
+        injection_count: 1,
+        was_successful: true,
+        harm_observed: false,
+        attribution_reason: "success_outcome",
+        created_at: timestamp,
+        resolved_at: timestamp
+      });
+    }
+
+    attributionRepo.insert({
+      id: "attr_helped",
+      injection_id: "inject_helped",
+      node_id: "node_learning_quality",
+      delivered: true,
+      outcome: "success",
+      attribution_verdict: "strong_helped",
+      confidence: "high",
+      evidence_refs: ["run_captured"],
+      source: "automatic",
+      attribution_reason: "success_outcome",
+      created_at: timestamp,
+      resolved_at: timestamp
+    });
+    attributionRepo.insert({
+      id: "attr_harmed",
+      injection_id: "inject_harmed",
+      node_id: "node_learning_quality",
+      delivered: true,
+      outcome: "failure",
+      attribution_verdict: "strong_harmed",
+      confidence: "high",
+      evidence_refs: ["run_expression"],
+      source: "automatic",
+      attribution_reason: "relevant_failure",
+      created_at: timestamp,
+      resolved_at: timestamp
+    });
+
+    const service = new ExperienceInteractionService(config);
+    expect(service.inspectLearningQualityHealth(cwd)).toMatchObject({
+      scopeId: scope.scope_id,
+      recentTaskRuns: 5,
+      learningApplicableRuns: 4,
+      capturedRuns: 1,
+      rejectedRuns: 3,
+      notApplicableRuns: 1,
+      candidateAdmissionRate: 0.25,
+      rejectionReasons: {
+        expression_only: 1,
+        no_transferable_value: 1,
+        generic_advice: 1
+      },
+      genericAdviceRejections: 2,
+      feedbackClosure: {
+        recentResolvedInterventions: 3,
+        helped: 1,
+        harmed: 1,
+        unresolved: 1
+      }
     });
   });
 

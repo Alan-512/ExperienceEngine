@@ -78,6 +78,33 @@ const codexStatus = (overrides: Record<string, unknown> = {}) =>
     ...overrides
   }) as never;
 
+const learningQualityHealth = () => ({
+  scopeId: "scope_repo",
+  recentTaskRuns: 5,
+  learningApplicableRuns: 4,
+  capturedRuns: 1,
+  rejectedRuns: 3,
+  notApplicableRuns: 1,
+  candidateAdmissionRate: 0.25,
+  rejectionReasons: {
+    expression_only: 1,
+    no_transferable_value: 1,
+    insufficient_evidence: 0,
+    generic_advice: 1,
+    gate_failure: 0,
+    ordinary_success: 0,
+    other: 0
+  },
+  topRejectionReasons: [],
+  genericAdviceRejections: 2,
+  feedbackClosure: {
+    recentResolvedInterventions: 3,
+    helped: 1,
+    harmed: 1,
+    unresolved: 1
+  }
+});
+
 describe("doctor command", () => {
   it("prints a consolidated summary when no host target is provided", async () => {
     await runDoctorCommand(undefined, {
@@ -270,6 +297,7 @@ describe("doctor command", () => {
         recentPriorityPromotions: 1,
         lastDecisionMode: "inject"
       }),
+      inspectLearningQualityHealth: learningQualityHealth,
       fetchLatestGitHubReleaseStatus: async () => ({
         source: "github-releases",
         repository: "Alan-512/ExperienceEngine",
@@ -318,7 +346,14 @@ describe("doctor command", () => {
         ["- Second-opinion conservative downgrades: 1"],
         ["- Rising patterns (priority candidates): 2"],
         ["- Merged refinements (converged updates): 3"],
-        ["- Newly promoted hints (priority promotions): 1"]
+        ["- Newly promoted hints (priority promotions): 1"],
+        ["Learning quality:"],
+        ["- Recent task runs considered: 5"],
+        ["- Learning outcomes: captured 1, rejected 3, not applicable 1"],
+        ["- Candidate admission rate: 25%"],
+        ["- Rejection reason distribution: expression_only:1, no_transferable_value:1, generic_advice:1"],
+        ["- Generic/non-transferable rejections: 2"],
+        ["- Feedback closure: helped 1, harmed 1, unresolved 1 of 3 resolved interventions"]
       ])
     );
   });

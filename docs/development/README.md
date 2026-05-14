@@ -23,6 +23,8 @@ Operational validation snapshots belong in [`source-repo-host-validation.md`](./
 
 Architecture optimization audits belong in dated audit documents, such as [`architecture-optimization-implementation-audit-2026-05-14.md`](./architecture-optimization-implementation-audit-2026-05-14.md). They should map original plan items to implemented changes and remaining gaps; they are not standing roadmaps.
 
+Follow-up implementation plans belong in scoped plan documents, such as [`quality-band-and-operator-surface-followup-plan.md`](./quality-band-and-operator-surface-followup-plan.md). These plans guide future OpenSpec changes, but they should not replace the current-state architecture blueprint.
+
 ## Update Rule
 
 Every architecture-changing PR or local change should update `architecture.md` for what the system now is.

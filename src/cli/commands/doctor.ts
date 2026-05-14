@@ -2,6 +2,7 @@ import { loadConfig } from "../../config/load-config.js";
 import {
   ExperienceDecisionHealth,
   ExperienceInteractionService,
+  type ExperienceLearningQualityHealth,
   type ExperienceFirstValueReadiness
 } from "../../interaction/service.js";
 import { inspectClaudeCodeInstall } from "../../install/claude-code-doctor.js";
@@ -33,6 +34,7 @@ type DoctorDeps = {
   readRegistryHealth?: typeof readRegistryHealth;
   inspectFirstValueReadiness?: () => ExperienceFirstValueReadiness;
   inspectDecisionHealth?: () => ExperienceDecisionHealth;
+  inspectLearningQualityHealth?: () => ExperienceLearningQualityHealth;
   inspectSharedSetupState?: () => SharedSetupState;
 };
 
@@ -71,6 +73,9 @@ const inspectFirstValueReadiness = (): ExperienceFirstValueReadiness =>
 
 const inspectDecisionHealth = (): ExperienceDecisionHealth =>
   new ExperienceInteractionService(loadConfig()).inspectDecisionHealth();
+
+const inspectLearningQualityHealth = (): ExperienceLearningQualityHealth =>
+  new ExperienceInteractionService(loadConfig()).inspectLearningQualityHealth();
 
 const logEvaluationMode = (): void => {
   const config = loadConfig();
@@ -409,6 +414,29 @@ const logDecisionHealth = (summary?: ExperienceDecisionHealth): void => {
   console.log(`- Newly promoted hints (priority promotions): ${summary.recentPriorityPromotions}`);
 };
 
+const formatRate = (value: number): string => `${Math.round(value * 100)}%`;
+
+const logLearningQualityHealth = (summary?: ExperienceLearningQualityHealth): void => {
+  if (!summary) {
+    return;
+  }
+
+  const rejectionSummary = Object.entries(summary.rejectionReasons)
+    .filter(([, count]) => count > 0)
+    .map(([bucket, count]) => `${bucket}:${count}`)
+    .join(", ") || "none";
+
+  console.log("Learning quality:");
+  console.log(`- Recent task runs considered: ${summary.recentTaskRuns}`);
+  console.log(`- Learning outcomes: captured ${summary.capturedRuns}, rejected ${summary.rejectedRuns}, not applicable ${summary.notApplicableRuns}`);
+  console.log(`- Candidate admission rate: ${formatRate(summary.candidateAdmissionRate)}`);
+  console.log(`- Rejection reason distribution: ${rejectionSummary}`);
+  console.log(`- Generic/non-transferable rejections: ${summary.genericAdviceRejections}`);
+  console.log(
+    `- Feedback closure: helped ${summary.feedbackClosure.helped}, harmed ${summary.feedbackClosure.harmed}, unresolved ${summary.feedbackClosure.unresolved} of ${summary.feedbackClosure.recentResolvedInterventions} resolved interventions`
+  );
+};
+
 const getCodexSkipHeavyHint = (summary: ExperienceDecisionHealth): string | undefined => {
   if (
     summary.recentDecisions > 0 &&
@@ -442,6 +470,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
   const registryHealth = (deps.readRegistryHealth ?? readRegistryHealth)();
   const firstValueReadiness = (deps.inspectFirstValueReadiness ?? inspectFirstValueReadiness)();
   const decisionHealth = (deps.inspectDecisionHealth ?? inspectDecisionHealth)();
+  const learningQuality = (deps.inspectLearningQualityHealth ?? inspectLearningQualityHealth)();
   const sharedSetup = (deps.inspectSharedSetupState ?? inspectSharedSetupState)();
   if (!target) {
     const codexStatus = (deps.inspectCodexInstall ?? inspectCodexInstall)();
@@ -541,6 +570,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
           codexStatus.hostWiring.enabled || isClaudeInteractionReady(claudeStatus) || (openclawStatus.hostState.enabled ?? false)
       });
     logFirstValueReadiness(firstValueReadiness, aggregateSetupState);
+    logLearningQualityHealth(learningQuality);
     return;
   }
   if (target === "claude-code") {
@@ -592,6 +622,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
         interactionReady: isClaudeInteractionReady(status)
       })
     );
+    logLearningQualityHealth(learningQuality);
     return;
   }
 
@@ -634,6 +665,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     logCodexRuntimeStatus(status);
     logCodexLearningLoopStatus(status);
     logDecisionHealth(decisionHealth);
+    logLearningQualityHealth(learningQuality);
     const skipHeavyHint = getCodexSkipHeavyHint(decisionHealth);
     if (skipHeavyHint) {
       console.log(`- Recommended next step: ${skipHeavyHint}`);
@@ -742,4 +774,5 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
       interactionReady: Boolean(status.hostState.enabled ?? status.hostWiring?.wired)
     })
   );
+  logLearningQualityHealth(learningQuality);
 };
