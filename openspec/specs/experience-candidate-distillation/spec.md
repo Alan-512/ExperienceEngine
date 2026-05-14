@@ -2,9 +2,7 @@
 
 ## Purpose
 Define the candidate-first learning lifecycle so ExperienceEngine captures raw learning signals before formal node creation, distills them asynchronously, and keeps undistilled candidate state out of normal user-facing review surfaces.
-
 ## Requirements
-
 ### Requirement: ExperienceCandidate is a first-class persisted object
 ExperienceEngine SHALL persist raw experience candidates as a distinct lifecycle object before any formal experience node is created.
 
@@ -52,3 +50,18 @@ ExperienceEngine SHALL keep pending, failed, or discarded candidates out of the 
 #### Scenario: Discarded candidate does not become injectable
 - **WHEN** a candidate is discarded after retry exhaustion
 - **THEN** it never becomes eligible for intervention retrieval
+
+### Requirement: Distillation only processes eligible candidates
+
+ExperienceEngine SHALL only create distillation jobs for tasks that passed learning eligibility and produced an experience candidate.
+
+#### Scenario: Rejected task does not enqueue distillation
+
+- **WHEN** a finalized task is rejected by the learning eligibility gate
+- **THEN** ExperienceEngine SHALL NOT create a distillation job for that task
+
+#### Scenario: Accepted task can enqueue distillation
+
+- **WHEN** a finalized task passes learning eligibility and candidate creation succeeds
+- **THEN** ExperienceEngine MAY create a distillation job according to the existing distillation pipeline behavior
+

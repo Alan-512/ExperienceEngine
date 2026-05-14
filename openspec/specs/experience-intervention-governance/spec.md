@@ -167,3 +167,68 @@ ExperienceEngine SHALL deliver a candidate as a live diagnostic hint only when i
 - **THEN** the candidate remains in its existing lifecycle state
 - **AND** promotion still requires existing helped/support/validation governance
 - **AND** diagnostic delivery does not mutate `usage_count`, helped count, harmed count, `delivery_state`, or promotion metadata
+
+### Requirement: Routine injection defaults to one compact hint
+
+ExperienceEngine SHALL inject at most one compact hint during routine prompt-time intervention unless a documented strong-candidate path explicitly permits more.
+
+#### Scenario: Ordinary eligible match
+
+- **WHEN** a routine task has one or more ordinary eligible matching nodes
+- **THEN** ExperienceEngine SHALL inject no more than one compact hint by default
+
+### Requirement: Raw history is never injected
+
+ExperienceEngine SHALL NOT inject raw task records, raw tool histories, or raw learning candidates into a host prompt.
+
+#### Scenario: Candidate exists but is not a mature node
+
+- **WHEN** retrieval or learning diagnostics include a candidate that has not become an injectable experience node
+- **THEN** ExperienceEngine SHALL NOT inject that candidate into the prompt
+
+### Requirement: Conservative injection remains compact
+
+ExperienceEngine SHALL render conservative injections as compact hints without expanded structured guidance.
+
+#### Scenario: Conservative delivery selected
+
+- **WHEN** intervention mode is conservative
+- **THEN** the injected prompt content SHALL omit expanded Goal, Steps, Avoid, and raw evidence details
+
+### Requirement: Expanded guidance is gated by maturity
+
+ExperienceEngine SHALL render expanded structured guidance only when node maturity and delivery confidence allow it.
+
+#### Scenario: Mature high-confidence node
+
+- **WHEN** a node is mature, delivery-eligible, and selected through a high-confidence path
+- **THEN** ExperienceEngine MAY render bounded Goal, Avoid, or Success Signal fields according to injection policy
+
+### Requirement: No-injection decisions expose structured reasons
+
+ExperienceEngine SHALL produce a structured skip reason when an intervention decision does not inject guidance.
+
+#### Scenario: No candidate exists
+
+- **WHEN** no relevant experience candidate is available for a task
+- **THEN** ExperienceEngine SHALL expose a skip reason indicating that no candidate was available
+
+#### Scenario: Candidate is not mature enough
+
+- **WHEN** a similar candidate exists but delivery or lifecycle state prevents injection
+- **THEN** ExperienceEngine SHALL expose a skip reason indicating that the candidate is not mature enough or is not eligible for delivery
+
+#### Scenario: Policy rejects injection
+
+- **WHEN** retrieval finds a semantically similar candidate but policy rejects it
+- **THEN** ExperienceEngine SHALL expose a skip reason indicating policy rejection
+
+### Requirement: Skip explanations do not pollute routine prompts
+
+ExperienceEngine SHALL keep no-injection explanations out of normal prompt injection unless a user or agent explicitly asks for an explanation.
+
+#### Scenario: Routine task has no injection
+
+- **WHEN** ExperienceEngine skips injection during routine prompt-time lookup
+- **THEN** it SHALL NOT add a verbose no-injection explanation to the task prompt by default
+

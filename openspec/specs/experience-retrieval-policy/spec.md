@@ -133,3 +133,12 @@ ExperienceEngine SHALL expose staged retrieval-policy diagnostics through operat
 - **THEN** it includes a bounded retrieval-policy explanation derived from the scorecard
 - **AND** the explanation is additive and does not change retrieval, scoring, delivery, or prompt text
 
+### Requirement: Retrieval does not imply injection
+
+ExperienceEngine SHALL treat retrieved candidates as inputs to intervention policy, not as automatic prompt content.
+
+#### Scenario: Candidate retrieved but policy rejects injection
+
+- **WHEN** retrieval returns a candidate that intervention policy rejects because of maturity, delivery state, recent harm, or confidence
+- **THEN** ExperienceEngine SHALL keep the candidate diagnostic and SHALL NOT inject it
+
