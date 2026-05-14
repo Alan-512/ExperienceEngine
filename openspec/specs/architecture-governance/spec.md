@@ -12,14 +12,14 @@ ExperienceEngine SHALL maintain a development architecture blueprint that descri
 - **WHEN** a change modifies module boundaries, runtime flow, domain objects, storage relationships, host adapter behavior, or operator surfaces that affect architecture
 - **THEN** the change SHALL update `docs/development/architecture.md` or explicitly state why no blueprint update is required
 
-### Requirement: Roadmap is separate from current-state documentation
+### Requirement: Architecture plans stay outside the current-state blueprint
 
-ExperienceEngine SHALL keep future architecture direction separate from the current architecture blueprint.
+ExperienceEngine SHALL keep proposed architecture direction and implementation planning separate from the current architecture blueprint.
 
-#### Scenario: Future plan changes
+#### Scenario: Future architecture planning changes
 
 - **WHEN** architecture priorities, phase boundaries, or execution constraints change
-- **THEN** the change SHALL update `docs/development/architecture-optimization-roadmap.md` without turning `docs/development/architecture.md` into a proposal document
+- **THEN** the change SHALL update the relevant design or OpenSpec planning document without turning `docs/development/architecture.md` into a proposal document
 
 ### Requirement: Development docs expose the architecture update rule
 
@@ -29,4 +29,3 @@ ExperienceEngine SHALL provide a development docs entrypoint that identifies the
 
 - **WHEN** a coding agent or maintainer opens `docs/development/README.md`
 - **THEN** it SHALL identify `architecture.md` as the required current architecture baseline and list the types of changes that must update it
-

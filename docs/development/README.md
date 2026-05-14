@@ -15,19 +15,12 @@ Keep it current whenever a change modifies ExperienceEngine's architecture, incl
 - CLI, MCP, install, repair, or operator surfaces when they affect architecture
 - supported host behavior when it changes the shared core model
 
-The blueprint is intentionally descriptive. It should explain the current system as it exists after the change. Do not use it to propose future work or debate alternatives.
+The blueprint is intentionally descriptive. It should explain the current system as it exists after the change. Do not use it to propose future work, implementation plans, or debate alternatives.
 
-## Optimization Roadmap
-
-[`architecture-optimization-roadmap.md`](./architecture-optimization-roadmap.md) is the architecture direction and staged improvement roadmap.
-
-Update it when architectural priorities, phase boundaries, or execution constraints change. It should remain a roadmap, not a substitute for the current-state blueprint.
+Architecture design proposals and implementation plans should live in their own design or OpenSpec change documents instead of creating a second standing architecture roadmap.
 
 ## Update Rule
 
-Every architecture-changing PR or local change should update both documents when needed:
-
-- update `architecture.md` for what the system now is
-- update `architecture-optimization-roadmap.md` for what the plan now means
+Every architecture-changing PR or local change should update `architecture.md` for what the system now is.
 
 If an architecture change does not require a blueprint update, the change description should say why.
