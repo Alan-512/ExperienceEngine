@@ -1,8 +1,10 @@
 import { z } from "zod";
 import type { CodexActionRegistry } from "./action-registry.js";
+import { describeSurfaceTier } from "../../interaction/surface-tiers.js";
 
 export const listCodexActionsSchema = z.object({
   category: z.enum(["inspect", "state", "admin", "maintenance"]).optional(),
+  surfaceTier: z.enum(["routine", "operator", "advanced"]).optional(),
   riskLevel: z.enum(["low", "medium", "high"]).optional()
 });
 
@@ -95,7 +97,7 @@ const describeRisk = (riskLevel: "low" | "medium" | "high", requiresConfirmation
     return "Medium-impact action. Verify scope and arguments before execution.";
   }
 
-  return "Low-risk action. Safe for routine inspection or scoped state updates.";
+  return "Low-risk action. Safe for read-only inspection or scoped low-impact state updates.";
 };
 
 const describeNextStep = (action: ReturnType<CodexActionRegistry["get"]>) => {
@@ -115,12 +117,14 @@ export const createCodexBrokerFacade = (registry: CodexActionRegistry) => ({
     const actions = registry
       .list()
       .filter((action) => (args.category ? action.category === args.category : true))
+      .filter((action) => (args.surfaceTier ? action.surfaceTier === args.surfaceTier : true))
       .filter((action) => (args.riskLevel ? action.riskLevel === args.riskLevel : true))
       .map((action) => ({
         id: action.id,
         title: action.title,
         summary: action.summary,
         category: action.category,
+        surfaceTier: action.surfaceTier,
         riskLevel: action.riskLevel,
         requiresConfirmation: action.requiresConfirmation
       }));
@@ -140,6 +144,7 @@ export const createCodexBrokerFacade = (registry: CodexActionRegistry) => ({
         title: action.title,
         summary: action.summary,
         category: action.category,
+        surfaceTier: action.surfaceTier,
         riskLevel: action.riskLevel,
         requiresConfirmation: action.requiresConfirmation
       },
@@ -147,6 +152,7 @@ export const createCodexBrokerFacade = (registry: CodexActionRegistry) => ({
         ? serializeZodSchema(action.inputSchema)
         : { type: "object", required: [], properties: {} },
       example_payload: action.examplePayload ?? {},
+      surface_tier_description: describeSurfaceTier(action.surfaceTier),
       risk_description: describeRisk(action.riskLevel, action.requiresConfirmation),
       impact_summary: action.summary,
       suggested_next_step: describeNextStep(action)

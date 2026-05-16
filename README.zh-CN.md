@@ -277,6 +277,14 @@ OpenClaw 还支持这些 readiness / silence 问题：
 对于 `OpenClaw`、`Codex`、`Claude Code`，常规 review / feedback 路径都应优先留在宿主内部完成。
 只有宿主侧路径不可用，或者你需要显式 operator 控制时，再退回 CLI。
 
+ExperienceEngine 的交互面分成三层：
+
+- Routine：宿主内 review、`ee status`、`ee doctor <host>`、`ee inspect --last`、`ee helped`、`ee harmed`
+- Operator：install、upgrade、repair、operator review、hygiene review、export drafts、backup/export/import/rollback
+- Advanced / experimental：maintenance 命令、原始 evaluation、broker 内部动作、开发者诊断
+
+层级和风险是两个概念。比如 `ee inspect review` 是 operator 层但只读；install/upgrade/rollback 是 operator 层且属于 high-impact，需要保留现有保护。
+
 当你需要显式运维、验证或排障时，可以用：
 
 ```bash

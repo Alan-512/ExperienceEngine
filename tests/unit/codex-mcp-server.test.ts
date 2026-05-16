@@ -824,8 +824,12 @@ describe("Codex MCP behavior loop", () => {
       {}
     );
     const capabilitiesToolPayload = parseTextPayload<{
+      surface_tiers: Record<string, string>;
       core_actions: string[];
       routine_read_surfaces: string[];
+      routine_surfaces: string[];
+      operator_surfaces: string[];
+      advanced_surfaces: string[];
       advanced_actions: string[];
       high_risk_actions: string[];
       surface_model: string;
@@ -850,8 +854,12 @@ describe("Codex MCP behavior loop", () => {
     const capabilitiesResourcePayload = JSON.parse(
       (capabilitiesPayload as { contents: Array<{ text: string }> }).contents[0].text
     ) as {
+      surface_tiers: Record<string, string>;
       core_actions: string[];
       routine_read_surfaces: string[];
+      routine_surfaces: string[];
+      operator_surfaces: string[];
+      advanced_surfaces: string[];
       advanced_actions: string[];
       high_risk_actions: string[];
       surface_model: string;
@@ -862,6 +870,11 @@ describe("Codex MCP behavior loop", () => {
     };
 
     expect(capabilitiesResourcePayload).toMatchObject({
+      surface_tiers: {
+        routine: expect.stringContaining("Day-to-day"),
+        operator: expect.stringContaining("Explicit install"),
+        advanced: expect.stringContaining("Maintenance")
+      },
       core_actions: expect.arrayContaining([
         "experienceengine_lookup_hints",
         "experienceengine_record_tool_result",
@@ -876,6 +889,21 @@ describe("Codex MCP behavior loop", () => {
         "experienceengine://last",
         "experienceengine://repo-summary",
         "experienceengine://review"
+      ]),
+      routine_surfaces: expect.arrayContaining([
+        "experienceengine_feedback_last",
+        "experienceengine://last",
+        "host-native review and helped/harmed feedback"
+      ]),
+      operator_surfaces: expect.arrayContaining([
+        "experienceengine://review",
+        "experienceengine://hygiene",
+        "experienceengine://export-drafts",
+        "brokered install / repair / upgrade plans"
+      ]),
+      advanced_surfaces: expect.arrayContaining([
+        "CLI maintenance commands",
+        "raw evaluation commands"
       ]),
       routine_read_surface_notes: {
         "experienceengine://review": expect.stringContaining("Read-only operator workflow summary")

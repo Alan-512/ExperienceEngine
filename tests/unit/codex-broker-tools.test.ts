@@ -58,7 +58,7 @@ describe("codex broker tools", () => {
     const server = createCodexMcpServer();
     const listTool = getRegisteredTool(server, "experienceengine_list_actions");
 
-    const payload = parseTextPayload<{ actions: Array<{ id: string; category: string; riskLevel: string }> }>(
+    const payload = parseTextPayload<{ actions: Array<{ id: string; category: string; surfaceTier: string; riskLevel: string }> }>(
       (await listTool.handler({})) as {
         content: Array<{ type: string; text?: string }>;
       }
@@ -66,10 +66,20 @@ describe("codex broker tools", () => {
 
     expect(payload.actions).toEqual(
       expect.arrayContaining([
-        expect.objectContaining({ id: "plan_upgrade", category: "admin", riskLevel: "high" }),
-        expect.objectContaining({ id: "inspect_recent_history", category: "inspect", riskLevel: "low" })
+        expect.objectContaining({ id: "plan_upgrade", category: "admin", surfaceTier: "operator", riskLevel: "high" }),
+        expect.objectContaining({ id: "feedback_node", category: "state", surfaceTier: "routine", riskLevel: "low" }),
+        expect.objectContaining({ id: "inspect_recent_history", category: "inspect", surfaceTier: "operator", riskLevel: "low" })
       ])
     );
+
+    const routinePayload = parseTextPayload<{ actions: Array<{ id: string; surfaceTier: string }> }>(
+      (await listTool.handler({ surfaceTier: "routine" })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+    expect(routinePayload.actions).toEqual([
+      expect.objectContaining({ id: "feedback_node", surfaceTier: "routine" })
+    ]);
   });
 
   it("prepares action details and executes low-risk inspect actions", async () => {
@@ -87,13 +97,14 @@ describe("codex broker tools", () => {
     const executeTool = getRegisteredTool(server, "experienceengine_execute_action");
 
     const preparePayload = parseTextPayload<{
-      action: { id: string; category: string; riskLevel: string; requiresConfirmation: boolean };
+      action: { id: string; category: string; surfaceTier: string; riskLevel: string; requiresConfirmation: boolean };
       parameter_contract: {
         type: string;
         required: string[];
         properties: Record<string, { type: string; optional?: boolean; enum?: string[]; integer?: boolean; positive?: boolean }>;
       };
       example_payload: Record<string, unknown>;
+      surface_tier_description: string;
       risk_description: string;
       impact_summary: string;
       suggested_next_step: string;
@@ -104,6 +115,7 @@ describe("codex broker tools", () => {
     expect(preparePayload.action).toMatchObject({
       id: "inspect_recent_history",
       category: "inspect",
+      surfaceTier: "operator",
       riskLevel: "low",
       requiresConfirmation: false
     });
@@ -128,6 +140,7 @@ describe("codex broker tools", () => {
       limit: 10
     });
     expect(preparePayload.risk_description).toContain("Low-risk action");
+    expect(preparePayload.surface_tier_description).toContain("Explicit install");
     expect(preparePayload.impact_summary).toContain("recent EE history");
     expect(preparePayload.suggested_next_step).toContain("experienceengine_execute_action");
 
@@ -273,7 +286,7 @@ describe("codex broker tools", () => {
     const prepareTool = getRegisteredTool(server, "experienceengine_prepare_action");
 
     const payload = parseTextPayload<{
-      action: { id: string; requiresConfirmation: boolean; riskLevel: string };
+      action: { id: string; requiresConfirmation: boolean; surfaceTier: string; riskLevel: string };
       parameter_contract: {
         type: string;
         required: string[];
@@ -289,6 +302,7 @@ describe("codex broker tools", () => {
     expect(payload.action).toMatchObject({
       id: "plan_upgrade",
       requiresConfirmation: true,
+      surfaceTier: "operator",
       riskLevel: "high"
     });
     expect(payload.parameter_contract).toMatchObject({

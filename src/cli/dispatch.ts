@@ -4,6 +4,7 @@ import {
   buildCodexPublicInstallCommand,
   buildOpenClawPublicInstallCommand
 } from "../install/public-install.js";
+import { SURFACE_TIER_DEFINITIONS } from "../interaction/surface-tiers.js";
 
 const usageText =
   "Usage: ee <install openclaw|claude-code|codex|upgrade openclaw|claude-code|codex|repair [openclaw|codex]|claude-hook|codex-hook|codex <exec ...>|codex-mcp-server|doctor [openclaw|claude-code|codex]|status|stats|inspect|feedback|disable|enable|cool|retire>"
@@ -26,19 +27,16 @@ export const printCliUsage = (): void => {
   console.log(`- Then install the plugin: ${buildClaudePluginInstallCommand()}`);
   console.log(`- Codex (EE-managed wiring): ${buildCodexPublicInstallCommand()}`);
   console.log("- Initialize shared state: ee init");
-  console.log("- Check shared ExperienceEngine state: ee status");
-  console.log("- Verify host wiring explicitly: ee doctor <openclaw|claude-code|codex>");
-  console.log("See what ExperienceEngine is doing:");
-  console.log("- Check current state: ee status");
-  console.log("- Inspect the latest persisted intervention: ee inspect --last");
-  console.log("Fix a problem:");
-  console.log("- Validate the current host: ee doctor <openclaw|claude-code|codex>");
-  console.log("- Refresh host wiring when needed: ee upgrade <openclaw|claude-code|codex>");
-  console.log("- Refresh recoverable host wiring: ee repair <openclaw|codex>");
-  console.log("- Routine review/feedback stays in the host first for OpenClaw, Codex, and Claude Code.");
-  console.log("- CLI/operator fallback remains the path for deeper inspection, repair, and advanced management.");
-  console.log("- CLI fallback/operator path: ee inspect --last | ee helped | ee harmed");
-  console.log("Advanced operator commands:");
+  console.log(`${SURFACE_TIER_DEFINITIONS.routine.label} workflows:`);
+  console.log("- Host-first review/feedback: ask OpenClaw, Codex, or Claude Code what ExperienceEngine injected and mark helped/harmed in-session.");
+  console.log("- CLI fallback: ee status | ee doctor <openclaw|claude-code|codex> | ee inspect --last | ee helped | ee harmed");
+  console.log(`${SURFACE_TIER_DEFINITIONS.operator.label} workflows:`);
+  console.log("- Host setup and repair: ee install|upgrade|repair <openclaw|claude-code|codex>");
+  console.log("- Read-only review: ee inspect review | ee inspect hygiene | ee inspect export-drafts | ee inspect repo");
+  console.log("- Managed state: ee backup | ee export | ee import <snapshot-path> | ee rollback <backup-id>");
+  console.log(`${SURFACE_TIER_DEFINITIONS.advanced.label} workflows:`);
+  console.log("- Maintenance, raw evaluation, Codex broker internals, and developer diagnostics are advanced/experimental.");
+  console.log("Full command reference:");
   console.log(usageText);
 };
 

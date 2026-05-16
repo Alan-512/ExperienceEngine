@@ -221,6 +221,27 @@ Use `ee` for:
 - learning and intervention inspection
 - quick helped / harmed feedback
 
+ExperienceEngine surfaces are grouped by workflow tier:
+
+- `Routine`
+  - host-first review and feedback
+  - `ee status`
+  - `ee doctor <host>`
+  - `ee inspect --last`
+  - `ee helped` / `ee harmed`
+- `Operator`
+  - `ee install|upgrade|repair <host>`
+  - `ee inspect review`
+  - `ee inspect hygiene`
+  - `ee inspect export-drafts`
+  - managed backup/export/import/rollback
+- `Advanced / experimental`
+  - `ee maintenance ...`
+  - raw evaluation commands
+  - broker internals and developer diagnostics
+
+Workflow tier is separate from mutation risk. Operator review, hygiene, and export drafts are operator-tier but read-only. Install, upgrade, import, and rollback are operator-tier and high-impact.
+
 `ee status` and `ee doctor` now also summarize recent retrieval health in product language. They still show the raw counters, but they additionally explain whether ExperienceEngine is mostly injecting, mostly staying conservative, or still skipping too many close-match tasks in the current repo.
 
 Their roles are intentionally different:
@@ -673,7 +694,12 @@ Use `ee` directly when:
 Useful fallback commands:
 
 ```bash
+# Routine fallback
 ee inspect --last
+ee helped
+ee harmed
+
+# Operator inspection
 ee inspect recent injected 10
 ee inspect review
 ee inspect repo
@@ -684,8 +710,6 @@ ee inspect active
 ee inspect node <id>
 ee inspect state retired
 ee inspect type warning
-ee helped
-ee harmed
 ee feedback --last helped
 ee feedback node <id> harmed
 ee disable scope

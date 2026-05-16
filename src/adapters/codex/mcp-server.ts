@@ -38,6 +38,7 @@ import {
   createCodexBehaviorLoop,
   type CodexLookupArgs
 } from "./behavior-loop.js";
+import { SURFACE_TIER_DEFINITIONS } from "../../interaction/surface-tiers.js";
 export { createCodexBehaviorLoop } from "./behavior-loop.js";
 
 type CodexServerOptions = {
@@ -61,6 +62,11 @@ const EXPERIENCE_ADAPTERS = ["openclaw", "claude-code", "codex"] as const;
 const HIGH_IMPACT_OPERATIONS = ["install", "repair", "upgrade"] as const satisfies readonly HighImpactOperation[];
 
 const buildExperienceCapabilities = () => ({
+  surface_tiers: {
+    routine: SURFACE_TIER_DEFINITIONS.routine.summary,
+    operator: SURFACE_TIER_DEFINITIONS.operator.summary,
+    advanced: SURFACE_TIER_DEFINITIONS.advanced.summary
+  },
   core_actions: [
     "experienceengine_lookup_hints",
     "experienceengine_explain_last_decision",
@@ -78,6 +84,29 @@ const buildExperienceCapabilities = () => ({
     "experienceengine://review",
     "experienceengine://hygiene",
     "experienceengine://export-drafts"
+  ],
+  routine_surfaces: [
+    "experienceengine_lookup_hints",
+    "experienceengine_explain_last_decision",
+    "experienceengine_feedback_last",
+    "experienceengine_get_capabilities",
+    "experienceengine://last",
+    "host-native review and helped/harmed feedback"
+  ],
+  operator_surfaces: [
+    "experienceengine://doctor/{adapter}",
+    "experienceengine://repo-summary",
+    "experienceengine://review",
+    "experienceengine://hygiene",
+    "experienceengine://export-drafts",
+    "brokered install / repair / upgrade plans",
+    "brokered managed-state backup / export / import / rollback plans"
+  ],
+  advanced_surfaces: [
+    "brokered node lifecycle and scope state actions",
+    "CLI maintenance commands",
+    "raw evaluation commands",
+    "developer diagnostics"
   ],
   routine_read_surface_notes: {
     quality_band:

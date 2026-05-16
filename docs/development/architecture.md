@@ -73,6 +73,14 @@ src/
   version/               # 版本与远端 release 检查
 ```
 
+Interaction surfaces are presented with a tier model:
+
+- `routine`: host-first review and feedback, status, doctor, last-inspection, and helped/harmed fallback
+- `operator`: install, upgrade, repair, operator review, hygiene review, export drafts, and managed state workflows
+- `advanced`: maintenance commands, raw evaluations, broker internals, and developer diagnostics
+
+Tier is separate from mutation risk. Operator review, hygiene, and export drafts are read-only operator workflows; install/upgrade/import/rollback are operator workflows with high-impact safeguards.
+
 ---
 
 ## 3. 当前整体架构图

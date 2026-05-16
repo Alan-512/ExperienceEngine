@@ -152,6 +152,14 @@ Each node moves through that lifecycle using real task outcomes, not just time-b
 - deterministic match scorecards that separate same-repo confidence from broader cross-repo reuse
 - host-agent driven inspection and feedback, with CLI fallback commands such as `ee inspect --last`, `ee helped`, and `ee harmed`
 
+### Interaction Surface Tiers
+
+- Routine: host-first review, `ee status`, `ee doctor <host>`, `ee inspect --last`, `ee helped`, and `ee harmed`
+- Operator: install, upgrade, repair, operator review, hygiene review, export drafts, and managed backup/export/import/rollback
+- Advanced / experimental: maintenance commands, raw evaluations, broker internals, and developer diagnostics
+
+Tier and risk are separate. For example, `ee inspect review` is an operator workflow but read-only, while install/upgrade/rollback are operator workflows with high-impact safeguards.
+
 For a more detailed explanation of what ExperienceEngine records and how an experience node is structured, see:
 
 - [Experience Model Overview](./docs/development/experience-model.md)

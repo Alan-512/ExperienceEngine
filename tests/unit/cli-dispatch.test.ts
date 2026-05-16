@@ -48,16 +48,15 @@ describe("CLI dispatch", () => {
     expect(output).toContain("Then install the plugin: /plugin install experienceengine@experienceengine");
     expect(output).toContain("Codex (EE-managed wiring): ee install codex");
     expect(output).toContain("ee init");
-    expect(output).toContain("ee status");
-    expect(output).toContain("ee doctor <openclaw|claude-code|codex>");
-    expect(output).toContain("See what ExperienceEngine is doing:");
+    expect(output).toContain("Routine workflows:");
+    expect(output).toContain("Host-first review/feedback");
+    expect(output).toContain("ee status | ee doctor <openclaw|claude-code|codex> | ee inspect --last | ee helped | ee harmed");
     expect(output).toContain("ee inspect --last");
-    expect(output).toContain("Fix a problem:");
-    expect(output).toContain("ee upgrade <openclaw|claude-code|codex>");
-    expect(output).toContain("ee repair <openclaw|codex>");
-    expect(output).toContain("Routine review/feedback stays in the host first for OpenClaw, Codex, and Claude Code.");
-    expect(output).toContain("CLI/operator fallback remains the path for deeper inspection, repair, and advanced management.");
-    expect(output).toContain("Advanced operator commands:");
+    expect(output).toContain("Operator workflows:");
+    expect(output).toContain("ee install|upgrade|repair <openclaw|claude-code|codex>");
+    expect(output).toContain("ee inspect review | ee inspect hygiene | ee inspect export-drafts | ee inspect repo");
+    expect(output).toContain("Advanced / experimental workflows:");
+    expect(output).toContain("Full command reference:");
     expect(output).toContain("Usage: ee <");
 
     consoleLog.mockRestore();

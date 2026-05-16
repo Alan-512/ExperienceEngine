@@ -2,15 +2,18 @@ import { z } from "zod";
 import type { DeliveryState, ExperienceNodeType, ExperienceState, TaskType } from "../../types/domain.js";
 import type { HygieneFindingType, HygieneSeverity } from "../../maintenance/experience-hygiene.js";
 import type { ExportDraftRisk } from "../../maintenance/experience-export-drafts.js";
+import type { ExperienceSurfaceTier } from "../../interaction/surface-tiers.js";
 
 export type CodexActionCategory = "inspect" | "state" | "admin" | "maintenance";
 export type CodexActionRiskLevel = "low" | "medium" | "high";
+export type CodexActionSurfaceTier = ExperienceSurfaceTier;
 
 export type CodexActionDefinition = {
   id: string;
   title: string;
   summary: string;
   category: CodexActionCategory;
+  surfaceTier: CodexActionSurfaceTier;
   riskLevel: CodexActionRiskLevel;
   requiresConfirmation: boolean;
   inputSchema?: z.ZodTypeAny;
@@ -74,6 +77,7 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
       title: "Plan Install",
       summary: "Create an install plan for a supported adapter.",
       category: "admin",
+      surfaceTier: "operator",
       riskLevel: "high",
       requiresConfirmation: true,
       inputSchema: z.object({
@@ -91,6 +95,7 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
       title: "Plan Repair",
       summary: "Create a repair plan for a supported adapter.",
       category: "admin",
+      surfaceTier: "operator",
       riskLevel: "high",
       requiresConfirmation: true,
       inputSchema: z.object({
@@ -108,6 +113,7 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
       title: "Plan Upgrade",
       summary: "Create an upgrade plan for a supported adapter.",
       category: "admin",
+      surfaceTier: "operator",
       riskLevel: "high",
       requiresConfirmation: true,
       inputSchema: z.object({
@@ -125,6 +131,7 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
       title: "Execute Operational Plan",
       summary: "Execute a previously planned install, repair, or upgrade operation.",
       category: "admin",
+      surfaceTier: "operator",
       riskLevel: "high",
       requiresConfirmation: true,
       inputSchema: z.object({
@@ -143,6 +150,7 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
       title: "Plan Backup",
       summary: "Create a backup plan for managed EE state.",
       category: "maintenance",
+      surfaceTier: "operator",
       riskLevel: "high",
       requiresConfirmation: true,
       examplePayload: {},
@@ -153,6 +161,7 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
       title: "Plan Export",
       summary: "Create an export plan for managed EE state.",
       category: "maintenance",
+      surfaceTier: "operator",
       riskLevel: "high",
       requiresConfirmation: true,
       examplePayload: {},
@@ -163,6 +172,7 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
       title: "Plan Import",
       summary: "Create an import plan for an EE snapshot.",
       category: "maintenance",
+      surfaceTier: "operator",
       riskLevel: "high",
       requiresConfirmation: true,
       inputSchema: z.object({
@@ -177,6 +187,7 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
       title: "Plan Rollback",
       summary: "Create a rollback plan for managed EE state.",
       category: "maintenance",
+      surfaceTier: "operator",
       riskLevel: "high",
       requiresConfirmation: true,
       inputSchema: z.object({
@@ -191,6 +202,7 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
       title: "Execute State Plan",
       summary: "Execute a previously planned backup, export, import, or rollback operation.",
       category: "maintenance",
+      surfaceTier: "operator",
       riskLevel: "high",
       requiresConfirmation: true,
       inputSchema: z.object({
@@ -209,6 +221,7 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
       title: "Check Update",
       summary: "Check release or update status for an adapter.",
       category: "maintenance",
+      surfaceTier: "operator",
       riskLevel: "low",
       requiresConfirmation: false,
       inputSchema: z.object({
@@ -223,6 +236,7 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
       title: "Inspect Recent History",
       summary: "Inspect recent EE history, optionally filtered to injected turns.",
       category: "inspect",
+      surfaceTier: "operator",
       riskLevel: "low",
       requiresConfirmation: false,
       inputSchema: z.object({
@@ -241,6 +255,7 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
       title: "Inspect Node Detail",
       summary: "Inspect one EE node by id.",
       category: "inspect",
+      surfaceTier: "operator",
       riskLevel: "low",
       requiresConfirmation: false,
       inputSchema: z.object({
@@ -254,6 +269,7 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
       title: "Inspect Nodes By State",
       summary: "Inspect EE nodes filtered by lifecycle state.",
       category: "inspect",
+      surfaceTier: "operator",
       riskLevel: "low",
       requiresConfirmation: false,
       inputSchema: z.object({
@@ -268,6 +284,7 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
       title: "Inspect Nodes By Type",
       summary: "Inspect EE nodes filtered by node type.",
       category: "inspect",
+      surfaceTier: "operator",
       riskLevel: "low",
       requiresConfirmation: false,
       inputSchema: z.object({
@@ -282,6 +299,7 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
       title: "Inspect Learning Summary",
       summary: "Inspect the current learning summary.",
       category: "inspect",
+      surfaceTier: "operator",
       riskLevel: "low",
       requiresConfirmation: false,
       examplePayload: {},
@@ -293,6 +311,7 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
       summary:
         "Inspect the read-only operator review workflow across repo policy, hygiene, and export drafts, with drill-down references only.",
       category: "inspect",
+      surfaceTier: "operator",
       riskLevel: "low",
       requiresConfirmation: false,
       inputSchema: z.object({
@@ -311,6 +330,7 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
       title: "Inspect Experience Hygiene",
       summary: "Inspect read-only EE hygiene findings for stale, duplicate, conflicting, over-generalized, or drifted guidance.",
       category: "inspect",
+      surfaceTier: "operator",
       riskLevel: "low",
       requiresConfirmation: false,
       inputSchema: z.object({
@@ -339,6 +359,7 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
       title: "Inspect Export Drafts",
       summary: "Inspect read-only review packages for guidance that may be exported outside local EE state.",
       category: "inspect",
+      surfaceTier: "operator",
       riskLevel: "low",
       requiresConfirmation: false,
       inputSchema: z.object({
@@ -369,6 +390,7 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
       title: "Inspect Backup Inventory",
       summary: "Inspect managed EE backups available for rollback or export review.",
       category: "inspect",
+      surfaceTier: "operator",
       riskLevel: "low",
       requiresConfirmation: false,
       examplePayload: {},
@@ -379,6 +401,7 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
       title: "Feedback Node",
       summary: "Record helped or harmed feedback for a specific EE node.",
       category: "state",
+      surfaceTier: "routine",
       riskLevel: "low",
       requiresConfirmation: false,
       inputSchema: z.object({
@@ -397,6 +420,7 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
       title: "Set Scope Intervention State",
       summary: "Enable or disable EE interventions for a working-directory scope.",
       category: "state",
+      surfaceTier: "operator",
       riskLevel: "low",
       requiresConfirmation: false,
       inputSchema: z.object({
@@ -414,6 +438,7 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
       title: "Set Node Lifecycle",
       summary: "Move a specific EE node into cooling or retired lifecycle state.",
       category: "state",
+      surfaceTier: "operator",
       riskLevel: "low",
       requiresConfirmation: false,
       inputSchema: z.object({
