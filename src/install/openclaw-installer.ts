@@ -8,6 +8,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  rmSync,
   statSync,
   writeFileSync
 } from "node:fs";
@@ -19,6 +20,7 @@ import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import { resolveExperienceEnginePaths, resolveProductStateDir, type ResolvedPathInfo } from "../config/path-resolver.js";
 import {
   buildOpenClawInstallCommands,
+  buildOpenClawAllowSetCommand,
   buildOpenClawConfigGetCommand,
   buildOpenClawInfoCommand,
   buildOpenClawLoadPathsSetCommand,
@@ -32,7 +34,8 @@ import {
   runOpenClawCommand,
   runOpenClawCommands,
   type OpenClawCommand,
-  type OpenClawCommandRunner
+  type OpenClawCommandRunner,
+  type OpenClawPluginsConfig
 } from "./openclaw-cli.js";
 import { buildVersionStatus, readCurrentPackageVersion } from "../version/package-version.js";
 import {
@@ -84,6 +87,46 @@ const readExplicitBooleanEnv = (env: NodeJS.ProcessEnv, key: string): boolean | 
 
 const readExplicitStringEnv = (env: NodeJS.ProcessEnv, key: string): string | undefined =>
   env[key] !== undefined ? env[key] : undefined;
+
+const resolveOpenClawConfigPath = (homeDir?: string): string =>
+  join(homeDir ? resolve(homeDir) : resolve(homedir()), ".openclaw", "openclaw.json");
+
+const readOpenClawConfigFile = (homeDir?: string): OpenClawPluginsConfig | null => {
+  const configPath = resolveOpenClawConfigPath(homeDir);
+  if (!existsSync(configPath)) {
+    return null;
+  }
+
+  try {
+    const parsed = JSON.parse(readFileSync(configPath, "utf8")) as {
+      plugins?: OpenClawPluginsConfig;
+    };
+    return parsed.plugins ?? null;
+  } catch {
+    return null;
+  }
+};
+
+const writeOpenClawAllowListToConfigFile = (pluginIds: string[], homeDir?: string): boolean => {
+  const configPath = resolveOpenClawConfigPath(homeDir);
+  if (!existsSync(configPath)) {
+    return false;
+  }
+
+  try {
+    const parsed = JSON.parse(readFileSync(configPath, "utf8")) as {
+      plugins?: OpenClawPluginsConfig;
+    };
+    parsed.plugins = {
+      ...(parsed.plugins ?? {}),
+      allow: pluginIds
+    };
+    writeFileSync(configPath, `${JSON.stringify(parsed, null, 2)}\n`, "utf8");
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 type HostState = {
   status?: string;
@@ -333,6 +376,33 @@ const protectOpenClawReinstallPath = (installPath: string, packageRoot: string, 
   }
 };
 
+const removeOpenClawReinstallPath = (installPath: string, homeDir?: string): void => {
+  const normalizedInstallPath = resolve(expandHomePath(installPath, homeDir));
+  rmSync(normalizedInstallPath, { recursive: true, force: true });
+};
+
+const removeOpenClawPluginFromAllowList = (
+  existingPluginsConfig: ReturnType<typeof readOpenClawPluginsConfig>,
+  pluginId: string,
+  homeDir?: string,
+  runner?: OpenClawCommandRunner
+): void => {
+  const allowList = existingPluginsConfig?.allow;
+  if (!Array.isArray(allowList) || !allowList.includes(pluginId)) {
+    return;
+  }
+
+  const nextAllowList = allowList.filter((allowedPluginId) => allowedPluginId !== pluginId);
+  try {
+    runOpenClawCommand(buildOpenClawAllowSetCommand(nextAllowList), runner);
+  } catch (error) {
+    if (writeOpenClawAllowListToConfigFile(nextAllowList, homeDir)) {
+      return;
+    }
+    throw error;
+  }
+};
+
 export const createOpenClawInstallTarball = (packageRoot: string, paths: ResolvedPathInfo): string => {
   const tempRoot = mkdtempSync(join(resolveProductStateDir(paths), "openclaw-package-"));
   const stageDir = join(tempRoot, "experienceengine-openclaw");
@@ -551,9 +621,13 @@ const cleanupOpenClawWarningSources = (
   normalizeOpenClawPluginPermissions(installPath);
 };
 
-const readOpenClawPluginsConfig = (runner?: OpenClawCommandRunner) => {
-  const pluginsOutput = runOpenClawCommand(buildOpenClawPluginsConfigGetCommand(), runner);
-  return parseOpenClawPluginsConfig(pluginsOutput).config;
+const readOpenClawPluginsConfig = (runner?: OpenClawCommandRunner, homeDir?: string) => {
+  try {
+    const pluginsOutput = runOpenClawCommand(buildOpenClawPluginsConfigGetCommand(), runner);
+    return parseOpenClawPluginsConfig(pluginsOutput).config;
+  } catch {
+    return readOpenClawConfigFile(homeDir);
+  }
 };
 
 const readOpenClawPluginEntryConfig = (runner?: OpenClawCommandRunner) => {
@@ -631,13 +705,15 @@ export const installOpenClawAdapter = (options: InstallerOptions = {}): OpenClaw
   mkdirSync(paths.captureDir, { recursive: true });
   mkdirSync(dirname(paths.sqlitePath), { recursive: true });
 
-  const existingPluginsConfig = readOpenClawPluginsConfig(options.runner);
+  const existingPluginsConfig = readOpenClawPluginsConfig(options.runner, options.homeDir);
   const expectedInstallPath =
     existingPluginsConfig?.installs?.experienceengine?.installPath ??
     join(dirname(paths.compatibilityHome), "extensions", "experienceengine");
   const installAction = inferOpenClawInstallAction(existingPluginsConfig, packageRoot, expectedInstallPath);
   if (installAction === "reinstall") {
     protectOpenClawReinstallPath(expectedInstallPath, packageRoot, options.homeDir);
+    removeOpenClawPluginFromAllowList(existingPluginsConfig, "experienceengine", options.homeDir, options.runner);
+    removeOpenClawReinstallPath(expectedInstallPath, options.homeDir);
   }
   const installSource = (options.packageSourceBuilder ?? createOpenClawInstallTarball)(packageRoot, paths);
   const commands = buildOpenClawInstallCommands(installSource, "experienceengine", installAction, pluginConfig);

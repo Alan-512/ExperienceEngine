@@ -188,6 +188,7 @@ describe("OpenClaw installer", () => {
         const key = [command.bin, ...command.args].join(" ");
         if (key === "openclaw config get plugins") {
           return `{
+  "allow": ["experienceengine"],
   "load": {
     "paths": []
   },
@@ -273,6 +274,7 @@ Recorded version: 0.2.0`;
         }
         if (key === "openclaw config get plugins") {
           return `{
+  "allow": ["experienceengine"],
   "load": {
     "paths": []
   },
@@ -629,7 +631,7 @@ Recorded version: 0.2.0`;
     expect(payload.installMode).toBe("reinstalled-packaged-plugin");
   });
 
-  it("keeps an existing reinstall directory in place until OpenClaw performs the install", () => {
+  it("removes an existing safe reinstall directory before asking OpenClaw to install", () => {
     const homeDir = makeTempDir();
     const commands: string[] = [];
     const installPath = join(homeDir, ".openclaw", "extensions", "experienceengine");
@@ -645,6 +647,7 @@ Recorded version: 0.2.0`;
         commands.push(key);
         if (key === "openclaw config get plugins") {
           return `{
+  "allow": ["experienceengine"],
   "load": {
     "paths": []
   },
@@ -658,13 +661,14 @@ Recorded version: 0.2.0`;
 }`;
         }
         if (key.startsWith("openclaw plugins install ")) {
-          expect(existsSync(installPath)).toBe(true);
+          expect(existsSync(installPath)).toBe(false);
         }
         return "";
       }
     });
 
-    expect(commands[2]).toMatch(/^openclaw plugins install /);
+    expect(commands[2]).toBe("openclaw config set plugins.allow [] --json");
+    expect(commands[3]).toMatch(/^openclaw plugins install /);
   });
 
   it("refuses to delete an install path that points at a live git working tree", () => {

@@ -49,6 +49,7 @@ export type OpenClawPluginEntryConfig = {
 };
 
 export type OpenClawPluginsConfig = {
+  allow?: string[];
   load?: {
     paths?: string[];
   };
@@ -137,6 +138,12 @@ export const buildOpenClawLoadPathsSetCommand = (paths: string[]): OpenClawComma
   bin: "openclaw",
   args: ["config", "set", "plugins.load.paths", JSON.stringify(paths), "--json"],
   description: "Update OpenClaw plugin load paths"
+});
+
+export const buildOpenClawAllowSetCommand = (pluginIds: string[]): OpenClawCommand => ({
+  bin: "openclaw",
+  args: ["config", "set", "plugins.allow", JSON.stringify(pluginIds), "--json"],
+  description: "Update OpenClaw plugin allow list"
 });
 
 export const defaultOpenClawCommandRunner: OpenClawCommandRunner = (command) => {
