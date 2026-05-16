@@ -72,6 +72,13 @@ import {
   buildRetrievalPolicyInspectionSummary,
   type RetrievalPolicyInspectionSummary
 } from "./retrieval-policy-inspection.js";
+import {
+  deriveNodeConfidence,
+  deriveNodeRisk,
+  deriveQualityBandExplanation,
+  summarizeQualityBandDistribution,
+  type ExperienceQualityBandExplanation
+} from "./quality-band.js";
 
 export type ExperienceNodeSummary = {
   id: string;
@@ -96,6 +103,7 @@ export type ExperienceNodeSummary = {
   hint: string;
   qualityBand: "strong" | "building" | "risky";
   qualityDrivers: string[];
+  quality: ExperienceQualityBandExplanation;
   applicabilityProfile: {
     bestFit: string;
     scopeValidity: string;
@@ -143,6 +151,7 @@ export type ExperienceLastInspection = {
   scorecard?: InjectionScorecard;
   decisionExplanation?: string;
   trustSummary?: string;
+  qualityContext?: ExperienceQualityBandExplanation;
   retrievalNotes: string[];
   retrievalPolicySummary?: RetrievalPolicyInspectionSummary;
   timeline: ExperienceTimelineEntry[];
@@ -470,107 +479,46 @@ const toManualOverrideAttributionRecord = (input: {
   };
 };
 
-const deriveNodeRisk = (node: ExperienceNode): "low" | "medium" | "high" => {
-  if (node.state === "candidate") {
-    return "high";
-  }
-
-  if (node.state === "priority_candidate") {
-    return "medium";
-  }
-
-  if (node.state === "cooling" || node.harmed_count > 0 || node.node_type === "warning") {
-    return node.harmed_count > node.helped_count ? "high" : "medium";
-  }
-
-  return "low";
-};
-
-const deriveQualityBand = (node: ExperienceNode): "strong" | "building" | "risky" => {
-  if (node.state === "retired" || node.harmed_count > node.helped_count || deriveNodeRisk(node) === "high") {
-    return "risky";
-  }
-
-  if (
-    node.state === "active" &&
-    node.validation_state === "validated_by_reuse" &&
-    node.harmed_count === 0
-  ) {
-    return "strong";
-  }
-
-  return "building";
-};
-
-const buildQualityDrivers = (node: ExperienceNode): string[] => {
-  const drivers: string[] = [];
-  if (node.validation_state === "validated_by_reuse") {
-    drivers.push("This node has already been validated by successful reuse.");
-  }
-
-  if (node.helped_count > node.harmed_count) {
-    drivers.push("Helpful outcomes still outweigh harmful ones for this node.");
-  } else if (node.harmed_count > node.helped_count) {
-    drivers.push("Harmful outcomes currently outweigh helpful ones for this node.");
-  }
-
-  if (node.state === "candidate" || node.state === "priority_candidate") {
-    drivers.push("This node is still early in its lifecycle and needs more runtime evidence.");
-  } else if (node.state === "cooling") {
-    drivers.push("This node is in cooling state because recent runtime evidence weakened confidence.");
-  }
-
-  return drivers.slice(0, 3);
-};
-
-const deriveConfidence = (node: ExperienceNode): "high" | "medium" | "low" => {
-  if (node.validation_state === "validated_by_reuse" && node.state === "active" && node.harmed_count === 0) {
-    return "high";
-  }
-
-  if (node.state === "candidate" || node.harmed_count > node.helped_count) {
-    return "low";
-  }
-
-  return "medium";
-};
-
 const formatTaskFamily = (taskType: ExperienceNode["task_type"]): string =>
   taskType === "general" ? "general tasks" : `${taskType} tasks`;
 
 const buildApplicabilityProfile = (node: ExperienceNode) => ({
   bestFit: `${formatTaskFamily(node.task_type)} in this repo scope`,
   scopeValidity: node.applicability_notes ?? "Use within the same repo scope unless fresh evidence says otherwise.",
-  confidence: deriveConfidence(node),
+  confidence: deriveNodeConfidence(node),
   risk: deriveNodeRisk(node),
   avoidWhen: node.stop_condition ?? node.escalation_condition ?? node.avoid_steps?.[0]
 });
 
-const toNodeSummary = (node: ExperienceNode): ExperienceNodeSummary => ({
-  id: node.id,
-  type: node.node_type,
-  taskType: node.task_type,
-  state: node.state,
-  sourceKind: node.source_kind,
-  distillationMode: node.distillation_mode_used,
-  distillationSource: node.distillation_source,
-  redistilledFrom: node.redistilled_from,
-  promotionSignal: node.promotion_signal,
-  promotionReason: node.promotion_reason,
-  mergeDecision: node.merge_decision,
-  mergeReason: node.merge_reason,
-  priorityPromotionApplied: node.priority_promotion_applied,
-  triggerPattern: node.trigger_pattern,
-  evidenceSummary: node.evidence_summary,
-  originRecordIds: node.origin_record_ids,
-  helped: node.helped_count,
-  harmed: node.harmed_count,
-  lastUsedAt: node.last_used_at,
-  hint: node.compact_hint,
-  qualityBand: deriveQualityBand(node),
-  qualityDrivers: buildQualityDrivers(node),
-  applicabilityProfile: buildApplicabilityProfile(node)
-});
+const toNodeSummary = (node: ExperienceNode): ExperienceNodeSummary => {
+  const quality = deriveQualityBandExplanation(node);
+  return {
+    id: node.id,
+    type: node.node_type,
+    taskType: node.task_type,
+    state: node.state,
+    sourceKind: node.source_kind,
+    distillationMode: node.distillation_mode_used,
+    distillationSource: node.distillation_source,
+    redistilledFrom: node.redistilled_from,
+    promotionSignal: node.promotion_signal,
+    promotionReason: node.promotion_reason,
+    mergeDecision: node.merge_decision,
+    mergeReason: node.merge_reason,
+    priorityPromotionApplied: node.priority_promotion_applied,
+    triggerPattern: node.trigger_pattern,
+    evidenceSummary: node.evidence_summary,
+    originRecordIds: node.origin_record_ids,
+    helped: node.helped_count,
+    harmed: node.harmed_count,
+    lastUsedAt: node.last_used_at,
+    hint: node.compact_hint,
+    qualityBand: quality.band,
+    qualityDrivers: quality.reasons,
+    quality,
+    applicabilityProfile: buildApplicabilityProfile(node)
+  };
+};
 
 const toNodeDetail = (node: ExperienceNode): ExperienceNodeDetail => ({
   ...toNodeSummary(node),
@@ -773,6 +721,25 @@ const buildTrustSummary = (input: {
 
   const confidence = scorecard.confidence ? ` ${scorecard.confidence}-confidence` : "";
   return `${scorecard.riskLevel}-risk${confidence} ${primaryNode.state} guidance with ${primaryNode.helped} helped and ${primaryNode.harmed} harmed signal(s).`;
+};
+
+const buildQualityContext = (input: {
+  scorecard?: InjectionScorecard;
+  injectedNodes: ExperienceNodeSummary[];
+  lookupNode: (nodeId: string) => ExperienceNode | undefined;
+}): ExperienceQualityBandExplanation | undefined => {
+  const primaryInjected = input.injectedNodes[0]?.quality;
+  if (primaryInjected) {
+    return primaryInjected;
+  }
+
+  const topCandidateId = input.scorecard?.topCandidates?.[0]?.id;
+  if (!topCandidateId) {
+    return undefined;
+  }
+
+  const candidateNode = input.lookupNode(topCandidateId);
+  return candidateNode ? deriveQualityBandExplanation(candidateNode) : undefined;
 };
 
 const buildRetrievalNotes = (scorecard?: InjectionScorecard): string[] => {
@@ -997,6 +964,12 @@ export class ExperienceInteractionService {
       outcome: record.outcome_signal
     });
     const decisionExplanation = buildDecisionExplanation({ intervention, scorecard });
+    const injectedNodeSummaries = injectedNodes.map(toNodeSummary);
+    const qualityContext = buildQualityContext({
+      scorecard,
+      injectedNodes: injectedNodeSummaries,
+      lookupNode: (nodeId) => this.nodeRepo.getById(nodeId)
+    });
     return {
       sessionId: record.session_id,
       episodeId: record.episode_id,
@@ -1010,12 +983,13 @@ export class ExperienceInteractionService {
       attributionRecords,
       episodeProjection,
       outcome: record.outcome_signal,
-      injectedNodes: injectedNodes.map(toNodeSummary),
+      injectedNodes: injectedNodeSummaries,
       hints: injectedNodes.map((node) => node.compact_hint),
       evidence: record.evidence,
       scorecard,
       decisionExplanation,
-      trustSummary: buildTrustSummary({ scorecard, injectedNodes: injectedNodes.map(toNodeSummary) }),
+      trustSummary: buildTrustSummary({ scorecard, injectedNodes: injectedNodeSummaries }),
+      qualityContext,
       retrievalNotes: buildRetrievalNotes(scorecard),
       retrievalPolicySummary: buildRetrievalPolicyInspectionSummary(scorecard),
       timeline: buildLatestTimeline({
@@ -1067,6 +1041,12 @@ export class ExperienceInteractionService {
       (taskRun?.final_status === "success" ? "success" : taskRun?.final_status === "failure" ? "failure" : "unknown");
     const summary = event.task_summary ?? taskRun?.task_summary ?? "Latest injection event";
     const decisionExplanation = buildDecisionExplanation({ intervention, scorecard: event.scorecard });
+    const injectedNodeSummaries = injectedNodes.map(toNodeSummary);
+    const qualityContext = buildQualityContext({
+      scorecard: event.scorecard,
+      injectedNodes: injectedNodeSummaries,
+      lookupNode: (nodeId) => this.nodeRepo.getById(nodeId)
+    });
 
     return {
       sessionId: event.session_id,
@@ -1086,12 +1066,13 @@ export class ExperienceInteractionService {
       attributionRecords,
       episodeProjection,
       outcome,
-      injectedNodes: injectedNodes.map(toNodeSummary),
+      injectedNodes: injectedNodeSummaries,
       hints: injectedNodes.map((node) => node.compact_hint),
       evidence: [],
       scorecard: event.scorecard,
       decisionExplanation,
-      trustSummary: buildTrustSummary({ scorecard: event.scorecard, injectedNodes: injectedNodes.map(toNodeSummary) }),
+      trustSummary: buildTrustSummary({ scorecard: event.scorecard, injectedNodes: injectedNodeSummaries }),
+      qualityContext,
       retrievalNotes: buildRetrievalNotes(event.scorecard),
       retrievalPolicySummary: buildRetrievalPolicyInspectionSummary(event.scorecard),
       timeline: buildLatestTimeline({
@@ -1346,6 +1327,9 @@ export class ExperienceInteractionService {
     const latest = latestRecord ? this.inspectRecord(latestRecord) : undefined;
     const learning = this.buildLearningSummary(scope.scope_id);
     const policyInspection = this.inspectRepoPolicy(cwd);
+    const quality = summarizeQualityBandDistribution(
+      this.nodeRepo.listByScope(scope.scope_id).map((node) => deriveQualityBandExplanation(node))
+    );
 
     return buildRepoSummary({
       scope: {
@@ -1355,6 +1339,7 @@ export class ExperienceInteractionService {
       },
       latest: latest && latest.scopeId === scope.scope_id ? latest : undefined,
       learning,
+      quality,
       policyInspection
     });
   }

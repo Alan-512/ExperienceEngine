@@ -80,6 +80,16 @@ That same routing now needs to stay explainable in inspection surfaces:
 - `ee status` and `ee doctor` should translate recent retrieval health into plain-language operator guidance, not just raw counters
 - `ee inspect node:<id>` should expose a lightweight quality band and applicability profile derived from existing runtime truth
 
+Quality Band is the shared derived trust model for inspection surfaces. It produces:
+
+- `strong`, `building`, or `risky`
+- a short summary
+- stable reason codes and readable reasons
+- evidence references back to the node and related records
+- optional review-only action text
+
+Quality Band is not a persistence state and is not a delivery gate by itself. Runtime delivery still uses lifecycle, delivery state, match policy, repo policy, and second-opinion routing; Quality Band explains the existing evidence so CLI and MCP surfaces do not each invent their own trust language.
+
 ## The Capture And Learning Split
 
 ExperienceEngine now treats task history and reusable experience as two different layers:

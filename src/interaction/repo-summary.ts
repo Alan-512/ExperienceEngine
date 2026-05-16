@@ -2,6 +2,7 @@ import type { BenchmarkSummary } from "../evaluation/benchmark-summary.js";
 import type { RepoPolicyInspection } from "../experience-management/repo-policy.js";
 import type { RepoPolicy } from "../types/domain.js";
 import type { ExperienceLastInspection, ExperienceLearningSummary } from "./service.js";
+import type { QualityBandDistribution } from "./quality-band.js";
 
 export type ExperienceRepoSummary = {
   scope: {
@@ -20,6 +21,7 @@ export type ExperienceRepoSummary = {
     latestTrustSummary?: ExperienceLastInspection["trustSummary"];
   };
   benchmark: BenchmarkSummary;
+  quality: QualityBandDistribution;
   policy?: {
     configuredMode: RepoPolicy["configured_mode"];
     effectiveMode: RepoPolicy["effective_mode"];
@@ -57,6 +59,7 @@ export const buildRepoSummary = (input: {
   };
   latest?: ExperienceLastInspection;
   learning: ExperienceLearningSummary;
+  quality: QualityBandDistribution;
   policy?: RepoPolicy;
   policyInspection?: RepoPolicyInspection;
 }): ExperienceRepoSummary => {
@@ -75,6 +78,7 @@ export const buildRepoSummary = (input: {
       latestTrustSummary: input.latest?.trustSummary
     },
     benchmark: input.learning.benchmark,
+    quality: input.quality,
     policy: policy
       ? {
           configuredMode: policy.configured_mode,

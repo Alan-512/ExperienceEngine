@@ -418,6 +418,11 @@ describe("Codex MCP behavior loop", () => {
     expect(activeNodes.map((entry) => entry.id)).toContain("node_codex_surface_view");
     expect(node?.id).toBe("node_codex_surface_view");
     expect(node?.qualityBand).toBe("building");
+    expect(node?.quality).toMatchObject({
+      band: "building",
+      summary: expect.stringContaining("Building guidance"),
+      reasonCodes: expect.arrayContaining(["limited_reuse_evidence"])
+    });
     expect(node?.applicabilityProfile.bestFit).toBe("test_debug tasks in this repo scope");
     expect(node?.recommendedSteps).toEqual([
       "Run the failing test",

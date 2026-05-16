@@ -19,6 +19,12 @@ const makeRepo = (overrides: Partial<ExperienceRepoSummary> = {}): ExperienceRep
     suggestedMode: "live",
     recommendation: "Keep monitoring."
   },
+  quality: {
+    strong: 0,
+    building: 0,
+    risky: 0,
+    summary: "No experience nodes are available for this scope yet."
+  },
   policy: {
     configuredMode: "safe",
     effectiveMode: "safe",
@@ -28,7 +34,7 @@ const makeRepo = (overrides: Partial<ExperienceRepoSummary> = {}): ExperienceRep
   },
   recommendedNextAction: "Keep monitoring.",
   ...overrides
-});
+} as ExperienceRepoSummary);
 
 const makeHygiene = (overrides: Partial<HygieneReviewReport> = {}): HygieneReviewReport => ({
   scopeId: "scope_repo",

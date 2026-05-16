@@ -4,6 +4,7 @@ import { ExperienceInteractionService } from "../../interaction/service.js";
 import { ExperienceStateArtifactService } from "../../interaction/state-artifact-service.js";
 import type { DeliveryState, ExperienceNode } from "../../types/domain.js";
 import type { ExperienceLastInspection, ExperienceNodeDetail } from "../../interaction/service.js";
+import type { ExperienceQualityBandExplanation } from "../../interaction/quality-band.js";
 import type { HygieneFindingType, HygieneSeverity } from "../../maintenance/experience-hygiene.js";
 import type { ExportDraftRisk } from "../../maintenance/experience-export-drafts.js";
 
@@ -74,6 +75,20 @@ const describeTrustSummary = (record: ExperienceLastInspection): string | undefi
 
   const confidence = scorecard.confidence ? ` ${scorecard.confidence}-confidence` : "";
   return `${scorecard.riskLevel}-risk${confidence} ${primaryNode.state} guidance with ${primaryNode.helped} helped and ${primaryNode.harmed} harmed signal(s).`;
+};
+
+const formatQualitySummary = (quality: ExperienceQualityBandExplanation): string =>
+  `${quality.band} - ${quality.summary}`;
+
+const printQualityDetails = (quality: ExperienceQualityBandExplanation, indent = ""): void => {
+  console.log(`${indent}Quality: ${formatQualitySummary(quality)}`);
+  if (quality.reasonCodes.length) {
+    console.log(`${indent}Quality reasons: ${quality.reasonCodes.join(", ")}`);
+  }
+  if (quality.recommendedAction) {
+    const command = quality.recommendedAction.command ? ` (${quality.recommendedAction.command})` : "";
+    console.log(`${indent}Recommended review: ${quality.recommendedAction.label}${command}`);
+  }
 };
 
 const buildRetrievalNotes = (record: ExperienceLastInspection): string[] => {
@@ -369,7 +384,7 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string,
       for (const node of record.injectedNodes) {
         console.log(`- ${node.id} ${node.type} ${node.state} ${node.sourceKind}`);
         console.log(`  Trigger: ${node.triggerPattern}`);
-        console.log(`  Quality: ${node.qualityBand}`);
+        printQualityDetails(node.quality, "  ");
         console.log(`  Best fit: ${node.applicabilityProfile.bestFit}`);
         if (node.promotionSignal) {
           console.log(`  Promotion signal: ${node.promotionSignal}`);
@@ -411,6 +426,12 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string,
       const trustSummary = describeTrustSummary(record);
       if (trustSummary) {
         console.log(`- Trust summary: ${trustSummary}`);
+      }
+      if (!record.injectedNodes.length && record.qualityContext) {
+        console.log(`- Quality context: ${formatQualitySummary(record.qualityContext)}`);
+        if (record.qualityContext.reasonCodes.length) {
+          console.log(`- Quality reasons: ${record.qualityContext.reasonCodes.join(", ")}`);
+        }
       }
       if (verbose) {
         if (typeof record.scorecard.topCandidateScore === "number") {
@@ -801,6 +822,7 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string,
     console.log(`- Scope: ${summary.scope.scopeId}`);
     console.log(`- Benchmark verdict: ${summary.benchmark.verdict}`);
     console.log(`- Suggested mode: ${summary.benchmark.suggestedMode}`);
+    console.log(`- Quality bands: ${summary.quality.summary}`);
     if (summary.policy) {
       console.log("Repo policy:");
       console.log(`- Configured mode: ${summary.policy.configuredMode}`);
@@ -883,6 +905,7 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string,
         state: node.state,
         helped: node.helped,
         harmed: node.harmed,
+        quality: node.qualityBand,
         last_used: node.lastUsedAt ?? "",
         hint: node.hint
       }))
@@ -911,6 +934,7 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string,
         state: node.state,
         helped: node.helped,
         harmed: node.harmed,
+        quality: node.qualityBand,
         last_used: node.lastUsedAt ?? "",
         hint: node.hint
       }))
@@ -945,12 +969,26 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string,
     console.log(`Harmed: ${node.harmed}`);
     console.log(`Used: ${node.used}`);
     console.log(`Current assessment: ${describeNodeAssessment(node)}`);
-    console.log(`Quality band: ${node.qualityBand}`);
-    if (node.qualityDrivers.length) {
-      console.log("Quality drivers:");
-      for (const driver of node.qualityDrivers) {
-        console.log(`- ${driver}`);
+    console.log(`Quality band: ${node.quality.band}`);
+    console.log(`Quality summary: ${node.quality.summary}`);
+    if (node.quality.reasonCodes.length) {
+      console.log(`Quality reason codes: ${node.quality.reasonCodes.join(", ")}`);
+    }
+    if (node.quality.reasons.length) {
+      console.log("Quality reasons:");
+      for (const reason of node.quality.reasons) {
+        console.log(`- ${reason}`);
       }
+    }
+    if (node.quality.evidenceRefs.length) {
+      console.log("Quality evidence refs:");
+      for (const ref of node.quality.evidenceRefs.slice(0, 8)) {
+        console.log(`- ${ref.kind}:${ref.id}`);
+      }
+    }
+    if (node.quality.recommendedAction) {
+      const command = node.quality.recommendedAction.command ? ` (${node.quality.recommendedAction.command})` : "";
+      console.log(`Quality review action: ${node.quality.recommendedAction.label}${command}`);
     }
     console.log(`Hint: ${node.hint}`);
     if (node.goal) {
@@ -1002,6 +1040,7 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string,
       state: node.state,
       helped: node.helped,
       harmed: node.harmed,
+      quality: node.qualityBand,
       last_used: node.lastUsedAt ?? "",
       hint: node.hint
     }))

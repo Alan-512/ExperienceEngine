@@ -9,6 +9,12 @@ describe("repo summary", () => {
         scopeName: "repo",
         rootPath: "/repo"
       },
+      quality: {
+        strong: 1,
+        building: 0,
+        risky: 0,
+        summary: "1 strong, 0 building, 0 risky node(s) in this scope."
+      },
       latest: {
         sessionId: "session_a",
         scopeId: "scope_a",
@@ -84,6 +90,12 @@ describe("repo summary", () => {
     const summary = buildRepoSummary({
       scope: {
         scopeId: "scope_b"
+      },
+      quality: {
+        strong: 0,
+        building: 0,
+        risky: 0,
+        summary: "No experience nodes are available for this scope yet."
       },
       learning: {
         candidates: { pending: 0, distilled: 0, failed: 0, discarded: 0 },

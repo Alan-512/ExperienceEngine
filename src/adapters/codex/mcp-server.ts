@@ -80,6 +80,8 @@ const buildExperienceCapabilities = () => ({
     "experienceengine://export-drafts"
   ],
   routine_read_surface_notes: {
+    quality_band:
+      "Quality Band is a derived inspection model only. It explains strong/building/risky trust signals and does not mutate delivery state or gate injection by itself.",
     "experienceengine://review":
       "Read-only operator workflow summary. Coordinates repo policy, hygiene, and export drafts with drill-down references; it does not restore policy, mutate nodes, or write exports."
   },

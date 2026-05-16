@@ -251,8 +251,11 @@ That output now tells you both:
 When you inspect a specific node, ExperienceEngine now also shows a lightweight quality judgment layer:
 
 - a `quality band` (`strong`, `building`, or `risky`)
-- the short drivers behind that judgment
+- a short summary, reason codes, readable reasons, and evidence references behind that judgment
+- a review-only action for `building` or `risky` guidance when a closer look is useful
 - a compact applicability profile covering best fit, scope validity, confidence, risk, and when to avoid reuse
+
+The same Quality Band model is also exposed in host-native MCP inspection payloads and in `ee inspect repo` as a current-scope distribution. It is explanatory only: it helps you judge whether guidance is strong, still building, or risky, but it does not by itself change delivery state, mutate nodes, or gate injection.
 
 ### Operator Review Workflow
 

@@ -212,7 +212,11 @@ describe("ExperienceInteractionService", () => {
       id: "node_interaction_detail",
       type: "strategy",
       state: "active",
-      sourceKind: "system_derived"
+      sourceKind: "system_derived",
+      quality: expect.objectContaining({
+        band: "building",
+        reasonCodes: expect.arrayContaining(["limited_reuse_evidence"])
+      })
     });
     expect(detail).toMatchObject({
       id: "node_interaction_detail",

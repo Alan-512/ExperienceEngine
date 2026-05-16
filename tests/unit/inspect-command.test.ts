@@ -348,7 +348,8 @@ describe("inspect command", () => {
         ["Injected nodes:"],
         ["- node_inspect strategy active system_derived"],
         ["  Trigger: Fix the failing auth test"],
-        ["  Quality: strong"],
+        ["  Quality: strong - Strong guidance: active, reuse-validated guidance with no harmful feedback."],
+        ["  Quality reasons: active_eligible, validated_by_reuse, helped_without_harm"],
         ["  Best fit: test_debug tasks in this repo scope"],
         ["  Promotion signal: high_value"],
         ["  Promotion reason: The lesson carries a reusable verification loop with explicit next-step guidance."],
@@ -753,6 +754,73 @@ describe("inspect command", () => {
     );
   });
 
+  it("prints quality context for skipped turns when a candidate node exists", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+
+    const scopeId = resolveScope(process.cwd()).scope_id;
+    new NodeRepository(db).upsert(
+      makeNode({
+        id: "node_skip_building",
+        scope_id: scopeId,
+        state: "candidate",
+        delivery_state: "shadow_only",
+        validation_state: "pending_reuse_validation",
+        helped_count: 0,
+        harmed_count: 0,
+        helped_record_ids: [],
+        harmed_record_ids: []
+      })
+    );
+    new InjectionRepository(db).upsert({
+      ...makeInjectionEvent({
+        injection_id: "decision_skip_with_candidate",
+        session_id: "session_skip_with_candidate",
+        scope_id: scopeId,
+        mode: "skip",
+        delivered: true,
+        injected_node_ids: [],
+        injection_count: 0
+      }),
+      scorecard: {
+        sessionId: "session_skip_with_candidate",
+        scopeId,
+        taskType: "test_debug",
+        taskSummary: "Fix the failing auth test",
+        mode: "skip",
+        skipReasonCode: "candidate_not_mature",
+        skipReasonExplanation: "ExperienceEngine found related guidance, but it is still building evidence.",
+        riskLevel: "medium",
+        recommendation: "Skip until the candidate has stronger runtime evidence.",
+        reasons: ["The best related candidate is still early lifecycle."],
+        topCandidates: [{ id: "node_skip_building", taskFamilyMatch: true }],
+        fastPathApplied: false,
+        gateReason: "candidate_not_mature",
+        decisionReason: "candidate_not_mature",
+        confidence: "low",
+        budgetClass: "none",
+        selectedCandidateIds: [],
+        rejectedCandidates: [],
+        nodes: [],
+        createdAt: "2026-03-14T02:30:00.000Z"
+      }
+    });
+
+    runInspectCommand("--last");
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Session: session_skip_with_candidate"],
+        ["Intervention: skip"],
+        ["- Why ExperienceEngine acted: ExperienceEngine found related guidance, but it is still building evidence."],
+        ["- Quality context: building - Building guidance: usable with caution while ExperienceEngine gathers stronger reuse evidence."],
+        ["- Quality reasons: limited_reuse_evidence, early_lifecycle, shadow_only"]
+      ])
+    );
+  });
+
   it("prints learning status and rejection reason for recorded-only tasks", () => {
     const home = makeTempDir();
     process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
@@ -891,6 +959,7 @@ describe("inspect command", () => {
         [`- Scope: ${resolveScope(process.cwd()).scope_id}`],
         ["- Benchmark verdict: warming_up"],
         ["- Suggested mode: shadow"],
+        ["- Quality bands: 1 strong, 0 building, 0 risky node(s) in this scope."],
         ["- Latest intervention summary: inject on the latest recorded task."],
         ["- Latest decision explanation: ExperienceEngine injected the best available reusable guidance for this task."],
         ["Recommended next action:"]
@@ -1138,9 +1207,18 @@ describe("inspect command", () => {
         ["Used: 2"],
         ["Current assessment: trusted for normal reuse in similar tasks."],
         ["Quality band: strong"],
-        ["Quality drivers:"],
+        ["Quality summary: Strong guidance: active, reuse-validated guidance with no harmful feedback."],
+        ["Quality reason codes: active_eligible, validated_by_reuse, helped_without_harm"],
+        ["Quality reasons:"],
+        ["- This node is active and eligible for normal delivery."],
         ["- This node has already been validated by successful reuse."],
+        ["- Helpful outcomes exist and no harmful outcome has been recorded for this node."],
         ["- Helpful outcomes still outweigh harmful ones for this node."],
+        ["Quality evidence refs:"],
+        ["- node:node_inspect"],
+        ["- origin_record:input_origin"],
+        ["- helped_record:input_helped"],
+        ["- harmed_record:input_harmed"],
         ["Hint: Run the failing auth test before editing and verify after the fix."],
         ["Goal: Stabilize the auth test"],
         ["Applicability: Stay in the same repo scope"],
