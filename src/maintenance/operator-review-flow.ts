@@ -3,7 +3,7 @@ import type { ExperienceExportDraftReport } from "./experience-export-drafts.js"
 import type { HygieneReviewReport } from "./experience-hygiene.js";
 
 export type OperatorReviewPriority = "high" | "medium" | "low";
-export type OperatorReviewSource = "repo_policy" | "hygiene" | "export_drafts";
+export type OperatorReviewSource = "repo_policy" | "hygiene" | "export_drafts" | "governance";
 export type RepoPolicyReviewHealth = "clear" | "attention" | "tripped";
 
 export type OperatorReviewDrillDown = {
@@ -71,23 +71,35 @@ export type OperatorReviewReport = {
       }>;
       drillDown: OperatorReviewDrillDown;
     };
+    governance?: OperatorReviewGovernanceSummary;
   };
   reviewItems: OperatorReviewItem[];
   recommendedReviewOrder: OperatorReviewSource[];
   reviewOnlyNextActions: OperatorReviewNextAction[];
 };
 
+export type OperatorReviewGovernanceSummary = {
+  status: "clear" | "attention";
+  recentAutomaticActions: number;
+  failedRuns: number;
+  pendingApprovals: number;
+  lastRunStatus?: string;
+  lastFailureClass?: string;
+  drillDown: OperatorReviewDrillDown;
+};
+
 export type BuildOperatorReviewFlowInput = {
   repo: ExperienceRepoSummary;
   hygiene: HygieneReviewReport;
   exportDrafts: ExperienceExportDraftReport;
+  governance?: OperatorReviewGovernanceSummary;
   limit?: number;
   generatedAt?: string;
 };
 
 const DEFAULT_LIMIT = 5;
 const PRIORITY_RANK: Record<OperatorReviewPriority, number> = { high: 0, medium: 1, low: 2 };
-const SOURCE_RANK: Record<OperatorReviewSource, number> = { repo_policy: 0, hygiene: 1, export_drafts: 2 };
+const SOURCE_RANK: Record<OperatorReviewSource, number> = { governance: 0, repo_policy: 1, hygiene: 2, export_drafts: 3 };
 
 const drillDowns = () => ({
   repo_policy: {
@@ -103,6 +115,11 @@ const drillDowns = () => ({
     cli: "ee inspect export-drafts",
     mcpResource: "experienceengine://export-drafts",
     brokerAction: "inspect_export_drafts"
+  },
+  governance: {
+    cli: "ee inspect governance",
+    mcpResource: "experienceengine://governance",
+    brokerAction: "inspect_governance"
   }
 });
 
@@ -160,6 +177,18 @@ export const buildOperatorReviewFlow = (input: BuildOperatorReviewFlowInput): Op
   const drillDown = drillDowns();
   const health = policyHealth(input.repo);
   const items: OperatorReviewItem[] = [];
+
+  if (input.governance && input.governance.status !== "clear") {
+    const hasFailedRuns = input.governance.failedRuns > 0;
+    addReviewItem(items, {
+      priority: hasFailedRuns ? "medium" : "low",
+      source: "governance",
+      title: "Autonomous governance needs attention",
+      summary:
+        `Governance status=${input.governance.status}, failedRuns=${input.governance.failedRuns}, pendingApprovals=${input.governance.pendingApprovals}, recentAutomaticActions=${input.governance.recentAutomaticActions}.`,
+      drillDown: input.governance.drillDown
+    });
+  }
 
   if (health === "tripped") {
     addReviewItem(items, {
@@ -261,7 +290,8 @@ export const buildOperatorReviewFlow = (input: BuildOperatorReviewFlowInput): Op
           summary: draft.evidenceSummary
         })),
         drillDown: drillDown.export_drafts
-      }
+      },
+      governance: input.governance
     },
     reviewItems,
     recommendedReviewOrder: reviewOrder(reviewItems),

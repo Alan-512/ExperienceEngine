@@ -1,7 +1,9 @@
 import { loadConfig } from "../../config/load-config.js";
 import { resolveDistillationResolution } from "../../distillation/host-llm.js";
 import { LlmDistiller } from "../../distillation/llm-distiller.js";
+import { resolveScope } from "../../input/scope-resolver.js";
 import { runClaudePrintValidation } from "../../maintenance/claude-validate-print.js";
+import { drainDueHygieneGovernance } from "../../maintenance/hygiene-governance-scheduler.js";
 import { redistillRuleNodes } from "../../maintenance/redistill-rule-nodes.js";
 import { mergeScopesWithConfig } from "../../maintenance/scope-merge.js";
 import { runEmbeddingSmoke, type EmbeddingSmokeReport } from "../../maintenance/embedding-smoke.js";
@@ -18,6 +20,32 @@ type MaintenanceDeps = {
   claudeValidatePrint?: typeof runClaudePrintValidation;
   mergeScopesWithConfig?: typeof mergeScopesWithConfig;
   embeddingSmoke?: (config: ReturnType<typeof loadConfig>) => Promise<EmbeddingSmokeReport>;
+};
+
+const parseGovernanceDrainArgs = (args: string[]): { cwd?: string; maxActions?: number } | null => {
+  if (args[0] !== "drain") {
+    return null;
+  }
+  const parsed: { cwd?: string; maxActions?: number } = {};
+  for (let index = 1; index < args.length; index += 1) {
+    const value = args[index];
+    const next = args[index + 1];
+    if (value === "--cwd" && next) {
+      parsed.cwd = next;
+      index += 1;
+      continue;
+    }
+    if (value === "--max-actions" && next) {
+      const maxActions = Number(next);
+      if (Number.isInteger(maxActions) && maxActions > 0) {
+        parsed.maxActions = maxActions;
+        index += 1;
+        continue;
+      }
+    }
+    return null;
+  }
+  return parsed;
 };
 
 export const runMaintenanceCommand = async (
@@ -55,6 +83,37 @@ export const runMaintenanceCommand = async (
     console.log(
       `[ExperienceEngine] Passage cold=${report.coldPassageMs}ms warm=${report.warmPassageMs}ms`
     );
+    return;
+  }
+
+  if (action === "governance") {
+    const parsed = parseGovernanceDrainArgs(args);
+    if (!parsed) {
+      console.log("Usage: ee maintenance governance drain [--cwd <path>] [--max-actions <n>]");
+      return;
+    }
+    const scopeId = resolveScope(parsed.cwd ?? process.cwd()).scope_id;
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    try {
+      const result = await drainDueHygieneGovernance(db, {
+        scopeId,
+        maxActions: parsed.maxActions
+      });
+      const appliedActions = db
+        .prepare("SELECT COUNT(*) AS count FROM hygiene_governance_actions WHERE scope_id = ? AND status = 'applied'")
+        .get(scopeId) as { count: number };
+      console.log(`[ExperienceEngine] Governance drain completed for ${scopeId}: ${result.status}.`);
+      if (result.status === "deferred") {
+        console.log(`[ExperienceEngine] Governance drain deferred: ${result.reason}.`);
+      }
+      if (result.status === "failed") {
+        console.log(`[ExperienceEngine] Governance drain failed: ${result.failureClass} ${result.message}`);
+      }
+      console.log(`[ExperienceEngine] Recent applied actions: ${appliedActions.count}`);
+    } finally {
+      db.close();
+    }
     return;
   }
 
@@ -137,8 +196,7 @@ export const runMaintenanceCommand = async (
     if (!sourceScopeId || !targetScopeId) {
       console.log("[ExperienceEngine] merge-scope requires <sourceScopeId> <targetScopeId>.");
       console.log(
-        "Usage: ee maintenance embeddings-reset|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
-        .replace("embeddings-reset|", "embeddings-reset|embedding-smoke|")
+        "Usage: ee maintenance embeddings-reset|embedding-smoke|governance drain|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
       );
       return;
     }
@@ -155,6 +213,6 @@ export const runMaintenanceCommand = async (
   }
 
   console.log(
-    "Usage: ee maintenance embeddings-reset|embedding-smoke|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
+    "Usage: ee maintenance embeddings-reset|embedding-smoke|governance drain|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
   );
 };

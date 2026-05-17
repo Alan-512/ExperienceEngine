@@ -315,4 +315,46 @@ describe("operator review flow", () => {
     expect(report.sections.export_drafts.total).toBe(2);
     expect(report.sections.export_drafts.surfacedDrafts).toHaveLength(1);
   });
+
+  it("surfaces autonomous governance failures, recent automatic actions, and pending approvals", () => {
+    const report = buildOperatorReviewFlow({
+      repo: makeRepo(),
+      hygiene: makeHygiene(),
+      exportDrafts: makeExportDrafts(),
+      governance: {
+        status: "attention",
+        recentAutomaticActions: 2,
+        failedRuns: 1,
+        pendingApprovals: 1,
+        lastRunStatus: "failed",
+        lastFailureClass: "worker_error",
+        drillDown: {
+          cli: "ee inspect governance",
+          mcpResource: "experienceengine://governance"
+        }
+      },
+      limit: 5
+    });
+
+    expect(report.sections.governance).toMatchObject({
+      status: "attention",
+      recentAutomaticActions: 2,
+      failedRuns: 1,
+      pendingApprovals: 1,
+      lastRunStatus: "failed",
+      lastFailureClass: "worker_error"
+    });
+    expect(report.reviewItems).toEqual([
+      expect.objectContaining({
+        priority: "medium",
+        source: "governance",
+        title: "Autonomous governance needs attention",
+        drillDown: {
+          cli: "ee inspect governance",
+          mcpResource: "experienceengine://governance"
+        }
+      })
+    ]);
+    expect(report.recommendedReviewOrder[0]).toBe("governance");
+  });
 });

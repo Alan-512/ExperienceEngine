@@ -15,7 +15,7 @@ export const SURFACE_TIER_DEFINITIONS: Record<ExperienceSurfaceTier, ExperienceS
   operator: {
     tier: "operator",
     label: "Operator",
-    summary: "Explicit install, repair, upgrade, review, hygiene, export-draft, and managed-state workflows."
+    summary: "Explicit install, repair, upgrade, review, governance approval, hygiene, export-draft, and managed-state workflows."
   },
   advanced: {
     tier: "advanced",

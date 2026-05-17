@@ -8,6 +8,8 @@ import { resolveScope } from "../../src/input/scope-resolver.js";
 import { ExperienceRuntimeService } from "../../src/runtime/service.js";
 import { decidePosttaskHybridRoute } from "../../src/runtime/service.js";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
+import type { GovernanceDrainWorker } from "../../src/maintenance/hygiene-governance-scheduler.js";
+import { GovernanceRunRepository, GovernanceScheduleRepository } from "../../src/store/sqlite/repositories/hygiene-governance-repo.js";
 import { InjectionRepository } from "../../src/store/sqlite/repositories/injection-repo.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
 import { RepoPolicyRepository } from "../../src/store/sqlite/repositories/repo-policy-repo.js";
@@ -94,6 +96,128 @@ afterEach(() => {
 });
 
 describe("ExperienceRuntimeService finalize transaction", () => {
+  it("queues autonomous hygiene governance after finalization without blocking the host response", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    let releaseWorker: (() => void) | undefined;
+    let workerStarted = false;
+    const workerReleased = new Promise<void>((resolve) => {
+      releaseWorker = resolve;
+    });
+    const worker: GovernanceDrainWorker = {
+      async drain() {
+        workerStarted = true;
+        await workerReleased;
+        return { status: "completed" };
+      }
+    };
+    const service = new ExperienceRuntimeService(
+      loadConfig({ sqlitePath }),
+      undefined,
+      {
+        disableBackgroundLearning: true,
+        autonomousHygieneGovernance: {
+          enabled: true,
+          hostInstanceId: "runtime-test",
+          now: () => "2026-05-16T10:00:00.000Z",
+          intervalMs: 86_400_000,
+          worker
+        }
+      }
+    );
+
+    const finalized = await service.finalizeTask({
+      sessionId: "hygiene-runtime-session",
+      cwd: "/repo",
+      userMessage: "Fix the failing vitest auth test",
+      taskSummary: "Fix the failing vitest auth test",
+      contextSummary: "The task completed and should trigger a cheap governance pass."
+    });
+
+    expect(finalized.task_summary).toBe("Fix the failing vitest auth test");
+    expect(workerStarted).toBe(true);
+    const db = new DatabaseSync(sqlitePath);
+    const scopeId = resolveScope("/repo").scope_id;
+    expect(new GovernanceScheduleRepository(db).get(scopeId)).toMatchObject({
+      scope_id: scopeId,
+      pending_reasons: ["posttask"]
+    });
+    expect(new GovernanceRunRepository(db).listByScope(scopeId)[0]).toMatchObject({
+      status: "running"
+    });
+
+    releaseWorker?.();
+    await service.waitForBackgroundLearning();
+
+    expect(new GovernanceRunRepository(db).listByScope(scopeId)[0]).toMatchObject({
+      status: "completed"
+    });
+  });
+
+  it("resumes checkpointed autonomous governance on a later host event without waiting in finalization", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const calls: Array<{ runId?: string; status: string }> = [];
+    const worker: GovernanceDrainWorker = {
+      async drain({ runId }) {
+        if (calls.length === 0) {
+          calls.push({ runId, status: "checkpointed" });
+          return { status: "checkpointed", checkpoint: { nextActionOffset: 1 } };
+        }
+
+        calls.push({ runId, status: "completed" });
+        return { status: "completed" };
+      }
+    };
+    const service = new ExperienceRuntimeService(
+      loadConfig({ sqlitePath }),
+      undefined,
+      {
+        disableBackgroundLearning: true,
+        autonomousHygieneGovernance: {
+          enabled: true,
+          hostInstanceId: "runtime-test",
+          now: () => "2026-05-16T10:00:00.000Z",
+          intervalMs: 86_400_000,
+          worker
+        }
+      }
+    );
+
+    await service.finalizeTask({
+      sessionId: "hygiene-runtime-checkpoint-session",
+      cwd: "/repo",
+      userMessage: "Fix the failing vitest auth test",
+      taskSummary: "Fix the failing vitest auth test",
+      contextSummary: "The task completed and should trigger a cheap governance pass."
+    });
+    await service.waitForBackgroundLearning();
+
+    const db = new DatabaseSync(sqlitePath);
+    const scopeId = resolveScope("/repo").scope_id;
+    const checkpointedRun = new GovernanceRunRepository(db).listByScope(scopeId)[0];
+    expect(checkpointedRun).toMatchObject({
+      status: "pending",
+      checkpoint: { nextActionOffset: 1 }
+    });
+
+    await service.beforePromptBuild({
+      sessionId: "hygiene-runtime-resume-session",
+      cwd: "/repo",
+      userMessage: "Run the next task in the same repo",
+      taskSummary: "Run the next task in the same repo"
+    });
+    await service.waitForBackgroundLearning();
+
+    const runs = new GovernanceRunRepository(db).listByScope(scopeId);
+    expect(runs).toHaveLength(1);
+    expect(runs[0]).toMatchObject({ status: "completed" });
+    expect(calls).toEqual([
+      { runId: checkpointedRun.run_id, status: "checkpointed" },
+      { runId: checkpointedRun.run_id, status: "completed" }
+    ]);
+  });
+
   it("routes an eligible completed run into async hybrid postmortem when enabled", () => {
     const decision = decidePosttaskHybridRoute({
       hybridEnabled: true,

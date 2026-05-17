@@ -20,8 +20,8 @@ export const buildExperienceInput = (
     task_type: resolveTaskType(taskSummary),
     task_summary: taskSummary,
     tool_events: toolEvents,
-    // Prompt text describes the task, not the observed runtime outcome.
-    outcome_signal: resolveOutcome(toolEvents),
+    // Prompt text describes the task; final context can contain observed outcome evidence.
+    outcome_signal: resolveOutcome(toolEvents, context.contextSummary),
     context_summary: adaptContextSummary(context.contextSummary),
     injected_node_ids: context.injectedNodeIds ?? []
   };

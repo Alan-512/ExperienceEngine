@@ -299,6 +299,7 @@ The review report summarizes:
 - repo policy health and circuit state
 - hygiene finding counts
 - export draft counts
+- autonomous governance status, recent automatic actions, guarded actions, failures, and legacy pending approvals
 - recommended review order
 - prioritized review items
 - review-only next actions
@@ -310,9 +311,10 @@ The drill-down commands are manual inspection steps:
 ee inspect repo
 ee inspect hygiene
 ee inspect export-drafts
+ee inspect governance
 ```
 
-In MCP-capable hosts, ask the host agent to inspect the ExperienceEngine operator review or read `experienceengine://review`. The structured payload uses the same source names as the CLI: `repo_policy`, `hygiene`, and `export_drafts`.
+In MCP-capable hosts, ask the host agent to inspect the ExperienceEngine operator review or read `experienceengine://review`. The structured payload uses the same source names as the CLI: `repo_policy`, `hygiene`, `export_drafts`, and `governance`.
 
 This workflow is intentionally read-only. It does not:
 
@@ -324,6 +326,45 @@ This workflow is intentionally read-only. It does not:
 - export guidance automatically
 - open a console or mutation dashboard
 - coordinate team workflows
+
+## Autonomous Hygiene Governance
+
+ExperienceEngine runs hygiene governance automatically through the host-attached runtime. Host startup, prompt lookup, posttask finalization, and stop events wake a cheap due check for the current canonical scope. The persisted schedule, lease, backoff, finding hash, and action budget decide whether real governance work runs, so frequent host restarts do not multiply governance frequency.
+
+The automatic path applies validated experience-store mutations without routine user approval:
+
+- exact duplicate merges that preserve evidence
+- near-duplicate and conflicted semantic merges with evidence preserved
+- stale shadow-only retirement
+- delivery downgrades from live eligibility to conservative delivery
+- quarantine for invalidated or harmed live guidance
+- guarded promotion to conservative delivery
+- guarded soft-retire for records that should leave delivery
+
+High-impact experience-node actions use guarded automatic execution instead of approval. Guarded execution keeps the mutation reversible and conservative: rows are not physically deleted, before/after snapshots and affected row hashes are recorded, merged or promoted canonical guidance cannot become directly eligible for live injection, and retired/conflicting source nodes are quarantined. Broad rewrites, export writing, repo policy changes, and restore actions are outside automatic experience-store governance and are rejected unless a separate explicit workflow owns them.
+
+Read-only inspection surfaces:
+
+```bash
+ee inspect governance
+ee inspect review
+```
+
+MCP resources:
+
+```text
+experienceengine://governance
+experienceengine://governance/approvals
+experienceengine://review
+```
+
+Fallback drain command:
+
+```bash
+ee maintenance governance drain --cwd /path/to/repo
+```
+
+That command is for explicit operator troubleshooting or catch-up. It uses the same scheduler, lease, validator, audit, and rollback snapshot path as host-attached governance. An optional keeper can wake the same drain path for stricter wall-clock schedules, but it does not bypass budgets, leases, deterministic validators, guarded execution rules, or rollback safeguards.
 
 ## How MCP Interaction Works
 
@@ -369,7 +410,7 @@ For `Codex`, this means routine host-native interaction stays discoverable, whil
 
 So the two hosts share the same product model, but they do not expose the exact same interaction shape.
 
-For high-impact actions, ExperienceEngine does not execute immediately. It uses a:
+For high-impact operator actions outside routine experience governance, ExperienceEngine does not execute immediately. It uses a:
 
 ```text
 plan -> review -> explicit confirmation -> execute
@@ -385,6 +426,8 @@ That applies to:
 - export
 - import
 - rollback
+
+Autonomous experience governance is different: it is constrained to the experience store and uses guarded automatic execution plus rollback snapshots instead of routine human approval.
 
 ## Current Governance Surface
 

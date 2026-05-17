@@ -1,9 +1,65 @@
+import { mkdtempSync } from "node:fs";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runMaintenanceCommand } from "../../src/cli/commands/maintenance.js";
+import { loadConfig } from "../../src/config/load-config.js";
+import { resolveScope } from "../../src/input/scope-resolver.js";
+import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
+import { GovernanceActionRepository, GovernanceScheduleRepository } from "../../src/store/sqlite/repositories/hygiene-governance-repo.js";
+import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
+import type { ExperienceNode } from "../../src/types/domain.js";
+import { removeTempDirForTests } from "./temp-cleanup.js";
 
 const consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
+const tempDirs: string[] = [];
+const originalHome = process.env.EXPERIENCE_ENGINE_HOME;
+
+const makeTempDir = (): string => {
+  const dir = mkdtempSync(join(tmpdir(), "experienceengine-maintenance-command-"));
+  tempDirs.push(dir);
+  return dir;
+};
+
+const makeNode = (overrides: Partial<ExperienceNode> = {}): ExperienceNode => ({
+  id: "node_maintenance_a",
+  node_type: "strategy",
+  scope_id: "scope_maintenance",
+  task_type: "test_debug",
+  trigger_pattern: "Fix provider config mismatch",
+  compact_hint: "Inspect runtime provider config before changing generated config.",
+  recommended_steps: ["inspect runtime provider config"],
+  avoid_steps: [],
+  fallback_steps: [],
+  success_signal: "provider config test passes",
+  evidence_summary: "Recovered provider config mismatch in a prior task.",
+  retrieval_text: "Fix provider config mismatch Inspect runtime provider config",
+  source_kind: "system_derived",
+  origin_record_ids: ["input_a"],
+  helped_record_ids: [],
+  harmed_record_ids: [],
+  state: "active",
+  delivery_state: "eligible",
+  usage_count: 1,
+  helped_count: 0,
+  harmed_count: 0,
+  support_count: 1,
+  created_at: "2026-05-01T00:00:00.000Z",
+  updated_at: "2026-05-15T00:00:00.000Z",
+  ...overrides
+});
 
 afterEach(() => {
+  while (tempDirs.length) {
+    removeTempDirForTests(tempDirs.pop()!);
+  }
+
+  if (originalHome === undefined) {
+    delete process.env.EXPERIENCE_ENGINE_HOME;
+  } else {
+    process.env.EXPERIENCE_ENGINE_HOME = originalHome;
+  }
+
   consoleLogSpy.mockClear();
 });
 
@@ -137,7 +193,7 @@ describe("maintenance command", () => {
     await runMaintenanceCommand("unknown");
 
     expect(consoleLogSpy).toHaveBeenCalledWith(
-      "Usage: ee maintenance embeddings-reset|embedding-smoke|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
+      "Usage: ee maintenance embeddings-reset|embedding-smoke|governance drain|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
     );
   });
 
@@ -200,5 +256,55 @@ describe("maintenance command", () => {
         ["[ExperienceEngine] Merged aggregates: taskStats=2"]
       ])
     );
+  });
+
+  it("drains due autonomous hygiene governance through the scheduler path", async () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+    const cwd = "/repo-maintenance-governance-cli";
+    const scopeId = resolveScope(cwd).scope_id;
+    const nodeRepo = new NodeRepository(db);
+    nodeRepo.upsert(makeNode({
+      id: "node_maintenance_canonical",
+      scope_id: scopeId,
+      helped_record_ids: ["input_helped"],
+      helped_count: 1,
+      support_count: 2
+    }));
+    nodeRepo.upsert(makeNode({
+      id: "node_maintenance_duplicate",
+      scope_id: scopeId,
+      origin_record_ids: ["input_b"],
+      state: "priority_candidate",
+      delivery_state: "conservative_only"
+    }));
+    new GovernanceScheduleRepository(db).maybeEnqueue({
+      scopeId,
+      trigger: "maintenance_cli",
+      now: "2026-05-17T09:59:00.000Z",
+      intervalMs: 1,
+      findingHash: "stale-hash"
+    });
+    db.close();
+
+    await runMaintenanceCommand("governance", ["drain", "--cwd", cwd]);
+
+    const verifyDb = openDatabase(loadConfig());
+    bootstrapDatabase(verifyDb);
+    expect(new NodeRepository(verifyDb).getById("node_maintenance_duplicate")?.state).toBe("retired");
+    const appliedActions = verifyDb
+      .prepare("SELECT action_id FROM hygiene_governance_actions WHERE scope_id = ? AND status = 'applied'")
+      .all(scopeId);
+    expect(appliedActions).toHaveLength(1);
+    expect(new GovernanceActionRepository(verifyDb).get((appliedActions[0] as { action_id: string }).action_id)?.before_snapshot_id).toBeTruthy();
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        [`[ExperienceEngine] Governance drain completed for ${scopeId}: completed.`],
+        ["[ExperienceEngine] Recent applied actions: 1"]
+      ])
+    );
+    verifyDb.close();
   });
 });

@@ -1,3 +1,4 @@
+import type { DatabaseSync } from "node:sqlite";
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import { buildInjectionScorecard } from "../controller/injection-scorecard.js";
 import { buildBenchmarkSummary, type BenchmarkSummary } from "../evaluation/benchmark-summary.js";
@@ -17,6 +18,7 @@ import {
 } from "../maintenance/experience-export-drafts.js";
 import {
   buildOperatorReviewFlow,
+  type OperatorReviewGovernanceSummary,
   type OperatorReviewReport
 } from "../maintenance/operator-review-flow.js";
 import { selectHybridRoute, type HybridRouteDecision } from "../hybrid/router.js";
@@ -341,6 +343,22 @@ const classifyLearningRejectionReason = (reason: string | undefined): LearningRe
 
   return "other";
 };
+
+const HEARTBEAT_NOOP_PATTERN = /\bHEARTBEAT\.md\b|\bHEARTBEAT_OK\b|Read HEARTBEAT\.md if it exists/i;
+const AUDIT_WINDOW_OVERSAMPLE_FACTOR = 5;
+const AUDIT_WINDOW_MIN_OVERSAMPLE = 100;
+
+const isHeartbeatNoopSummary = (value: string | undefined): boolean =>
+  Boolean(value && HEARTBEAT_NOOP_PATTERN.test(value));
+
+const isAuditNoopTaskRun = (run: TaskRun): boolean =>
+  isHeartbeatNoopSummary(run.task_summary) || isHeartbeatNoopSummary(run.context_summary);
+
+const isAuditNoopInputRecord = (record: ExperienceInputRecord): boolean =>
+  isHeartbeatNoopSummary(record.task_summary) || isHeartbeatNoopSummary(record.context_summary);
+
+const auditWindowFetchLimit = (limit: number): number =>
+  Math.max(limit, Math.min(Math.max(limit * AUDIT_WINDOW_OVERSAMPLE_FACTOR, AUDIT_WINDOW_MIN_OVERSAMPLE), 500));
 
 export const isExplicitHybridExplanationRequest = (userMessage: string): boolean => {
   const message = normalizeHybridExplainPrompt(userMessage);
@@ -778,6 +796,7 @@ const buildRetrievalNotes = (scorecard?: InjectionScorecard): string[] => {
 };
 
 export class ExperienceInteractionService {
+  private readonly db: DatabaseSync;
   private readonly config;
   private readonly hybridWorkerClient;
   private readonly inputRepo;
@@ -798,6 +817,7 @@ export class ExperienceInteractionService {
     this.config = config;
     const db = openDatabase(config);
     bootstrapDatabase(db);
+    this.db = db;
     this.inputRepo = new InputRecordRepository(db);
     this.injectionRepo = new InjectionRepository(db);
     this.attributionRecordRepo = new AttributionRecordRepository(db);
@@ -816,6 +836,153 @@ export class ExperienceInteractionService {
       explainDecisionLlmEnabled:
         config.hybridEnabled && config.hybridSyncExplainEnabled && config.hybridExplainLlmEnabled
     });
+  }
+
+  private inspectGovernanceForReview(scopeId: string): OperatorReviewGovernanceSummary {
+    const latestRun = this.db
+      .prepare(
+        `SELECT status, failure_class
+         FROM hygiene_governance_runs
+         WHERE scope_id = ?
+         ORDER BY updated_at DESC
+         LIMIT 1`
+      )
+      .get(scopeId) as { status: string; failure_class: string | null } | undefined;
+    const failedRuns = this.db
+      .prepare("SELECT COUNT(*) AS count FROM hygiene_governance_runs WHERE scope_id = ? AND status = 'failed'")
+      .get(scopeId) as { count: number };
+    const recentAutomaticActions = this.db
+      .prepare("SELECT COUNT(*) AS count FROM hygiene_governance_actions WHERE scope_id = ? AND status = 'applied'")
+      .get(scopeId) as { count: number };
+    const pendingApprovals = this.db
+      .prepare("SELECT COUNT(*) AS count FROM hygiene_governance_approvals WHERE scope_id = ? AND status = 'pending'")
+      .get(scopeId) as { count: number };
+    const status = failedRuns.count > 0 || pendingApprovals.count > 0 ? "attention" : "clear";
+
+    return {
+      status,
+      recentAutomaticActions: recentAutomaticActions.count,
+      failedRuns: failedRuns.count,
+      pendingApprovals: pendingApprovals.count,
+      lastRunStatus: latestRun?.status,
+      lastFailureClass: latestRun?.failure_class ?? undefined,
+      drillDown: {
+        cli: "ee inspect governance",
+        mcpResource: "experienceengine://governance",
+        brokerAction: "inspect_governance"
+      }
+    };
+  }
+
+  inspectGovernance(cwd: string = process.cwd()): {
+    scopeId: string;
+    status: "clear" | "attention";
+    recentAutomaticActions: number;
+    failedRuns: number;
+    pendingApprovals: number;
+    lastRunStatus?: string;
+    lastFailureClass?: string;
+    recentRuns: Array<{ runId: string; trigger: string; status: string; failureClass?: string; updatedAt: string }>;
+    recentActions: Array<{ actionId: string; planId?: string; actionType: string; status: string; rollbackRef?: string; updatedAt: string }>;
+  } {
+    const scopeId = resolveScope(cwd).scope_id;
+    const summary = this.inspectGovernanceForReview(scopeId);
+    const recentRuns = this.db
+      .prepare(
+        `SELECT run_id, trigger, status, failure_class, updated_at
+         FROM hygiene_governance_runs
+         WHERE scope_id = ?
+         ORDER BY updated_at DESC
+         LIMIT 5`
+      )
+      .all(scopeId) as Array<{ run_id: string; trigger: string; status: string; failure_class: string | null; updated_at: string }>;
+    const recentActions = this.db
+      .prepare(
+        `SELECT action_id, plan_id, action_type, status, before_snapshot_id, rollback_of_action_id, updated_at
+         FROM hygiene_governance_actions
+         WHERE scope_id = ?
+         ORDER BY updated_at DESC
+         LIMIT 5`
+      )
+      .all(scopeId) as Array<{
+      action_id: string;
+      plan_id: string | null;
+      action_type: string;
+      status: string;
+      before_snapshot_id: string | null;
+      rollback_of_action_id: string | null;
+      updated_at: string;
+    }>;
+
+    return {
+      scopeId,
+      status: summary.status,
+      recentAutomaticActions: summary.recentAutomaticActions,
+      failedRuns: summary.failedRuns,
+      pendingApprovals: summary.pendingApprovals,
+      lastRunStatus: summary.lastRunStatus,
+      lastFailureClass: summary.lastFailureClass,
+      recentRuns: recentRuns.map((run) => ({
+        runId: run.run_id,
+        trigger: run.trigger,
+        status: run.status,
+        failureClass: run.failure_class ?? undefined,
+        updatedAt: run.updated_at
+      })),
+      recentActions: recentActions.map((action) => ({
+        actionId: action.action_id,
+        planId: action.plan_id ?? undefined,
+        actionType: action.action_type,
+        status: action.status,
+        rollbackRef: action.rollback_of_action_id ?? action.before_snapshot_id ?? undefined,
+        updatedAt: action.updated_at
+      }))
+    };
+  }
+
+  inspectGovernancePendingApprovals(cwd: string = process.cwd()): {
+    scopeId: string;
+    approvals: Array<{
+      approvalId: string;
+      actionId: string;
+      planId?: string;
+      status: string;
+      diffSummary?: string;
+      createdAt: string;
+      updatedAt: string;
+    }>;
+  } {
+    const scopeId = resolveScope(cwd).scope_id;
+    const approvals = this.db
+      .prepare(
+        `SELECT approval_id, action_id, plan_id, status, diff_summary, created_at, updated_at
+         FROM hygiene_governance_approvals
+         WHERE scope_id = ? AND status = 'pending'
+         ORDER BY created_at DESC
+         LIMIT 20`
+      )
+      .all(scopeId) as Array<{
+      approval_id: string;
+      action_id: string;
+      plan_id: string | null;
+      status: string;
+      diff_summary: string | null;
+      created_at: string;
+      updated_at: string;
+    }>;
+
+    return {
+      scopeId,
+      approvals: approvals.map((approval) => ({
+        approvalId: approval.approval_id,
+        actionId: approval.action_id,
+        planId: approval.plan_id ?? undefined,
+        status: approval.status,
+        diffSummary: approval.diff_summary ?? undefined,
+        createdAt: approval.created_at,
+        updatedAt: approval.updated_at
+      }))
+    };
   }
 
   private deriveOriginProfile(node: ExperienceNode): NodeOriginProfile | undefined {
@@ -1247,6 +1414,7 @@ export class ExperienceInteractionService {
       repo,
       hygiene,
       exportDrafts,
+      governance: this.inspectGovernanceForReview(scopeId),
       limit
     });
   }
@@ -1390,7 +1558,10 @@ export class ExperienceInteractionService {
 
   inspectDecisionHealth(cwd: string = process.cwd(), limit = 10): ExperienceDecisionHealth {
     const scope = resolveScope(cwd);
-    const recentRecords = this.inputRepo.listRecentByScope(scope.scope_id, limit);
+    const recentRecords = this.inputRepo
+      .listRecentByScope(scope.scope_id, auditWindowFetchLimit(limit))
+      .filter((record) => !isAuditNoopInputRecord(record))
+      .slice(0, limit);
     let recentInjects = 0;
     let recentConservativeInjects = 0;
     let recentSkips = 0;
@@ -1484,7 +1655,10 @@ export class ExperienceInteractionService {
 
   inspectLearningQualityHealth(cwd: string = process.cwd(), limit = 50): ExperienceLearningQualityHealth {
     const scope = resolveScope(cwd);
-    const recentTaskRuns = this.taskRunRepo.listRecentByScope(scope.scope_id, limit);
+    const recentTaskRuns = this.taskRunRepo
+      .listRecentByScope(scope.scope_id, auditWindowFetchLimit(limit))
+      .filter((run) => !isAuditNoopTaskRun(run))
+      .slice(0, limit);
     const capturedRuns = recentTaskRuns.filter((run) => run.learning_status === "captured").length;
     const rejectedRuns = recentTaskRuns.filter((run) => run.learning_status === "rejected").length;
     const notApplicableRuns = recentTaskRuns.filter((run) => run.learning_status === "not_applicable").length;

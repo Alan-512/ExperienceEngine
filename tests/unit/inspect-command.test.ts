@@ -16,6 +16,13 @@ import { OutcomeRecordRepository } from "../../src/store/sqlite/repositories/out
 import { ReviewEventRepository } from "../../src/store/sqlite/repositories/review-event-repo.js";
 import { RepoPolicyRepository } from "../../src/store/sqlite/repositories/repo-policy-repo.js";
 import { TaskRunRepository } from "../../src/store/sqlite/repositories/task-run-repo.js";
+import {
+  GovernanceActionRepository,
+  GovernanceApprovalRepository,
+  GovernancePlanRepository,
+  GovernanceRunRepository,
+  GovernanceScheduleRepository
+} from "../../src/store/sqlite/repositories/hygiene-governance-repo.js";
 import { nowIso } from "../../src/utils/clock.js";
 import { ExperienceStateArtifactService } from "../../src/interaction/state-artifact-service.js";
 import type {
@@ -692,6 +699,198 @@ describe("inspect command", () => {
         drill_down: "ee inspect export-drafts"
       })
     ]);
+  });
+
+  it("prints autonomous governance status, recent actions, and pending approvals", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+    const cwd = "/repo-governance-cli";
+    const scopeId = resolveScope(cwd).scope_id;
+    new GovernanceScheduleRepository(db).maybeEnqueue({
+      scopeId,
+      trigger: "keeper",
+      now: "2026-05-17T10:00:00.000Z",
+      intervalMs: 86_400_000,
+      findingHash: "hash-a"
+    });
+    const run = new GovernanceRunRepository(db).create({
+      run_id: "run_governance_cli",
+      scope_id: scopeId,
+      trigger: "keeper",
+      status: "completed",
+      started_at: "2026-05-17T10:00:00.000Z",
+      finished_at: "2026-05-17T10:00:01.000Z",
+      created_at: "2026-05-17T10:00:00.000Z",
+      updated_at: "2026-05-17T10:00:01.000Z"
+    });
+    const plan = new GovernancePlanRepository(db).create({
+      plan_id: "plan_governance_cli",
+      run_id: run.run_id,
+      scope_id: scopeId,
+      status: "completed",
+      finding_hash: "hash-a",
+      risk: "low",
+      plan: { actions: [] },
+      created_at: "2026-05-17T10:00:00.000Z",
+      updated_at: "2026-05-17T10:00:01.000Z"
+    });
+    new GovernanceActionRepository(db).create({
+      action_id: "action_governance_cli",
+      run_id: run.run_id,
+      plan_id: plan.plan_id,
+      scope_id: scopeId,
+      action_type: "retire_stale_shadow",
+      status: "applied",
+      affected_ids: ["node_old"],
+      affected_row_hashes: { "experience_nodes:id:node_old": "hash" },
+      action: { nodeId: "node_old" },
+      before_snapshot_id: "snapshot_governance_cli",
+      created_at: "2026-05-17T10:00:00.000Z",
+      updated_at: "2026-05-17T10:00:01.000Z",
+      applied_at: "2026-05-17T10:00:01.000Z"
+    });
+    new GovernanceApprovalRepository(db).create({
+      action_id: "action_promote_cli",
+      plan_id: plan.plan_id,
+      scope_id: scopeId,
+      status: "pending",
+      diff_summary: "Promote guidance to eligible delivery.",
+      affected_row_hashes: {},
+      created_at: "2026-05-17T10:00:02.000Z",
+      updated_at: "2026-05-17T10:00:02.000Z"
+    });
+
+    runInspectCommand("governance", "--cwd", cwd);
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Autonomous hygiene governance:"],
+        [`- Scope: ${scopeId}`],
+        ["- Schedule status: pending"],
+        ["- Pending approvals: 1"],
+        ["Recent runs:"],
+        ["Recent actions:"],
+        ["Pending approvals:"]
+      ])
+    );
+    expect(consoleTableSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        [
+          [
+            expect.objectContaining({
+              run: "run_governance_cli",
+              status: "completed"
+            })
+          ]
+        ],
+        [
+          [
+            expect.objectContaining({
+              action: "action_governance_cli",
+              plan: "plan_governance_cli",
+              rollback_ref: "snapshot_governance_cli",
+              type: "retire_stale_shadow",
+              status: "applied"
+            })
+          ]
+        ],
+        [
+          [
+            expect.objectContaining({
+              action: "action_promote_cli",
+              status: "pending",
+              summary: "Promote guidance to eligible delivery."
+            })
+          ]
+        ]
+      ])
+    );
+  });
+
+  it("includes autonomous governance status in operator review summaries", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+    const cwd = "/repo-review-governance-cli";
+    const scopeId = resolveScope(cwd).scope_id;
+    new GovernanceScheduleRepository(db).maybeEnqueue({
+      scopeId,
+      trigger: "posttask",
+      now: "2026-05-17T10:00:00.000Z",
+      intervalMs: 86_400_000,
+      findingHash: "hash-governance-review"
+    });
+    const run = new GovernanceRunRepository(db).create({
+      run_id: "run_governance_review_cli",
+      scope_id: scopeId,
+      trigger: "posttask",
+      status: "failed",
+      failure_class: "worker_error",
+      failure_message: "planner unavailable",
+      started_at: "2026-05-17T10:00:00.000Z",
+      finished_at: "2026-05-17T10:00:01.000Z",
+      created_at: "2026-05-17T10:00:00.000Z",
+      updated_at: "2026-05-17T10:00:01.000Z"
+    });
+    const plan = new GovernancePlanRepository(db).create({
+      plan_id: "plan_governance_review_cli",
+      run_id: run.run_id,
+      scope_id: scopeId,
+      status: "proposed",
+      finding_hash: "hash-governance-review",
+      risk: "high",
+      plan: { actions: [] },
+      created_at: "2026-05-17T10:00:00.000Z",
+      updated_at: "2026-05-17T10:00:01.000Z"
+    });
+    new GovernanceActionRepository(db).create({
+      action_id: "action_governance_review_cli",
+      run_id: run.run_id,
+      plan_id: plan.plan_id,
+      scope_id: scopeId,
+      action_type: "retire_stale_shadow",
+      status: "applied",
+      affected_ids: ["node_old"],
+      affected_row_hashes: {},
+      action: { nodeId: "node_old" },
+      created_at: "2026-05-17T10:00:00.000Z",
+      updated_at: "2026-05-17T10:00:01.000Z",
+      applied_at: "2026-05-17T10:00:01.000Z"
+    });
+    new GovernanceApprovalRepository(db).create({
+      action_id: "action_governance_approval_review_cli",
+      plan_id: plan.plan_id,
+      scope_id: scopeId,
+      status: "pending",
+      diff_summary: "Promote guidance to eligible delivery.",
+      affected_row_hashes: {},
+      created_at: "2026-05-17T10:00:02.000Z",
+      updated_at: "2026-05-17T10:00:02.000Z"
+    });
+
+    runInspectCommand("review", "--cwd", cwd);
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["- Governance: attention failed=1 pending_approvals=1 recent_actions=1 (ee inspect governance)"]
+      ])
+    );
+    expect(consoleTableSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        [
+          [
+            expect.objectContaining({
+              source: "governance",
+              priority: "medium",
+              drill_down: "ee inspect governance"
+            })
+          ]
+        ]
+      ])
+    );
   });
 
   it("prints persisted skip delivery decisions", () => {

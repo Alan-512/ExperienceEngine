@@ -64,7 +64,13 @@ const createClaudeRuntime = async (options: ClaudeHookOptions = {}) => {
         env: options.env ?? process.env,
         homeDir: options.homeDir
       }
-    )
+    ),
+    undefined,
+    {
+      autonomousHygieneGovernance: {
+        enabled: true
+      }
+    }
   );
 };
 

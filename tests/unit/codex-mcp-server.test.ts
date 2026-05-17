@@ -1,4 +1,5 @@
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -14,6 +15,13 @@ import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
 import { NodeRepository } from "../../src/store/sqlite/repositories/node-repo.js";
 import { ScopeRepository } from "../../src/store/sqlite/repositories/scope-repo.js";
 import { TaskRunRepository } from "../../src/store/sqlite/repositories/task-run-repo.js";
+import {
+  GovernanceActionRepository,
+  GovernanceApprovalRepository,
+  GovernancePlanRepository,
+  GovernanceRunRepository,
+  GovernanceScheduleRepository
+} from "../../src/store/sqlite/repositories/hygiene-governance-repo.js";
 import { clearEmbeddingProviderForTests, setEmbeddingProviderForTests } from "../../src/store/vector/embeddings.js";
 import { nowIso } from "../../src/utils/clock.js";
 import type { ExperienceNode } from "../../src/types/domain.js";
@@ -325,6 +333,40 @@ describe("Codex MCP behavior loop", () => {
     expect(node?.usage_count).toBe(1);
     expect(node?.helped_count).toBe(0);
     expect(node?.harmed_count).toBe(1);
+  });
+
+  it("does not carry tool events into a later prompt that reuses the same Codex session id", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+
+    const loop = createCodexBehaviorLoop({ homeDir, env });
+    await loop.lookupHints({
+      cwd: "/repo",
+      prompt: "Fix the failing auth test",
+      sessionId: "agent:main:main"
+    });
+    await loop.recordToolResult({
+      sessionId: "agent:main:main",
+      toolName: "Bash",
+      inputSummary: "pnpm test auth",
+      outputSummary: "1 failed",
+      errorSignature: "1 failed",
+      status: "failure"
+    });
+
+    await loop.lookupHints({
+      cwd: "/repo",
+      prompt: "Read HEARTBEAT.md and reply HEARTBEAT_OK when nothing needs attention",
+      sessionId: "agent:main:main"
+    });
+    const finalized = await loop.finalizeTask({
+      sessionId: "agent:main:main",
+      cwd: "/repo",
+      contextSummary: "HEARTBEAT_OK"
+    });
+
+    expect(finalized.outcomeSignal).toBe("unknown");
+    expect(finalized.recordedToolEvents).toBe(0);
   });
 
   it("skips intervention when the current scope has been disabled", async () => {
@@ -983,6 +1025,270 @@ describe("Codex MCP behavior loop", () => {
       recommendedNextAction: expect.any(String)
     });
     expect(getRegisteredTool(server, "experienceengine_get_repo_summary")).toBeUndefined();
+  });
+
+  it("registers governance status and pending approval MCP resources with a brokered inspect action", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const scopeId = resolveScope(process.cwd()).scope_id;
+    new GovernanceScheduleRepository(db).maybeEnqueue({
+      scopeId,
+      trigger: "posttask",
+      now: "2026-05-17T10:00:00.000Z",
+      intervalMs: 86_400_000,
+      findingHash: "hash-mcp-governance"
+    });
+    const run = new GovernanceRunRepository(db).create({
+      run_id: "run_mcp_governance",
+      scope_id: scopeId,
+      trigger: "posttask",
+      status: "failed",
+      failure_class: "worker_error",
+      failure_message: "planner unavailable",
+      started_at: "2026-05-17T10:00:00.000Z",
+      finished_at: "2026-05-17T10:00:01.000Z",
+      created_at: "2026-05-17T10:00:00.000Z",
+      updated_at: "2026-05-17T10:00:01.000Z"
+    });
+    const plan = new GovernancePlanRepository(db).create({
+      plan_id: "plan_mcp_governance",
+      run_id: run.run_id,
+      scope_id: scopeId,
+      status: "proposed",
+      finding_hash: "hash-mcp-governance",
+      risk: "high",
+      plan: { actions: [] },
+      created_at: "2026-05-17T10:00:00.000Z",
+      updated_at: "2026-05-17T10:00:01.000Z"
+    });
+    new GovernanceApprovalRepository(db).create({
+      approval_id: "approval_mcp_governance",
+      action_id: "action_mcp_governance",
+      plan_id: plan.plan_id,
+      scope_id: scopeId,
+      status: "pending",
+      diff_summary: "Promote guidance to eligible delivery.",
+      affected_row_hashes: { "experience_nodes:id:node_mcp": "hash" },
+      created_at: "2026-05-17T10:00:02.000Z",
+      updated_at: "2026-05-17T10:00:02.000Z"
+    });
+
+    const server = createCodexMcpServer({ homeDir, env });
+    const governanceResource = getRegisteredResource(server, "experienceengine://governance");
+    const approvalsResource = getRegisteredResource(server, "experienceengine://governance/approvals");
+    const executeActionTool = getRegisteredTool(server, "experienceengine_execute_action");
+    const capabilitiesResource = getRegisteredResource(server, "experienceengine://capabilities");
+
+    const governance = JSON.parse(
+      ((await governanceResource.readCallback(new URL("experienceengine://governance"), {})) as {
+        contents: Array<{ text: string }>;
+      }).contents[0]?.text ?? "null"
+    ) as { status: string; failedRuns: number; pendingApprovals: number };
+    const approvals = JSON.parse(
+      ((await approvalsResource.readCallback(new URL("experienceengine://governance/approvals"), {})) as {
+        contents: Array<{ text: string }>;
+      }).contents[0]?.text ?? "null"
+    ) as { approvals: Array<{ approvalId: string; actionId: string; diffSummary: string }> };
+    const brokeredInspect = parseTextPayload<{ actionId: string; result: { pendingApprovals: number } }>(
+      (await executeActionTool.handler({ actionId: "inspect_governance", payload: {} })) as {
+        content: Array<{ type: string; text?: string }>;
+      }
+    );
+    const capabilities = JSON.parse(
+      ((await capabilitiesResource.readCallback(new URL("experienceengine://capabilities"), {})) as {
+        contents: Array<{ text: string }>;
+      }).contents[0]?.text ?? "null"
+    ) as { routine_read_surfaces: string[]; operator_surfaces: string[] };
+
+    expect(governance).toMatchObject({
+      status: "attention",
+      failedRuns: 1,
+      pendingApprovals: 1
+    });
+    expect(approvals.approvals).toEqual([
+      expect.objectContaining({
+        approvalId: "approval_mcp_governance",
+        actionId: "action_mcp_governance",
+        diffSummary: "Promote guidance to eligible delivery."
+      })
+    ]);
+    expect(brokeredInspect).toMatchObject({
+      actionId: "inspect_governance",
+      result: {
+        pendingApprovals: 1
+      }
+    });
+    expect(capabilities.routine_read_surfaces).toEqual(expect.arrayContaining([
+      "experienceengine://governance",
+      "experienceengine://governance/approvals"
+    ]));
+    expect(capabilities.operator_surfaces).toContain("experienceengine://governance");
+    expect(getRegisteredTool(server, "experienceengine_get_governance")).toBeUndefined();
+  });
+
+  it("plans, executes, rejects, and stale-checks governance approvals through brokered MCP actions", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+    const config = loadConfig({ dataDir: env.EXPERIENCE_ENGINE_HOME });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const scopeId = resolveScope(process.cwd()).scope_id;
+    const nodeRepo = new NodeRepository(db);
+    seedStrategyNode(nodeRepo, process.cwd(), "2026-05-17T10:00:00.000Z", "node_mcp_approval");
+    seedStrategyNode(nodeRepo, process.cwd(), "2026-05-17T10:00:00.000Z", "node_mcp_stale");
+    const nodeRow = db.prepare("SELECT * FROM experience_nodes WHERE id = ?").get("node_mcp_approval") as Record<string, unknown>;
+    const staleRow = db.prepare("SELECT * FROM experience_nodes WHERE id = ?").get("node_mcp_stale") as Record<string, unknown>;
+    const hashRow = (row: Record<string, unknown>) =>
+      createHash("sha256").update(JSON.stringify(row, Object.keys(row).sort()), "utf8").digest("hex");
+    const run = new GovernanceRunRepository(db).create({
+      run_id: "run_mcp_approval",
+      scope_id: scopeId,
+      trigger: "posttask",
+      status: "completed",
+      created_at: "2026-05-17T10:00:00.000Z",
+      updated_at: "2026-05-17T10:00:01.000Z"
+    });
+    const plan = new GovernancePlanRepository(db).create({
+      plan_id: "plan_mcp_approval",
+      run_id: run.run_id,
+      scope_id: scopeId,
+      status: "proposed",
+      finding_hash: "hash-mcp-approval",
+      risk: "high",
+      plan: { actions: [] },
+      created_at: "2026-05-17T10:00:00.000Z",
+      updated_at: "2026-05-17T10:00:01.000Z"
+    });
+    new GovernanceActionRepository(db).create({
+      action_id: "action_mcp_approval",
+      run_id: run.run_id,
+      plan_id: plan.plan_id,
+      scope_id: scopeId,
+      action_type: "promote_delivery",
+      status: "pending",
+      affected_ids: ["node_mcp_approval"],
+      affected_row_hashes: { "experience_nodes:id:node_mcp_approval": hashRow(nodeRow) },
+      action: { nodeId: "node_mcp_approval" },
+      created_at: "2026-05-17T10:00:00.000Z",
+      updated_at: "2026-05-17T10:00:01.000Z"
+    });
+    new GovernanceApprovalRepository(db).create({
+      approval_id: "approval_mcp_execute",
+      action_id: "action_mcp_approval",
+      plan_id: plan.plan_id,
+      scope_id: scopeId,
+      status: "pending",
+      diff_summary: "Promote guidance to eligible delivery.",
+      affected_row_hashes: { "experience_nodes:id:node_mcp_approval": hashRow(nodeRow) },
+      created_at: "2026-05-17T10:00:02.000Z",
+      updated_at: "2026-05-17T10:00:02.000Z"
+    });
+    new GovernanceApprovalRepository(db).create({
+      approval_id: "approval_mcp_reject",
+      action_id: "action_mcp_reject",
+      plan_id: plan.plan_id,
+      scope_id: scopeId,
+      status: "pending",
+      diff_summary: "Reject a broad rewrite.",
+      affected_row_hashes: {},
+      created_at: "2026-05-17T10:00:03.000Z",
+      updated_at: "2026-05-17T10:00:03.000Z"
+    });
+    new GovernanceApprovalRepository(db).create({
+      approval_id: "approval_mcp_stale",
+      action_id: "action_mcp_stale",
+      plan_id: plan.plan_id,
+      scope_id: scopeId,
+      status: "pending",
+      diff_summary: "Approve stale row guarded action.",
+      affected_row_hashes: { "experience_nodes:id:node_mcp_stale": hashRow(staleRow) },
+      created_at: "2026-05-17T10:00:04.000Z",
+      updated_at: "2026-05-17T10:00:04.000Z"
+    });
+    db.close();
+
+    const server = createCodexMcpServer({ homeDir, env });
+    const executeActionTool = getRegisteredTool(server, "experienceengine_execute_action");
+    const approvalPlan = parseTextPayload<{
+      result: { approvalId: string; confirmationToken: string; affectedRowHashes: Record<string, string> };
+    }>(
+      (await executeActionTool.handler({
+        actionId: "plan_governance_approval",
+        payload: { approvalId: "approval_mcp_execute" }
+      })) as { content: Array<{ type: string; text?: string }> }
+    );
+    const approved = parseTextPayload<{ result: { status: string; approvalId: string } }>(
+      (await executeActionTool.handler({
+        actionId: "execute_governance_approval",
+        payload: {
+          approvalId: "approval_mcp_execute",
+          confirmationToken: approvalPlan.result.confirmationToken
+        }
+      })) as { content: Array<{ type: string; text?: string }> }
+    );
+    const approvedAgain = parseTextPayload<{ result: { status: string; approvalId: string } }>(
+      (await executeActionTool.handler({
+        actionId: "execute_governance_approval",
+        payload: {
+          approvalId: "approval_mcp_execute",
+          confirmationToken: approvalPlan.result.confirmationToken
+        }
+      })) as { content: Array<{ type: string; text?: string }> }
+    );
+    const rejected = parseTextPayload<{ result: { status: string; approvalId: string } }>(
+      (await executeActionTool.handler({
+        actionId: "reject_governance_approval",
+        payload: { approvalId: "approval_mcp_reject" }
+      })) as { content: Array<{ type: string; text?: string }> }
+    );
+    const rejectedAgain = parseTextPayload<{ result: { status: string; approvalId: string } }>(
+      (await executeActionTool.handler({
+        actionId: "reject_governance_approval",
+        payload: { approvalId: "approval_mcp_reject" }
+      })) as { content: Array<{ type: string; text?: string }> }
+    );
+    const stalePlan = parseTextPayload<{ result: { confirmationToken: string } }>(
+      (await executeActionTool.handler({
+        actionId: "plan_governance_approval",
+        payload: { approvalId: "approval_mcp_stale" }
+      })) as { content: Array<{ type: string; text?: string }> }
+    );
+    const mutateDb = openDatabase(config);
+    mutateDb.prepare("UPDATE experience_nodes SET compact_hint = ? WHERE id = ?").run("Changed after approval planning.", "node_mcp_stale");
+    mutateDb.close();
+    const stale = parseTextPayload<{ result: { status: string; reason: string } }>(
+      (await executeActionTool.handler({
+        actionId: "execute_governance_approval",
+        payload: {
+          approvalId: "approval_mcp_stale",
+          confirmationToken: stalePlan.result.confirmationToken
+        }
+      })) as { content: Array<{ type: string; text?: string }> }
+    );
+
+    const verifyDb = openDatabase(config);
+    expect(approved.result).toMatchObject({ approvalId: "approval_mcp_execute", status: "approved" });
+    expect(approvedAgain.result).toMatchObject({ approvalId: "approval_mcp_execute", status: "already_approved" });
+    expect(rejected.result).toMatchObject({ approvalId: "approval_mcp_reject", status: "rejected" });
+    expect(rejectedAgain.result).toMatchObject({ approvalId: "approval_mcp_reject", status: "already_rejected" });
+    expect(stale.result).toMatchObject({ status: "stale_replan_required", reason: "affected_rows_changed" });
+    expect(new GovernanceApprovalRepository(verifyDb).get("approval_mcp_execute")).toMatchObject({
+      status: "approved",
+      confirmation_token_hash: expect.any(String)
+    });
+    expect(new GovernanceActionRepository(verifyDb).get("action_mcp_approval")).toMatchObject({
+      status: "applied"
+    });
+    expect(new GovernanceApprovalRepository(verifyDb).get("approval_mcp_reject")).toMatchObject({
+      status: "rejected"
+    });
+    expect(new GovernanceApprovalRepository(verifyDb).get("approval_mcp_stale")).toMatchObject({
+      status: "stale"
+    });
+    verifyDb.close();
   });
 
   it("registers a direct explain-last-decision tool that writes a hybrid explain trace", async () => {

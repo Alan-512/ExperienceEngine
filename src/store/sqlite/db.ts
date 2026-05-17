@@ -160,6 +160,12 @@ export const bootstrapDatabase = (db: DatabaseSync): void => {
   ensureColumn(db, "hybrid_invocation_traces", "capsule_schema_version", "TEXT");
   ensureColumn(db, "hybrid_invocation_traces", "worker_profile_version", "TEXT");
   ensureColumn(db, "hybrid_invocation_traces", "fallback_reason", "TEXT");
+  ensureColumn(db, "hygiene_governance_schedules", "last_failure_class", "TEXT");
+  ensureIndex(db, "idx_hygiene_governance_runs_scope", "hygiene_governance_runs", "scope_id");
+  ensureIndex(db, "idx_hygiene_governance_plans_scope", "hygiene_governance_plans", "scope_id");
+  ensureIndex(db, "idx_hygiene_governance_actions_scope", "hygiene_governance_actions", "scope_id");
+  ensureIndex(db, "idx_hygiene_governance_approvals_scope", "hygiene_governance_approvals", "scope_id");
+  ensureIndex(db, "idx_hygiene_governance_snapshots_action", "hygiene_governance_snapshots", "action_id");
 };
 
 const isBusyLockError = (error: unknown): boolean => {

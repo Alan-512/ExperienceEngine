@@ -1759,7 +1759,8 @@ describe("OpenClaw plugin runtime", () => {
         },
         fetchImpl: fetchImpl as unknown as typeof fetch,
         disableBackgroundLearning: false,
-        disableHybridPosttask: true
+        disableHybridPosttask: true,
+        autonomousHygieneGovernance: { enabled: false }
       }
     );
 

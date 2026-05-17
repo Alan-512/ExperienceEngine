@@ -81,6 +81,37 @@ Interaction surfaces are presented with a tier model:
 
 Tier is separate from mutation risk. Operator review, hygiene, and export drafts are read-only operator workflows; install/upgrade/import/rollback are operator workflows with high-impact safeguards.
 
+### Autonomous Hygiene Governance
+
+Autonomous hygiene governance is a separate maintenance path from read-only hygiene inspection. Hygiene reports and operator review remain inspection surfaces; mutation happens only through the governance scheduler, planner, validator, applicator, and SQLite audit records. The approval service remains available for legacy queued approval records, but new autonomous experience-store governance uses guarded automatic execution.
+
+Runtime hooks use host lifecycle events as wake signals, not as the source of truth for cadence:
+
+```text
+host startup / prompt lookup / posttask / stop
+  -> maybeEnqueueGovernance(scope)
+  -> persisted schedule + backoff + finding hash
+  -> per-scope lease
+  -> bounded drain
+  -> planner
+  -> deterministic validator
+  -> safe or guarded apply
+  -> action audit + rollback snapshot
+```
+
+The scheduler key is the canonical scope id. Host instance identity is only lease owner metadata, so frequent host open/close cycles and multiple supported hosts sharing the same ExperienceEngine home do not multiply governance frequency.
+
+Core modules:
+
+- `src/maintenance/hygiene-governance-scheduler.ts`: due checks, leases, bounded drain, backoff, keeper-compatible entrypoint
+- `src/maintenance/hygiene-governance-planner.ts`: bounded input package, LLM strict JSON plan, deterministic fallback
+- `src/maintenance/hygiene-governance-validator.ts`: deterministic safety checks for merge, retire, downgrade, quarantine, rewrite, scope, evidence, guarded high-impact experience-store execution, and non-store action rejection
+- `src/maintenance/hygiene-governance-applicator.ts`: safe and guarded automatic application with snapshot/audit references
+- `src/maintenance/hygiene-governance-approvals.ts`: legacy confirmation-token planning, approval execution/rejection, affected-row stale checks
+- `src/store/sqlite/repositories/hygiene-governance-repo.ts`: schedule, lease, run, plan, action, approval, snapshot, and rollback persistence
+
+High-impact experience-store actions are guarded automatic mutations, never direct LLM mutations: promotion lands in conservative delivery, delete-like cleanup is soft-retire/quarantine, and conflicted merges keep the canonical node out of direct live eligibility. Legacy approval tokens still bind scope, plan, action, affected row hashes, diff summary, and expiration for older queued approval records.
+
 ---
 
 ## 3. 当前整体架构图

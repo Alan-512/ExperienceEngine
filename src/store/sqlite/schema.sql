@@ -289,3 +289,101 @@ CREATE TABLE IF NOT EXISTS scope_task_stats (
   updated_at TEXT NOT NULL,
   PRIMARY KEY (scope_id, task_type)
 );
+
+CREATE TABLE IF NOT EXISTS hygiene_governance_schedules (
+  scope_id TEXT PRIMARY KEY,
+  last_governed_at TEXT,
+  next_due_at TEXT NOT NULL,
+  pending_reasons_json TEXT NOT NULL DEFAULT '[]',
+  last_run_status TEXT,
+  last_failure_class TEXT,
+  backoff_until TEXT,
+  last_finding_hash TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS hygiene_governance_leases (
+  scope_id TEXT PRIMARY KEY,
+  lease_owner TEXT NOT NULL,
+  lease_expires_at TEXT NOT NULL,
+  acquired_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS hygiene_governance_runs (
+  run_id TEXT PRIMARY KEY,
+  scope_id TEXT NOT NULL,
+  trigger TEXT NOT NULL,
+  status TEXT NOT NULL,
+  failure_class TEXT,
+  failure_message TEXT,
+  checkpoint_json TEXT,
+  started_at TEXT,
+  finished_at TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS hygiene_governance_plans (
+  plan_id TEXT PRIMARY KEY,
+  run_id TEXT,
+  scope_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  finding_hash TEXT,
+  risk TEXT,
+  plan_json TEXT NOT NULL,
+  validator_result_json TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS hygiene_governance_actions (
+  action_id TEXT PRIMARY KEY,
+  plan_id TEXT,
+  run_id TEXT,
+  scope_id TEXT NOT NULL,
+  action_type TEXT NOT NULL,
+  status TEXT NOT NULL,
+  affected_ids_json TEXT NOT NULL DEFAULT '[]',
+  affected_row_hashes_json TEXT NOT NULL DEFAULT '{}',
+  action_json TEXT NOT NULL DEFAULT '{}',
+  validator_decision_json TEXT,
+  before_snapshot_id TEXT,
+  after_state_json TEXT,
+  rollback_of_action_id TEXT,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  applied_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS hygiene_governance_approvals (
+  approval_id TEXT PRIMARY KEY,
+  action_id TEXT NOT NULL,
+  plan_id TEXT,
+  scope_id TEXT NOT NULL,
+  status TEXT NOT NULL,
+  confirmation_token_hash TEXT,
+  token_expires_at TEXT,
+  diff_summary TEXT,
+  affected_row_hashes_json TEXT NOT NULL DEFAULT '{}',
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  decided_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS hygiene_governance_snapshots (
+  snapshot_id TEXT PRIMARY KEY,
+  scope_id TEXT NOT NULL,
+  action_id TEXT NOT NULL,
+  row_refs_json TEXT NOT NULL,
+  snapshot_json TEXT NOT NULL,
+  row_hashes_json TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_hygiene_governance_runs_scope ON hygiene_governance_runs(scope_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_hygiene_governance_plans_scope ON hygiene_governance_plans(scope_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_hygiene_governance_actions_scope ON hygiene_governance_actions(scope_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_hygiene_governance_approvals_scope ON hygiene_governance_approvals(scope_id, status);
+CREATE INDEX IF NOT EXISTS idx_hygiene_governance_snapshots_action ON hygiene_governance_snapshots(action_id);

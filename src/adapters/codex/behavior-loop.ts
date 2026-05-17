@@ -33,6 +33,12 @@ export type CodexFinalizeArgs = {
   injectedNodeIds?: string[];
 };
 
+export type CodexHostEventArgs = {
+  cwd?: string;
+  sessionId?: string;
+  trigger: "host_startup" | "prompt_lookup" | "posttask" | "stop";
+};
+
 export type CodexServerOptions = {
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
@@ -65,7 +71,13 @@ const createCodexPromptRuntime = (options: CodexServerOptions = {}): ExperienceP
 
 const createCodexRuntime = async (options: CodexServerOptions = {}): Promise<ExperienceRuntimeService> => {
   const { ExperienceRuntimeService } = await import("../../runtime/service.js");
-  return new ExperienceRuntimeService(createCodexConfig(options), undefined, options.runtimeOptions);
+  return new ExperienceRuntimeService(createCodexConfig(options), undefined, {
+    ...options.runtimeOptions,
+    autonomousHygieneGovernance: {
+      enabled: true,
+      ...options.runtimeOptions?.autonomousHygieneGovernance
+    }
+  });
 };
 
 const summarizeActionReason = (scorecard: {
@@ -213,6 +225,21 @@ export const createCodexBehaviorLoop = (options: CodexServerOptions = {}) => {
 
   return {
     async lookupHints(args: CodexLookupArgs) {
+      if (args.sessionId) {
+        const existingRuntime = await getRuntime();
+        existingRuntime.resetSession(args.sessionId);
+      }
+      const fullRuntime = await getRuntime();
+      await fullRuntime.signalHostEvent(
+        {
+          host: "codex",
+          sessionId: args.sessionId,
+          cwd: args.cwd,
+          userMessage: args.prompt,
+          taskSummary: args.prompt
+        },
+        "prompt_lookup"
+      );
       const context: HostPromptContext = {
         host: "codex",
         sessionId: args.sessionId,
@@ -235,6 +262,20 @@ export const createCodexBehaviorLoop = (options: CodexServerOptions = {}) => {
         deliveryMode: result.deliveryMode,
         delivered: result.delivered
       };
+    },
+
+    async signalHostEvent(args: CodexHostEventArgs) {
+      const fullRuntime = await getRuntime();
+      return fullRuntime.signalHostEvent(
+        {
+          host: "codex",
+          sessionId: args.sessionId,
+          cwd: args.cwd,
+          userMessage: "",
+          taskSummary: args.trigger
+        },
+        args.trigger
+      );
     },
 
     async recordToolResult(args: CodexToolResultArgs) {
@@ -270,6 +311,7 @@ export const createCodexBehaviorLoop = (options: CodexServerOptions = {}) => {
         contextSummary: args.contextSummary,
         injectedNodeIds: args.injectedNodeIds ?? promptLookup?.injectedNodeIds
       });
+      promptLookups.delete(args.sessionId ?? "global");
 
       return {
         status: "finalized",

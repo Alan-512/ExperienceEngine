@@ -344,6 +344,128 @@ describe("ExperienceInteractionService", () => {
     });
   });
 
+  it("excludes heartbeat no-op records from learning and decision health windows", () => {
+    const homeDir = makeTempDir();
+    const cwd = "/repo";
+    const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const scope = resolveScope(cwd);
+    const taskRunRepo = new TaskRunRepository(db);
+    const inputRepo = new InputRecordRepository(db);
+    const injectionRepo = new InjectionRepository(db);
+    const older = "2026-05-16T08:00:00.000Z";
+    const newer = "2026-05-16T09:00:00.000Z";
+
+    taskRunRepo.upsert({
+      id: "run_real",
+      host: "codex",
+      scope_id: scope.scope_id,
+      session_id: "real-session",
+      task_type: "test_debug",
+      task_summary: "Fix the failing Codex lifecycle validation",
+      started_at: older,
+      ended_at: older,
+      final_status: "success",
+      learning_status: "captured",
+      learning_reason: "captured durable lifecycle validation fix",
+      created_at: older,
+      updated_at: older
+    });
+    inputRepo.upsert({
+      record_id: "input_real",
+      scope_id: scope.scope_id,
+      session_id: "real-session",
+      task_type: "test_debug",
+      task_summary: "Fix the failing Codex lifecycle validation",
+      outcome_signal: "success",
+      context_summary: "The targeted lifecycle validation now passes.",
+      evidence: ["vitest: success: lifecycle validation passes"],
+      injected_node_ids: [],
+      created_at: older
+    });
+    injectionRepo.upsert({
+      injection_id: "inject_real",
+      session_id: "real-session",
+      scope_id: scope.scope_id,
+      task_type: "test_debug",
+      task_summary: "Fix the failing Codex lifecycle validation",
+      mode: "inject_conservative",
+      delivery_mode: "live",
+      delivered: true,
+      injected_node_ids: ["node_real"],
+      injection_count: 1,
+      was_successful: true,
+      harm_observed: false,
+      attribution_reason: "success_outcome",
+      created_at: older,
+      resolved_at: older
+    });
+
+    for (let index = 0; index < 2; index += 1) {
+      const id = `heartbeat_${index}`;
+      taskRunRepo.upsert({
+        id: `run_${id}`,
+        host: "codex",
+        scope_id: scope.scope_id,
+        session_id: "agent:main:main",
+        task_type: "general",
+        task_summary: "Read HEARTBEAT.md if it exists (workspace context). If nothing needs attention, reply HEARTBEAT_OK.",
+        started_at: newer,
+        ended_at: newer,
+        final_status: "failure",
+        learning_status: "rejected",
+        learning_reason: "insufficient substantive evidence: only edit or exploratory events were observed",
+        created_at: newer,
+        updated_at: newer
+      });
+      inputRepo.upsert({
+        record_id: `input_${id}`,
+        scope_id: scope.scope_id,
+        session_id: "agent:main:main",
+        task_type: "general",
+        task_summary: "Read HEARTBEAT.md if it exists (workspace context). If nothing needs attention, reply HEARTBEAT_OK.",
+        outcome_signal: "failure",
+        context_summary: "Previous assistant summary: HEARTBEAT_OK",
+        evidence: ["exec: failure: stale prior task evidence"],
+        injected_node_ids: [],
+        created_at: newer
+      });
+      injectionRepo.upsert({
+        injection_id: `inject_${id}`,
+        session_id: "agent:main:main",
+        scope_id: scope.scope_id,
+        task_type: "general",
+        task_summary: "Read HEARTBEAT.md if it exists (workspace context). If nothing needs attention, reply HEARTBEAT_OK.",
+        mode: "skip",
+        delivery_mode: "live",
+        delivered: false,
+        injected_node_ids: [],
+        injection_count: 0,
+        was_successful: false,
+        harm_observed: false,
+        attribution_reason: "suppressed_delivery",
+        created_at: newer,
+        resolved_at: newer
+      });
+    }
+
+    const service = new ExperienceInteractionService(config);
+
+    expect(service.inspectLearningQualityHealth(cwd, 2)).toMatchObject({
+      recentTaskRuns: 1,
+      learningApplicableRuns: 1,
+      capturedRuns: 1,
+      rejectedRuns: 0,
+      candidateAdmissionRate: 1
+    });
+    expect(service.inspectDecisionHealth(cwd, 2)).toMatchObject({
+      recentDecisions: 1,
+      recentConservativeInjects: 1,
+      recentSkips: 0
+    });
+  });
+
   it("uses the hybrid explain worker for explicit explanation requests and keeps deterministic fallback safe", async () => {
     const homeDir = makeTempDir();
     const config = loadConfig({

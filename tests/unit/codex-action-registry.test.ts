@@ -29,6 +29,11 @@ describe("codex action registry", () => {
         listBackups: () => [],
         planOperation: async () => ({}),
         executePlannedOperation: async () => ({})
+      } as never,
+      governanceApprovals: {
+        planApproval: async () => ({}),
+        executeApproval: async () => ({}),
+        rejectApproval: async () => ({})
       } as never
     });
 
@@ -76,6 +81,11 @@ describe("codex action registry", () => {
         listBackups: () => [],
         planOperation: async () => ({}),
         executePlannedOperation: async () => ({})
+      } as never,
+      governanceApprovals: {
+        planApproval: async () => ({}),
+        executeApproval: async () => ({}),
+        rejectApproval: async () => ({})
       } as never
     });
 

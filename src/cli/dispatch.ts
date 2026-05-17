@@ -10,7 +10,7 @@ const usageText =
   "Usage: ee <install openclaw|claude-code|codex|upgrade openclaw|claude-code|codex|repair [openclaw|codex]|claude-hook|codex-hook|codex <exec ...>|codex-mcp-server|doctor [openclaw|claude-code|codex]|status|stats|inspect|feedback|disable|enable|cool|retire>"
   + " | helped|harmed"
   + " | backup|export|import <snapshot-path>|rollback <backup-id>"
-  + " | maintenance embeddings-reset|embedding-smoke|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
+  + " | maintenance embeddings-reset|embedding-smoke|governance drain|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
   + " | evaluate openclaw-baseline [--lookback-hours N] [--output-dir PATH]"
   + " | evaluate openclaw-scenarios --pack high-confidence [--repo-root PATH] [--output-dir PATH] [--dry-run]"
   + " | evaluate codex-lifecycle [--repo-root PATH] [--output-dir PATH]"

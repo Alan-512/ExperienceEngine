@@ -1,7 +1,9 @@
 import { loadConfig } from "../../config/load-config.js";
 import { deriveGovernanceSignals } from "../../experience-management/governance-observability.js";
+import { resolveScope } from "../../input/scope-resolver.js";
 import { ExperienceInteractionService } from "../../interaction/service.js";
 import { ExperienceStateArtifactService } from "../../interaction/state-artifact-service.js";
+import { bootstrapDatabase, openDatabase } from "../../store/sqlite/db.js";
 import type { DeliveryState, ExperienceNode } from "../../types/domain.js";
 import type { ExperienceLastInspection, ExperienceNodeDetail } from "../../interaction/service.js";
 import type { ExperienceQualityBandExplanation } from "../../interaction/quality-band.js";
@@ -20,6 +22,24 @@ const HYGIENE_TYPES: HygieneFindingType[] = [
 ];
 const HYGIENE_SEVERITIES: HygieneSeverity[] = ["high", "medium", "low"];
 const EXPORT_DRAFT_RISKS: ExportDraftRisk[] = ["high", "medium", "low"];
+
+const parseCwdOnlyArgs = (args: string[]): { cwd?: string } | null => {
+  const parsed: { cwd?: string } = {};
+  for (let index = 0; index < args.length; index += 1) {
+    const arg = args[index];
+    if (arg === "--cwd") {
+      const value = args[index + 1];
+      if (!value) {
+        return null;
+      }
+      parsed.cwd = value;
+      index += 1;
+      continue;
+    }
+    return null;
+  }
+  return parsed;
+};
 
 const describeInterventionReason = (record: ExperienceLastInspection): string | undefined => {
   const scorecard = record.scorecard;
@@ -788,6 +808,11 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string,
     console.log(
       `- Export drafts: ${report.sections.export_drafts.total} high=${report.sections.export_drafts.highRisk} medium=${report.sections.export_drafts.mediumRisk} low=${report.sections.export_drafts.lowRisk} (${report.sections.export_drafts.drillDown.cli})`
     );
+    if (report.sections.governance) {
+      console.log(
+        `- Governance: ${report.sections.governance.status} failed=${report.sections.governance.failedRuns} pending_approvals=${report.sections.governance.pendingApprovals} recent_actions=${report.sections.governance.recentAutomaticActions} (${report.sections.governance.drillDown.cli})`
+      );
+    }
     console.log(`- Recommended order: ${report.recommendedReviewOrder.join(" -> ")}`);
     if (!report.reviewItems.length) {
       console.log("No immediate operator review items found.");
@@ -813,6 +838,134 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string,
     console.log(`- repo_policy: ${report.sections.repo_policy.drillDown.cli}`);
     console.log(`- hygiene: ${report.sections.hygiene.drillDown.cli}`);
     console.log(`- export_drafts: ${report.sections.export_drafts.drillDown.cli}`);
+    if (report.sections.governance) {
+      console.log(`- governance: ${report.sections.governance.drillDown.cli}`);
+    }
+    return;
+  }
+
+  if (target === "governance") {
+    const filters = parseCwdOnlyArgs([arg1, arg2, ...extraArgs].filter((value): value is string => Boolean(value)));
+    if (!filters) {
+      console.log("Usage: ee inspect governance [--cwd <path>]");
+      return;
+    }
+    const scopeId = resolveScope(filters.cwd ?? process.cwd()).scope_id;
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+    const schedule = db.prepare("SELECT * FROM hygiene_governance_schedules WHERE scope_id = ? LIMIT 1").get(scopeId) as
+      | {
+          last_governed_at: string | null;
+          next_due_at: string;
+          last_run_status: string | null;
+          last_failure_class: string | null;
+          backoff_until: string | null;
+          last_finding_hash: string | null;
+        }
+      | undefined;
+    const runs = db
+      .prepare(
+        `SELECT run_id, trigger, status, failure_class, started_at, finished_at, updated_at
+         FROM hygiene_governance_runs
+         WHERE scope_id = ?
+         ORDER BY updated_at DESC
+         LIMIT 5`
+      )
+      .all(scopeId) as Array<{
+      run_id: string;
+      trigger: string;
+      status: string;
+      failure_class: string | null;
+      started_at: string | null;
+      finished_at: string | null;
+      updated_at: string;
+    }>;
+    const actions = db
+      .prepare(
+        `SELECT action_id, plan_id, action_type, status, affected_ids_json, before_snapshot_id, rollback_of_action_id, applied_at, updated_at
+         FROM hygiene_governance_actions
+         WHERE scope_id = ?
+         ORDER BY updated_at DESC
+         LIMIT 5`
+      )
+      .all(scopeId) as Array<{
+      action_id: string;
+      plan_id: string | null;
+      action_type: string;
+      status: string;
+      affected_ids_json: string;
+      before_snapshot_id: string | null;
+      rollback_of_action_id: string | null;
+      applied_at: string | null;
+      updated_at: string;
+    }>;
+    const approvals = db
+      .prepare(
+        `SELECT approval_id, action_id, status, diff_summary, created_at
+         FROM hygiene_governance_approvals
+         WHERE scope_id = ? AND status = 'pending'
+         ORDER BY created_at DESC
+         LIMIT 5`
+      )
+      .all(scopeId) as Array<{
+      approval_id: string;
+      action_id: string;
+      status: string;
+      diff_summary: string | null;
+      created_at: string;
+    }>;
+
+    console.log("Autonomous hygiene governance:");
+    console.log(`- Scope: ${scopeId}`);
+    console.log(`- Schedule status: ${schedule?.last_run_status ?? "none"}`);
+    console.log(`- Next due: ${schedule?.next_due_at ?? "not scheduled"}`);
+    console.log(`- Last governed: ${schedule?.last_governed_at ?? "never"}`);
+    console.log(`- Last finding hash: ${schedule?.last_finding_hash ?? "none"}`);
+    if (schedule?.backoff_until) {
+      console.log(`- Backoff until: ${schedule.backoff_until} (${schedule.last_failure_class ?? "unknown"})`);
+    }
+    console.log(`- Pending approvals: ${approvals.length}`);
+
+    if (runs.length) {
+      console.log("Recent runs:");
+      console.table(
+        runs.map((run) => ({
+          run: run.run_id,
+          trigger: run.trigger,
+          status: run.status,
+          failure: run.failure_class ?? "",
+          started: run.started_at ?? "",
+          finished: run.finished_at ?? ""
+        }))
+      );
+    }
+    if (actions.length) {
+      console.log("Recent actions:");
+      console.table(
+        actions.map((action) => ({
+          action: action.action_id,
+          plan: action.plan_id ?? "",
+          type: action.action_type,
+          status: action.status,
+          affected: (JSON.parse(action.affected_ids_json) as string[]).join(","),
+          rollback_ref: action.rollback_of_action_id ?? action.before_snapshot_id ?? "",
+          applied: action.applied_at ?? ""
+        }))
+      );
+    }
+    if (approvals.length) {
+      console.log("Pending approvals:");
+      console.table(
+        approvals.map((approval) => ({
+          approval: approval.approval_id,
+          action: approval.action_id,
+          status: approval.status,
+          summary: approval.diff_summary ?? "",
+          created: approval.created_at
+        }))
+      );
+    }
+    db.close();
     return;
   }
 

@@ -29,6 +29,7 @@ type RegistryDeps = {
     listNodesByType: (args: { nodeType: ExperienceNodeType }) => Promise<unknown>;
     inspectLearningSummary: () => Promise<unknown>;
     inspectReview: (args?: { cwd?: string; limit?: number }) => Promise<unknown>;
+    inspectGovernance: (args?: { cwd?: string }) => Promise<unknown>;
     inspectHygiene: (args?: { cwd?: string; type?: HygieneFindingType; severity?: HygieneSeverity; limit?: number }) => Promise<unknown>;
     inspectExportDrafts: (args?: {
       cwd?: string;
@@ -65,6 +66,11 @@ type RegistryDeps = {
         | { operation: "rollback"; backupId: string }
     ) => unknown;
     executePlannedOperation: (args: { planId: string; confirmationToken: string }) => unknown;
+  };
+  governanceApprovals: {
+    planApproval: (approvalId: string) => Promise<unknown>;
+    executeApproval: (args: { approvalId: string; confirmationToken: string }) => Promise<unknown>;
+    rejectApproval: (approvalId: string) => Promise<unknown>;
   };
 };
 
@@ -324,6 +330,70 @@ export const createCodexActionRegistry = (deps: RegistryDeps) => {
           cwd: typeof cwd === "string" ? cwd : undefined,
           limit: typeof limit === "number" ? limit : undefined
         })
+    },
+    {
+      id: "inspect_governance",
+      title: "Inspect Governance",
+      summary: "Inspect autonomous hygiene governance status, recent actions, guarded actions, failed runs, and legacy pending approvals.",
+      category: "inspect",
+      surfaceTier: "operator",
+      riskLevel: "low",
+      requiresConfirmation: false,
+      inputSchema: z.object({
+        cwd: z.string().min(1).optional()
+      }),
+      examplePayload: { cwd: "/path/to/repo" },
+      handler: async ({ cwd }) =>
+        deps.interactionSurface.inspectGovernance({
+          cwd: typeof cwd === "string" ? cwd : undefined
+        })
+    },
+    {
+      id: "plan_governance_approval",
+      title: "Plan Governance Approval",
+      summary: "Create a confirmation token for a pending autonomous governance approval.",
+      category: "maintenance",
+      surfaceTier: "operator",
+      riskLevel: "high",
+      requiresConfirmation: true,
+      inputSchema: z.object({
+        approvalId: z.string().min(1)
+      }),
+      examplePayload: { approvalId: "hygiene_approval_123" },
+      handler: async ({ approvalId }) => deps.governanceApprovals.planApproval(String(approvalId))
+    },
+    {
+      id: "execute_governance_approval",
+      title: "Execute Governance Approval",
+      summary: "Approve and execute a pending autonomous governance action after token and row-hash validation.",
+      category: "maintenance",
+      surfaceTier: "operator",
+      riskLevel: "high",
+      requiresConfirmation: true,
+      inputSchema: z.object({
+        approvalId: z.string().min(1),
+        confirmationToken: z.string().min(1)
+      }),
+      examplePayload: { approvalId: "hygiene_approval_123", confirmationToken: "confirm-123" },
+      handler: async ({ approvalId, confirmationToken }) =>
+        deps.governanceApprovals.executeApproval({
+          approvalId: String(approvalId),
+          confirmationToken: String(confirmationToken)
+        })
+    },
+    {
+      id: "reject_governance_approval",
+      title: "Reject Governance Approval",
+      summary: "Reject a pending autonomous governance approval without applying the action.",
+      category: "maintenance",
+      surfaceTier: "operator",
+      riskLevel: "medium",
+      requiresConfirmation: false,
+      inputSchema: z.object({
+        approvalId: z.string().min(1)
+      }),
+      examplePayload: { approvalId: "hygiene_approval_123" },
+      handler: async ({ approvalId }) => deps.governanceApprovals.rejectApproval(String(approvalId))
     },
     {
       id: "inspect_experience_hygiene",

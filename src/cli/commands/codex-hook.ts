@@ -213,6 +213,11 @@ const runUserPromptSubmit = async (
     return {};
   }
 
+  await behaviorLoop.signalHostEvent?.({
+    cwd: payload.cwd,
+    sessionId: toSessionId(payload),
+    trigger: "host_startup"
+  });
   const lookup = await behaviorLoop.lookupHints({
     cwd: payload.cwd,
     prompt,
@@ -280,6 +285,11 @@ const runStop = async (
     prompt: readSession(toSessionId(payload)).prompt ?? "",
     contextSummary: payload.last_assistant_message ?? undefined,
     injectedNodeIds: readSession(toSessionId(payload)).injectedNodeIds
+  });
+  await behaviorLoop.signalHostEvent?.({
+    cwd: payload.cwd ?? readSession(toSessionId(payload)).cwd,
+    sessionId: toSessionId(payload),
+    trigger: "stop"
   });
   return {};
 };

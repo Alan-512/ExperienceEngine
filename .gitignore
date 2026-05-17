@@ -20,6 +20,16 @@ docs/superpowers/plans/
 docs/development
 .claude-plugin/
 .codex/skills/
+.codex/config.toml
+.codex/experienceengine-codex-hook.cmd
+.codex/hooks.json
+.openclaw/
+HEARTBEAT.md
+IDENTITY.md
+SOUL.md
+TOOLS.md
+USER.md
+typescript
 scripts/tmp-*
 AGENTS.md
 CODEX.md

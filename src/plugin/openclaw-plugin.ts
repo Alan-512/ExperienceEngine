@@ -217,7 +217,11 @@ export const createExperiencePlugin = (
     }), logger, {
       disableBackgroundLearning: !OPENCLAW_BACKGROUND_LEARNING_ENABLED,
       disableHybridPosttask: !OPENCLAW_HYBRID_POSTTASK_ENABLED,
-      ...runtimeOptions
+      ...runtimeOptions,
+      autonomousHygieneGovernance: {
+        enabled: true,
+        ...runtimeOptions.autonomousHygieneGovernance
+      }
     })
   );
 

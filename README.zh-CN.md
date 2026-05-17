@@ -394,6 +394,14 @@ codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceeng
 
 用户手册里包含安装、宿主差异、首次验证、维护命令和故障排查说明。
 
+## 自动 Hygiene Governance
+
+ExperienceEngine 会把 hygiene governance 当成宿主附着的自动能力，而不是要求用户定期手动运行 CLI。宿主启动、prompt lookup、posttask finalization 和 stop 路径只做廉价 due check；真正是否执行由每个 scope 持久化的 schedule、lease、backoff、finding hash 和 action budget 决定。因此用户频繁打开或关闭宿主，只会增加廉价检查，不会放大治理频率。
+
+自动治理会沿用用户给 EE 配置好的 LLM 做冲突聚类和治理计划，然后由确定性 validator 控制写库。通过校验的经验库动作会自动执行：低风险动作包括 exact duplicate merge、stale shadow-only retirement、delivery downgrade 和 quarantine；高影响经验节点动作走 guarded 自动执行，例如语义/冲突 merge 会保留证据并把 canonical 限制在保守投递，promotion 只会进入 conservative delivery，delete record 只做 soft-retire 并保留 rollback snapshot。broad rewrite、export writing、repo policy change 和 restore 不属于自动经验治理，默认拒绝。
+
+`ee inspect hygiene` 和 `ee inspect review` 仍然是 read-only。宿主侧可以读取 `experienceengine://review`、`experienceengine://governance`；`experienceengine://governance/approvals` 仅用于兼容旧 approval 记录。`ee maintenance governance drain` 只是 operator fallback，用于显式排障或补跑；可选 keeper 也只会唤醒同一条 scheduler/lease/validator/audit 路径，不会绕过 guarded 执行规则或 rollback snapshot。
+
 ## 许可证
 
 本项目采用 MIT License。

@@ -17,6 +17,8 @@ import {
   type OperationalActionsDeps,
 } from "../../interaction/operational-actions-service.js";
 import { ExperienceStateArtifactService } from "../../interaction/state-artifact-service.js";
+import { HygieneGovernanceApprovalService } from "../../maintenance/hygiene-governance-approvals.js";
+import { bootstrapDatabase, openDatabase } from "../../store/sqlite/db.js";
 import type { ExperienceRuntimeService } from "../../runtime/service.js";
 import type {
   DeliveryState,
@@ -61,6 +63,26 @@ const NODE_TYPES: ExperienceNodeType[] = ["strategy", "warning"];
 const EXPERIENCE_ADAPTERS = ["openclaw", "claude-code", "codex"] as const;
 const HIGH_IMPACT_OPERATIONS = ["install", "repair", "upgrade"] as const satisfies readonly HighImpactOperation[];
 
+const createCodexConfig = (options: CodexServerOptions = {}) => {
+  const paths = resolveExperienceEnginePaths({
+    adapter: "codex",
+    env: options.env ?? process.env,
+    homeDir: options.homeDir
+  });
+
+  return loadConfig(
+    {
+      dataDir: paths.dataDir,
+      sqlitePath: paths.sqlitePath,
+      captureDir: paths.captureDir
+    },
+    {
+      env: options.env ?? process.env,
+      homeDir: options.homeDir
+    }
+  );
+};
+
 const buildExperienceCapabilities = () => ({
   surface_tiers: {
     routine: SURFACE_TIER_DEFINITIONS.routine.summary,
@@ -83,7 +105,9 @@ const buildExperienceCapabilities = () => ({
     "experienceengine://repo-summary",
     "experienceengine://review",
     "experienceengine://hygiene",
-    "experienceengine://export-drafts"
+    "experienceengine://export-drafts",
+    "experienceengine://governance",
+    "experienceengine://governance/approvals"
   ],
   routine_surfaces: [
     "experienceengine_lookup_hints",
@@ -99,6 +123,8 @@ const buildExperienceCapabilities = () => ({
     "experienceengine://review",
     "experienceengine://hygiene",
     "experienceengine://export-drafts",
+    "experienceengine://governance",
+    "experienceengine://governance/approvals",
     "brokered install / repair / upgrade plans",
     "brokered managed-state backup / export / import / rollback plans"
   ],
@@ -112,7 +138,9 @@ const buildExperienceCapabilities = () => ({
     quality_band:
       "Quality Band is a derived inspection model only. It explains strong/building/risky trust signals and does not mutate delivery state or gate injection by itself.",
     "experienceengine://review":
-      "Read-only operator workflow summary. Coordinates repo policy, hygiene, and export drafts with drill-down references; it does not restore policy, mutate nodes, or write exports."
+      "Read-only operator workflow summary. Coordinates repo policy, hygiene, export drafts, and autonomous governance with drill-down references; it does not restore policy, mutate nodes, or write exports.",
+    "experienceengine://governance":
+      "Read-only autonomous hygiene governance status. Routine governance is automatic; CLI maintenance is a fallback drain surface."
   },
   advanced_actions: [
     "brokered admin actions",
@@ -129,25 +157,7 @@ const buildExperienceCapabilities = () => ({
 const createCodexInteractionService = (
   options: CodexServerOptions = {}
 ): ExperienceInteractionService => {
-  const paths = resolveExperienceEnginePaths({
-    adapter: "codex",
-    env: options.env ?? process.env,
-    homeDir: options.homeDir
-  });
-
-  return new ExperienceInteractionService(
-    loadConfig(
-      {
-        dataDir: paths.dataDir,
-        sqlitePath: paths.sqlitePath,
-        captureDir: paths.captureDir
-      },
-      {
-        env: options.env ?? process.env,
-        homeDir: options.homeDir
-      }
-    ),
-  );
+  return new ExperienceInteractionService(createCodexConfig(options));
 };
 
 const createCodexOperationalService = (
@@ -302,6 +312,14 @@ export const createCodexInteractionSurface = (options: CodexServerOptions = {}) 
       return interaction.inspectReview(args.cwd, { limit: args.limit });
     },
 
+    async inspectGovernance(args: CodexScopeArgs = {}) {
+      return interaction.inspectGovernance(args.cwd);
+    },
+
+    async inspectGovernancePendingApprovals(args: CodexScopeArgs = {}) {
+      return interaction.inspectGovernancePendingApprovals(args.cwd);
+    },
+
     async inspectHygiene(args: { cwd?: string; type?: HygieneFindingType; severity?: HygieneSeverity; limit?: number } = {}) {
       const { cwd, ...filters } = args;
       return interaction.inspectHygiene(cwd ?? process.cwd(), filters);
@@ -368,11 +386,20 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
   const operationalSurface = createCodexOperationalService(options);
   const operationalActions = createCodexOperationalActionsService(options);
   const stateArtifacts = createCodexStateArtifactService(options);
+  const config = createCodexConfig(options);
+  const governanceApprovalsDb = openDatabase(config);
+  bootstrapDatabase(governanceApprovalsDb);
+  const governanceApprovals = new HygieneGovernanceApprovalService(governanceApprovalsDb);
   const actionRegistry = createCodexActionRegistry({
     interactionSurface,
     operationalSurface,
     operationalActions,
-    stateArtifacts
+    stateArtifacts,
+    governanceApprovals: {
+      planApproval: async (approvalId) => governanceApprovals.planApproval(approvalId),
+      executeApproval: async (args) => governanceApprovals.executeApproval(args),
+      rejectApproval: async (approvalId) => governanceApprovals.rejectApproval(approvalId)
+    }
   });
   const brokerFacade = createCodexBrokerFacade(actionRegistry);
   const server = new McpServer({
@@ -465,6 +492,28 @@ export const createCodexMcpServer = (options: CodexServerOptions = {}) => {
       mimeType: "application/json"
     },
     async (uri) => toJsonResourceResult(uri.toString(), await interactionSurface.inspectExportDrafts())
+  );
+
+  server.registerResource(
+    "experienceengine_governance",
+    "experienceengine://governance",
+    {
+      title: "ExperienceEngine Governance",
+      description: "Read-only autonomous hygiene governance status for the current scope.",
+      mimeType: "application/json"
+    },
+    async (uri) => toJsonResourceResult(uri.toString(), await interactionSurface.inspectGovernance())
+  );
+
+  server.registerResource(
+    "experienceengine_governance_approvals",
+    "experienceengine://governance/approvals",
+    {
+      title: "ExperienceEngine Governance Pending Approvals",
+      description: "Read-only legacy pending autonomous governance approvals for the current scope.",
+      mimeType: "application/json"
+    },
+    async (uri) => toJsonResourceResult(uri.toString(), await interactionSurface.inspectGovernancePendingApprovals())
   );
 
   server.registerTool(

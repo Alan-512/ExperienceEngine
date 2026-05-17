@@ -38,7 +38,8 @@ const behaviorLoop = () => ({
     outcomeSignal: "success",
     injectedNodeIds: ["node_1"],
     recordedToolEvents: 1
-  }))
+  })),
+  signalHostEvent: vi.fn(async () => ({ status: "queued" }))
 });
 
 describe("Codex hook command", () => {
@@ -86,6 +87,11 @@ describe("Codex hook command", () => {
       cwd: "/repo",
       prompt: "Fix the installer",
       sessionId: "turn_1"
+    });
+    expect(loop.signalHostEvent).toHaveBeenCalledWith({
+      cwd: "/repo",
+      sessionId: "turn_1",
+      trigger: "host_startup"
     });
     expect(output).toEqual({
       hookSpecificOutput: {
@@ -139,6 +145,11 @@ describe("Codex hook command", () => {
         contextSummary: "Done"
       })
     );
+    expect(loop.signalHostEvent).toHaveBeenCalledWith({
+      cwd: "/repo",
+      sessionId: "turn_1",
+      trigger: "stop"
+    });
   });
 
   it("queues PostToolUse by default and drains it through the behavior loop", async () => {

@@ -141,6 +141,7 @@ Each node moves through that lifecycle using real task outcomes, not just time-b
 - reuse short guidance from similar coding work
 - review why a hint matched or why nothing injected
 - let ExperienceEngine automatically reinforce, cool, quarantine, or retire guidance from real task outcomes
+- let autonomous hygiene governance use the configured LLM to cluster conflicts, merge duplicates, retire stale shadow-only guidance, downgrade risky delivery, and apply guarded high-impact experience-node changes automatically
 - override the last intervention as helpful or harmful when the automatic judgment needs correction
 - inspect active, cooling, quarantined, and retired experience
 - run across `OpenClaw`, `Claude Code`, and `Codex`
@@ -155,10 +156,18 @@ Each node moves through that lifecycle using real task outcomes, not just time-b
 ### Interaction Surface Tiers
 
 - Routine: host-first review, `ee status`, `ee doctor <host>`, `ee inspect --last`, `ee helped`, and `ee harmed`
-- Operator: install, upgrade, repair, operator review, hygiene review, export drafts, and managed backup/export/import/rollback
+- Operator: install, upgrade, repair, operator review, governance approvals, hygiene review, export drafts, and managed backup/export/import/rollback
 - Advanced / experimental: maintenance commands, raw evaluations, broker internals, and developer diagnostics
 
 Tier and risk are separate. For example, `ee inspect review` is an operator workflow but read-only, while install/upgrade/rollback are operator workflows with high-impact safeguards.
+
+### Autonomous Hygiene Governance
+
+ExperienceEngine now treats hygiene governance as a host-attached background capability, not a routine command users have to remember. Host startup, prompt lookup, posttask finalization, and stop paths perform cheap due checks against a persisted per-scope schedule. Frequent host open/close cycles only create cheap checks; the SQLite schedule, lease, backoff, finding hash, and action budget decide when governance actually runs.
+
+Validated experience-store actions are applied automatically. Low-risk actions can merge exact duplicates, retire stale shadow-only guidance, downgrade delivery, or quarantine harmed live guidance. High-impact experience-node actions use guarded execution: semantic/conflicted merges preserve evidence and cannot leave the canonical node directly eligible for live injection, promotion lands at conservative delivery, and deletion is a soft-retire with rollback snapshots. Broad rewrites, export writing, repo policy changes, and restore actions are rejected by automatic experience governance.
+
+Hygiene and operator review remain read-only inspection surfaces. Use `ee inspect review`, `experienceengine://review`, or `experienceengine://governance` to inspect status. `experienceengine://governance/approvals` remains available for legacy approval records. `ee maintenance governance drain` exists as an operator fallback for explicit troubleshooting, not as the normal way users keep EE healthy. An optional keeper can wake the same drain path for stricter wall-clock schedules; it does not bypass leases, budgets, validators, guarded execution rules, or rollback snapshots.
 
 For a more detailed explanation of what ExperienceEngine records and how an experience node is structured, see:
 

@@ -288,4 +288,16 @@ describe("runtime helpers", () => {
     expect(input.task_type).toBe("test_debug");
     expect(input.outcome_signal).toBe("unknown");
   });
+
+  it("uses final assistant summaries as outcome evidence when tool events are inconclusive", () => {
+    const input = buildExperienceInput({
+      sessionId: "sess_final_summary_success",
+      cwd: "/repo/runtime",
+      userMessage: "Run real host validation for Codex and OpenClaw",
+      contextSummary:
+        "已经完成本地真实宿主验证。已验证通过：Windows Codex upgrade codex 成功，doctor codex healthy；OpenClaw WSL 修复后验证通过。"
+    });
+
+    expect(input.outcome_signal).toBe("success");
+  });
 });
