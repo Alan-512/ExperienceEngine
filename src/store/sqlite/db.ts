@@ -64,7 +64,7 @@ const backfillExperienceNodeDeliveryState = (db: DatabaseSync, forceAllRows = fa
      END
      WHERE ${forceAllRows
        ? "1 = 1"
-       : "delivery_state IS NULL OR delivery_state = '' OR delivery_state NOT IN ('shadow_only', 'conservative_only', 'eligible', 'quarantined')"}`
+       : "delivery_state IS NULL OR delivery_state = '' OR delivery_state NOT IN ('shadow_only', 'conservative_only', 'eligible', 'quarantined', 'shadow_probe', 'retired')"}`
   );
 };
 

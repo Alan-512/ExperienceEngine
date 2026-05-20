@@ -1584,4 +1584,154 @@ describe("inspect command", () => {
       })
     ]);
   });
+
+  it("prints verbose portability scorecards and trajectory attributions", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+
+    const nodeRepo = new NodeRepository(db);
+    const inputRepo = new InputRecordRepository(db);
+    const injectionRepo = new InjectionRepository(db);
+    const attributionRepo = new AttributionRecordRepository(db);
+    const scopeId = resolveScope(process.cwd()).scope_id;
+
+    nodeRepo.upsert(makeNode({ scope_id: scopeId }));
+    inputRepo.upsert(
+      makeRecord({
+        scope_id: scopeId,
+        session_id: "session_verbose_port",
+        task_summary: "Investigate the payments auth test regression",
+        created_at: "2026-03-13T01:00:00.000Z"
+      })
+    );
+
+    const portScorecard = {
+      portabilityBand: "validated_portable",
+      score: 0.95,
+      matchedLanguage: true,
+      sharedDependencies: ["react"],
+      penalties: [
+        {
+          dependency: "react",
+          category: "framework",
+          penalty: 0.05,
+          reason: "minor version mismatch"
+        }
+      ],
+      negativeEvidence: ["harm_recorded"],
+      whyScore: "strong compatibility matching",
+      successReuseCount: 5,
+      harmCount: 0
+    };
+
+    injectionRepo.upsert(
+      makeInjectionEvent({
+        session_id: "session_verbose_port",
+        scope_id: scopeId,
+        scorecard: {
+          scopeId,
+          sessionId: "session_verbose_port",
+          taskType: "test_debug",
+          taskSummary: "Investigate the payments auth test regression",
+          mode: "inject",
+          interventionStrength: "strong_recommendation",
+          riskLevel: "medium",
+          recommendation: "Apply these hints normally",
+          reasons: ["Strong match"],
+          topCandidates: [
+            {
+              id: "node_inspect",
+              semanticScore: 0.8,
+              fusedScore: 0.8,
+              portabilityScorecard: portScorecard
+            }
+          ]
+        }
+      })
+    );
+
+    attributionRepo.insert(
+      makeAttributionRecord({
+        node_id: "node_inspect",
+        attribution_verdict: "adoption_detected",
+        confidence: "medium",
+        delivered: true,
+        source: "automatic",
+        trajectory_verdict: "adoption_detected",
+        trajectory_confidence: "medium",
+        trajectory_matched_expectations: ["modify src/index.ts"],
+        trajectory_violated_expectations: [],
+        trajectory_evidence_refs: ["task_run_123"]
+      })
+    );
+
+    runInspectCommand("--last", "--verbose");
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Portability scorecard:"],
+        ["- Band: validated_portable"],
+        ["- Score: 0.95"],
+        ["- Matched language: yes"],
+        ["- Shared dependencies: react"],
+        ["- SemVer penalties:"],
+        ["  - react (framework): -0.05 (minor version mismatch)"],
+        ["- Negative evidence: harm_recorded"],
+        ["- Reason: strong compatibility matching"],
+        ["- Success reuse count: 5"],
+        ["- Harm count: 0"],
+        ["- Attribution records:"],
+        ["  - node_inspect: adoption_detected (medium, delivered, source=automatic)"],
+        ["    Trajectory verdict: adoption_detected"],
+        ["    Trajectory confidence: medium"],
+        ["    Trajectory matched expectations: modify src/index.ts"],
+        ["    Trajectory evidence refs: task_run_123"]
+      ])
+    );
+  });
+
+  it("inspects a node and reports delivery state, vector migration status, fingerprint, and quarantine counters", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+
+    const nodeRepo = new NodeRepository(db);
+    const scopeId = resolveScope(process.cwd()).scope_id;
+
+    nodeRepo.upsert(
+      makeNode({
+        id: "node_quarantine_inspect",
+        scope_id: scopeId,
+        delivery_state: "shadow_probe",
+        migration_status: "migrated",
+        source_fingerprint_hash: "fingerprint-xyz",
+        quarantine_lease_expires_at: "2026-06-20T19:30:35Z",
+        quarantine_original_delivery_state: "eligible",
+        quarantine_release_attempt_count: 2,
+        quarantine_last_release_attempt_at: "2026-05-20T19:30:35Z",
+        quarantine_release_reason: "passed_shadow_probe",
+        quarantine_no_harm_pass_count: 1
+      })
+    );
+
+    runInspectCommand("node:node_quarantine_inspect");
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Node: node_quarantine_inspect"],
+        ["Delivery state: shadow_probe"],
+        ["Vector migration status: migrated"],
+        ["Source fingerprint hash: fingerprint-xyz"],
+        ["Quarantine lease expires at: 2026-06-20T19:30:35Z"],
+        ["Quarantine original delivery state: eligible"],
+        ["Quarantine release attempt count: 2"],
+        ["Quarantine last release attempt at: 2026-05-20T19:30:35Z"],
+        ["Quarantine release reason: passed_shadow_probe"],
+        ["Quarantine no harm pass count: 1"]
+      ])
+    );
+  });
 });

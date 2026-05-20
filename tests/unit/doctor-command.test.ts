@@ -1,5 +1,19 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runDoctorCommand } from "../../src/cli/commands/doctor.js";
+import { loadConfig } from "../../src/config/load-config.js";
+import { loadOfflineManifestForModel } from "../../src/store/vector/offline-manifest.js";
+
+vi.mock("../../src/config/load-config.js", async (importOriginal) => {
+  const original = await importOriginal<typeof import("../../src/config/load-config.js")>();
+  return {
+    ...original,
+    loadConfig: vi.fn(original.loadConfig)
+  };
+});
+
+vi.mock("../../src/store/vector/offline-manifest.js", () => ({
+  loadOfflineManifestForModel: vi.fn()
+}));
 
 const consoleTableSpy = vi.spyOn(console, "table").mockImplementation(() => {});
 const consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -9,6 +23,8 @@ const originalHoldoutRate = process.env.EXPERIENCE_ENGINE_HOLDOUT_RATE;
 afterEach(() => {
   consoleTableSpy.mockClear();
   consoleLogSpy.mockClear();
+  vi.mocked(loadConfig).mockReset();
+  vi.mocked(loadOfflineManifestForModel).mockReset();
   if (originalEvaluationMode === undefined) {
     delete process.env.EXPERIENCE_ENGINE_EVALUATION_MODE;
   } else {
@@ -1142,6 +1158,148 @@ describe("doctor command", () => {
         ["Host drift: Installed OpenClaw plugin bundle differs from the current ExperienceEngine package at dist/runtime/service.js."],
         ["OpenClaw workspace note: default workspace is the global OpenClaw workspace; ExperienceEngine will session-isolate unresolved turns instead of reusing broad workspace experience."],
         ["Recommended next step: ee repair openclaw"]
+      ])
+    );
+  });
+
+  it("reports local offline readiness, manifest id, and verified assets status when embedding is local", async () => {
+    const defaultConfig = loadConfig();
+    vi.mocked(loadConfig).mockReturnValue({
+      ...defaultConfig,
+      embeddingProvider: "local",
+      embeddingProfile: "strict-offline",
+      embeddingModel: "test-model-abc",
+      embeddingCacheDir: "/tmp/cache"
+    });
+    vi.mocked(loadOfflineManifestForModel).mockReturnValue({
+      id: "manifest-12345",
+      model: "test-model-abc",
+      assets: {}
+    } as any);
+
+    const defaultDeps = {
+      inspectCodexInstall: () => codexStatus(),
+      inspectClaudeCodeInstall: () => ({
+        adapter: "claude-code",
+        installed: true,
+        versionStatus: { recordedVersion: "0.1.0", currentVersion: "0.1.0", state: "current", updateAvailable: false },
+        hooksPresent: { userPromptSubmit: true, preToolUse: true, postToolUse: true, postToolUseFailure: true, sessionEnd: true },
+        hostWiring: { wired: true }
+      }) as never,
+      inspectOpenClawInstall: () => ({
+        adapter: "openclaw",
+        installed: true,
+        runtimeDefaults: { learningLoopState: "interaction_only", backgroundLearningEnabled: false, hybridPosttaskEnabled: false },
+        versionStatus: { recordedVersion: "0.1.0", currentVersion: "0.1.0", state: "current", updateAvailable: false },
+        hostWiring: { wired: true },
+        hostState: { enabled: true }
+      }) as never,
+      inspectFirstValueReadiness: () => ({
+        rawRecords: 0,
+        taskRuns: 0,
+        candidates: 0,
+        nodes: 0,
+        nextStep: "Warm up"
+      }),
+      inspectDecisionHealth: () => ({
+        totalDecisions: 0,
+        liveDecisions: 0,
+        shadowDecisions: 0,
+        holdoutDecisions: 0,
+        deliveredDecisions: 0,
+        suppressedDecisions: 0,
+        automaticHelpedCount: 0,
+        automaticHarmedCount: 0,
+        manualHelpedCount: 0,
+        manualHarmedCount: 0,
+        netHelpfulDecisions: 0
+      }),
+      inspectLearningQualityHealth: () => learningQualityHealth(),
+      inspectSharedSetupState: () => ({
+        initialized: true,
+        version: "0.1.0"
+      })
+    };
+
+    await runDoctorCommand(undefined, defaultDeps);
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["- Mode: local"],
+        ["- Profile: strict-offline"],
+        ["- Offline readiness: Ready"],
+        ["- Offline manifest ID: manifest-12345"],
+        ["- Offline assets: verified (checksums match)"]
+      ])
+    );
+  });
+
+  it("reports error diagnostics when loading local offline manifest fails", async () => {
+    const defaultConfig = loadConfig();
+    vi.mocked(loadConfig).mockReturnValue({
+      ...defaultConfig,
+      embeddingProvider: "local",
+      embeddingProfile: "strict-offline",
+      embeddingModel: "test-model-abc",
+      embeddingCacheDir: "/tmp/cache"
+    });
+    vi.mocked(loadOfflineManifestForModel).mockImplementation(() => {
+      throw new Error("Missing or corrupt manifest file");
+    });
+
+    const defaultDeps = {
+      inspectCodexInstall: () => codexStatus(),
+      inspectClaudeCodeInstall: () => ({
+        adapter: "claude-code",
+        installed: true,
+        versionStatus: { recordedVersion: "0.1.0", currentVersion: "0.1.0", state: "current", updateAvailable: false },
+        hooksPresent: { userPromptSubmit: true, preToolUse: true, postToolUse: true, postToolUseFailure: true, sessionEnd: true },
+        hostWiring: { wired: true }
+      }) as never,
+      inspectOpenClawInstall: () => ({
+        adapter: "openclaw",
+        installed: true,
+        runtimeDefaults: { learningLoopState: "interaction_only", backgroundLearningEnabled: false, hybridPosttaskEnabled: false },
+        versionStatus: { recordedVersion: "0.1.0", currentVersion: "0.1.0", state: "current", updateAvailable: false },
+        hostWiring: { wired: true },
+        hostState: { enabled: true }
+      }) as never,
+      inspectFirstValueReadiness: () => ({
+        rawRecords: 0,
+        taskRuns: 0,
+        candidates: 0,
+        nodes: 0,
+        nextStep: "Warm up"
+      }),
+      inspectDecisionHealth: () => ({
+        totalDecisions: 0,
+        liveDecisions: 0,
+        shadowDecisions: 0,
+        holdoutDecisions: 0,
+        deliveredDecisions: 0,
+        suppressedDecisions: 0,
+        automaticHelpedCount: 0,
+        automaticHarmedCount: 0,
+        manualHelpedCount: 0,
+        manualHarmedCount: 0,
+        netHelpfulDecisions: 0
+      }),
+      inspectLearningQualityHealth: () => learningQualityHealth(),
+      inspectSharedSetupState: () => ({
+        initialized: true,
+        version: "0.1.0"
+      })
+    };
+
+    await runDoctorCommand(undefined, defaultDeps);
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["- Mode: local"],
+        ["- Profile: strict-offline"],
+        ["- Offline readiness: Error"],
+        ["- Offline manifest error: Missing or corrupt manifest file"],
+        ["  Warning: Strict offline profile is set, but offline assets are not ready or are corrupt."]
       ])
     );
   });

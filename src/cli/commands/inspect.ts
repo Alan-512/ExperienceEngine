@@ -12,7 +12,7 @@ import type { ExportDraftRisk } from "../../maintenance/experience-export-drafts
 
 const NODE_STATES: ExperienceNode["state"][] = ["candidate", "priority_candidate", "active", "cooling", "retired"];
 const NODE_TYPES: ExperienceNode["node_type"][] = ["strategy", "warning"];
-const DELIVERY_STATES: DeliveryState[] = ["shadow_only", "conservative_only", "eligible", "quarantined"];
+const DELIVERY_STATES: DeliveryState[] = ["shadow_only", "conservative_only", "eligible", "quarantined", "shadow_probe", "retired"];
 const HYGIENE_TYPES: HygieneFindingType[] = [
   "stale_experience",
   "duplicate_guidance",
