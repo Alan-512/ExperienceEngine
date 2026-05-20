@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite";
-import type { EmbeddingSpace, ExperienceNode } from "../types/domain.js";
+import type { ExperienceNode } from "../types/domain.js";
+import type { EmbeddingSpace } from "../store/vector/embeddings.js";
 import { embedPassageText } from "../store/vector/embeddings.js";
 import { withTransaction } from "../store/sqlite/db.js";
 import { NodeRepository } from "../store/sqlite/repositories/node-repo.js";
@@ -80,7 +81,7 @@ export class VectorMigrationPipeline {
       const pendingRows = db
         .prepare(
           `SELECT * FROM experience_nodes
-           WHERE migration_status IN ('pending', 'failed', 'migrating')
+           WHERE migration_status = 'pending'
            LIMIT ?`
         )
         .all(batchSize) as Array<Parameters<NodeRepository["mapNode"]>[0]>;
@@ -119,6 +120,19 @@ export class VectorMigrationPipeline {
       try {
         // 调用 embedPassageText 重编码
         const embeddingResult = await embedPassageText(retrievalText, { config });
+
+        const spaceMatched =
+          embeddingResult.space.provider === currentSpace.provider &&
+          embeddingResult.space.model === currentSpace.model &&
+          embeddingResult.space.version === currentSpace.version &&
+          embeddingResult.space.dimensions === currentSpace.dimensions &&
+          (embeddingResult.space.manifestId ?? undefined) === (currentSpace.manifestId ?? undefined);
+
+        if (!spaceMatched) {
+          throw new Error(
+            `Migration fallback detected: re-encoded space ${embeddingResult.space.provider}/${embeddingResult.space.model} does not match target space ${currentSpace.provider}/${currentSpace.model}`
+          );
+        }
 
         // 3. 单个小事务写入成功状态
         withTransaction(db, () => {

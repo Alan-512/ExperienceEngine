@@ -559,9 +559,43 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     console.log("Distillation summary:");
     console.log(`- Provider: ${config.distillerProvider}`);
     console.log(`- Model: ${config.distillerModel}`);
+    
+    let totalNodes = 0;
+    let completedCount = 0;
+    let pendingCount = 0;
+    let migratingCount = 0;
+    let failedCount = 0;
+
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    try {
+      const nodeRepo = new NodeRepository(db);
+      const allNodes = nodeRepo.listAll();
+      totalNodes = allNodes.length;
+      for (const node of allNodes) {
+        const status = node.migration_status;
+        if (status === "current") {
+          completedCount += 1;
+        } else if (status === "migrating") {
+          migratingCount += 1;
+        } else if (status === "failed") {
+          failedCount += 1;
+        } else {
+          pendingCount += 1;
+        }
+      }
+    } catch {
+      // Graceful fallback if DB is locked or tables don't exist
+    } finally {
+      db.close();
+    }
+
     console.log("Embedding summary:");
     console.log(`- Mode: ${config.embeddingProvider}`);
     console.log(`- API provider override: ${config.embeddingApiProvider}`);
+    console.log(
+      `- Vector migration: completed=${completedCount}, pending=${pendingCount}, migrating=${migratingCount}, failed=${failedCount} (total=${totalNodes})`
+    );
     logRegistryHealth(registryHealth);
     logEvaluationMode();
     const aggregateSetupState =

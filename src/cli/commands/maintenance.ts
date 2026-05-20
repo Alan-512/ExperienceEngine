@@ -11,6 +11,8 @@ import { bootstrapDatabase, openDatabase } from "../../store/sqlite/db.js";
 import { CandidateRepository } from "../../store/sqlite/repositories/candidate-repo.js";
 import { NodeRepository } from "../../store/sqlite/repositories/node-repo.js";
 import { resetManagedEmbeddingCache } from "../../store/vector/local-provider.js";
+import { VectorMigrationPipeline } from "../../maintenance/vector-migrator.js";
+import { embedQueryText } from "../../store/vector/embeddings.js";
 
 type MaintenanceDeps = {
   loadConfig?: typeof loadConfig;
@@ -44,6 +46,39 @@ const parseGovernanceDrainArgs = (args: string[]): { cwd?: string; maxActions?: 
       }
     }
     return null;
+  }
+  return parsed;
+};
+
+const parseMigrateArgs = (args: string[]): { batchSize?: number; throttleGapMs?: number; maxTotal?: number } => {
+  const parsed: { batchSize?: number; throttleGapMs?: number; maxTotal?: number } = {};
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index];
+    const next = args[index + 1];
+    if (value === "--batch-size" && next) {
+      const batchSize = Number(next);
+      if (Number.isInteger(batchSize) && batchSize > 0) {
+        parsed.batchSize = batchSize;
+        index += 1;
+        continue;
+      }
+    }
+    if (value === "--throttle-gap" && next) {
+      const throttleGap = Number(next);
+      if (Number.isInteger(throttleGap) && throttleGap >= 0) {
+        parsed.throttleGapMs = throttleGap;
+        index += 1;
+        continue;
+      }
+    }
+    if (value === "--max-total" && next) {
+      const maxTotal = Number(next);
+      if (Number.isInteger(maxTotal) && maxTotal > 0) {
+        parsed.maxTotal = maxTotal;
+        index += 1;
+        continue;
+      }
+    }
   }
   return parsed;
 };
@@ -196,7 +231,7 @@ export const runMaintenanceCommand = async (
     if (!sourceScopeId || !targetScopeId) {
       console.log("[ExperienceEngine] merge-scope requires <sourceScopeId> <targetScopeId>.");
       console.log(
-        "Usage: ee maintenance embeddings-reset|embedding-smoke|governance drain|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
+        "Usage: ee maintenance embeddings-reset|embedding-smoke|governance drain|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>|migrate [--batch-size <n>] [--throttle-gap <ms>] [--max-total <n>]"
       );
       return;
     }
@@ -212,7 +247,58 @@ export const runMaintenanceCommand = async (
     return;
   }
 
+  if (action === "migrate") {
+    const parsed = parseMigrateArgs(args);
+
+    console.log("[ExperienceEngine] Detecting active embedding space...");
+    let currentSpace;
+    try {
+      const probeResult = await embedQueryText("migration_probe", { config });
+      currentSpace = probeResult.space;
+      console.log(
+        `[ExperienceEngine] Active space: ${currentSpace.provider}/${currentSpace.model} (${currentSpace.dimensions}d, manifest=${currentSpace.manifestId || "none"})`
+      );
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error);
+      console.error(`[ExperienceEngine] Failed to resolve active space: ${msg}`);
+      return;
+    }
+
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    try {
+      const pipeline = new VectorMigrationPipeline();
+      console.log("[ExperienceEngine] Discovering nodes needing migration...");
+      const pendingCount = pipeline.discoverPendingNodes(db, currentSpace);
+      console.log(`[ExperienceEngine] Discovered ${pendingCount} pending nodes.`);
+
+      if (pendingCount === 0) {
+        console.log("[ExperienceEngine] All vectors are up-to-date in active space. No migration needed.");
+        return;
+      }
+
+      console.log("[ExperienceEngine] Running vector migration pipeline...");
+      const report = await pipeline.runMigration(db, currentSpace, {
+        config,
+        batchSize: parsed.batchSize,
+        throttleGapMs: parsed.throttleGapMs,
+        maxTotalToProcess: parsed.maxTotal
+      });
+
+      console.log("[ExperienceEngine] Vector migration finished!");
+      console.log(
+        `[ExperienceEngine] Total discovered: ${report.totalDiscovered} | Processed: ${report.processed} | Succeeded: ${report.succeeded} | Failed: ${report.failed}`
+      );
+    } catch (error) {
+      const msg = error instanceof Error ? error.stack || error.message : String(error);
+      console.error(`[ExperienceEngine] Fatal migration error: ${msg}`);
+    } finally {
+      db.close();
+    }
+    return;
+  }
+
   console.log(
-    "Usage: ee maintenance embeddings-reset|embedding-smoke|governance drain|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
+    "Usage: ee maintenance embeddings-reset|embedding-smoke|governance drain|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>|migrate [--batch-size <n>] [--throttle-gap <ms>] [--max-total <n>]"
   );
 };

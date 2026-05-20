@@ -193,7 +193,7 @@ describe("maintenance command", () => {
     await runMaintenanceCommand("unknown");
 
     expect(consoleLogSpy).toHaveBeenCalledWith(
-      "Usage: ee maintenance embeddings-reset|embedding-smoke|governance drain|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
+      "Usage: ee maintenance embeddings-reset|embedding-smoke|governance drain|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>|migrate [--batch-size <n>] [--throttle-gap <ms>] [--max-total <n>]"
     );
   });
 
