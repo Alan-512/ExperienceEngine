@@ -17,6 +17,7 @@ export type HostPromptContext = {
   taskSummary?: string;
   contextSummary?: string;
   injectedNodeIds?: string[];
+  outcomeSignal?: string;
 };
 
 export type HostToolResult = {

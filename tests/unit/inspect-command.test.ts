@@ -1645,17 +1645,17 @@ describe("inspect command", () => {
               id: "node_inspect",
               semanticScore: 0.8,
               fusedScore: 0.8,
-              portabilityScorecard: portScorecard
-            }
+              portabilityScorecard: portScorecard as any
+            } as any
           ]
-        }
+        } as any
       })
     );
 
     attributionRepo.insert(
       makeAttributionRecord({
         node_id: "node_inspect",
-        attribution_verdict: "adoption_detected",
+        attribution_verdict: "adoption_detected" as any,
         confidence: "medium",
         delivered: true,
         source: "automatic",
@@ -1706,7 +1706,7 @@ describe("inspect command", () => {
         id: "node_quarantine_inspect",
         scope_id: scopeId,
         delivery_state: "shadow_probe",
-        migration_status: "migrated",
+        migration_status: "migrated" as any,
         source_fingerprint_hash: "fingerprint-xyz",
         quarantine_lease_expires_at: "2026-06-20T19:30:35Z",
         quarantine_original_delivery_state: "eligible",

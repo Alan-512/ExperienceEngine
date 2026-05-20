@@ -362,6 +362,30 @@ describe("TrajectoryMatcher Engine Tests", () => {
       expect(res.matchedExpectationIds.length).toBe(2);
       expect(res.violatedExpectationIds.length).toBe(0);
     });
+
+    it("should match artifact expectations when tool_name is apply_patch with a realistic JSON stringified input summary", () => {
+      const compiled = TrajectoryCompiler.compileNodeExpectations(
+        ["modify src/index.ts"], 
+        []
+      );
+
+      const events: ToolEvent[] = [
+        { 
+          event_id: "e1", 
+          tool_name: "apply_patch", 
+          // Realistic stringified JSON with patch format that might contain escaped newlines and path
+          input_summary: '{"patch":"*** Update File: src\\\\index.ts\\n--- a/src/index.ts\\n+++ b/src/index.ts\\n@@ -1,3 +1,4 @@\\n+console.log(\\"test\\");","path":"src/index.ts"}',
+          status: "success", 
+          started_at: "2026-05-20" 
+        }
+      ];
+
+      const res = TrajectoryMatcher.match(compiled, events, "success");
+      expect(res.verdict).toBe("adoption_detected");
+      expect(res.confidence).toBe("medium");
+      expect(res.matchedExpectationIds.length).toBe(1);
+      expect(res.violatedExpectationIds.length).toBe(0);
+    });
   });
 
   describe("P1 Artifact Read vs Write matching", () => {

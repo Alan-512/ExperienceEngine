@@ -1213,7 +1213,7 @@ describe("doctor command", () => {
         manualHelpedCount: 0,
         manualHarmedCount: 0,
         netHelpfulDecisions: 0
-      }),
+      } as any),
       inspectLearningQualityHealth: () => learningQualityHealth(),
       inspectSharedSetupState: () => ({
         initialized: true,
@@ -1283,7 +1283,7 @@ describe("doctor command", () => {
         manualHelpedCount: 0,
         manualHarmedCount: 0,
         netHelpfulDecisions: 0
-      }),
+      } as any),
       inspectLearningQualityHealth: () => learningQualityHealth(),
       inspectSharedSetupState: () => ({
         initialized: true,

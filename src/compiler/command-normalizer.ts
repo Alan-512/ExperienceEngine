@@ -195,7 +195,8 @@ export class CommandNormalizer {
         // *** Update File: path
         // *** Add File: path
         // *** Delete File: path
-        const patchPattern = /\*\*\*\s+(?:Update|Add|Delete)\s+File:\s*([^\r\n]+)/gi;
+        // Stop at any double quote, backslash, or comma which might demarcate JSON fields.
+        const patchPattern = /\*\*\*\s+(?:Update|Add|Delete)\s+File:\s*([^\r\n"\\,]+)/gi;
         let match;
         while ((match = patchPattern.exec(text)) !== null) {
           if (match[1]) {
@@ -206,7 +207,8 @@ export class CommandNormalizer {
         // Regex to match git/standard diff headers:
         // --- a/path
         // +++ b/path
-        const diffPattern = /^(?:--- a\/|\+\+\+ b\/)([^\r\n\t ]+)/gm;
+        // Support optional quotes that may prefix/suffix headers in JSON formatting
+        const diffPattern = /^(?:"?--- a\/|"?\+\+\+ b\/)([^\r\n\t "]+)/gm;
         let diffMatch;
         while ((diffMatch = diffPattern.exec(text)) !== null) {
           if (diffMatch[1]) {
@@ -239,18 +241,25 @@ export class CommandNormalizer {
         }
       };
 
-      // 1. Try parsing input_summary as JSON
-      if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+      // Unescape escaped newline structures and replace double backslashes
+      let normalizedText = trimmed
+        .replace(/\\r\\n/g, "\n")
+        .replace(/\\n/g, "\n")
+        .replace(/\\r/g, "\n")
+        .replace(/\\\\/g, "/");
+
+      // 1. Try parsing normalizedText as JSON
+      if (normalizedText.startsWith("{") || normalizedText.startsWith("[")) {
         try {
-          const parsed = JSON.parse(trimmed);
+          const parsed = JSON.parse(normalizedText);
           walkJson(parsed);
         } catch {
           // ignore parsing error, fallback to raw string extraction
         }
       }
 
-      // 2. Also run regex on raw string directly in case JSON parsing failed or wasn't used
-      extractPathsFromString(trimmed);
+      // 2. Also run regex on normalized text directly
+      extractPathsFromString(normalizedText);
 
       // 3. Fallback if no paths were resolved
       if (pathsSet.size === 0) {
