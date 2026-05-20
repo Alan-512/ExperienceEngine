@@ -8,6 +8,15 @@ CREATE TABLE IF NOT EXISTS scopes (
   updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS scope_fingerprints (
+  scope_id TEXT PRIMARY KEY,
+  schema_version TEXT NOT NULL,
+  fingerprint_hash TEXT NOT NULL,
+  fingerprint_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS experience_input_records (
   record_id TEXT PRIMARY KEY,
   episode_id TEXT,
@@ -152,6 +161,18 @@ CREATE TABLE IF NOT EXISTS experience_nodes (
   last_harmed_at TEXT,
   quarantined_at TEXT,
   quarantine_reason TEXT,
+  embedding_manifest_id TEXT,
+  migration_status TEXT,
+  migration_last_error TEXT,
+  migration_updated_at TEXT,
+  source_fingerprint_hash TEXT,
+  portable_validation_evidence_json TEXT,
+  quarantine_lease_expires_at TEXT,
+  quarantine_original_delivery_state TEXT,
+  quarantine_release_attempt_count INTEGER,
+  quarantine_last_release_attempt_at TEXT,
+  quarantine_release_reason TEXT,
+  quarantine_no_harm_pass_count INTEGER,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -255,6 +276,11 @@ CREATE TABLE IF NOT EXISTS attribution_records (
   user_override TEXT,
   source TEXT NOT NULL,
   attribution_reason TEXT,
+  trajectory_verdict TEXT,
+  trajectory_confidence TEXT,
+  trajectory_matched_expectations_json TEXT,
+  trajectory_violated_expectations_json TEXT,
+  trajectory_evidence_refs_json TEXT,
   created_at TEXT NOT NULL,
   resolved_at TEXT
 );

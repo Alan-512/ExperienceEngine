@@ -228,4 +228,56 @@ describe("NodeRepository", () => {
 
     expect(diagnosticCandidates.map((entry) => entry.id)).toEqual(["scope-candidate"]);
   });
+
+  it("round-trips new portability and quarantine release fields", () => {
+    const { repo } = makeRepo();
+
+    repo.upsert(
+      node({
+        id: "node_portability",
+        embedding_manifest_id: "manifest_123",
+        migration_status: "pending",
+        migration_last_error: "connection timeout",
+        migration_updated_at: "2026-05-20T03:00:00.000Z",
+        source_fingerprint_hash: "hash_abc",
+        portable_validation_evidence: {
+          compatibilityClasses: {
+            "class_1": {
+              successReuseCount: 3,
+              harmCount: 0,
+              lastUsedAt: 1716180000000
+            }
+          }
+        },
+        quarantine_lease_expires_at: "2026-05-27T00:00:00.000Z",
+        quarantine_original_delivery_state: "eligible",
+        quarantine_release_attempt_count: 2,
+        quarantine_last_release_attempt_at: "2026-05-20T04:00:00.000Z",
+        quarantine_release_reason: "no harm observed in 3 shadow tasks",
+        quarantine_no_harm_pass_count: 3
+      })
+    );
+
+    const stored = repo.getById("node_portability");
+    expect(stored?.embedding_manifest_id).toBe("manifest_123");
+    expect(stored?.migration_status).toBe("pending");
+    expect(stored?.migration_last_error).toBe("connection timeout");
+    expect(stored?.migration_updated_at).toBe("2026-05-20T03:00:00.000Z");
+    expect(stored?.source_fingerprint_hash).toBe("hash_abc");
+    expect(stored?.portable_validation_evidence).toEqual({
+      compatibilityClasses: {
+        "class_1": {
+          successReuseCount: 3,
+          harmCount: 0,
+          lastUsedAt: 1716180000000
+        }
+      }
+    });
+    expect(stored?.quarantine_lease_expires_at).toBe("2026-05-27T00:00:00.000Z");
+    expect(stored?.quarantine_original_delivery_state).toBe("eligible");
+    expect(stored?.quarantine_release_attempt_count).toBe(2);
+    expect(stored?.quarantine_last_release_attempt_at).toBe("2026-05-20T04:00:00.000Z");
+    expect(stored?.quarantine_release_reason).toBe("no harm observed in 3 shadow tasks");
+    expect(stored?.quarantine_no_harm_pass_count).toBe(3);
+  });
 });

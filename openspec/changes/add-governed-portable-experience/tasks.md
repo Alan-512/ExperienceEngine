@@ -1,10 +1,10 @@
 ## 1. Baseline And Data Model
 
-- [ ] 1.1 Add focused baseline tests proving current same-scope retrieval, cross-scope conservative behavior, neutral/unknown attribution, and quarantine delivery gates before changing behavior.
-- [ ] 1.2 Add domain types for embedding profile/space metadata, offline asset manifests, vector migration status, compatibility fingerprints, portability bands, trajectory verdicts, and quarantine release metadata.
-- [ ] 1.3 Add SQLite migrations for the new persisted fields or tables required by embedding migration, compatibility fingerprints, portability validation, trajectory attribution, and quarantine release.
-- [ ] 1.4 Update repositories to read/write the new metadata while preserving existing row compatibility and legacy defaults.
-- [ ] 1.5 Add migration/backfill tests for existing databases with old nodes, old embeddings, old attribution records, and old quarantined nodes.
+- [x] 1.1 Add focused baseline tests proving current same-scope retrieval, cross-scope conservative behavior, neutral/unknown attribution, and quarantine delivery gates before changing behavior.
+- [x] 1.2 Add domain types for embedding profile/space metadata, offline asset manifests, vector migration status, compatibility fingerprints, portability bands, trajectory verdicts, and quarantine release metadata.
+- [x] 1.3 Add SQLite migrations for the new persisted fields or tables required by embedding migration, compatibility fingerprints, portability validation, trajectory attribution, and quarantine release.
+- [x] 1.4 Update repositories to read/write the new metadata while preserving existing row compatibility and legacy defaults.
+- [x] 1.5 Add migration/backfill tests for existing databases with old nodes, old embeddings, old attribution records, and old quarantined nodes.
 
 ## 2. Offline Embedding Profile
 

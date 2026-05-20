@@ -116,6 +116,18 @@ describe("bootstrapDatabase", () => {
     expect(columnNames).toContain("last_feedback_verdict");
     expect(columnNames).toContain("quarantined_at");
     expect(columnNames).toContain("quarantine_reason");
+    expect(columnNames).toContain("embedding_manifest_id");
+    expect(columnNames).toContain("migration_status");
+    expect(columnNames).toContain("migration_last_error");
+    expect(columnNames).toContain("migration_updated_at");
+    expect(columnNames).toContain("source_fingerprint_hash");
+    expect(columnNames).toContain("portable_validation_evidence_json");
+    expect(columnNames).toContain("quarantine_lease_expires_at");
+    expect(columnNames).toContain("quarantine_original_delivery_state");
+    expect(columnNames).toContain("quarantine_release_attempt_count");
+    expect(columnNames).toContain("quarantine_last_release_attempt_at");
+    expect(columnNames).toContain("quarantine_release_reason");
+    expect(columnNames).toContain("quarantine_no_harm_pass_count");
   });
 
   it("adds expectation-correction columns to an existing experience_candidates table", () => {
@@ -175,6 +187,53 @@ describe("bootstrapDatabase", () => {
     expect(tableNames).toContain("review_events");
     expect(tableNames).toContain("hybrid_review_artifacts");
     expect(tableNames).toContain("hybrid_invocation_traces");
+  });
+
+  it("adds trajectory columns to an existing attribution_records table", () => {
+    const runtimeDir = makeTempDir();
+    const dbPath = join(runtimeDir, "experienceengine.db");
+    const db = new DatabaseSync(dbPath);
+
+    db.exec(`
+      CREATE TABLE attribution_records (
+        id TEXT PRIMARY KEY,
+        injection_id TEXT,
+        node_id TEXT NOT NULL,
+        delivered INTEGER NOT NULL,
+        outcome TEXT NOT NULL,
+        attribution_verdict TEXT NOT NULL,
+        confidence TEXT NOT NULL,
+        evidence_refs_json TEXT NOT NULL,
+        source TEXT NOT NULL,
+        created_at TEXT NOT NULL
+      );
+    `);
+
+    bootstrapDatabase(db);
+
+    const columns = db.prepare("PRAGMA table_info(attribution_records)").all() as Array<{ name: string }>;
+    const columnNames = columns.map((column) => column.name);
+
+    expect(columnNames).toContain("trajectory_verdict");
+    expect(columnNames).toContain("trajectory_confidence");
+    expect(columnNames).toContain("trajectory_matched_expectations_json");
+    expect(columnNames).toContain("trajectory_violated_expectations_json");
+    expect(columnNames).toContain("trajectory_evidence_refs_json");
+  });
+
+  it("creates scope_fingerprints table on bootstrap", () => {
+    const runtimeDir = makeTempDir();
+    const dbPath = join(runtimeDir, "experienceengine.db");
+    const db = new DatabaseSync(dbPath);
+
+    bootstrapDatabase(db);
+
+    const tables = db
+      .prepare("SELECT name FROM sqlite_master WHERE type = 'table'")
+      .all() as Array<{ name: string }>;
+    const tableNames = tables.map((table) => table.name);
+
+    expect(tableNames).toContain("scope_fingerprints");
   });
 });
 

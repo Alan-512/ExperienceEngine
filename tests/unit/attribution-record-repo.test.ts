@@ -105,4 +105,26 @@ describe("AttributionRecordRepository", () => {
     });
     expect(repo.countByVerdict("strong_harmed")).toBe(1);
   });
+
+  it("round-trips new trajectory attribution fields", () => {
+    const repo = new AttributionRecordRepository(makeDb());
+
+    repo.insert(
+      attributionRecord({
+        id: "attr_trajectory",
+        trajectory_verdict: "adoption_detected",
+        trajectory_confidence: "high",
+        trajectory_matched_expectations: ["step_1", "step_2"],
+        trajectory_violated_expectations: ["step_avoid"],
+        trajectory_evidence_refs: ["tool_run_1", "file_write_2"]
+      })
+    );
+
+    const stored = repo.getById("attr_trajectory");
+    expect(stored?.trajectory_verdict).toBe("adoption_detected");
+    expect(stored?.trajectory_confidence).toBe("high");
+    expect(stored?.trajectory_matched_expectations).toEqual(["step_1", "step_2"]);
+    expect(stored?.trajectory_violated_expectations).toEqual(["step_avoid"]);
+    expect(stored?.trajectory_evidence_refs).toEqual(["tool_run_1", "file_write_2"]);
+  });
 });

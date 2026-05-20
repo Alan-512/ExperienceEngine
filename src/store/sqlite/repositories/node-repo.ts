@@ -71,6 +71,18 @@ export class NodeRepository {
     last_harmed_at: string | null;
     quarantined_at: string | null;
     quarantine_reason: string | null;
+    embedding_manifest_id: string | null;
+    migration_status: ExperienceNode["migration_status"] | null;
+    migration_last_error: string | null;
+    migration_updated_at: string | null;
+    source_fingerprint_hash: string | null;
+    portable_validation_evidence_json: string | null;
+    quarantine_lease_expires_at: string | null;
+    quarantine_original_delivery_state: ExperienceNode["quarantine_original_delivery_state"] | null;
+    quarantine_release_attempt_count: number | null;
+    quarantine_last_release_attempt_at: string | null;
+    quarantine_release_reason: string | null;
+    quarantine_no_harm_pass_count: number | null;
     created_at: string;
     updated_at: string;
   }): ExperienceNode {
@@ -129,6 +141,18 @@ export class NodeRepository {
       last_harmed_at: row.last_harmed_at ?? undefined,
       quarantined_at: row.quarantined_at ?? undefined,
       quarantine_reason: row.quarantine_reason ?? undefined,
+      embedding_manifest_id: row.embedding_manifest_id ?? undefined,
+      migration_status: (row.migration_status as ExperienceNode["migration_status"]) ?? undefined,
+      migration_last_error: row.migration_last_error ?? undefined,
+      migration_updated_at: row.migration_updated_at ?? undefined,
+      source_fingerprint_hash: row.source_fingerprint_hash ?? undefined,
+      portable_validation_evidence: row.portable_validation_evidence_json ? JSON.parse(row.portable_validation_evidence_json) : undefined,
+      quarantine_lease_expires_at: row.quarantine_lease_expires_at ?? undefined,
+      quarantine_original_delivery_state: (row.quarantine_original_delivery_state as ExperienceNode["quarantine_original_delivery_state"]) ?? undefined,
+      quarantine_release_attempt_count: row.quarantine_release_attempt_count ?? undefined,
+      quarantine_last_release_attempt_at: row.quarantine_last_release_attempt_at ?? undefined,
+      quarantine_release_reason: row.quarantine_release_reason ?? undefined,
+      quarantine_no_harm_pass_count: row.quarantine_no_harm_pass_count ?? undefined,
       created_at: row.created_at,
       updated_at: row.updated_at
     };
@@ -190,6 +214,18 @@ export class NodeRepository {
       last_harmed_at: node.last_harmed_at ?? null,
       quarantined_at: node.quarantined_at ?? null,
       quarantine_reason: node.quarantine_reason ?? null,
+      embedding_manifest_id: node.embedding_manifest_id ?? null,
+      migration_status: node.migration_status ?? null,
+      migration_last_error: node.migration_last_error ?? null,
+      migration_updated_at: node.migration_updated_at ?? null,
+      source_fingerprint_hash: node.source_fingerprint_hash ?? null,
+      portable_validation_evidence_json: node.portable_validation_evidence ? JSON.stringify(node.portable_validation_evidence) : null,
+      quarantine_lease_expires_at: node.quarantine_lease_expires_at ?? null,
+      quarantine_original_delivery_state: node.quarantine_original_delivery_state ?? null,
+      quarantine_release_attempt_count: node.quarantine_release_attempt_count ?? null,
+      quarantine_last_release_attempt_at: node.quarantine_last_release_attempt_at ?? null,
+      quarantine_release_reason: node.quarantine_release_reason ?? null,
+      quarantine_no_harm_pass_count: node.quarantine_no_harm_pass_count ?? null,
       created_at: node.created_at,
       updated_at: node.updated_at
     };
@@ -200,12 +236,12 @@ export class NodeRepository {
           (id, node_type, scope_id, task_type, experience_kind, confidence_signal, validation_state, correction_scope, correction_category, deviation_pattern, corrected_constraint, trigger_pattern, applicability_notes, env_signature, compact_hint, goal, recommended_steps_json,
            avoid_steps_json, fallback_steps_json, success_signal, stop_condition, escalation_condition, evidence_summary, retrieval_text, embedding_json, embedding_provider, embedding_model, embedding_version, embedding_dimensions, distillation_mode_used, distillation_source, redistilled_from, promotion_signal, promotion_reason, merge_decision, merge_reason, priority_promotion_applied, source_kind,
            origin_record_ids_json, helped_record_ids_json, harmed_record_ids_json, state, delivery_state,
-           usage_count, helped_count, harmed_count, consecutive_harmed_count, last_feedback_verdict, support_count, last_used_at, last_helped_at, last_harmed_at, quarantined_at, quarantine_reason, created_at, updated_at)
+            usage_count, helped_count, harmed_count, consecutive_harmed_count, last_feedback_verdict, support_count, last_used_at, last_helped_at, last_harmed_at, quarantined_at, quarantine_reason, embedding_manifest_id, migration_status, migration_last_error, migration_updated_at, source_fingerprint_hash, portable_validation_evidence_json, quarantine_lease_expires_at, quarantine_original_delivery_state, quarantine_release_attempt_count, quarantine_last_release_attempt_at, quarantine_release_reason, quarantine_no_harm_pass_count, created_at, updated_at)
          VALUES
          (@id, @node_type, @scope_id, @task_type, @experience_kind, @confidence_signal, @validation_state, @correction_scope, @correction_category, @deviation_pattern, @corrected_constraint, @trigger_pattern, @applicability_notes, @env_signature, @compact_hint, @goal, @recommended_steps_json,
            @avoid_steps_json, @fallback_steps_json, @success_signal, @stop_condition, @escalation_condition, @evidence_summary, @retrieval_text, @embedding_json, @embedding_provider, @embedding_model, @embedding_version, @embedding_dimensions, @distillation_mode_used, @distillation_source, @redistilled_from, @promotion_signal, @promotion_reason, @merge_decision, @merge_reason, @priority_promotion_applied, @source_kind,
            @origin_record_ids_json, @helped_record_ids_json, @harmed_record_ids_json, @state, @delivery_state,
-           @usage_count, @helped_count, @harmed_count, @consecutive_harmed_count, @last_feedback_verdict, @support_count, @last_used_at, @last_helped_at, @last_harmed_at, @quarantined_at, @quarantine_reason, @created_at, @updated_at)
+           @usage_count, @helped_count, @harmed_count, @consecutive_harmed_count, @last_feedback_verdict, @support_count, @last_used_at, @last_helped_at, @last_harmed_at, @quarantined_at, @quarantine_reason, @embedding_manifest_id, @migration_status, @migration_last_error, @migration_updated_at, @source_fingerprint_hash, @portable_validation_evidence_json, @quarantine_lease_expires_at, @quarantine_original_delivery_state, @quarantine_release_attempt_count, @quarantine_last_release_attempt_at, @quarantine_release_reason, @quarantine_no_harm_pass_count, @created_at, @updated_at)
          ON CONFLICT(id) DO UPDATE SET
           experience_kind = excluded.experience_kind,
           confidence_signal = excluded.confidence_signal,
@@ -257,6 +293,18 @@ export class NodeRepository {
           last_harmed_at = excluded.last_harmed_at,
           quarantined_at = excluded.quarantined_at,
           quarantine_reason = excluded.quarantine_reason,
+          embedding_manifest_id = excluded.embedding_manifest_id,
+          migration_status = excluded.migration_status,
+          migration_last_error = excluded.migration_last_error,
+          migration_updated_at = excluded.migration_updated_at,
+          source_fingerprint_hash = excluded.source_fingerprint_hash,
+          portable_validation_evidence_json = excluded.portable_validation_evidence_json,
+          quarantine_lease_expires_at = excluded.quarantine_lease_expires_at,
+          quarantine_original_delivery_state = excluded.quarantine_original_delivery_state,
+          quarantine_release_attempt_count = excluded.quarantine_release_attempt_count,
+          quarantine_last_release_attempt_at = excluded.quarantine_last_release_attempt_at,
+          quarantine_release_reason = excluded.quarantine_release_reason,
+          quarantine_no_harm_pass_count = excluded.quarantine_no_harm_pass_count,
           updated_at = excluded.updated_at`
       )
       .run(payload);

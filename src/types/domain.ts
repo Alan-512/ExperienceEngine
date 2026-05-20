@@ -11,7 +11,7 @@ export type TaskType =
 export type ResolvedTaskType = TaskType | "unknown";
 
 export type ExperienceState = "candidate" | "priority_candidate" | "active" | "cooling" | "retired";
-export type DeliveryState = "shadow_only" | "conservative_only" | "eligible" | "quarantined";
+export type DeliveryState = "shadow_only" | "conservative_only" | "eligible" | "quarantined" | "shadow_probe" | "retired";
 export type ExperienceNodeType = "strategy" | "warning";
 export type PromotionSignal = "normal" | "high_value";
 export type MergeAction = "ADD" | "UPDATE" | "NONE";
@@ -338,6 +338,24 @@ export type ExperienceNode = {
   last_harmed_at?: string;
   quarantined_at?: string;
   quarantine_reason?: string;
+  embedding_manifest_id?: string;
+  migration_status?: 'current' | 'pending' | 'migrating' | 'failed';
+  migration_last_error?: string;
+  migration_updated_at?: string;
+  source_fingerprint_hash?: string;
+  portable_validation_evidence?: {
+    compatibilityClasses: Record<string, {
+      successReuseCount: number;
+      harmCount: number;
+      lastUsedAt: number;
+    }>;
+  };
+  quarantine_lease_expires_at?: string;
+  quarantine_original_delivery_state?: DeliveryState;
+  quarantine_release_attempt_count?: number;
+  quarantine_last_release_attempt_at?: string;
+  quarantine_release_reason?: string;
+  quarantine_no_harm_pass_count?: number;
   created_at: string;
   updated_at: string;
 };
@@ -378,6 +396,11 @@ export type AttributionRecord = {
   user_override?: "helped" | "harmed" | "neutral";
   source: AttributionSource;
   attribution_reason?: FeedbackAttributionReason | "manual_override" | "diagnostic_record";
+  trajectory_verdict?: string;
+  trajectory_confidence?: string;
+  trajectory_matched_expectations?: string[];
+  trajectory_violated_expectations?: string[];
+  trajectory_evidence_refs?: string[];
   created_at: string;
   resolved_at?: string;
 };
@@ -637,4 +660,29 @@ export type DistillationJob = {
   started_at?: string;
   finished_at?: string;
   discarded_at?: string;
+};
+
+export type ProjectFingerprint = {
+  schemaVersion: string;
+  fingerprintHash: string;
+  timestamp: number;
+  primaryLanguage: string;
+  packageManager: string;
+  lockfileFamily: string;
+  frameworks: Record<string, number>;
+  databaseOrORM: Record<string, number>;
+  testBuildTools: Record<string, number>;
+  hostRuntimeAdapters: Record<string, number>;
+  configMarkers: string[];
+  workspaceRootPath?: string;
+  projectRootScopeId?: string;
+};
+
+export type ScopeFingerprint = {
+  scope_id: string;
+  schema_version: string;
+  fingerprint_hash: string;
+  fingerprint_json: string; // Serialized ProjectFingerprint
+  created_at: string;
+  updated_at: string;
 };

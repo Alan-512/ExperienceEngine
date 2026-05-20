@@ -17,6 +17,11 @@ type AttributionRecordRow = {
   user_override: AttributionRecord["user_override"] | null;
   source: AttributionRecord["source"];
   attribution_reason: AttributionRecord["attribution_reason"] | null;
+  trajectory_verdict: string | null;
+  trajectory_confidence: string | null;
+  trajectory_matched_expectations_json: string | null;
+  trajectory_violated_expectations_json: string | null;
+  trajectory_evidence_refs_json: string | null;
   created_at: string;
   resolved_at: string | null;
 };
@@ -41,6 +46,11 @@ export class AttributionRecordRepository {
       user_override: row.user_override ?? undefined,
       source: row.source,
       attribution_reason: row.attribution_reason ?? undefined,
+      trajectory_verdict: row.trajectory_verdict ?? undefined,
+      trajectory_confidence: row.trajectory_confidence ?? undefined,
+      trajectory_matched_expectations: row.trajectory_matched_expectations_json ? JSON.parse(row.trajectory_matched_expectations_json) as string[] : undefined,
+      trajectory_violated_expectations: row.trajectory_violated_expectations_json ? JSON.parse(row.trajectory_violated_expectations_json) as string[] : undefined,
+      trajectory_evidence_refs: row.trajectory_evidence_refs_json ? JSON.parse(row.trajectory_evidence_refs_json) as string[] : undefined,
       created_at: row.created_at,
       resolved_at: row.resolved_at ?? undefined
     };
@@ -52,10 +62,12 @@ export class AttributionRecordRepository {
         `INSERT INTO attribution_records
           (id, injection_id, node_id, episode_id, intervention_strength, injection_mode, delivery_mode, delivered,
            outcome, attribution_verdict, confidence, evidence_refs_json, user_override, source, attribution_reason,
+           trajectory_verdict, trajectory_confidence, trajectory_matched_expectations_json, trajectory_violated_expectations_json, trajectory_evidence_refs_json,
            created_at, resolved_at)
          VALUES
           (@id, @injection_id, @node_id, @episode_id, @intervention_strength, @injection_mode, @delivery_mode, @delivered,
            @outcome, @attribution_verdict, @confidence, @evidence_refs_json, @user_override, @source, @attribution_reason,
+           @trajectory_verdict, @trajectory_confidence, @trajectory_matched_expectations_json, @trajectory_violated_expectations_json, @trajectory_evidence_refs_json,
            @created_at, @resolved_at)
          ON CONFLICT(id) DO NOTHING`
       )
@@ -75,6 +87,11 @@ export class AttributionRecordRepository {
         user_override: record.user_override ?? null,
         source: record.source,
         attribution_reason: record.attribution_reason ?? null,
+        trajectory_verdict: record.trajectory_verdict ?? null,
+        trajectory_confidence: record.trajectory_confidence ?? null,
+        trajectory_matched_expectations_json: record.trajectory_matched_expectations ? JSON.stringify(record.trajectory_matched_expectations) : null,
+        trajectory_violated_expectations_json: record.trajectory_violated_expectations ? JSON.stringify(record.trajectory_violated_expectations) : null,
+        trajectory_evidence_refs_json: record.trajectory_evidence_refs ? JSON.stringify(record.trajectory_evidence_refs) : null,
         created_at: record.created_at,
         resolved_at: record.resolved_at ?? null
       });
