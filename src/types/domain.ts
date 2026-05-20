@@ -723,3 +723,32 @@ export type PortabilityScorecard = {
   successReuseCount?: number;
   harmCount?: number;
 };
+
+export type TrajectoryExpectationType = "recommend" | "avoid";
+export type ExpectationActionType = "command" | "artifact" | "generic";
+
+export type TrajectoryExpectation = {
+  id: string;
+  type: TrajectoryExpectationType;
+  actionType: ExpectationActionType;
+  toolNamePattern?: string;   // e.g. "run_command", "replace_file_content"
+  commandPattern?: string;    // e.g. "git checkout", "pnpm test"
+  artifactPattern?: string;   // e.g. "ts", "json", "src/types/domain.ts"
+  originalStep: string;       // Original prose for diagnostics
+  ordered: boolean;           // Whether ordering constraint applies
+};
+
+export type CompiledTrajectoryExpectations = {
+  orderedExpectations: TrajectoryExpectation[];
+  unorderedExpectations: TrajectoryExpectation[];
+};
+
+export type NormalizedToolEvent = {
+  toolName: string;
+  commandFamily?: string;
+  subcommand?: string;
+  normalizedInput?: string;
+  artifactExtension?: string;
+  artifactName?: string;
+  status: "success" | "failure" | "unknown";
+};

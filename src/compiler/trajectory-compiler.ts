@@ -1,0 +1,139 @@
+import { createId } from "../utils/ids.js";
+import type { TrajectoryExpectation, CompiledTrajectoryExpectations, TrajectoryExpectationType, ExpectationActionType } from "../types/domain.js";
+import { CommandNormalizer } from "./command-normalizer.js";
+
+export class TrajectoryCompiler {
+  /**
+   * Cleans raw step prose by removing bullet points, numbers, and leading whitespace.
+   */
+  public static cleanStepProse(step: string): string {
+    if (!step) return "";
+    return step
+      .replace(/^[\s\-\*\•\d\.\)]+/, "") // Remove bullet points like "-", "*", "1.", "1)"
+      .trim();
+  }
+
+  /**
+   * Compiles a single step prose into a TrajectoryExpectation structure.
+   */
+  public static compileStep(stepProse: string, type: TrajectoryExpectationType): TrajectoryExpectation {
+    const originalStep = stepProse.trim();
+    const cleanStep = this.cleanStepProse(originalStep);
+    const id = createId("exp");
+
+    // 1. Check for command features
+    // Match common executables (pnpm, npm, git, tsc, vitest, docker, etc.)
+    const commandRegex = /\b(pnpm|npm|yarn|bun|npx|git|tsc|vitest|jest|mocha|eslint|prettier|vite|next|docker)\b\s*([a-zA-Z0-9_\-\.\/]+)?/i;
+    const commandMatch = cleanStep.match(commandRegex);
+
+    if (commandMatch) {
+      const exe = commandMatch[1]?.toLowerCase();
+      const sub = commandMatch[2]?.toLowerCase() || "";
+      const rawExtracted = commandMatch[0];
+
+      const norm = CommandNormalizer.normalizeCommand(rawExtracted);
+      const commandFamily = norm.commandFamily || exe;
+      const subcommand = norm.subcommand || (sub && !sub.startsWith("-") ? sub : undefined);
+      
+      const commandPattern = subcommand 
+        ? `${commandFamily} ${subcommand}`
+        : commandFamily;
+
+      return {
+        id,
+        type,
+        actionType: "command",
+        toolNamePattern: "run_command",
+        commandPattern,
+        originalStep,
+        ordered: type === "recommend" // Recommended commands are ordered; avoid commands check globally
+      };
+    }
+
+    // 2. Check for file / artifact manipulation features
+    // Match file extensions or edit verbs + files
+    const fileVerbRegex = /\b(edit|modify|write|create|touch|update|delete|remove|read|view|inspect)\s+([a-zA-Z0-9_\-\.\/\\\*]+\.[a-zA-Z0-9]+)/i;
+    const fileVerbMatch = cleanStep.match(fileVerbRegex);
+
+    const genericFileRegex = /\b([a-zA-Z0-9_\-\.\/\\\*]+\.([a-zA-Z0-9]+))\b/;
+    const genericFileMatch = cleanStep.match(genericFileRegex);
+
+    if (fileVerbMatch) {
+      const filePath = fileVerbMatch[2] || "";
+      const ext = CommandNormalizer.getExtension(filePath) || "ts";
+      
+      return {
+        id,
+        type,
+        actionType: "artifact",
+        artifactPattern: ext,
+        originalStep,
+        ordered: false // Artifact touches can happen in any order
+      };
+    } else if (genericFileMatch) {
+      const ext = genericFileMatch[2] || "";
+      // Exclude false positives like common words (e.g. e.g. or i.e.)
+      if (ext && !["eg", "ie", "md", "txt"].includes(ext.toLowerCase())) {
+        return {
+          id,
+          type,
+          actionType: "artifact",
+          artifactPattern: ext.toLowerCase(),
+          originalStep,
+          ordered: false
+        };
+      }
+    }
+
+    // 3. Fallback to generic action type
+    return {
+      id,
+      type,
+      actionType: "generic",
+      originalStep,
+      ordered: false
+    };
+  }
+
+  /**
+   * Compiles recommended_steps and avoid_steps of an ExperienceNode into CompiledTrajectoryExpectations.
+   */
+  public static compileNodeExpectations(
+    recommendedSteps?: string[],
+    avoidSteps?: string[]
+  ): CompiledTrajectoryExpectations {
+    const orderedExpectations: TrajectoryExpectation[] = [];
+    const unorderedExpectations: TrajectoryExpectation[] = [];
+
+    // Compile recommended steps
+    if (recommendedSteps && Array.isArray(recommendedSteps)) {
+      for (const step of recommendedSteps) {
+        if (!step.trim()) continue;
+        const exp = this.compileStep(step, "recommend");
+        if (exp.ordered) {
+          orderedExpectations.push(exp);
+        } else {
+          unorderedExpectations.push(exp);
+        }
+      }
+    }
+
+    // Compile avoid steps
+    if (avoidSteps && Array.isArray(avoidSteps)) {
+      for (const step of avoidSteps) {
+        if (!step.trim()) continue;
+        const exp = this.compileStep(step, "avoid");
+        // Avoid step expectations are ALWAYS unordered because they trigger non-adoption violations globally
+        unorderedExpectations.push({
+          ...exp,
+          ordered: false
+        });
+      }
+    }
+
+    return {
+      orderedExpectations,
+      unorderedExpectations
+    };
+  }
+}

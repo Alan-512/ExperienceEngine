@@ -401,6 +401,7 @@ export const decideIntervention = (
     | "retrievalRerankerModel"
     | "syncSecondOpinionMode"
     | "syncSecondOpinionModel"
+  >,
   retrievalContext?: RetrievalContext,
   repoPolicy?: RepoPolicy
 ): Promise<InterventionDecision> => {
