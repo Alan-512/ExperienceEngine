@@ -557,8 +557,7 @@ export const buildPortabilityScorecard = (
     if (sourceRow?.fingerprint_json) {
       sourceFingerprint = JSON.parse(sourceRow.fingerprint_json);
     }
-  } catch (err) {
-    // Tolerant
+  } catch (err: any) {
   }
 
   try {
@@ -566,8 +565,7 @@ export const buildPortabilityScorecard = (
     if (targetRow?.fingerprint_json) {
       targetFingerprint = JSON.parse(targetRow.fingerprint_json);
     }
-  } catch (err) {
-    // Tolerant
+  } catch (err: any) {
   }
 
   if (!sourceFingerprint || !targetFingerprint) {
@@ -652,7 +650,7 @@ export const buildPortabilityScorecard = (
   compareCategory("hostRuntimeAdapters", true);
   compareCategory("testBuildTools", false);
 
-  if (node.harmed_count > 0) {
+  if (node.scope_id === input.scope_id && node.harmed_count > 0) {
     negativeEvidence.push("historical_causal_harm");
   }
 
@@ -676,15 +674,22 @@ export const buildPortabilityScorecard = (
     } else {
       band = "same_family";
       why = "Strong portability match with no core mismatch or negative evidence.";
+    }
+  }
 
-      const evidence = node.portable_validation_evidence;
-      const currentHash = sourceFingerprint.fingerprintHash;
-      if (evidence?.compatibilityClasses?.[currentHash]) {
-        const record = evidence.compatibilityClasses[currentHash];
-        if (record.successReuseCount >= 3 && record.harmCount === 0) {
-          band = "validated_portable";
-          why = `Validated portable through ${record.successReuseCount} successful reuse counts under compatibility class ${currentHash.slice(0, 8)}.`;
-        }
+  let successReuseCount: number | undefined;
+  let harmCount: number | undefined;
+
+  if (sourceFingerprint && node.portable_validation_evidence) {
+    const evidence = node.portable_validation_evidence;
+    const currentHash = sourceFingerprint.fingerprintHash;
+    if (evidence?.compatibilityClasses?.[currentHash]) {
+      const record = evidence.compatibilityClasses[currentHash];
+      successReuseCount = record.successReuseCount;
+      harmCount = record.harmCount;
+      if (band === "same_family" && record.successReuseCount >= 3 && record.harmCount === 0) {
+        band = "validated_portable";
+        why = `Validated portable through ${record.successReuseCount} successful reuse counts under compatibility class ${currentHash.slice(0, 8)}.`;
       }
     }
   }
@@ -696,7 +701,9 @@ export const buildPortabilityScorecard = (
     sharedDependencies,
     penalties,
     negativeEvidence,
-    whyScore: why
+    whyScore: why,
+    successReuseCount,
+    harmCount
   };
 };
 

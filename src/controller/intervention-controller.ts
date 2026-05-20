@@ -53,12 +53,15 @@ const isLiveInjectableNode = (node: ExperienceNode): boolean => {
 const isTrustedSameFamilyCluster = (
   quality: TriggerCandidateQuality,
   runnerUpQuality?: TriggerCandidateQuality
-): boolean =>
-  Boolean(
+): boolean => {
+  const qualityScopeMatch = quality.scopeMatch || quality.portabilityScorecard?.portabilityBand === "validated_portable";
+  const runnerUpScopeMatch = runnerUpQuality ? (runnerUpQuality.scopeMatch || runnerUpQuality.portabilityScorecard?.portabilityBand === "validated_portable") : false;
+
+  return Boolean(
     runnerUpQuality &&
-    quality.scopeMatch &&
+    qualityScopeMatch &&
     quality.taskFamilyMatch &&
-    runnerUpQuality.scopeMatch &&
+    runnerUpScopeMatch &&
     runnerUpQuality.taskFamilyMatch &&
     quality.state === "active" &&
     runnerUpQuality.state === "active" &&
@@ -68,12 +71,15 @@ const isTrustedSameFamilyCluster = (
     runnerUpQuality.totalScore >= 0.95 &&
     quality.helpedCount >= runnerUpQuality.helpedCount
   );
+};
 
 const isStrongCandidate = (
   quality: TriggerCandidateQuality,
   runnerUpQuality?: TriggerCandidateQuality
 ): boolean => {
-  return quality.scopeMatch &&
+  const qualityScopeMatch = quality.scopeMatch || quality.portabilityScorecard?.portabilityBand === "validated_portable";
+
+  return qualityScopeMatch &&
     quality.taskFamilyMatch &&
     quality.state === "active" &&
     quality.totalScore >= 0.75 &&
@@ -87,7 +93,7 @@ const isStrongCandidate = (
       ) ||
       isTrustedSameFamilyCluster(quality, runnerUpQuality)
     ) &&
-    (quality.helpedCount >= 2 || quality.validationState === "validated_by_reuse") &&
+    (quality.helpedCount >= 2 || quality.validationState === "validated_by_reuse" || (!quality.scopeMatch && quality.portabilityScorecard?.portabilityBand === "validated_portable")) &&
     quality.helpedCount >= quality.harmedCount;
 };
 
@@ -100,6 +106,14 @@ const toCandidateQuality = (
     return undefined;
   }
 
+  const helpedCount = (!candidate.scopeMatch && candidate.portabilityScorecard)
+    ? (candidate.portabilityScorecard.successReuseCount ?? 0)
+    : node.helped_count;
+
+  const harmedCount = (!candidate.scopeMatch && candidate.portabilityScorecard)
+    ? (candidate.portabilityScorecard.harmCount ?? 0)
+    : node.harmed_count;
+
   return {
     semanticScore: candidate.semanticScore,
     retrievalScore: candidate.retrievalScore,
@@ -111,8 +125,8 @@ const toCandidateQuality = (
     scopeMatch: candidate.scopeMatch,
     taskFamilyMatch: candidate.taskFamilyMatch || node.task_type === input.task_type,
     state: node.state,
-    helpedCount: node.helped_count,
-    harmedCount: node.harmed_count,
+    helpedCount,
+    harmedCount,
     validationState: node.validation_state as ValidationState | undefined,
     matchScorecard: candidate.matchScorecard,
     portabilityScorecard: candidate.portabilityScorecard,
@@ -387,11 +401,11 @@ export const decideIntervention = (
     | "retrievalRerankerModel"
     | "syncSecondOpinionMode"
     | "syncSecondOpinionModel"
-  >,
   retrievalContext?: RetrievalContext,
   repoPolicy?: RepoPolicy
-): Promise<InterventionDecision> =>
-  decideInterventionInternal(input, nodes, stats, threshold, maxHints, config, retrievalContext, repoPolicy);
+): Promise<InterventionDecision> => {
+  return decideInterventionInternal(input, nodes, stats, threshold, maxHints, config, retrievalContext, repoPolicy);
+};
 
 const decideInterventionInternal = async (
   input: ExperienceInput,
@@ -529,10 +543,19 @@ const decideInterventionInternal = async (
     };
   }
 
-  const mode: InjectionMode =
-    liveCorrectionAwareRanked[0] && resolveDeliveryState(liveCorrectionAwareRanked[0]) === "conservative_only"
-      ? "inject_conservative"
-      : "inject";
+  const topCandidate = liveCorrectionAwareRanked[0];
+  const topCandidateInBundle = topCandidate ? candidateById.get(topCandidate.id) : undefined;
+
+  let mode: InjectionMode = "inject";
+  if (topCandidate) {
+    const isCrossRepo = topCandidateInBundle ? !topCandidateInBundle.scopeMatch : false;
+    const isConservativeOnly = resolveDeliveryState(topCandidate) === "conservative_only";
+    const portabilityBand = topCandidateInBundle?.portabilityScorecard?.portabilityBand;
+
+    if (isConservativeOnly || (isCrossRepo && portabilityBand === "same_family")) {
+      mode = "inject_conservative";
+    }
+  }
   const selected = selectInjectableNodes(
     liveCorrectionAwareRanked,
     mode === "inject_conservative" ? 1 : maxHints,

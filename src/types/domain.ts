@@ -720,4 +720,6 @@ export type PortabilityScorecard = {
   }>;
   negativeEvidence: string[];
   whyScore: string;
+  successReuseCount?: number;
+  harmCount?: number;
 };

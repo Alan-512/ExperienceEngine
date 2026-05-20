@@ -48,6 +48,7 @@ import { StatsRepository } from "../store/sqlite/repositories/stats-repo.js";
 import { TaskRunRepository } from "../store/sqlite/repositories/task-run-repo.js";
 import { InjectionRepository } from "../store/sqlite/repositories/injection-repo.js";
 import { AttributionRecordRepository } from "../store/sqlite/repositories/attribution-record-repo.js";
+import { ScopeFingerprintRepository } from "../store/sqlite/repositories/scope-fingerprint-repo.js";
 import { RepoPolicyRepository } from "../store/sqlite/repositories/repo-policy-repo.js";
 import { HybridInvocationTraceRepository } from "../store/sqlite/repositories/hybrid-invocation-trace-repo.js";
 import { RuntimeCaptureWriter } from "../plugin/runtime-capture.js";
@@ -212,6 +213,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly scopeRepo;
   private readonly inputRepo;
   private readonly nodeRepo;
+  private readonly scopeFingerprintRepo;
   private readonly candidateRepo;
   private readonly jobRepo;
   private readonly taskRunRepo;
@@ -249,6 +251,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     this.scopeRepo = new ScopeRepository(this.db);
     this.inputRepo = new InputRecordRepository(this.db);
     this.nodeRepo = new NodeRepository(this.db);
+    this.scopeFingerprintRepo = new ScopeFingerprintRepository(this.db);
     this.candidateRepo = new CandidateRepository(this.db);
     this.jobRepo = new DistillationJobRepository(this.db);
     this.taskRunRepo = new TaskRunRepository(this.db);
@@ -805,6 +808,8 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
         .map((candidate) => candidate.id) ?? []
     );
     const promotedNodeIds: string[] = [];
+    const fpRecord = this.scopeFingerprintRepo.getById(input.scope_id);
+    const hostHash = fpRecord?.fingerprint_hash;
 
     for (const node of applyFeedback(input, touched, attributionRecordId, { originProfilesByNodeId })) {
       const shouldPromoteSameScopeHighMatch =
@@ -814,7 +819,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
         node.state === "priority_candidate" &&
         node.delivery_state === "conservative_only" &&
         node.harmed_count === 0;
-      const nextNode = shouldPromoteSameScopeHighMatch
+      let nextNode = shouldPromoteSameScopeHighMatch
         ? {
             ...node,
             state: "active" as const,
@@ -823,6 +828,37 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
             promotion_reason: node.promotion_reason ?? "same_scope_high_match_success"
           }
         : node;
+
+      if (hostHash && nextNode.scope_id !== input.scope_id) {
+        const harmed = detectHarm(input, nextNode);
+        const verdict =
+          input.outcome_signal === "success"
+            ? "success"
+            : harmed
+              ? "harmed"
+              : "none";
+
+        if (verdict === "success" || verdict === "harmed") {
+          const evidence = nextNode.portable_validation_evidence ?? { compatibilityClasses: {} };
+          const classes = evidence.compatibilityClasses ?? {};
+          const prev = classes[hostHash] ?? { successReuseCount: 0, harmCount: 0, lastUsedAt: 0 };
+
+          classes[hostHash] = {
+            successReuseCount: verdict === "success" ? prev.successReuseCount + 1 : prev.successReuseCount,
+            harmCount: verdict === "harmed" ? prev.harmCount + 1 : prev.harmCount,
+            lastUsedAt: Date.now()
+          };
+
+          nextNode = {
+            ...nextNode,
+            portable_validation_evidence: {
+              ...evidence,
+              compatibilityClasses: classes
+            }
+          };
+        }
+      }
+
       if (shouldPromoteSameScopeHighMatch) {
         promotedNodeIds.push(node.id);
       }
