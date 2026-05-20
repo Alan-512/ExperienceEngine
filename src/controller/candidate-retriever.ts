@@ -7,7 +7,10 @@ import type {
   RetrievalContext,
   RetrievalPolicyDiagnostics,
   RetrievalPolicyStageDiagnostic,
-  TaskType
+  TaskType,
+  PortabilityBand,
+  PortabilityScorecard,
+  ProjectFingerprint
 } from "../types/domain.js";
 import {
   buildLegacyEmbedding,
@@ -23,6 +26,7 @@ import { computeLexicalRetrievalScores } from "./lexical-retriever.js";
 import type { DistillerEndpoint } from "../distillation/providers/types.js";
 import { enrichPolicyForCandidate, textOverlapScore } from "./policy-enricher.js";
 import { resolveModelRerankerMode } from "./model-reranker-mode.js";
+import type { DatabaseSync } from "node:sqlite";
 
 export type RetrievedCandidate = {
   node: ExperienceNode;
@@ -39,6 +43,7 @@ export type RetrievedCandidate = {
   rerankSource?: "heuristic" | "model";
   familyScore: number;
   matchScorecard?: MatchScorecard;
+  portabilityScorecard?: PortabilityScorecard;
   totalScore: number;
   scopeMatch: boolean;
   taskFamilyMatch: boolean;
@@ -519,6 +524,182 @@ const buildMatchScorecard = (
   };
 };
 
+export const buildPortabilityScorecard = (
+  input: ExperienceInput,
+  node: ExperienceNode,
+  retrievalContext?: RetrievalContext
+): PortabilityScorecard => {
+  const db = retrievalContext?.db as DatabaseSync | undefined;
+  
+  const defaultScorecard = (band: PortabilityBand, score: number, why: string): PortabilityScorecard => ({
+    portabilityBand: band,
+    score,
+    matchedLanguage: true,
+    sharedDependencies: [],
+    penalties: [],
+    negativeEvidence: [],
+    whyScore: why
+  });
+
+  if (node.scope_id === input.scope_id) {
+    return defaultScorecard("validated_portable", 1.0, "Same scope experience node.");
+  }
+
+  if (!db) {
+    return defaultScorecard("weakly_related", 0.5, "Missing database context for fingerprint check.");
+  }
+
+  let sourceFingerprint: ProjectFingerprint | undefined;
+  let targetFingerprint: ProjectFingerprint | undefined;
+
+  try {
+    const sourceRow = db.prepare("SELECT fingerprint_json FROM scope_fingerprints WHERE scope_id = ? LIMIT 1").get(input.scope_id) as { fingerprint_json: string } | undefined;
+    if (sourceRow?.fingerprint_json) {
+      sourceFingerprint = JSON.parse(sourceRow.fingerprint_json);
+    }
+  } catch (err) {
+    // Tolerant
+  }
+
+  try {
+    const targetRow = db.prepare("SELECT fingerprint_json FROM scope_fingerprints WHERE scope_id = ? LIMIT 1").get(node.scope_id) as { fingerprint_json: string } | undefined;
+    if (targetRow?.fingerprint_json) {
+      targetFingerprint = JSON.parse(targetRow.fingerprint_json);
+    }
+  } catch (err) {
+    // Tolerant
+  }
+
+  if (!sourceFingerprint || !targetFingerprint) {
+    return defaultScorecard("weakly_related", 0.5, "One or both scope fingerprints are missing.");
+  }
+
+  const penalties: PortabilityScorecard["penalties"] = [];
+  const negativeEvidence: string[] = [];
+  const sharedDependencies: string[] = [];
+
+  const langMatch = 
+    sourceFingerprint.primaryLanguage && 
+    targetFingerprint.primaryLanguage && 
+    sourceFingerprint.primaryLanguage !== "unknown" &&
+    targetFingerprint.primaryLanguage !== "unknown"
+      ? sourceFingerprint.primaryLanguage === targetFingerprint.primaryLanguage
+      : true;
+
+  if (!langMatch) {
+    return {
+      portabilityBand: "incompatible",
+      score: 0.0,
+      matchedLanguage: false,
+      sharedDependencies: [],
+      penalties: [{
+        dependency: "Language Mismatch",
+        category: "language",
+        penalty: 1.0,
+        reason: `Source language (${sourceFingerprint.primaryLanguage}) mismatches target language (${targetFingerprint.primaryLanguage}).`
+      }],
+      negativeEvidence: ["language_mismatch"],
+      whyScore: "Primary languages mismatch between scopes."
+    };
+  }
+
+  let currentScore = 1.0;
+  let hasCoreMismatch = false;
+
+  const compareCategory = (
+    categoryName: "frameworks" | "databaseOrORM" | "hostRuntimeAdapters" | "testBuildTools",
+    isCore: boolean
+  ) => {
+    const sourceDeps = sourceFingerprint![categoryName] || {};
+    const targetDeps = targetFingerprint![categoryName] || {};
+
+    const allKeys = new Set([...Object.keys(sourceDeps), ...Object.keys(targetDeps)]);
+
+    for (const key of allKeys) {
+      if (key in sourceDeps && key in targetDeps) {
+        sharedDependencies.push(key);
+        const sourceVer = sourceDeps[key];
+        const targetVer = targetDeps[key];
+
+        if (sourceVer === 0 || targetVer === 0 || sourceVer === undefined || targetVer === undefined) {
+          const p = 0.05;
+          currentScore = Math.max(0, currentScore - p);
+          penalties.push({
+            dependency: key,
+            category: categoryName,
+            penalty: p,
+            reason: `Unknown version for shared dependency ${key} (${sourceVer ?? "none"} vs ${targetVer ?? "none"}).`
+          });
+        } else if (sourceVer !== targetVer) {
+          const p = isCore ? 0.3 : 0.1;
+          currentScore = Math.max(0, currentScore - p);
+          if (isCore) {
+            hasCoreMismatch = true;
+          }
+          penalties.push({
+            dependency: key,
+            category: categoryName,
+            penalty: p,
+            reason: `Major version mismatch for shared dependency ${key} (v${sourceVer} vs v${targetVer}).`
+          });
+        }
+      }
+    }
+  };
+
+  compareCategory("frameworks", true);
+  compareCategory("databaseOrORM", true);
+  compareCategory("hostRuntimeAdapters", true);
+  compareCategory("testBuildTools", false);
+
+  if (node.harmed_count > 0) {
+    negativeEvidence.push("historical_causal_harm");
+  }
+
+  let band: PortabilityBand = "weakly_related";
+  let why = "Portability score falls into weakly related band.";
+
+  if (currentScore < 0.4) {
+    band = "incompatible";
+    why = "Portability score is below 0.4.";
+  } else if (hasCoreMismatch || currentScore < 0.7) {
+    band = "weakly_related";
+    if (hasCoreMismatch) {
+      why = "Contains major version mismatch in core dependency (frameworks, ORM, or runtime).";
+    } else {
+      why = "Portability score is between 0.4 and 0.7.";
+    }
+  } else {
+    if (negativeEvidence.length > 0) {
+      band = "weakly_related";
+      why = "Contains negative evidence (historical harm).";
+    } else {
+      band = "same_family";
+      why = "Strong portability match with no core mismatch or negative evidence.";
+
+      const evidence = node.portable_validation_evidence;
+      const currentHash = sourceFingerprint.fingerprintHash;
+      if (evidence?.compatibilityClasses?.[currentHash]) {
+        const record = evidence.compatibilityClasses[currentHash];
+        if (record.successReuseCount >= 3 && record.harmCount === 0) {
+          band = "validated_portable";
+          why = `Validated portable through ${record.successReuseCount} successful reuse counts under compatibility class ${currentHash.slice(0, 8)}.`;
+        }
+      }
+    }
+  }
+
+  return {
+    portabilityBand: band,
+    score: currentScore,
+    matchedLanguage: langMatch,
+    sharedDependencies,
+    penalties,
+    negativeEvidence,
+    whyScore: why
+  };
+};
+
 export const retrieveCandidates = async (
   input: ExperienceInput,
   nodes: ExperienceNode[],
@@ -664,6 +845,7 @@ export const retrieveCandidateBundle = async (
       const retrievalScore = fusedScore * 0.68;
       const policy = enrichPolicyForCandidate(input, node, options.retrievalContext);
       const matchScorecard = buildMatchScorecard(input, node, options.retrievalContext);
+      const portabilityScorecard = buildPortabilityScorecard(input, node, options.retrievalContext);
       const rawRetrievalReasons = buildRetrievalReasons({
         semanticScore,
         lexicalScore,
@@ -694,6 +876,7 @@ export const retrieveCandidateBundle = async (
         policyComponents: policy.components,
         familyScore: policy.familyScore,
         matchScorecard,
+        portabilityScorecard,
         totalScore,
         scopeMatch: node.scope_id === input.scope_id,
         taskFamilyMatch: node.task_type === input.task_type
@@ -749,6 +932,7 @@ export const retrieveCandidateBundle = async (
           policyComponents,
           familyScore,
           matchScorecard,
+          portabilityScorecard,
           totalScore,
           scopeMatch,
           taskFamilyMatch
@@ -765,6 +949,7 @@ export const retrieveCandidateBundle = async (
           policyComponents,
           familyScore,
           matchScorecard,
+          portabilityScorecard,
           totalScore,
           scopeMatch,
           taskFamilyMatch

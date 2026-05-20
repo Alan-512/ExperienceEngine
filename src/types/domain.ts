@@ -459,6 +459,7 @@ export type InjectionScorecardNode = {
 export type InjectionScorecardCandidate = {
   id: string;
   matchScorecard?: MatchScorecard;
+  portabilityScorecard?: PortabilityScorecard;
   semanticScore?: number;
   lexicalScore?: number;
   fusedScore?: number;
@@ -697,4 +698,25 @@ export type OfflineAssetManifest = {
   assets: Record<string, { path: string; sha256: string }>;
   license?: string;
   sourceMetadata?: Record<string, unknown>;
+};
+
+export type PortabilityBand =
+  | "incompatible"
+  | "weakly_related"
+  | "same_family"
+  | "validated_portable";
+
+export type PortabilityScorecard = {
+  portabilityBand: PortabilityBand;
+  score: number;
+  matchedLanguage: boolean;
+  sharedDependencies: string[];
+  penalties: Array<{
+    dependency: string;
+    category: string;
+    penalty: number;
+    reason: string;
+  }>;
+  negativeEvidence: string[];
+  whyScore: string;
 };

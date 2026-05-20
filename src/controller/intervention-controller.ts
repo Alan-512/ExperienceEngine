@@ -115,6 +115,7 @@ const toCandidateQuality = (
     harmedCount: node.harmed_count,
     validationState: node.validation_state as ValidationState | undefined,
     matchScorecard: candidate.matchScorecard,
+    portabilityScorecard: candidate.portabilityScorecard,
     scoreMargin: candidate.scoreMargin
   };
 };
@@ -122,6 +123,7 @@ const toCandidateQuality = (
 const toScorecardCandidate = (candidate: RetrievedCandidate): InjectionScorecardCandidate => ({
   id: candidate.node.id,
   matchScorecard: candidate.matchScorecard,
+  portabilityScorecard: candidate.portabilityScorecard,
   semanticScore: Number(candidate.semanticScore.toFixed(4)),
   lexicalScore: Number(candidate.lexicalScore.toFixed(4)),
   fusedScore: Number(candidate.fusedScore.toFixed(4)),
