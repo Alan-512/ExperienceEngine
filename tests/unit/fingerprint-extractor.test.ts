@@ -2,7 +2,7 @@ import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import * as path from "node:path";
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 
-// 拦截 mock 整个 node:fs 模块，以绕过 ESM 只读命名空间限制
+// Mock the entire node:fs module to bypass ESM read-only namespace limitations
 vi.mock("node:fs", async (importOriginal) => {
   const actual = await importOriginal<typeof import("node:fs")>();
   return {
@@ -238,7 +238,8 @@ prisma@npm:^5.1.0:
       const info = detectWorkspaceAndProjectRoots("/mock/workspace/packages/subproject");
       expect(info.workspaceRoot).toBe(path.resolve("/mock/workspace"));
       expect(info.projectRoot).toBe(path.resolve("/mock/workspace/packages/subproject"));
-      expect(info.lockfileFamily).toBe("none");
+      expect(info.lockfileFamily).toBe("unknown");
+      expect(info.packageManager).toBe("unknown");
     });
   });
 
@@ -292,14 +293,109 @@ packages:
       expect(fingerprint.packageManager).toBe("pnpm");
       expect(fingerprint.lockfileFamily).toBe("pnpm");
 
-      // react 命中锁文件精确提取
+      // react matches exact lockfile extraction
       expect(fingerprint.frameworks).toEqual({ react: 18 });
-      // prisma 锁文件未查到，回退 range (latest -> 0)
+      // prisma not found in lockfile, falls back to range (latest -> 0)
       expect(fingerprint.databaseOrORM).toEqual({ prisma: 0 });
-      // vitest 命中锁文件精确提取
+      // vitest matches exact lockfile extraction
       expect(fingerprint.testBuildTools).toEqual({ vitest: 1 });
       expect(fingerprint.configMarkers).toEqual(["package.json", "tsconfig.json"]);
       expect(fingerprint.fingerprintHash).toBeDefined();
     });
   });
+
+  describe("Monorepo Conflict Resolution and Unknown Project Signals", () => {
+    beforeEach(() => {
+      vi.clearAllMocks();
+    });
+
+    it("parses conflicting pnpm-lock.yaml in monorepo, choosing subproject specific importer", () => {
+      const pnpmLockContent = `
+lockfileVersion: '6.0'
+
+importers:
+  packages/app-a:
+    dependencies:
+      react:
+        specifier: ^17.0.2
+        version: 17.0.2
+  packages/app-b:
+    dependencies:
+      react:
+        specifier: ^18.2.0
+        version: 18.2.0
+
+packages:
+  /react@17.0.2:
+    resolution: {integrity: sha512-...}
+  /react@18.2.0:
+    resolution: {integrity: sha512-...}
+      `;
+
+      const resA = parsePnpmLock(pnpmLockContent, ["react"], "packages/app-a", { react: "^17.0.2" });
+      expect(resA.react).toBe("17.0.2");
+
+      const resB = parsePnpmLock(pnpmLockContent, ["react"], "packages/app-b", { react: "^18.2.0" });
+      expect(resB.react).toBe("18.2.0");
+    });
+
+    it("parses conflicting package-lock.json in monorepo, resolving correct local subproject node_modules first", () => {
+      const packageLockContent = JSON.stringify({
+        lockfileVersion: 3,
+        packages: {
+          "": { version: "1.0.0" },
+          "node_modules/react": { version: "18.2.0" },
+          "packages/sub-a/node_modules/react": { version: "17.0.2" }
+        }
+      });
+
+      const resSubA = parsePackageLock(packageLockContent, ["react"], "packages/sub-a", { react: "^17.0.2" });
+      expect(resSubA.react).toBe("17.0.2");
+
+      const resRoot = parsePackageLock(packageLockContent, ["react"], ".", { react: "^18.2.0" });
+      expect(resRoot.react).toBe("18.2.0");
+    });
+
+    it("parses conflicting yarn.lock in monorepo using range and expectedMajor heuristics", () => {
+      const yarnLockContent = `
+react@^17.0.2:
+  version "17.0.2"
+
+react@^18.2.0:
+  version "18.2.0"
+      `;
+
+      const resA = parseYarnLock(yarnLockContent, ["react"], "packages/sub-a", { react: "^17.0.2" });
+      expect(resA.react).toBe("17.0.2");
+
+      const resB = parseYarnLock(yarnLockContent, ["react"], "packages/sub-b", { react: "^18.2.0" });
+      expect(resB.react).toBe("18.2.0");
+    });
+
+    it("resolves to unknown project signals when no lockfiles and no package.json manifest exist", () => {
+      (existsSync as any).mockReturnValue(false);
+      (readdirSync as any).mockReturnValue([]);
+
+      const info = detectWorkspaceAndProjectRoots("/mock/unrecognized-project");
+      expect(info.lockfileFamily).toBe("unknown");
+      expect(info.packageManager).toBe("unknown");
+
+      const lang = detectPrimaryLanguage("/mock/unrecognized-project");
+      expect(lang).toBe("unknown");
+    });
+
+    it("resolves to none lockfileFamily and npm packageManager when package.json exists but no lockfile exists", () => {
+      (existsSync as any).mockImplementation((p: string) => {
+        return p.endsWith("package.json");
+      });
+      (readFileSync as any).mockReturnValue(JSON.stringify({
+        name: "test-pkg"
+      }));
+
+      const info = detectWorkspaceAndProjectRoots("/mock/no-lockfile-project");
+      expect(info.lockfileFamily).toBe("none");
+      expect(info.packageManager).toBe("npm");
+    });
+  });
 });
+

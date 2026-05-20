@@ -1,5 +1,5 @@
 import { readdirSync, statSync, existsSync, readFileSync } from "node:fs";
-import { join, basename, resolve, dirname } from "node:path";
+import { join, basename, resolve, dirname, relative } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
 import type { ProjectFingerprint, ScopeFingerprint } from "../types/domain.js";
 import { hashText } from "../utils/hashing.js";
@@ -125,10 +125,11 @@ export const detectPrimaryLanguage = (projectRoot: string): string => {
       if (pkg.dependencies?.typescript || pkg.devDependencies?.typescript) {
         return "typescript";
       }
+      return "javascript";
     }
   } catch {}
 
-  return "javascript";
+  return "unknown";
 };
 
 export type WorkspaceInfo = {
@@ -176,8 +177,8 @@ export const detectWorkspaceAndProjectRoots = (cwd: string): WorkspaceInfo => {
     current = parent;
   }
 
-  let packageManager = "npm";
-  let lockfileFamily = "none";
+  let packageManager = "unknown";
+  let lockfileFamily = "unknown";
 
   // Check for physical existence of lockfiles (project root prioritized over workspace root)
   const checkDirs = foundWorkspace ? [projectRoot, workspaceRoot] : [projectRoot];
@@ -197,14 +198,17 @@ export const detectWorkspaceAndProjectRoots = (cwd: string): WorkspaceInfo => {
     }
   }
 
-  if (lockfileFamily === "none") {
+  if (lockfileFamily === "unknown") {
     try {
       const pkgPath = join(projectRoot, "package.json");
       if (existsSync(pkgPath)) {
+        lockfileFamily = "none";
         const pkg = JSON.parse(readFileSync(pkgPath, "utf-8"));
         if (pkg.packageManager) {
           const pm = pkg.packageManager.split("@")[0];
           packageManager = pm;
+        } else {
+          packageManager = "npm";
         }
       }
     } catch {}
@@ -225,22 +229,53 @@ export const detectWorkspaceAndProjectRoots = (cwd: string): WorkspaceInfo => {
 /**
  * Robustly parse dependency major versions from package-lock.json
  */
-export const parsePackageLock = (contentStr: string, packagesToFind: string[]): Record<string, string> => {
+export const parsePackageLock = (
+  contentStr: string,
+  packagesToFind: string[],
+  relativeProjectDir = ".",
+  localDeps: Record<string, string> = {}
+): Record<string, string> => {
   const result: Record<string, string> = {};
   try {
     const lock = JSON.parse(contentStr);
     if (lock.packages) {
       for (const pkg of packagesToFind) {
-        const key = `node_modules/${pkg}`;
-        if (lock.packages[key]?.version) {
-          result[pkg] = lock.packages[key].version;
-        } else {
-          // Fallback loop across nested package names inside lock packages
+        const normalizedRelativeDir = relativeProjectDir === "." ? "" : relativeProjectDir.replace(/^\.?\/+/, "");
+        
+        // If we are in a workspace subproject, try searching under packages/subproject/node_modules/pkg first
+        if (normalizedRelativeDir) {
+          const subprojectKey = `${normalizedRelativeDir}/node_modules/${pkg}`;
+          if (lock.packages[subprojectKey]?.version) {
+            result[pkg] = lock.packages[subprojectKey].version;
+            continue;
+          }
+        }
+        
+        // Otherwise fall back to root node_modules/pkg
+        const rootKey = `node_modules/${pkg}`;
+        if (lock.packages[rootKey]?.version) {
+          result[pkg] = lock.packages[rootKey].version;
+          continue;
+        }
+
+        // Fallback loops
+        let found = false;
+        if (normalizedRelativeDir) {
           for (const k of Object.keys(lock.packages)) {
-            if (k === key || k.endsWith(`/node_modules/${pkg}`)) {
+            if (k.startsWith(normalizedRelativeDir) && k.endsWith(`/node_modules/${pkg}`)) {
               result[pkg] = lock.packages[k].version;
+              found = true;
               break;
             }
+          }
+        }
+        if (found) continue;
+
+        for (const k of Object.keys(lock.packages)) {
+          if (k === rootKey || k.endsWith(`/node_modules/${pkg}`)) {
+            result[pkg] = lock.packages[k].version;
+            found = true;
+            break;
           }
         }
       }
@@ -261,11 +296,88 @@ export const parsePackageLock = (contentStr: string, packagesToFind: string[]): 
 /**
  * Robustly parse dependency versions from pnpm-lock.yaml via line scans
  */
-export const parsePnpmLock = (contentStr: string, packagesToFind: string[]): Record<string, string> => {
+export const parsePnpmLock = (
+  contentStr: string,
+  packagesToFind: string[],
+  relativeProjectDir = ".",
+  localDeps: Record<string, string> = {}
+): Record<string, string> => {
   const result: Record<string, string> = {};
   const lines = contentStr.split(/\r?\n/);
 
+  // 1. First scan the importers block for this specific subproject relative directory if it exists
+  let importerLines: string[] = [];
+  let inImporterSection = false;
+  let inTargetImporter = false;
+
+  const relativePathKey = relativeProjectDir === "." ? "." : relativeProjectDir;
+
+  for (const line of lines) {
+    const trimLine = line.trim();
+    if (!trimLine) continue;
+    
+    const indent = line.length - line.trimStart().length;
+
+    if (trimLine === "importers:") {
+      inImporterSection = true;
+      continue;
+    }
+
+    if (inImporterSection) {
+      if (indent === 2 && (trimLine === `${relativePathKey}:` || trimLine === `'${relativePathKey}':` || trimLine === `"${relativePathKey}":`)) {
+        inTargetImporter = true;
+        continue;
+      } else if (indent <= 2 && inTargetImporter) {
+        inTargetImporter = false;
+      } else if (indent === 0) {
+        inImporterSection = false;
+        inTargetImporter = false;
+      }
+
+      if (inTargetImporter) {
+        importerLines.push(line);
+      }
+    }
+  }
+
+  if (importerLines.length > 0) {
+    for (const pkg of packagesToFind) {
+      const escapedPkg = escapeRegExp(pkg);
+      const pkgPattern = new RegExp(`^\\s*` + escapedPkg + `:\\s*(.*)$`);
+      const versionPattern = /^\s*version:\s*['"]?([0-9]+\.[0-9]+\.[0-9]+[^'"\\s_:]*)/;
+
+      for (let i = 0; i < importerLines.length; i++) {
+        const match = pkgPattern.exec(importerLines[i]);
+        if (match) {
+          const rest = match[1].trim();
+          if (rest) {
+            const pureVer = rest.split(/[_\(\)]/)[0].replace(/['"]/g, "");
+            if (/^[0-9]+\.[0-9]+\.[0-9]+/.test(pureVer)) {
+              result[pkg] = pureVer;
+              break;
+            }
+          } else {
+            for (let j = i + 1; j < Math.min(importerLines.length, i + 5); j++) {
+              const vMatch = versionPattern.exec(importerLines[j]);
+              if (vMatch && vMatch[1]) {
+                result[pkg] = vMatch[1];
+                break;
+              }
+            }
+          }
+        }
+        if (result[pkg]) break;
+      }
+    }
+  }
+
+  // 2. Global fallback/matching, but prioritizing version matching expectedMajor
   for (const pkg of packagesToFind) {
+    if (result[pkg]) continue;
+
+    const localRange = localDeps[pkg];
+    const expectedMajor = localRange ? extractMajorFromRange(localRange) : null;
+
     const escapedPkg = escapeRegExp(pkg);
     const patterns = [
       new RegExp(`(?:\\/|'|")` + escapedPkg + `@([0-9]+\\.[0-9]+\\.[0-9]+[^'"\\s_:]*)`),
@@ -273,7 +385,9 @@ export const parsePnpmLock = (contentStr: string, packagesToFind: string[]): Rec
       new RegExp(`^\\s*` + escapedPkg + `:\\s*['"]?([0-9]+\\.[0-9]+\\.[0-9]+[^'"\\s_:]*)`)
     ];
 
-    let foundVersion: string | null = null;
+    let bestMatch: string | null = null;
+    let firstMatch: string | null = null;
+
     for (const line of lines) {
       for (const pattern of patterns) {
         const match = pattern.exec(line);
@@ -281,31 +395,55 @@ export const parsePnpmLock = (contentStr: string, packagesToFind: string[]): Rec
           const ver = match[1];
           const pureVer = ver.split(/[_\(\)]/)[0];
           if (/^[0-9]+\.[0-9]+\.[0-9]+/.test(pureVer)) {
-            foundVersion = pureVer;
-            break;
+            if (!firstMatch) {
+              firstMatch = pureVer;
+            }
+            if (expectedMajor !== null) {
+              const major = parseInt(pureVer.split(".")[0], 10);
+              if (major === expectedMajor) {
+                bestMatch = pureVer;
+                break;
+              }
+            }
           }
         }
       }
-      if (foundVersion) break;
+      if (bestMatch) break;
     }
-    if (foundVersion) {
-      result[pkg] = foundVersion;
+
+    const finalVer = bestMatch || firstMatch;
+    if (finalVer) {
+      result[pkg] = finalVer;
     }
   }
+
   return result;
 };
 
 /**
  * Robustly parse dependency versions from yarn.lock via line scans
  */
-export const parseYarnLock = (contentStr: string, packagesToFind: string[]): Record<string, string> => {
+export const parseYarnLock = (
+  contentStr: string,
+  packagesToFind: string[],
+  relativeProjectDir = ".",
+  localDeps: Record<string, string> = {}
+): Record<string, string> => {
   const result: Record<string, string> = {};
   const lines = contentStr.split(/\r?\n/);
 
   for (const pkg of packagesToFind) {
+    const localRange = localDeps[pkg];
     const escapedPkg = escapeRegExp(pkg);
-    const headerPattern = new RegExp(`^"?` + escapedPkg + `@`);
+    
+    let headerPattern = new RegExp(`^"?` + escapedPkg + `@`);
+    if (localRange) {
+      const escapedRange = escapeRegExp(localRange);
+      headerPattern = new RegExp(`^"?` + escapedPkg + `@(npm:)?` + escapedRange + `[,":]`);
+    }
+
     const versionPattern = /^\s*version:?\s*['"]?([0-9]+\.[0-9]+\.[0-9]+[^'"\s]*)/;
+    let found = false;
 
     for (let i = 0; i < lines.length; i++) {
       if (headerPattern.test(lines[i])) {
@@ -313,11 +451,29 @@ export const parseYarnLock = (contentStr: string, packagesToFind: string[]): Rec
           const match = versionPattern.exec(lines[j]);
           if (match && match[1]) {
             result[pkg] = match[1];
+            found = true;
             break;
           }
         }
       }
-      if (result[pkg]) break;
+      if (found) break;
+    }
+
+    if (!found) {
+      const generalHeaderPattern = new RegExp(`^"?` + escapedPkg + `@`);
+      for (let i = 0; i < lines.length; i++) {
+        if (generalHeaderPattern.test(lines[i])) {
+          for (let j = i + 1; j < Math.min(lines.length, i + 10); j++) {
+            const match = versionPattern.exec(lines[j]);
+            if (match && match[1]) {
+              result[pkg] = match[1];
+              found = true;
+              break;
+            }
+          }
+        }
+        if (found) break;
+      }
     }
   }
   return result;
@@ -469,14 +625,18 @@ export const extractProjectFingerprint = (cwd: string): ProjectFingerprint => {
     }
   }
 
+  const relativeProjectDir = info.workspaceRoot !== info.projectRoot
+    ? relative(info.workspaceRoot, info.projectRoot).replace(/\\/g, "/")
+    : ".";
+
   if (lockfileContent) {
     const filename = basename(loadedPath);
     if (filename === "pnpm-lock.yaml") {
-      lockfileResolved = parsePnpmLock(lockfileContent, allScanningDeps);
+      lockfileResolved = parsePnpmLock(lockfileContent, allScanningDeps, relativeProjectDir, localDeps);
     } else if (filename === "package-lock.json") {
-      lockfileResolved = parsePackageLock(lockfileContent, allScanningDeps);
+      lockfileResolved = parsePackageLock(lockfileContent, allScanningDeps, relativeProjectDir, localDeps);
     } else if (filename === "yarn.lock") {
-      lockfileResolved = parseYarnLock(lockfileContent, allScanningDeps);
+      lockfileResolved = parseYarnLock(lockfileContent, allScanningDeps, relativeProjectDir, localDeps);
     }
   }
 
