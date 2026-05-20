@@ -83,13 +83,23 @@ export const applyGovernedNodeFeedback = (
     last_harmed_at: feedback === "harmed" ? timestamp : node.last_harmed_at,
     updated_at: timestamp
   };
-  const nextState = node.state === "retired" ? "retired" : transitionState(next, { originProfile });
-  const nextDeliveryState = resolveDeliveryStateAfterFeedback({
+  let nextState = node.state === "retired" ? "retired" : transitionState(next, { originProfile });
+  let nextDeliveryState = resolveDeliveryStateAfterFeedback({
     previous: node,
     nextState,
     feedback,
     nextConsecutiveHarmedCount
   });
+
+  const enteringQuarantine = nextDeliveryState === "quarantined" && node.delivery_state !== "quarantined";
+
+  // Retirement/re-quarantine for nodes that cause repeated harm (attempts >= 3)
+  if (enteringQuarantine && (node.quarantine_release_attempt_count ?? 0) >= 3) {
+    nextDeliveryState = "retired";
+    nextState = "retired";
+  }
+
+  const isQuarantineOrProbe = nextDeliveryState === "quarantined" || nextDeliveryState === "shadow_probe";
 
   return {
     ...next,
@@ -98,14 +108,30 @@ export const applyGovernedNodeFeedback = (
     quarantined_at:
       nextDeliveryState === "quarantined"
         ? (node.quarantined_at ?? timestamp)
-        : undefined,
+        : isQuarantineOrProbe ? node.quarantined_at : undefined,
     quarantine_reason:
       nextDeliveryState === "quarantined"
-        ? feedback === "harmed" && node.state === "priority_candidate"
+        ? (feedback === "harmed" && node.state === "priority_candidate"
           ? "priority_candidate_harmed"
           : nextConsecutiveHarmedCount >= CONSECUTIVE_HARM_QUARANTINE_THRESHOLD
             ? "consecutive_harms"
-            : node.quarantine_reason
-        : undefined
+            : node.quarantine_reason)
+        : isQuarantineOrProbe ? node.quarantine_reason : undefined,
+    quarantine_lease_expires_at:
+      nextDeliveryState === "quarantined"
+        ? (node.quarantine_lease_expires_at ?? new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString())
+        : isQuarantineOrProbe ? node.quarantine_lease_expires_at : undefined,
+    quarantine_original_delivery_state:
+      nextDeliveryState === "quarantined"
+        ? (node.quarantine_original_delivery_state ?? node.delivery_state)
+        : isQuarantineOrProbe ? node.quarantine_original_delivery_state : undefined,
+    quarantine_release_attempt_count:
+      nextDeliveryState === "quarantined"
+        ? (node.quarantine_release_attempt_count ?? 0)
+        : isQuarantineOrProbe ? node.quarantine_release_attempt_count : undefined,
+    quarantine_no_harm_pass_count:
+      nextDeliveryState === "quarantined"
+        ? (node.quarantine_no_harm_pass_count ?? 0)
+        : isQuarantineOrProbe ? node.quarantine_no_harm_pass_count : undefined
   };
 };
