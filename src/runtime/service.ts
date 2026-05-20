@@ -329,6 +329,10 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     return this.nodeRepo.listDiagnosticCandidatesByExactScope(scopeId);
   }
 
+  private resolveShadowProbeCandidates(scopeId: string): ExperienceNode[] {
+    return this.nodeRepo.listShadowProbeByExactScope(scopeId);
+  }
+
   recoverToolEvents(sessionId: string, payload: unknown): void {
     for (const toolResult of extractToolResultsFromPayload(payload)) {
       const recoveredEvent = toolResult.toolCallId
@@ -1005,6 +1009,77 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
           trajectory_violated_expectations: matchResult.violatedExpectationIds,
           trajectory_evidence_refs: matchResult.evidenceRefs,
         };
+
+        if (node.delivery_state === "shadow_probe") {
+          const hasHarm = detectHarm(input.experienceInput, node) || matchResult.verdict === "guidance_caused_failure";
+          const isSuccess = input.experienceInput.outcome_signal === "success";
+
+          if (isSuccess && !hasHarm) {
+            const nextPassCount = (node.quarantine_no_harm_pass_count ?? 0) + 1;
+            const updatedNode: ExperienceNode = {
+              ...node,
+              quarantine_no_harm_pass_count: nextPassCount,
+              updated_at: nowIso()
+            };
+
+            if (nextPassCount >= 3) {
+              updatedNode.delivery_state = "conservative_only";
+              updatedNode.quarantine_release_reason = "passed_shadow_probe";
+
+              this.reviewEventRepo.upsert({
+                id: stableId("rev", `${input.taskRunId}:${nodeId}:restore_conservative`),
+                episode_id: input.episodeId,
+                node_id: nodeId,
+                task_run_id: input.taskRunId,
+                event_type: "restore_conservative",
+                source: "automatic",
+                created_at: nowIso()
+              });
+            }
+            this.nodeRepo.upsert(updatedNode);
+          } else {
+            const nextAttemptCount = node.quarantine_release_attempt_count ?? 0;
+            if (nextAttemptCount >= 3) {
+              const updatedNode: ExperienceNode = {
+                ...node,
+                delivery_state: "retired",
+                state: "retired",
+                quarantine_no_harm_pass_count: 0,
+                updated_at: nowIso()
+              };
+              this.nodeRepo.upsert(updatedNode);
+
+              this.reviewEventRepo.upsert({
+                id: stableId("rev", `${input.taskRunId}:${nodeId}:retire`),
+                episode_id: input.episodeId,
+                node_id: nodeId,
+                task_run_id: input.taskRunId,
+                event_type: "retire",
+                source: "automatic",
+                created_at: nowIso()
+              });
+            } else {
+              const updatedNode: ExperienceNode = {
+                ...node,
+                delivery_state: "quarantined",
+                quarantine_lease_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
+                quarantine_no_harm_pass_count: 0,
+                updated_at: nowIso()
+              };
+              this.nodeRepo.upsert(updatedNode);
+
+              this.reviewEventRepo.upsert({
+                id: stableId("rev", `${input.taskRunId}:${nodeId}:quarantine`),
+                episode_id: input.episodeId,
+                node_id: nodeId,
+                task_run_id: input.taskRunId,
+                event_type: "quarantine",
+                source: "automatic",
+                created_at: nowIso()
+              });
+            }
+          }
+        }
       }
 
       this.attributionRecordRepo.insert({
@@ -1093,7 +1168,8 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       ? [
           ...this.resolveExactScopeInjectableNodes(input.scope_id),
           ...this.resolveConservativeCrossScopeCandidates(input.scope_id),
-          ...this.resolveDiagnosticCandidates(input.scope_id)
+          ...this.resolveDiagnosticCandidates(input.scope_id),
+          ...this.resolveShadowProbeCandidates(input.scope_id)
         ]
       : [];
     const existingRepoPolicy = this.repoPolicyRepo.getOrCreate(input.scope_id, this.config.repoExperienceMode);
