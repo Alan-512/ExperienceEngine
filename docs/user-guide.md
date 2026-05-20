@@ -366,6 +366,40 @@ ee maintenance governance drain --cwd /path/to/repo
 
 That command is for explicit operator troubleshooting or catch-up. It uses the same scheduler, lease, validator, audit, and rollback snapshot path as host-attached governance. An optional keeper can wake the same drain path for stricter wall-clock schedules, but it does not bypass budgets, leases, deterministic validators, guarded execution rules, or rollback safeguards.
 
+## Governed Portable Experience
+
+ExperienceEngine connects retrieval, attribution, and lifecycle layers to support governed, cautious sharing of experience nodes across different repositories and scopes.
+
+### Portability Bands & SemVer Compatibility
+
+When retrieving experience candidates for a task, ExperienceEngine calculates a cross-repository compatibility scorecard. This scorecard determines how safe the guidance is in the current environment using the following **Portability Bands**:
+- `validated_portable`: Highly compatible. The node matches the local programming language, and any shared dependencies have verified SemVer compatibility.
+- `cautiously_portable`: Medium compatibility. Reused with caution, usually limited to conservative delivery state until local execution success is demonstrated.
+- `incompatible`: The node requires frameworks or languages not present in the current project. Delivery is blocked.
+
+Compatibility scoring factors in **SemVer matching penalties**:
+- Framework or dependency version mismatches subtract penalty points (e.g. minor or major version drift).
+- Language mismatches (e.g., trying to use Python guidance in a TypeScript codebase) flag the node as incompatible.
+
+### Causal Trajectory Attribution
+
+During post-task finalization, ExperienceEngine verifies if the host agent actually adopted the expectations of an injected hint. This **Causal Trajectory Attribution** produces a precise verdict:
+- `adoption_detected`: The agent successfully matched the expectations of the injected hint (e.g., specific file modifications or CLI tool executions).
+- `non_adoption_detected`: The agent completed the task but did not follow the suggested guidance.
+- `unverifiable`: The task ended in failure, or outcomes could not be traced clearly.
+
+These trajectory verdicts prevent false positives in outcome attribution, ensuring that helpfulness or harm is only counted if the agent actually used the guidance.
+
+### Quarantine Leases & Shadow-Probe Release
+
+To ensure quarantined nodes have a safe path back to eligibility without erasing historical lessons:
+1. **Quarantine Leases**: When a node is quarantined due to harm or invalidation, it is given a lease duration.
+2. **Lease Expiration**: Once the lease expires, the node is transitioned to a special `shadow_probe` delivery state.
+3. **Shadow Probe**: While in `shadow_probe`, the node is evaluated silently behind the scenes. If the agent finishes tasks using this guidance without any new harm, a **no-harm pass counter** is incremented.
+4. **Conservative Restoration**: Upon successfully passing the shadow probe, the node is restored to `conservative_only` delivery (rather than direct live eligibility).
+5. **Repeated-Harm Retirement**: If the node causes repeated harm during its shadow probe or live recovery, it is permanently retired.
+6. **Preservation of History**: Throughout this cycle, historical helped/harmed counts, original delivery states, and release attempt logs are strictly preserved.
+
 ## How MCP Interaction Works
 
 For `Codex` and `Claude Code`, ExperienceEngine is designed to keep routine review and management inside the host session first.
@@ -530,6 +564,13 @@ Notes:
 - `ee install ...` and `ee doctor ...` warn when `npm` or `pnpm` is pointed at a non-official registry
 - the recommended registry for managed model downloads is `https://registry.npmjs.org`
 - `ee doctor ...` reports a first-value readiness summary so users can see how much captured evidence exists before the first durable node is promoted
+
+### Offline Profiles, Manifest Health, and Vector Migration
+
+For air-gapped or sensitive environments, ExperienceEngine supports fully offline semantic retrieval:
+- **Offline Profiles**: Set `embeddingProvider = "local"` and configure an offline profile (such as `strict-offline`) in settings. ExperienceEngine will rely entirely on local ONNX model assets.
+- **Manifest Health Verification**: When running `ee doctor`, the system validates the health of the local offline profile. It reads the model manifest files, checks checksums, and detects corrupted assets. If a strict-offline profile is active but files are missing or corrupt, a warning is raised automatically.
+- **Vector Migration**: Upgrading embedding models or altering dimensions requires vector migration. ExperienceEngine tracks vector migration status for every node (`migrated`, `pending`, etc.) along with timestamps and migration errors. You can inspect this status via `ee inspect node:<id>` or `ee doctor`.
 
 Maintenance:
 

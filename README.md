@@ -116,6 +116,9 @@ ExperienceEngine is not trying to remember more things than the host. Its core j
 - posttask review can revise whether a hint actually helped, harmed, or stayed uncertain
 - delivery decisions are persisted even when no hint is shipped, so skipped turns can still be explained later
 - high-match same-repo experience can move out of conservative delivery after successful reuse, while cross-repo reuse stays cautious unless there is stronger evidence
+- calculated cross-repo portability scorecards and SemVer penalties prevent unsafe sharing across different scopes
+- post-task causal trajectory attributions ensure outcome feedback is only recorded when the agent actually adopted the injected guidance
+- quarantine leases and shadow probes provide a safe, monitored recovery path to conservative delivery without erasing historical lessons
 - the product goal is production-safe reuse, not maximum recall
 
 ## Where It Sits In The Agent Loop
@@ -149,8 +152,10 @@ Each node moves through that lifecycle using real task outcomes, not just time-b
 ### Under The Hood
 
 - MCP-native interaction surfaces plus CLI/operator fallback
-- semantic retrieval with API and local fallback
-- deterministic match scorecards that separate same-repo confidence from broader cross-repo reuse
+- semantic retrieval with API and local fallback (including `strict-offline` profiles, manifest health checks, and vector migration)
+- deterministic match scorecards with portability bands (`validated_portable`, `cautiously_portable`, `incompatible`) and SemVer mismatch penalties
+- post-task causal trajectory attributions (`adoption_detected`, `non_adoption_detected`, `unverifiable`)
+- quarantine shadow-probe lease cycles with no-harm counters and conservative restoration
 - host-agent driven inspection and feedback, with CLI fallback commands such as `ee inspect --last`, `ee helped`, and `ee harmed`
 
 ### Interaction Surface Tiers
