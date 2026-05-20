@@ -686,3 +686,14 @@ export type ScopeFingerprint = {
   created_at: string;
   updated_at: string;
 };
+
+export type OfflineAssetManifest = {
+  manifestVersion: string;
+  providerId: string;
+  modelId: string;
+  dimensions: number;
+  preprocessingVersion: string;
+  assets: Record<string, { path: string; sha256: string }>;
+  license?: string;
+  sourceMetadata?: Record<string, unknown>;
+};

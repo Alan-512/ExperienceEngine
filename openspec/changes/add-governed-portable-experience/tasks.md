@@ -8,14 +8,14 @@
 
 ## 2. Offline Embedding Profile
 
-- [ ] 2.1 Add configuration schema support for `standard`, `local-download`, and `strict-offline` embedding profile semantics without removing existing provider settings.
-- [ ] 2.2 Add an offline asset manifest type and loader that validates provider/runtime id, model id, dimensions, preprocessing/model version, asset paths, checksums, license/source metadata, and manifest version.
-- [ ] 2.3 Update the local embedding provider to support strict offline loading with remote model fetching disabled and explicit local asset resolution.
-- [ ] 2.4 Make strict offline profile fail loudly on missing or corrupt model assets instead of silently falling back unless fallback is explicitly allowed by profile/config.
-- [ ] 2.5 Add an offline asset pack import path that validates checksums, registers the imported manifest locally, and supports air-gapped staging without network access.
-- [ ] 2.6 Add an optional offline asset pack export or packaging validation path so release artifacts can be verified before distribution.
-- [ ] 2.7 Add unit tests for successful strict offline loading, missing manifest, checksum mismatch, remote-fetch disabled behavior, asset import failure, asset import success, and standard-mode graceful fallback.
-- [ ] 2.8 Add package/build validation for any bundled, exported, or staged offline asset layout chosen by the implementation.
+- [x] 2.1 Add configuration schema support for `standard`, `local-download`, and `strict-offline` embedding profile semantics without removing existing provider settings.
+- [x] 2.2 Add an offline asset manifest type and loader that validates provider/runtime id, model id, dimensions, preprocessing/model version, asset paths, checksums, license/source metadata, and manifest version.
+- [x] 2.3 Update the local embedding provider to support strict offline loading with remote model fetching disabled and explicit local asset resolution.
+- [x] 2.4 Make strict offline profile fail loudly on missing or corrupt model assets instead of silently falling back unless fallback is explicitly allowed by profile/config.
+- [x] 2.5 Add an offline asset pack import path that validates checksums, registers the imported manifest locally, and supports air-gapped staging without network access.
+- [x] 2.6 Add an optional offline asset pack export or packaging validation path so release artifacts can be verified before distribution.
+- [x] 2.7 Add unit tests for successful strict offline loading, missing manifest, checksum mismatch, remote-fetch disabled behavior, asset import failure, asset import success, and standard-mode graceful fallback.
+- [x] 2.8 Add package/build validation for any bundled, exported, or staged offline asset layout chosen by the implementation.
 
 ## 3. Vector Migration
 

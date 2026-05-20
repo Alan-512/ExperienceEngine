@@ -24,7 +24,7 @@ type EmbeddingOptions = {
   config?: Partial<
     Pick<
     ExperienceEngineConfig,
-    "embeddingProvider" | "embeddingApiProvider" | "embeddingModel" | "embeddingDtype" | "embeddingCacheDir"
+    "embeddingProfile" | "embeddingProvider" | "embeddingApiProvider" | "embeddingModel" | "embeddingDtype" | "embeddingCacheDir"
     >
   >;
   env?: NodeJS.ProcessEnv;

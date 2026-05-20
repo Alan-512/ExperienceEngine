@@ -13,6 +13,7 @@ export const configSchema = z.object({
   captureDir: z.string().default("./data/runtime-captures"),
   maxHints: z.number().int().min(1).max(3).default(3),
   triggerThreshold: z.number().min(0).max(1).default(0.6),
+  embeddingProfile: z.enum(["standard", "local-download", "strict-offline"]).default("standard"),
   embeddingProvider: z.enum(["api", "local", "legacy"]).default("api"),
   embeddingApiProvider: z.enum(["auto", "openai", "gemini", "jina"]).default("auto"),
   embeddingModel: z.string().default("Xenova/multilingual-e5-small"),
@@ -107,6 +108,11 @@ export const pluginConfigJsonSchema = {
       minimum: 0,
       maximum: 1,
       description: "Trigger threshold for intervention gating."
+    },
+    embeddingProfile: {
+      type: "string",
+      enum: ["standard", "local-download", "strict-offline"],
+      description: "Embedding profile for local/offline execution. `standard` uses default behavior, `local-download` allows managed downloads, `strict-offline` blocks remote requests and requires staged model assets."
     },
     embeddingProvider: {
       type: "string",
@@ -303,6 +309,9 @@ export const pluginUiHints = {
   },
   triggerThreshold: {
     label: "Trigger Threshold"
+  },
+  embeddingProfile: {
+    label: "Embedding Profile"
   },
   embeddingProvider: {
     label: "Embedding Provider"

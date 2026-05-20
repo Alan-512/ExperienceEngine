@@ -4,10 +4,11 @@ import type { ExperienceEngineConfig } from "../../config/config-schema.js";
 import { resolveExperienceEnginePaths } from "../../config/path-resolver.js";
 import { normalizeWhitespace } from "../../utils/text.js";
 import type { SemanticEmbeddingProvider } from "./provider-types.js";
+import { loadOfflineManifestForModel } from "./offline-manifest.js";
 
 type ProviderOptions = {
   config?: Partial<
-    Pick<ExperienceEngineConfig, "embeddingProvider" | "embeddingModel" | "embeddingDtype" | "embeddingCacheDir">
+    Pick<ExperienceEngineConfig, "embeddingProfile" | "embeddingProvider" | "embeddingModel" | "embeddingDtype" | "embeddingCacheDir">
   >;
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
@@ -120,15 +121,29 @@ export const createLocalEmbeddingProvider = async (
   const modelCacheDir = resolveModelCacheDir(cacheDir, model);
   mkdirSync(cacheDir, { recursive: true });
 
+  const profile = options.config?.embeddingProfile ?? "standard";
   const { env, pipeline } = await loadTransformers();
-  env.allowRemoteModels = true;
-  env.allowLocalModels = true;
-  env.cacheDir = cacheDir;
+
+  if (profile === "strict-offline") {
+    env.allowRemoteModels = false;
+    env.allowLocalModels = true;
+    env.cacheDir = cacheDir;
+
+    // Validate offline manifest first. It will throw if manifest or assets are missing/invalid
+    loadOfflineManifestForModel(cacheDir, model);
+  } else {
+    env.allowRemoteModels = true;
+    env.allowLocalModels = true;
+    env.cacheDir = cacheDir;
+  }
 
   let extractor: Awaited<ReturnType<TransformersModule["pipeline"]>>;
   try {
     extractor = await pipeline("feature-extraction", model, { dtype });
   } catch (error) {
+    if (profile === "strict-offline") {
+      throw new Error(`Strict offline model load failed. Cache may be corrupted: ${error instanceof Error ? error.message : String(error)}`);
+    }
     if (!isCorruptedModelCacheError(error)) {
       throw error;
     }
