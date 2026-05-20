@@ -3,13 +3,10 @@ import type { TrajectoryExpectation, CompiledTrajectoryExpectations, TrajectoryE
 import { CommandNormalizer } from "./command-normalizer.js";
 
 export class TrajectoryCompiler {
-  /**
-   * Cleans raw step prose by removing bullet points, numbers, and leading whitespace.
-   */
   public static cleanStepProse(step: string): string {
     if (!step) return "";
     return step
-      .replace(/^[\s\-\*\•\d\.\)]+/, "") // Remove bullet points like "-", "*", "1.", "1)"
+      .replace(/^[\s\-\*\•\d\.\)]+/, "")
       .trim();
   }
 

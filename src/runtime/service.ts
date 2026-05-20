@@ -71,6 +71,8 @@ import type {
   HybridWorkerClient,
   HybridWorkerClientOptions
 } from "../hybrid/worker-client.js";
+import { TrajectoryCompiler } from "../compiler/trajectory-compiler.js";
+import { TrajectoryMatcher } from "../compiler/trajectory-matcher.js";
 
 type LearningRuntimeOptions = {
   env?: NodeJS.ProcessEnv;
@@ -935,6 +937,20 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
         continue;
       }
 
+      const compiledExps = TrajectoryCompiler.compileNodeExpectations(
+        node.recommended_steps,
+        node.avoid_steps,
+        node.success_signal,
+        node.stop_condition,
+        node.escalation_condition
+      );
+
+      const matchResult = TrajectoryMatcher.match(
+        compiledExps,
+        input.experienceInput.tool_events,
+        input.experienceInput.outcome_signal
+      );
+
       const attribution = this.deriveAttributionVerdict(input.experienceInput, node, event.delivered);
       this.attributionRecordRepo.insert({
         id: stableId("attr", `${event.injection_id}:${nodeId}:automatic`),
@@ -951,6 +967,11 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
         evidence_refs: evidenceRefs,
         source: "automatic",
         attribution_reason: event.attribution_reason,
+        trajectory_verdict: matchResult.verdict,
+        trajectory_confidence: matchResult.confidence,
+        trajectory_matched_expectations: matchResult.matchedExpectationIds,
+        trajectory_violated_expectations: matchResult.violatedExpectationIds,
+        trajectory_evidence_refs: matchResult.evidenceRefs,
         created_at: nowIso(),
         resolved_at: event.resolved_at
       });
@@ -960,6 +981,30 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     for (const nodeId of diagnosticNodeIds) {
       if (selectedNodeIds.has(nodeId)) {
         continue;
+      }
+
+      const node = this.nodeRepo.getById(nodeId);
+      let trajectoryFields = {};
+      if (node) {
+        const compiledExps = TrajectoryCompiler.compileNodeExpectations(
+          node.recommended_steps,
+          node.avoid_steps,
+          node.success_signal,
+          node.stop_condition,
+          node.escalation_condition
+        );
+        const matchResult = TrajectoryMatcher.match(
+          compiledExps,
+          input.experienceInput.tool_events,
+          input.experienceInput.outcome_signal
+        );
+        trajectoryFields = {
+          trajectory_verdict: matchResult.verdict,
+          trajectory_confidence: matchResult.confidence,
+          trajectory_matched_expectations: matchResult.matchedExpectationIds,
+          trajectory_violated_expectations: matchResult.violatedExpectationIds,
+          trajectory_evidence_refs: matchResult.evidenceRefs,
+        };
       }
 
       this.attributionRecordRepo.insert({
@@ -977,6 +1022,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
         evidence_refs: evidenceRefs,
         source: "diagnostic_record",
         attribution_reason: "diagnostic_record",
+        ...trajectoryFields,
         created_at: nowIso(),
         resolved_at: event.resolved_at
       });

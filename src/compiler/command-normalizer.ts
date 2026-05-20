@@ -159,7 +159,8 @@ export class CommandNormalizer {
     const status = event.status;
 
     // Handle command executions
-    if (event.tool_name === "run_command" && event.input_summary) {
+    const isCmdToolName = /^(run_command|bash|execute_command|terminal|sh)$/i.test(event.tool_name);
+    if (isCmdToolName && event.input_summary) {
       const normalizedCmd = this.normalizeCommand(event.input_summary);
       return {
         toolName: event.tool_name,
