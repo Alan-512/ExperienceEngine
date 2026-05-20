@@ -5,6 +5,8 @@ import {
   type ExperienceLearningQualityHealth,
   type ExperienceFirstValueReadiness
 } from "../../interaction/service.js";
+import { openDatabase, bootstrapDatabase } from "../../store/sqlite/db.js";
+import { NodeRepository } from "../../store/sqlite/repositories/node-repo.js";
 import { inspectClaudeCodeInstall } from "../../install/claude-code-doctor.js";
 import { inspectCodexInstall } from "../../install/codex-installer.js";
 import {

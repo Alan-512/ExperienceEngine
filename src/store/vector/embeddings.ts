@@ -13,6 +13,7 @@ export type EmbeddingSpace = {
   model: string;
   version: string;
   dimensions: number;
+  manifestId?: string;
 };
 
 export type EmbeddingResult = {
@@ -339,6 +340,7 @@ export const isMatchingEmbeddingSpace = (
     embedding_model?: string;
     embedding_version?: string;
     embedding_dimensions?: number;
+    embedding_manifest_id?: string;
   },
   space: EmbeddingSpace
 ): boolean =>
@@ -347,17 +349,19 @@ export const isMatchingEmbeddingSpace = (
   node.embedding_provider === space.provider &&
   node.embedding_model === space.model &&
   node.embedding_version === space.version &&
-  node.embedding_dimensions === space.dimensions;
+  node.embedding_dimensions === space.dimensions &&
+  (node.embedding_manifest_id ?? undefined) === (space.manifestId ?? undefined);
 
 export const withEmbeddingMetadata = (
   result: EmbeddingResult
 ): Pick<
   import("../../types/domain.js").ExperienceNode,
-  "embedding" | "embedding_provider" | "embedding_model" | "embedding_version" | "embedding_dimensions"
+  "embedding" | "embedding_provider" | "embedding_model" | "embedding_version" | "embedding_dimensions" | "embedding_manifest_id"
 > => ({
   embedding: result.embedding,
   embedding_provider: result.space.provider,
   embedding_model: result.space.model,
   embedding_version: result.space.version,
-  embedding_dimensions: result.space.dimensions
+  embedding_dimensions: result.space.dimensions,
+  embedding_manifest_id: result.space.manifestId
 });

@@ -596,13 +596,25 @@ export const retrieveCandidateBundle = async (
   const semanticPool = semanticMode === "backfill" ? scopeLocalNodes : lexicalShortlist;
 
   const localSemanticRecords = semanticPool
-    .filter((node) => localQuery && isMatchingEmbeddingSpace(node, localQuery.space))
+    .filter(
+      (node) =>
+        localQuery &&
+        node.migration_status !== "pending" &&
+        node.migration_status !== "migrating" &&
+        isMatchingEmbeddingSpace(node, localQuery.space)
+    )
     .map((node) => ({
       id: node.id,
       embedding: node.embedding!
     }));
   const legacyRecords = semanticPool
-    .filter((node) => !localQuery || !isMatchingEmbeddingSpace(node, localQuery.space))
+    .filter(
+      (node) =>
+        !localQuery ||
+        node.migration_status === "pending" ||
+        node.migration_status === "migrating" ||
+        !isMatchingEmbeddingSpace(node, localQuery.space)
+    )
     .map((node) => ({
       id: node.id,
       embedding: isCompatibleEmbedding(node.embedding)
@@ -648,7 +660,7 @@ export const retrieveCandidateBundle = async (
       const retrievalScore = fusedScore * 0.68;
       const policy = enrichPolicyForCandidate(input, node, options.retrievalContext);
       const matchScorecard = buildMatchScorecard(input, node, options.retrievalContext);
-      const retrievalReasons = buildRetrievalReasons({
+      const rawRetrievalReasons = buildRetrievalReasons({
         semanticScore,
         lexicalScore,
         fusedScore,
@@ -656,6 +668,14 @@ export const retrieveCandidateBundle = async (
         familyScore: policy.familyScore,
         queryRewriteApplied: retrievalQuery.rewriteApplied
       });
+      const reasons = [...rawRetrievalReasons];
+      if (localQuery) {
+        if (node.migration_status === "pending" || node.migration_status === "migrating") {
+          reasons.push("semantic:excluded_due_to_pending_migration");
+        } else if (!isMatchingEmbeddingSpace(node, localQuery.space)) {
+          reasons.push("semantic:excluded_due_to_incompatible_space");
+        }
+      }
       const totalScore = retrievalScore + policy.policyAdjustment;
       return {
         node,
@@ -663,7 +683,7 @@ export const retrieveCandidateBundle = async (
         lexicalScore,
         fusedScore,
         retrievalScore,
-        retrievalReasons,
+        retrievalReasons: reasons,
         policyAdjustment: policy.policyAdjustment,
         policyScore: policy.policyScore,
         policyReasons: policy.reasons,
