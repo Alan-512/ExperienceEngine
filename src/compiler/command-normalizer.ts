@@ -177,16 +177,98 @@ export class CommandNormalizer {
     const isFileToolName = /^(write_to_file|replace_file_content|multi_replace_file_content|write_file|read_file|view_file|apply_patch)$/i.test(event.tool_name);
 
     if (isFileToolName && event.input_summary) {
-      // input_summary usually contains the file path
-      const pathStr = event.input_summary.trim();
-      const basename = this.getBasename(pathStr);
-      const extension = this.getExtension(pathStr);
+      const trimmed = event.input_summary.trim();
+      const pathsSet = new Set<string>();
+
+      const addPath = (p: string) => {
+        if (p && typeof p === "string") {
+          let cleaned = p.trim();
+          cleaned = cleaned.replace(/^['"]|['"]$/g, "").trim();
+          if (cleaned) {
+            pathsSet.add(cleaned.replace(/\\/g, "/"));
+          }
+        }
+      };
+
+      const extractPathsFromString = (text: string) => {
+        // Regex to match:
+        // *** Update File: path
+        // *** Add File: path
+        // *** Delete File: path
+        const patchPattern = /\*\*\*\s+(?:Update|Add|Delete)\s+File:\s*([^\r\n]+)/gi;
+        let match;
+        while ((match = patchPattern.exec(text)) !== null) {
+          if (match[1]) {
+            addPath(match[1]);
+          }
+        }
+
+        // Regex to match git/standard diff headers:
+        // --- a/path
+        // +++ b/path
+        const diffPattern = /^(?:--- a\/|\+\+\+ b\/)([^\r\n\t ]+)/gm;
+        let diffMatch;
+        while ((diffMatch = diffPattern.exec(text)) !== null) {
+          if (diffMatch[1]) {
+            addPath(diffMatch[1]);
+          }
+        }
+      };
+
+      const walkJson = (val: any) => {
+        if (!val) return;
+        if (typeof val === "string") {
+          extractPathsFromString(val);
+        } else if (Array.isArray(val)) {
+          for (const item of val) {
+            walkJson(item);
+          }
+        } else if (typeof val === "object") {
+          for (const key of Object.keys(val)) {
+            const lowKey = key.toLowerCase();
+            const isPathProp = lowKey === "path" || 
+                               lowKey === "filepath" || 
+                               lowKey === "targetfile" || 
+                               lowKey === "filename" || 
+                               lowKey === "file";
+            if (isPathProp && typeof val[key] === "string") {
+              addPath(val[key]);
+            }
+            walkJson(val[key]);
+          }
+        }
+      };
+
+      // 1. Try parsing input_summary as JSON
+      if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
+        try {
+          const parsed = JSON.parse(trimmed);
+          walkJson(parsed);
+        } catch {
+          // ignore parsing error, fallback to raw string extraction
+        }
+      }
+
+      // 2. Also run regex on raw string directly in case JSON parsing failed or wasn't used
+      extractPathsFromString(trimmed);
+
+      // 3. Fallback if no paths were resolved
+      if (pathsSet.size === 0) {
+        addPath(trimmed);
+      }
+
+      const paths = Array.from(pathsSet);
+      const primaryPath = paths[0] || "";
+      const basename = this.getBasename(primaryPath);
+      const extension = this.getExtension(primaryPath);
 
       return {
         toolName: event.tool_name,
         artifactName: basename || undefined,
         artifactExtension: extension || undefined,
-        normalizedInput: this.redactVolatileTokens(pathStr),
+        artifactPath: primaryPath || undefined,
+        artifactPaths: paths,
+        normalizedInput: this.redactVolatileTokens(trimmed),
         normalizedOutput,
         status
       };

@@ -91,7 +91,7 @@ describe("Trajectory Expectation Compiler & Normalizer Tests", () => {
       // Recommended files/artifacts are ordered: false
       expect(compiled.unorderedExpectations.length).toBe(1);
       expect(compiled.unorderedExpectations[0]?.actionType).toBe("artifact");
-      expect(compiled.unorderedExpectations[0]?.artifactPattern).toBe("ts");
+      expect(compiled.unorderedExpectations[0]?.artifactPattern).toBe("src/index.ts");
       expect(compiled.unorderedExpectations[0]?.ordered).toBe(false);
     });
 
@@ -113,7 +113,7 @@ describe("Trajectory Expectation Compiler & Normalizer Tests", () => {
 
       expect(compiled.unorderedExpectations[1]?.type).toBe("avoid");
       expect(compiled.unorderedExpectations[1]?.actionType).toBe("artifact");
-      expect(compiled.unorderedExpectations[1]?.artifactPattern).toBe("json");
+      expect(compiled.unorderedExpectations[1]?.artifactPattern).toBe("package.json");
       expect(compiled.unorderedExpectations[1]?.ordered).toBe(false);
     });
 

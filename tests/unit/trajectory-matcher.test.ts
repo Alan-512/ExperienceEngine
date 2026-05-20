@@ -195,16 +195,21 @@ describe("TrajectoryMatcher Engine Tests", () => {
 
   describe("Artifact & Generic Prose Fuzzy Matching", () => {
     it("should match file artifact extensions and names accurately", () => {
-      // Expectation artifact pattern compiles to "ts" extension filter
-      const compiled = TrajectoryCompiler.compileNodeExpectations(["modify index.ts"], []);
-
-      const events: ToolEvent[] = [
-        { event_id: "e1", tool_name: "write_to_file", input_summary: "src/main.ts", status: "success", started_at: "2026-05-20" }
+      // 1. Precise filename match
+      const compiledFile = TrajectoryCompiler.compileNodeExpectations(["modify index.ts"], []);
+      const eventsFile: ToolEvent[] = [
+        { event_id: "e1", tool_name: "write_to_file", input_summary: "src/index.ts", status: "success", started_at: "2026-05-20" }
       ];
+      const resFile = TrajectoryMatcher.match(compiledFile, eventsFile, "success");
+      expect(resFile.verdict).toBe("adoption_detected");
 
-      const res = TrajectoryMatcher.match(compiled, events, "success");
-      expect(res.verdict).toBe("adoption_detected");
-      expect(res.confidence).toBe("medium");
+      // 2. Wildcard/extension match
+      const compiledExt = TrajectoryCompiler.compileNodeExpectations(["modify *.ts"], []);
+      const eventsExt: ToolEvent[] = [
+        { event_id: "e2", tool_name: "write_to_file", input_summary: "src/main.ts", status: "success", started_at: "2026-05-20" }
+      ];
+      const resExt = TrajectoryMatcher.match(compiledExt, eventsExt, "success");
+      expect(resExt.verdict).toBe("adoption_detected");
     });
 
     it("should match generic prose fuzzy overlaps by keywords criteria", () => {
@@ -358,4 +363,325 @@ describe("TrajectoryMatcher Engine Tests", () => {
       expect(res.violatedExpectationIds.length).toBe(0);
     });
   });
+
+  describe("P1 Artifact Read vs Write matching", () => {
+    it("should NOT match modify/write steps when only read/view events occur", () => {
+      const compiled = TrajectoryCompiler.compileNodeExpectations(
+        ["modify src/index.ts"],
+        []
+      );
+
+      const events: ToolEvent[] = [
+        {
+          event_id: "e1",
+          tool_name: "read_file",
+          input_summary: "src/index.ts",
+          status: "success",
+          started_at: "2026-05-20"
+        }
+      ];
+
+      const res = TrajectoryMatcher.match(compiled, events, "success");
+      expect(res.verdict).toBe("non_adoption_detected");
+      expect(res.matchedExpectationIds.length).toBe(0);
+      expect(res.violatedExpectationIds.length).toBe(1);
+    });
+
+    it("should match modify/write steps when write/apply_patch events occur", () => {
+      const compiled = TrajectoryCompiler.compileNodeExpectations(
+        ["modify src/index.ts"],
+        []
+      );
+
+      const events: ToolEvent[] = [
+        {
+          event_id: "e1",
+          tool_name: "apply_patch",
+          input_summary: "src/index.ts",
+          status: "success",
+          started_at: "2026-05-20"
+        }
+      ];
+
+      const res = TrajectoryMatcher.match(compiled, events, "success");
+      expect(res.verdict).toBe("adoption_detected");
+      expect(res.matchedExpectationIds.length).toBe(1);
+      expect(res.violatedExpectationIds.length).toBe(0);
+    });
+  });
+
+  describe("P2 Directory-Aware Artifact Matching", () => {
+    it("should NOT match when directories do not align even if basenames match", () => {
+      const compiled = TrajectoryCompiler.compileNodeExpectations(
+        ["modify src/index.ts"],
+        []
+      );
+
+      const events: ToolEvent[] = [
+        {
+          event_id: "e1",
+          tool_name: "apply_patch",
+          input_summary: "other/index.ts",
+          status: "success",
+          started_at: "2026-05-20"
+        }
+      ];
+
+      const res = TrajectoryMatcher.match(compiled, events, "success");
+      expect(res.verdict).toBe("non_adoption_detected");
+      expect(res.matchedExpectationIds.length).toBe(0);
+      expect(res.violatedExpectationIds.length).toBe(1);
+    });
+
+    it("should match when directories align", () => {
+      const compiled = TrajectoryCompiler.compileNodeExpectations(
+        ["modify src/index.ts"],
+        []
+      );
+
+      const events: ToolEvent[] = [
+        {
+          event_id: "e1",
+          tool_name: "apply_patch",
+          input_summary: "src/index.ts",
+          status: "success",
+          started_at: "2026-05-20"
+        }
+      ];
+
+      const res = TrajectoryMatcher.match(compiled, events, "success");
+      expect(res.verdict).toBe("adoption_detected");
+      expect(res.matchedExpectationIds.length).toBe(1);
+      expect(res.violatedExpectationIds.length).toBe(0);
+    });
+
+    it("should match even when expectation has leading ./ and event has no leading ./", () => {
+      const compiled = TrajectoryCompiler.compileNodeExpectations(
+        ["modify ./src/index.ts"],
+        []
+      );
+
+      const events: ToolEvent[] = [
+        {
+          event_id: "e1",
+          tool_name: "apply_patch",
+          input_summary: "src/index.ts",
+          status: "success",
+          started_at: "2026-05-20"
+        }
+      ];
+
+      const res = TrajectoryMatcher.match(compiled, events, "success");
+      expect(res.verdict).toBe("adoption_detected");
+      expect(res.matchedExpectationIds.length).toBe(1);
+      expect(res.violatedExpectationIds.length).toBe(0);
+    });
+
+    it("should match even when event has leading ./ and expectation has no leading ./", () => {
+      const compiled = TrajectoryCompiler.compileNodeExpectations(
+        ["modify src/index.ts"],
+        []
+      );
+
+      const events: ToolEvent[] = [
+        {
+          event_id: "e1",
+          tool_name: "apply_patch",
+          input_summary: "./src/index.ts",
+          status: "success",
+          started_at: "2026-05-20"
+        }
+      ];
+
+      const res = TrajectoryMatcher.match(compiled, events, "success");
+      expect(res.verdict).toBe("adoption_detected");
+      expect(res.matchedExpectationIds.length).toBe(1);
+      expect(res.violatedExpectationIds.length).toBe(0);
+    });
+
+    it("should match directory-aware artifacts case-insensitively when event has uppercase/mixed-case path", () => {
+      const compiled = TrajectoryCompiler.compileNodeExpectations(
+        ["modify src/index.ts"],
+        []
+      );
+
+      const events: ToolEvent[] = [
+        {
+          event_id: "e1",
+          tool_name: "apply_patch",
+          input_summary: "SRC/Index.TS",
+          status: "success",
+          started_at: "2026-05-20"
+        }
+      ];
+
+      const res = TrajectoryMatcher.match(compiled, events, "success");
+      expect(res.verdict).toBe("adoption_detected");
+      expect(res.matchedExpectationIds.length).toBe(1);
+      expect(res.violatedExpectationIds.length).toBe(0);
+    });
+
+    it("should NOT match when event path contains expectation as substring but NOT at a directory boundary", () => {
+      const compiled = TrajectoryCompiler.compileNodeExpectations(
+        ["modify lib/utils.ts"],
+        []
+      );
+
+      const events: ToolEvent[] = [
+        {
+          event_id: "e1",
+          tool_name: "apply_patch",
+          input_summary: "mylib/utils.ts",
+          status: "success",
+          started_at: "2026-05-20"
+        }
+      ];
+
+      const res = TrajectoryMatcher.match(compiled, events, "success");
+      expect(res.verdict).toBe("non_adoption_detected");
+      expect(res.matchedExpectationIds.length).toBe(0);
+      expect(res.violatedExpectationIds.length).toBe(1);
+    });
+
+    it("should match when event path is a deeper nested directory containing the expectation as a proper suffix", () => {
+      const compiled = TrajectoryCompiler.compileNodeExpectations(
+        ["modify src/index.ts"],
+        []
+      );
+
+      const events: ToolEvent[] = [
+        {
+          event_id: "e1",
+          tool_name: "apply_patch",
+          input_summary: "packages/frontend/src/index.ts",
+          status: "success",
+          started_at: "2026-05-20"
+        }
+      ];
+
+      const res = TrajectoryMatcher.match(compiled, events, "success");
+      expect(res.verdict).toBe("adoption_detected");
+      expect(res.matchedExpectationIds.length).toBe(1);
+      expect(res.violatedExpectationIds.length).toBe(0);
+    });
+
+    it("should match directory-aware expectations against absolute paths at a proper boundary", () => {
+      const compiled = TrajectoryCompiler.compileNodeExpectations(
+        ["modify src/config/settings.ts"],
+        []
+      );
+
+      const events: ToolEvent[] = [
+        {
+          event_id: "e1",
+          tool_name: "apply_patch",
+          input_summary: "d:/project/ExperienceEngine/src/config/settings.ts",
+          status: "success",
+          started_at: "2026-05-20"
+        }
+      ];
+
+      const res = TrajectoryMatcher.match(compiled, events, "success");
+      expect(res.verdict).toBe("adoption_detected");
+      expect(res.matchedExpectationIds.length).toBe(1);
+      expect(res.violatedExpectationIds.length).toBe(0);
+    });
+
+    it("should match when input_summary is a JSON string containing a patch with target file markers", () => {
+      const compiled = TrajectoryCompiler.compileNodeExpectations(
+        ["modify src/index.ts"],
+        []
+      );
+
+      const events: ToolEvent[] = [
+        {
+          event_id: "e1",
+          tool_name: "apply_patch",
+          input_summary: JSON.stringify({
+            patch: "*** Update File: src/index.ts\n--- a/src/index.ts\n+++ b/src/index.ts\n@@ -1,3 +1,4 @@"
+          }),
+          status: "success",
+          started_at: "2026-05-20"
+        }
+      ];
+
+      const res = TrajectoryMatcher.match(compiled, events, "success");
+      expect(res.verdict).toBe("adoption_detected");
+      expect(res.matchedExpectationIds.length).toBe(1);
+      expect(res.violatedExpectationIds.length).toBe(0);
+    });
+
+    it("should match when input_summary is a raw patch string with markers", () => {
+      const compiled = TrajectoryCompiler.compileNodeExpectations(
+        ["modify src/index.ts"],
+        []
+      );
+
+      const events: ToolEvent[] = [
+        {
+          event_id: "e1",
+          tool_name: "apply_patch",
+          input_summary: "*** Update File: src/index.ts\n[Patch contents here]",
+          status: "success",
+          started_at: "2026-05-20"
+        }
+      ];
+
+      const res = TrajectoryMatcher.match(compiled, events, "success");
+      expect(res.verdict).toBe("adoption_detected");
+      expect(res.matchedExpectationIds.length).toBe(1);
+      expect(res.violatedExpectationIds.length).toBe(0);
+    });
+
+    it("should match when input_summary is a JSON string with key filePath", () => {
+      const compiled = TrajectoryCompiler.compileNodeExpectations(
+        ["modify src/index.ts"],
+        []
+      );
+
+      const events: ToolEvent[] = [
+        {
+          event_id: "e1",
+          tool_name: "replace_file_content",
+          input_summary: JSON.stringify({
+            filePath: "src/index.ts",
+            targetContent: "foo",
+            replacementContent: "bar"
+          }),
+          status: "success",
+          started_at: "2026-05-20"
+        }
+      ];
+
+      const res = TrajectoryMatcher.match(compiled, events, "success");
+      expect(res.verdict).toBe("adoption_detected");
+      expect(res.matchedExpectationIds.length).toBe(1);
+      expect(res.violatedExpectationIds.length).toBe(0);
+    });
+
+    it("should match multiple files correctly in a single multi-file patch", () => {
+      const compiled = TrajectoryCompiler.compileNodeExpectations(
+        ["modify src/first.ts", "modify src/second.ts"],
+        []
+      );
+
+      const events: ToolEvent[] = [
+        {
+          event_id: "e1",
+          tool_name: "apply_patch",
+          input_summary: JSON.stringify({
+            patch: "*** Update File: src/first.ts\n...\n*** Add File: src/second.ts\n..."
+          }),
+          status: "success",
+          started_at: "2026-05-20"
+        }
+      ];
+
+      const res = TrajectoryMatcher.match(compiled, events, "success");
+      expect(res.verdict).toBe("adoption_detected");
+      expect(res.matchedExpectationIds.length).toBe(2);
+      expect(res.violatedExpectationIds.length).toBe(0);
+    });
+  });
 });
+

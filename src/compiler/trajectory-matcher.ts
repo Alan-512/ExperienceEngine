@@ -312,31 +312,123 @@ export class TrajectoryMatcher {
     if (exp.actionType === "artifact" && exp.artifactPattern) {
       const expPatternClean = exp.artifactPattern.toLowerCase().trim();
 
-      // If expectation is purely an extension filter (e.g. ts, js, py)
-      const isExtensionOnly = !expPatternClean.includes("/") && 
-        !expPatternClean.includes("\\") && 
-        !expPatternClean.startsWith(".");
-
-      if (isExtensionOnly && event.artifactExtension) {
-        if (event.artifactExtension.toLowerCase() === expPatternClean) {
-          return true;
+      const cleanPath = (p: string): string => {
+        let clean = p.replace(/\\/g, "/").trim();
+        while (clean.startsWith("./") || clean.startsWith("/")) {
+          if (clean.startsWith("./")) {
+            clean = clean.slice(2);
+          } else {
+            clean = clean.slice(1);
+          }
         }
+        return clean;
+      };
+
+      const expPathClean = cleanPath(expPatternClean);
+      const hasDirectory = expPathClean.includes("/");
+
+      // Path-boundary-aware suffix check: ensures the expectation aligns at
+      // the start of the event path or after a "/" separator, preventing
+      // false positives like "mylib/utils.ts" matching expectation "lib/utils.ts".
+      const isPathSuffix = (eventPath: string, suffix: string): boolean => {
+        return eventPath === suffix || eventPath.endsWith("/" + suffix);
+      };
+
+      let matchesPattern = false;
+      // If expectation is purely an extension filter (e.g. ts, js, py, *.ts, .ts)
+      const cleanPattern = expPathClean.startsWith("*.")
+        ? expPathClean.slice(2)
+        : expPathClean.startsWith(".")
+          ? expPathClean.slice(1)
+          : expPathClean;
+
+      const isExtensionOnly = !cleanPattern.includes("/") && 
+        !cleanPattern.includes("\\") && 
+        !cleanPattern.includes(".");
+
+      // Build the list of candidate paths from the event
+      const candidates: { path: string; name?: string; extension?: string }[] = [];
+      if (event.artifactPaths && event.artifactPaths.length > 0) {
+        for (const p of event.artifactPaths) {
+          const cp = cleanPath(p).toLowerCase();
+          candidates.push({
+            path: cp,
+            name: CommandNormalizer.getBasename(cp) || undefined,
+            extension: CommandNormalizer.getExtension(cp) || undefined
+          });
+        }
+      } else {
+        const cp = cleanPath(event.artifactPath || event.normalizedInput || "").toLowerCase();
+        candidates.push({
+          path: cp,
+          name: event.artifactName ? event.artifactName.toLowerCase() : (CommandNormalizer.getBasename(cp) || undefined),
+          extension: event.artifactExtension ? event.artifactExtension.toLowerCase() : (CommandNormalizer.getExtension(cp) || undefined)
+        });
       }
 
-      if (event.artifactName) {
-        const expBasename = CommandNormalizer.getBasename(expPatternClean);
-        if (event.artifactName.toLowerCase() === expBasename) {
-          return true;
+      if (hasDirectory) {
+        for (const cand of candidates) {
+          if (isPathSuffix(cand.path, expPathClean)) {
+            matchesPattern = true;
+            break;
+          }
+        }
+      } else {
+        if (isExtensionOnly) {
+          for (const cand of candidates) {
+            if (cand.extension === cleanPattern) {
+              matchesPattern = true;
+              break;
+            }
+          }
+        }
+
+        if (!matchesPattern) {
+          const expBasename = CommandNormalizer.getBasename(expPathClean);
+          for (const cand of candidates) {
+            if (cand.name === expBasename) {
+              matchesPattern = true;
+              break;
+            }
+          }
         }
       }
 
       // Input fallback
-      if (event.normalizedInput) {
-        if (event.normalizedInput.toLowerCase().includes(expPatternClean)) {
-          return true;
+      if (!matchesPattern && event.normalizedInput) {
+        const cleanInput = cleanPath(event.normalizedInput.toLowerCase());
+        if (hasDirectory) {
+          if (isPathSuffix(cleanInput, expPathClean)) {
+            matchesPattern = true;
+          }
+        } else {
+          if (cleanInput.includes(expPathClean)) {
+            matchesPattern = true;
+          }
         }
       }
-      return false;
+
+      if (!matchesPattern) {
+        return false;
+      }
+
+      // Pattern matched! Now check the read/write action alignment if defined
+      const expAction = exp.artifactAction || "any";
+      if (expAction === "any") {
+        return true;
+      }
+
+      const isReadTool = /^(read_file|view_file)$/i.test(event.toolName);
+      const isWriteTool = /^(write_to_file|replace_file_content|multi_replace_file_content|write_file|apply_patch)$/i.test(event.toolName);
+
+      if (expAction === "read") {
+        return isReadTool;
+      }
+      if (expAction === "write") {
+        return isWriteTool;
+      }
+
+      return true;
     }
 
     // 4. Generic prose element fuzzy matcher

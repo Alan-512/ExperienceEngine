@@ -734,6 +734,7 @@ export type TrajectoryExpectation = {
   toolNamePattern?: string;   // e.g. "run_command", "replace_file_content"
   commandPattern?: string;    // e.g. "git checkout", "pnpm test"
   artifactPattern?: string;   // e.g. "ts", "json", "src/types/domain.ts"
+  artifactAction?: "read" | "write" | "any"; // e.g. "read" for view/inspect, "write" for modify/create
   originalStep: string;       // Original prose for diagnostics
   ordered: boolean;           // Whether ordering constraint applies
   sourceField?: "recommended_steps" | "avoid_steps" | "success_signal" | "stop_condition" | "escalation_condition";
@@ -753,5 +754,8 @@ export type NormalizedToolEvent = {
   normalizedOutput?: string;
   artifactExtension?: string;
   artifactName?: string;
+  artifactPath?: string;
+  artifactPaths?: string[];
   status: "success" | "failure" | "unknown";
 };
+

@@ -68,17 +68,26 @@ export class TrajectoryCompiler {
 
     if (fileVerbMatch) {
       const filePath = fileVerbMatch[2] || "";
-      const ext = CommandNormalizer.getExtension(filePath) || "ts";
+      const verb = (fileVerbMatch[1] || "").toLowerCase();
       
+      let artifactAction: "read" | "write" | "any" = "any";
+      if (["read", "view", "inspect"].includes(verb)) {
+        artifactAction = "read";
+      } else if (["edit", "modify", "write", "create", "touch", "update", "delete", "remove"].includes(verb)) {
+        artifactAction = "write";
+      }
+
       return {
         id,
         type,
         actionType: "artifact",
-        artifactPattern: ext,
+        artifactPattern: filePath,
+        artifactAction,
         originalStep,
         ordered: false // Artifact touches can happen in any order
       };
     } else if (genericFileMatch) {
+      const filePath = genericFileMatch[1] || "";
       const ext = genericFileMatch[2] || "";
       // Exclude false positives like common words (e.g. e.g. or i.e.)
       if (ext && !["eg", "ie", "md", "txt"].includes(ext.toLowerCase())) {
@@ -86,7 +95,8 @@ export class TrajectoryCompiler {
           id,
           type,
           actionType: "artifact",
-          artifactPattern: ext.toLowerCase(),
+          artifactPattern: filePath,
+          artifactAction: "any",
           originalStep,
           ordered: false
         };
