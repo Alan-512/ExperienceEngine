@@ -251,7 +251,8 @@ const isDestructiveOrIrreversibleGuidance = (node: ExperienceNode): boolean => {
 };
 
 const isDiagnosticCandidate = (candidate: RetrievedCandidate): boolean =>
-  candidate.node.state === "candidate" && resolveDeliveryState(candidate.node) === "shadow_only";
+  (candidate.node.state === "candidate" && resolveDeliveryState(candidate.node) === "shadow_only") ||
+  resolveDeliveryState(candidate.node) === "shadow_probe";
 
 const DIAGNOSTIC_GATE_THRESHOLDS: Record<RepoPolicy["effective_mode"], { totalScore: number; scoreMargin: number }> = {
   safe: { totalScore: 0.6, scoreMargin: 0.05 },
@@ -260,6 +261,9 @@ const DIAGNOSTIC_GATE_THRESHOLDS: Record<RepoPolicy["effective_mode"], { totalSc
 };
 
 const passesDiagnosticLiveGate = (candidate: RetrievedCandidate, repoPolicy?: RepoPolicy): boolean => {
+  if (resolveDeliveryState(candidate.node) === "shadow_probe") {
+    return false;
+  }
   const mode = repoPolicy?.effective_mode ?? "safe";
   const thresholds = DIAGNOSTIC_GATE_THRESHOLDS[mode];
   const strictCircuitSuppressed = mode === "strict" && repoPolicy?.live_diagnostics_disabled;
