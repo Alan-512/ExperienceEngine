@@ -203,7 +203,6 @@ describe("Phase 6 Integration: Cross-Repo Intervention Governance", () => {
       undefined
     );
 
-    console.log("DEBUG decisionAfterSuccesses:", JSON.stringify(decisionAfterSuccesses, null, 2));
     expect(decisionAfterSuccesses.mode).toBe("inject");
     expect(decisionAfterSuccesses.selected[0].id).toBe("node_cross");
 
@@ -239,6 +238,7 @@ describe("Phase 6 Integration: Cross-Repo Intervention Governance", () => {
       undefined
     );
 
-    expect(decisionAfterHarm.mode).toBe("inject_conservative");
+    // Now that the node has global harm count > 0, the cross-scope global harm check correctly blocks it from same_family delivery, forcing a skip decision.
+    expect(decisionAfterHarm.mode).toBe("skip");
   });
 });

@@ -133,5 +133,67 @@ describe("Trajectory Expectation Compiler & Normalizer Tests", () => {
       expect(compiled.unorderedExpectations[1]?.actionType).toBe("generic");
       expect(compiled.unorderedExpectations[1]?.originalStep).toBe(complexProse[1]);
     });
+
+    it("should compile all 5 core guidance fields including success_signal, stop_condition, and escalation_condition", () => {
+      const steps = ["pnpm test"];
+      const avoid = ["git reset --hard"];
+      const success = "Build succeeds perfectly";
+      const stop = "Exit if port is in use";
+      const escalation = "Escalate if out of memory";
+
+      const compiled = TrajectoryCompiler.compileNodeExpectations(steps, avoid, success, stop, escalation);
+
+      // Verify ordered expectations (only recommended command steps are ordered)
+      expect(compiled.orderedExpectations.length).toBe(1);
+      expect(compiled.orderedExpectations[0]?.commandPattern).toBe("pnpm test");
+      expect(compiled.orderedExpectations[0]?.ordered).toBe(true);
+
+      // Verify unordered expectations: 1 avoid command + 3 compiled fields (all unordered)
+      // success_signal -> recommend (unordered)
+      // stop_condition -> avoid (unordered)
+      // escalation_condition -> avoid (unordered)
+      expect(compiled.unorderedExpectations.length).toBe(4);
+
+      const avoidExp = compiled.unorderedExpectations.find(e => e.originalStep.includes("reset"));
+      expect(avoidExp?.type).toBe("avoid");
+      expect(avoidExp?.actionType).toBe("command");
+      expect(avoidExp?.commandPattern).toBe("git reset");
+      expect(avoidExp?.ordered).toBe(false);
+
+      const successExp = compiled.unorderedExpectations.find(e => e.originalStep.includes("perfect"));
+      expect(successExp?.type).toBe("recommend");
+      expect(successExp?.actionType).toBe("generic");
+      expect(successExp?.ordered).toBe(false);
+
+      const stopExp = compiled.unorderedExpectations.find(e => e.originalStep.includes("Exit"));
+      expect(stopExp?.type).toBe("avoid");
+      expect(stopExp?.actionType).toBe("generic");
+      expect(stopExp?.ordered).toBe(false);
+
+      const escalationExp = compiled.unorderedExpectations.find(e => e.originalStep.includes("memory"));
+      expect(escalationExp?.type).toBe("avoid");
+      expect(escalationExp?.actionType).toBe("generic");
+      expect(escalationExp?.ordered).toBe(false);
+    });
+
+    it("should capture advanced package manager command patterns (npm run / pnpm exec) and decouple toolNamePattern", () => {
+      const steps = [
+        "Run npm run build --config production",
+        "avoid pnpm exec tsc --noEmit"
+      ];
+
+      const compiled = TrajectoryCompiler.compileNodeExpectations(steps, []);
+      
+      expect(compiled.orderedExpectations.length).toBe(2);
+      expect(compiled.orderedExpectations[0]?.actionType).toBe("command");
+      expect(compiled.orderedExpectations[0]?.commandPattern).toBe("npm run_build");
+      expect(compiled.orderedExpectations[0]?.toolNamePattern).toBe("run_command|bash|execute_command|terminal|sh");
+      expect(compiled.orderedExpectations[0]?.ordered).toBe(true);
+
+      expect(compiled.orderedExpectations[1]?.actionType).toBe("command");
+      expect(compiled.orderedExpectations[1]?.commandPattern).toBe("pnpm exec_tsc");
+      expect(compiled.orderedExpectations[1]?.toolNamePattern).toBe("run_command|bash|execute_command|terminal|sh");
+      expect(compiled.orderedExpectations[1]?.ordered).toBe(true);
+    });
   });
 });

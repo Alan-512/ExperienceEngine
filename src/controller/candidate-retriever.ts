@@ -584,6 +584,37 @@ export const buildPortabilityScorecard = (
       ? sourceFingerprint.primaryLanguage === targetFingerprint.primaryLanguage
       : true;
 
+  const isDestructiveCrossRepo = (n: ExperienceNode): boolean => {
+    const text = [
+      n.trigger_pattern,
+      n.compact_hint,
+      n.goal,
+      n.recommended_steps?.join(" "),
+      n.avoid_steps?.join(" "),
+      n.success_signal,
+      n.stop_condition,
+      n.escalation_condition
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+
+    return /\b(rm\s+-rf|git\s+reset\s+--hard|git\s+clean\b|drop\s+table|delete\s+database|force\s+push|rewrite\s+history)/i.test(text);
+  };
+
+  if (isDestructiveCrossRepo(node)) {
+    negativeEvidence.push("destructive_guidance");
+    return {
+      portabilityBand: "incompatible",
+      score: 0.0,
+      matchedLanguage: langMatch,
+      sharedDependencies: [],
+      penalties: [],
+      negativeEvidence,
+      whyScore: "Destructive or irreversible guidance detected in cross-repo transfer."
+    };
+  }
+
   if (!langMatch) {
     return {
       portabilityBand: "incompatible",
@@ -650,7 +681,7 @@ export const buildPortabilityScorecard = (
   compareCategory("hostRuntimeAdapters", true);
   compareCategory("testBuildTools", false);
 
-  if (node.scope_id === input.scope_id && node.harmed_count > 0) {
+  if (node.harmed_count > 0) {
     negativeEvidence.push("historical_causal_harm");
   }
 

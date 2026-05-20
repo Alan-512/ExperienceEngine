@@ -376,4 +376,59 @@ describe("Phase 5: Portability Scoring And Bands", () => {
     expect(route3.decision).toBe("allow");
     expect(route3.reason).toBe("explicit_failure_signal");
   });
+
+  it("should downgrade to weakly_related when cross-scope node has global harmed_count > 0", () => {
+    const { db, fpRepo } = makeTestEnv();
+    const fpSource = mockFingerprint({ primaryLanguage: "typescript" });
+    const fpTarget = mockFingerprint({ primaryLanguage: "typescript" });
+
+    insertFingerprint(fpRepo, "scope_source", fpSource);
+    insertFingerprint(fpRepo, "scope_target", fpTarget);
+
+    const nodeItem = mockNode({ 
+      id: "node_cross_harmed", 
+      scope_id: "scope_target", 
+      harmed_count: 1 
+    });
+    const input: ExperienceInput = {
+      scope_id: "scope_source",
+      task_type: "bug_fix",
+      task_summary: "Fix router issue",
+      tool_events: [],
+      outcome_signal: "unknown",
+      injected_node_ids: []
+    };
+
+    const scorecard = buildPortabilityScorecard(input, nodeItem, { db } as any);
+    expect(scorecard.portabilityBand).toBe("weakly_related");
+    expect(scorecard.negativeEvidence).toContain("historical_causal_harm");
+  });
+
+  it("should block cross-scope node and force incompatible when destructive command is detected", () => {
+    const { db, fpRepo } = makeTestEnv();
+    const fpSource = mockFingerprint({ primaryLanguage: "typescript" });
+    const fpTarget = mockFingerprint({ primaryLanguage: "typescript" });
+
+    insertFingerprint(fpRepo, "scope_source", fpSource);
+    insertFingerprint(fpRepo, "scope_target", fpTarget);
+
+    const nodeItem = mockNode({ 
+      id: "node_cross_destructive", 
+      scope_id: "scope_target", 
+      recommended_steps: ["Do some work", "Run rm -rf /"]
+    });
+    const input: ExperienceInput = {
+      scope_id: "scope_source",
+      task_type: "bug_fix",
+      task_summary: "Fix router issue",
+      tool_events: [],
+      outcome_signal: "unknown",
+      injected_node_ids: []
+    };
+
+    const scorecard = buildPortabilityScorecard(input, nodeItem, { db } as any);
+    expect(scorecard.portabilityBand).toBe("incompatible");
+    expect(scorecard.score).toBe(0.0);
+    expect(scorecard.negativeEvidence).toContain("destructive_guidance");
+  });
 });

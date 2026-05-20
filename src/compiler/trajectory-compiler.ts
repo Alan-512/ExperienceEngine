@@ -22,9 +22,20 @@ export class TrajectoryCompiler {
     const id = createId("exp");
 
     // 1. Check for command features
-    // Match common executables (pnpm, npm, git, tsc, vitest, docker, etc.)
-    const commandRegex = /\b(pnpm|npm|yarn|bun|npx|git|tsc|vitest|jest|mocha|eslint|prettier|vite|next|docker)\b\s*([a-zA-Z0-9_\-\.\/]+)?/i;
-    const commandMatch = cleanStep.match(commandRegex);
+    // Match package manager followed by run/exec
+    const pkgManagerRegex = /\b(pnpm|npm|yarn|bun|npx)\s+(run|exec)\s+([a-zA-Z0-9_\-\.\/]+)/i;
+    const pkgManagerMatch = cleanStep.match(pkgManagerRegex);
+    
+    let commandMatch = pkgManagerMatch;
+    let isPkgManager = false;
+    
+    if (pkgManagerMatch) {
+      isPkgManager = true;
+    } else {
+      // Match common executables (pnpm, npm, git, tsc, vitest, docker, etc.)
+      const commandRegex = /\b(pnpm|npm|yarn|bun|npx|git|tsc|vitest|jest|mocha|eslint|prettier|vite|next|docker)\b\s*([a-zA-Z0-9_\-\.\/]+)?/i;
+      commandMatch = cleanStep.match(commandRegex);
+    }
 
     if (commandMatch) {
       const exe = commandMatch[1]?.toLowerCase();
@@ -43,7 +54,7 @@ export class TrajectoryCompiler {
         id,
         type,
         actionType: "command",
-        toolNamePattern: "run_command",
+        toolNamePattern: "run_command|bash|execute_command|terminal|sh",
         commandPattern,
         originalStep,
         ordered: type === "recommend" // Recommended commands are ordered; avoid commands check globally
@@ -96,11 +107,14 @@ export class TrajectoryCompiler {
   }
 
   /**
-   * Compiles recommended_steps and avoid_steps of an ExperienceNode into CompiledTrajectoryExpectations.
+   * Compiles recommended_steps, avoid_steps, success_signal, stop_condition, and escalation_condition of an ExperienceNode into CompiledTrajectoryExpectations.
    */
   public static compileNodeExpectations(
     recommendedSteps?: string[],
-    avoidSteps?: string[]
+    avoidSteps?: string[],
+    successSignal?: string,
+    stopCondition?: string,
+    escalationCondition?: string
   ): CompiledTrajectoryExpectations {
     const orderedExpectations: TrajectoryExpectation[] = [];
     const unorderedExpectations: TrajectoryExpectation[] = [];
@@ -129,6 +143,33 @@ export class TrajectoryCompiler {
           ordered: false
         });
       }
+    }
+
+    // Compile success_signal
+    if (successSignal && successSignal.trim()) {
+      const exp = this.compileStep(successSignal, "recommend");
+      unorderedExpectations.push({
+        ...exp,
+        ordered: false
+      });
+    }
+
+    // Compile stop_condition
+    if (stopCondition && stopCondition.trim()) {
+      const exp = this.compileStep(stopCondition, "avoid");
+      unorderedExpectations.push({
+        ...exp,
+        ordered: false
+      });
+    }
+
+    // Compile escalation_condition
+    if (escalationCondition && escalationCondition.trim()) {
+      const exp = this.compileStep(escalationCondition, "avoid");
+      unorderedExpectations.push({
+        ...exp,
+        ordered: false
+      });
     }
 
     return {

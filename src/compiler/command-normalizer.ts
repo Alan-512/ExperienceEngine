@@ -100,15 +100,15 @@ export class CommandNormalizer {
       const primarySub = tokens[subIdx] || "";
       if (primarySub && !primarySub.startsWith("-")) {
         subcommand = primarySub.toLowerCase();
-        if (subcommand === "run") {
-          // If "run", try to capture the next script name (e.g. pnpm run build -> run_build)
+        if (subcommand === "run" || subcommand === "exec") {
+          // If "run" or "exec", try to capture the next script name (e.g. pnpm run build -> run_build, pnpm exec tsc -> exec_tsc)
           let scriptIdx = subIdx + 1;
           while (scriptIdx < tokens.length && tokens[scriptIdx]?.startsWith("-")) {
             scriptIdx++;
           }
           const scriptName = tokens[scriptIdx] || "";
           if (scriptName && !scriptName.startsWith("-")) {
-            subcommand = `run_${scriptName.toLowerCase()}`;
+            subcommand = `${subcommand}_${scriptName.toLowerCase()}`;
           }
         }
       }
