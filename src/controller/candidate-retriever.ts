@@ -167,8 +167,10 @@ const hardFilterNodes = (
       (
         options.includeShadowDiagnosticCandidates === true &&
         node.scope_id === input.scope_id &&
-        node.state === "candidate" &&
-        resolveDeliveryState(node) === "shadow_only"
+        (
+          (node.state === "candidate" && resolveDeliveryState(node) === "shadow_only") ||
+          resolveDeliveryState(node) === "shadow_probe"
+        )
       )
     ) &&
     passesCorrectionScopeGate(input, node)
@@ -752,6 +754,43 @@ export const retrieveCandidateBundle = async (
   nodes: ExperienceNode[],
   options: RetrieveOptions = {}
 ): Promise<RetrievedCandidateBundle> => {
+  const db = options.retrievalContext?.db as DatabaseSync | undefined;
+  if (db) {
+    try {
+      const nowIso = new Date().toISOString();
+      const expiredRows = db.prepare(
+        `SELECT id FROM experience_nodes 
+         WHERE delivery_state = 'quarantined' 
+           AND quarantine_lease_expires_at <= ?`
+      ).all(nowIso) as { id: string }[];
+
+      if (expiredRows.length > 0) {
+        const stmt = db.prepare(
+          `UPDATE experience_nodes
+           SET delivery_state = 'shadow_probe',
+               quarantine_release_attempt_count = COALESCE(quarantine_release_attempt_count, 0) + 1,
+               quarantine_last_release_attempt_at = ?,
+               quarantine_no_harm_pass_count = 0,
+               updated_at = ?
+           WHERE id = ?`
+        );
+        for (const row of expiredRows) {
+          stmt.run(nowIso, nowIso, row.id);
+          const inMemNode = nodes.find(n => n.id === row.id);
+          if (inMemNode) {
+            inMemNode.delivery_state = "shadow_probe";
+            inMemNode.quarantine_release_attempt_count = (inMemNode.quarantine_release_attempt_count ?? 0) + 1;
+            inMemNode.quarantine_last_release_attempt_at = nowIso;
+            inMemNode.quarantine_no_harm_pass_count = 0;
+            inMemNode.updated_at = nowIso;
+          }
+        }
+      }
+    } catch (err) {
+      // Gracefully ignore database issues
+    }
+  }
+
   const retrievalSource = resolveRetrievalSource(input, options.retrievalContext);
   const retrievalQuery = buildRetrievalQuery(retrievalSource.taskSummary, retrievalSource.contextSummary);
   const queryText = retrievalQuery.retrievalQueryText;
