@@ -5,6 +5,7 @@ import { renderInlineNotice } from "../controller/inline-notice.js";
 import { buildSkipScorecard } from "../controller/skip-scorecard.js";
 import { buildExperienceInput } from "../input/input-adapter.js";
 import { resolveScope } from "../input/scope-resolver.js";
+import { persistProjectFingerprint } from "../input/fingerprint-extractor.js";
 import { evaluateRepoPolicy } from "../experience-management/repo-policy.js";
 import { bootstrapDatabase, openDatabase } from "../store/sqlite/db.js";
 import { AttributionRecordRepository } from "../store/sqlite/repositories/attribution-record-repo.js";
@@ -137,6 +138,13 @@ export class ExperiencePromptRuntimeService {
     const input = buildExperienceInput(session.context, session.toolEvents);
     const retrievalContext = buildRetrievalContext(input, session.context);
     const resolvedScope = resolveScope(session.context.cwd);
+    if (session.context?.cwd) {
+      try {
+        persistProjectFingerprint(this.db, session.context.cwd);
+      } catch {
+        // 确保鲁棒容错，不阻塞 lookup 流程
+      }
+    }
     const existingScope = this.scopeRepo.getById(resolvedScope.scope_id);
 
     if (existingScope?.is_disabled) {

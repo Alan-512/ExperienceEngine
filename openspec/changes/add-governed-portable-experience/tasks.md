@@ -31,14 +31,14 @@
 
 ## 4. Compatibility Fingerprints
 
-- [ ] 4.1 Add a deterministic compatibility fingerprint extractor for repository scopes.
-- [ ] 4.2 Extract primary language, package manager, lockfile family, frameworks, database/ORM tools, test/build tools, host/runtime adapters, relevant config markers, and stable project markers.
-- [ ] 4.3 Prefer lockfile-resolved dependency versions over package manifest ranges when deriving SemVer major versions.
-- [ ] 4.4 Add monorepo-aware scope detection that records workspace root, package/project root, and a stable project root scope id.
-- [ ] 4.5 Combine package-local manifests with root lockfile-resolved versions when extracting dependency major versions for workspace packages.
-- [ ] 4.6 Handle missing manifests, missing lockfiles, workspace packages, aliased packages, and unknown versions without failing extraction.
-- [ ] 4.7 Persist schema-versioned structured fingerprint data and a stable fingerprint hash.
-- [ ] 4.8 Add tests for npm/pnpm/yarn lockfile inputs, missing lockfiles, major-version extraction, unknown versions, deterministic hash generation, and monorepo package/root lockfile resolution.
+- [x] 4.1 Add a deterministic compatibility fingerprint extractor for repository scopes.
+- [x] 4.2 Extract primary language, package manager, lockfile family, frameworks, database/ORM tools, test/build tools, host/runtime adapters, relevant config markers, and stable project markers.
+- [x] 4.3 Prefer lockfile-resolved dependency versions over package manifest ranges when deriving SemVer major versions.
+- [x] 4.4 Add monorepo-aware scope detection that records workspace root, package/project root, and a stable project root scope id.
+- [x] 4.5 Combine package-local manifests with root lockfile-resolved versions when extracting dependency major versions for workspace packages.
+- [x] 4.6 Handle missing manifests, missing lockfiles, workspace packages, aliased packages, and unknown versions without failing extraction.
+- [x] 4.7 Persist schema-versioned structured fingerprint data and a stable fingerprint hash.
+- [x] 4.8 Add tests for npm/pnpm/yarn lockfile inputs, missing lockfiles, major-version extraction, unknown versions, deterministic hash generation, and monorepo package/root lockfile resolution.
 
 ## 5. Portability Scoring And Bands
 
