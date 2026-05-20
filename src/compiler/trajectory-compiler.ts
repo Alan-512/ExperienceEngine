@@ -6,7 +6,7 @@ export class TrajectoryCompiler {
   public static cleanStepProse(step: string): string {
     if (!step) return "";
     return step
-      .replace(/^[\s\-\*\•\d\.\)]+/, "")
+      .replace(/^[\s\-\*\u2022\d\.\)]+/, "")
       .trim();
   }
 
@@ -147,6 +147,7 @@ export class TrajectoryCompiler {
       const exp = this.compileStep(successSignal, "recommend");
       unorderedExpectations.push({
         ...exp,
+        id: exp.id.replace("exp_", "success_"),
         ordered: false
       });
     }

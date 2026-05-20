@@ -157,6 +157,7 @@ export class CommandNormalizer {
    */
   public static normalizeToolEvent(event: ToolEvent): NormalizedToolEvent {
     const status = event.status;
+    const normalizedOutput = event.output_summary ? this.redactVolatileTokens(event.output_summary) : undefined;
 
     // Handle command executions
     const isCmdToolName = /^(run_command|bash|execute_command|terminal|sh)$/i.test(event.tool_name);
@@ -167,6 +168,7 @@ export class CommandNormalizer {
         commandFamily: normalizedCmd.commandFamily,
         subcommand: normalizedCmd.subcommand,
         normalizedInput: normalizedCmd.normalizedInput,
+        normalizedOutput,
         status
       };
     }
@@ -192,6 +194,7 @@ export class CommandNormalizer {
         artifactName: basename || undefined,
         artifactExtension: extension || undefined,
         normalizedInput: this.redactVolatileTokens(pathStr),
+        normalizedOutput,
         status
       };
     }
@@ -200,6 +203,7 @@ export class CommandNormalizer {
     return {
       toolName: event.tool_name,
       normalizedInput: event.input_summary ? this.redactVolatileTokens(event.input_summary) : undefined,
+      normalizedOutput,
       status
     };
   }

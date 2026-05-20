@@ -8,7 +8,7 @@ import type {
 import { CommandNormalizer } from "./command-normalizer.js";
 
 export type TrajectoryMatchResult = {
-  verdict: "adoption" | "non_adoption" | "contra_adoption" | "causal_success" | "causal_harm";
+  verdict: "adoption_detected" | "non_adoption_detected" | "contra_adoption_detected" | "guidance_prevented_failure" | "guidance_caused_failure" | "trajectory_unknown";
   confidence: AttributionConfidence;
   matchedExpectationIds: string[];
   violatedExpectationIds: string[];
@@ -31,9 +31,10 @@ export class TrajectoryMatcher {
     // De-duplicate evidence refs (ToolEvent.event_id)
     const evidenceRefsSet = new Set<string>();
 
+    // Exclude success_signal (which has success_ ID prefix) from standard command recommendations to prevent non_adoption false alarms
     const recommendIds = new Set<string>([
       ...expectations.orderedExpectations.map(e => e.id),
-      ...expectations.unorderedExpectations.filter(e => e.type === "recommend").map(e => e.id)
+      ...expectations.unorderedExpectations.filter(e => e.type === "recommend" && !e.id.startsWith("success_")).map(e => e.id)
     ]);
     const avoidIds = new Set<string>(
       expectations.unorderedExpectations.filter(e => e.type === "avoid").map(e => e.id)
@@ -124,7 +125,7 @@ export class TrajectoryMatcher {
     const matchedRecommendCount = matchedExpectationIds.filter(id => recommendIds.has(id)).length;
     const totalRecommendCount = recommendIds.size;
 
-    let verdict: TrajectoryMatchResult["verdict"] = "non_adoption";
+    let verdict: TrajectoryMatchResult["verdict"] = "non_adoption_detected";
     let confidence: AttributionConfidence = "low";
 
     const hasViolatedAvoid = violatedAvoidCount > 0;
@@ -166,23 +167,23 @@ export class TrajectoryMatcher {
 
     if (hasViolatedAvoid) {
       if (isCausalHarmConfirmed()) {
-        verdict = "causal_harm";
+        verdict = "guidance_caused_failure";
         confidence = "high";
       } else {
-        verdict = "contra_adoption";
+        verdict = "contra_adoption_detected";
         confidence = "medium";
       }
     } else {
       if (allRecommendsMet || (noRecommendsDefined && avoidIds.size > 0)) {
         if (outcome === "success") {
-          verdict = "causal_success";
+          verdict = "guidance_prevented_failure";
           confidence = "high";
         } else {
-          verdict = "adoption";
+          verdict = "adoption_detected";
           confidence = "medium";
         }
       } else {
-        verdict = "non_adoption";
+        verdict = "non_adoption_detected";
         if (matchedRecommendCount > 0) {
           confidence = "medium";
         } else {
@@ -282,7 +283,11 @@ export class TrajectoryMatcher {
       if (!cleanOriginal) return false;
 
       const cleanInput = (event.normalizedInput || "").toLowerCase().replace(/[^a-z0-9]/g, "");
-      if (cleanInput.includes(cleanOriginal) || cleanOriginal.includes(cleanInput)) {
+      const cleanOutput = (event.normalizedOutput || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      if (
+        cleanInput.includes(cleanOriginal) || cleanOriginal.includes(cleanInput) ||
+        cleanOutput.includes(cleanOriginal) || cleanOriginal.includes(cleanOutput)
+      ) {
         return true;
       }
 
@@ -296,9 +301,10 @@ export class TrajectoryMatcher {
         .split(/[^a-z0-9]+/)
         .filter(w => w.length > 3 && !stopwords.has(w));
 
-      if (expWords.length > 0 && event.normalizedInput) {
-        const inputLower = event.normalizedInput.toLowerCase();
-        const matchCount = expWords.filter(w => inputLower.includes(w)).length;
+      if (expWords.length > 0) {
+        const inputLower = (event.normalizedInput || "").toLowerCase();
+        const outputLower = (event.normalizedOutput || "").toLowerCase();
+        const matchCount = expWords.filter(w => inputLower.includes(w) || outputLower.includes(w)).length;
         // Matches if 50%+ of prose keywords or at least 2 distinct keywords overlap
         if (matchCount >= Math.min(2, expWords.length)) {
           return true;

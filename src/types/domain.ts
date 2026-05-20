@@ -748,6 +748,7 @@ export type NormalizedToolEvent = {
   commandFamily?: string;
   subcommand?: string;
   normalizedInput?: string;
+  normalizedOutput?: string;
   artifactExtension?: string;
   artifactName?: string;
   status: "success" | "failure" | "unknown";
