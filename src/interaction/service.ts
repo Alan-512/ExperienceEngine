@@ -53,7 +53,8 @@ import type {
   ExperienceNodeType,
   ExperienceState,
   ReviewEvent,
-  TaskRun
+  TaskRun,
+  DeliveryState
 } from "../types/domain.js";
 import type { NodeOriginProfile } from "../experience-management/task-management-signals.js";
 import {
@@ -126,6 +127,16 @@ export type ExperienceNodeDetail = ExperienceNodeSummary & {
   originRecordIds: string[];
   helpedRecordIds: string[];
   harmedRecordIds: string[];
+  deliveryState?: DeliveryState;
+  migrationStatus?: "current" | "pending" | "migrating" | "failed";
+  sourceFingerprintHash?: string;
+  portableValidationEvidence?: ExperienceNode["portable_validation_evidence"];
+  quarantineLeaseExpiresAt?: string;
+  quarantineOriginalDeliveryState?: DeliveryState;
+  quarantineReleaseAttemptCount?: number;
+  quarantineLastReleaseAttemptAt?: string;
+  quarantineReleaseReason?: string;
+  quarantineNoHarmPassCount?: number;
 };
 
 export type ExperienceTimelineEntry = {
@@ -549,7 +560,17 @@ const toNodeDetail = (node: ExperienceNode): ExperienceNodeDetail => ({
   recommendedSteps: node.recommended_steps ?? [],
   originRecordIds: node.origin_record_ids,
   helpedRecordIds: node.helped_record_ids,
-  harmedRecordIds: node.harmed_record_ids
+  harmedRecordIds: node.harmed_record_ids,
+  deliveryState: node.delivery_state,
+  migrationStatus: node.migration_status,
+  sourceFingerprintHash: node.source_fingerprint_hash,
+  portableValidationEvidence: node.portable_validation_evidence,
+  quarantineLeaseExpiresAt: node.quarantine_lease_expires_at,
+  quarantineOriginalDeliveryState: node.quarantine_original_delivery_state,
+  quarantineReleaseAttemptCount: node.quarantine_release_attempt_count,
+  quarantineLastReleaseAttemptAt: node.quarantine_last_release_attempt_at,
+  quarantineReleaseReason: node.quarantine_release_reason,
+  quarantineNoHarmPassCount: node.quarantine_no_harm_pass_count
 });
 
 const summarizeAutomaticFeedback = (events: ReviewEvent[]): "helped" | "harmed" | "none" => {

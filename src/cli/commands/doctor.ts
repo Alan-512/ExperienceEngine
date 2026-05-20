@@ -27,6 +27,7 @@ import {
   inspectSharedSetupState,
   type SharedSetupState
 } from "../state-model.js";
+import { loadOfflineManifestForModel } from "../../store/vector/offline-manifest.js";
 
 type DoctorDeps = {
   fetchLatestGitHubReleaseStatus?: typeof fetchLatestGitHubReleaseStatus;
@@ -593,6 +594,23 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     console.log("Embedding summary:");
     console.log(`- Mode: ${config.embeddingProvider}`);
     console.log(`- API provider override: ${config.embeddingApiProvider}`);
+    if (config.embeddingProvider === "local") {
+      console.log(`- Profile: ${config.embeddingProfile}`);
+      try {
+        const manifest = loadOfflineManifestForModel(config.embeddingCacheDir, config.embeddingModel);
+        console.log(`- Offline readiness: Ready`);
+        console.log(`- Offline manifest ID: ${manifest.id}`);
+        console.log(`- Offline assets: verified (checksums match)`);
+      } catch (error: any) {
+        console.log(`- Offline readiness: Error`);
+        console.log(`- Offline manifest error: ${error.message}`);
+        if (config.embeddingProfile === "strict-offline") {
+          console.log(`  Warning: Strict offline profile is set, but offline assets are not ready or are corrupt.`);
+        }
+      }
+    } else {
+      console.log(`- Offline readiness: Not applicable (using remote provider ${config.embeddingProvider})`);
+    }
     console.log(
       `- Vector migration: completed=${completedCount}, pending=${pendingCount}, migrating=${migratingCount}, failed=${failedCount} (total=${totalNodes})`
     );

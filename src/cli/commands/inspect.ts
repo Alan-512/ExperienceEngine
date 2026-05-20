@@ -515,6 +515,32 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string,
         if (topCandidate?.rerankSource) {
           console.log(`- Top candidate rerank source: ${topCandidate.rerankSource}`);
         }
+        if (topCandidate?.portabilityScorecard) {
+          const port = topCandidate.portabilityScorecard;
+          console.log("Portability scorecard:");
+          console.log(`- Band: ${port.portabilityBand}`);
+          console.log(`- Score: ${port.score}`);
+          console.log(`- Matched language: ${port.matchedLanguage ? "yes" : "no"}`);
+          if (port.sharedDependencies.length) {
+            console.log(`- Shared dependencies: ${port.sharedDependencies.join(", ")}`);
+          }
+          if (port.penalties && port.penalties.length) {
+            console.log("- SemVer penalties:");
+            for (const penalty of port.penalties) {
+              console.log(`  - ${penalty.dependency} (${penalty.category}): -${penalty.penalty} (${penalty.reason})`);
+            }
+          }
+          if (port.negativeEvidence && port.negativeEvidence.length) {
+            console.log(`- Negative evidence: ${port.negativeEvidence.join(", ")}`);
+          }
+          console.log(`- Reason: ${port.whyScore}`);
+          if (typeof port.successReuseCount === "number") {
+            console.log(`- Success reuse count: ${port.successReuseCount}`);
+          }
+          if (typeof port.harmCount === "number") {
+            console.log(`- Harm count: ${port.harmCount}`);
+          }
+        }
         if (record.scorecard.gateReason) {
           console.log(`- Gate reason: ${record.scorecard.gateReason}`);
         }
@@ -605,6 +631,21 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string,
             console.log(
               `  - ${attribution.node_id}: ${attribution.attribution_verdict} (${attribution.confidence}, ${delivered}, source=${attribution.source}${override})`
             );
+            if (verbose && attribution.trajectory_verdict) {
+              console.log(`    Trajectory verdict: ${attribution.trajectory_verdict}`);
+              if (attribution.trajectory_confidence) {
+                console.log(`    Trajectory confidence: ${attribution.trajectory_confidence}`);
+              }
+              if (attribution.trajectory_matched_expectations?.length) {
+                console.log(`    Trajectory matched expectations: ${attribution.trajectory_matched_expectations.join(", ")}`);
+              }
+              if (attribution.trajectory_violated_expectations?.length) {
+                console.log(`    Trajectory violated expectations: ${attribution.trajectory_violated_expectations.join(", ")}`);
+              }
+              if (attribution.trajectory_evidence_refs?.length) {
+                console.log(`    Trajectory evidence refs: ${attribution.trajectory_evidence_refs.join(", ")}`);
+              }
+            }
           }
         }
       }
@@ -1121,6 +1162,42 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string,
     console.log(`Helped: ${node.helped}`);
     console.log(`Harmed: ${node.harmed}`);
     console.log(`Used: ${node.used}`);
+    if (node.deliveryState) {
+      console.log(`Delivery state: ${node.deliveryState}`);
+    }
+    if (node.migrationStatus) {
+      console.log(`Vector migration status: ${node.migrationStatus}`);
+    }
+    if (node.sourceFingerprintHash) {
+      console.log(`Source fingerprint hash: ${node.sourceFingerprintHash}`);
+    }
+    if (node.quarantineLeaseExpiresAt) {
+      console.log(`Quarantine lease expires at: ${node.quarantineLeaseExpiresAt}`);
+    }
+    if (node.quarantineOriginalDeliveryState) {
+      console.log(`Quarantine original delivery state: ${node.quarantineOriginalDeliveryState}`);
+    }
+    if (typeof node.quarantineReleaseAttemptCount === "number") {
+      console.log(`Quarantine release attempt count: ${node.quarantineReleaseAttemptCount}`);
+    }
+    if (node.quarantineLastReleaseAttemptAt) {
+      console.log(`Quarantine last release attempt at: ${node.quarantineLastReleaseAttemptAt}`);
+    }
+    if (node.quarantineReleaseReason) {
+      console.log(`Quarantine release reason: ${node.quarantineReleaseReason}`);
+    }
+    if (typeof node.quarantineNoHarmPassCount === "number") {
+      console.log(`Quarantine no harm pass count: ${node.quarantineNoHarmPassCount}`);
+    }
+    if (node.portableValidationEvidence?.compatibilityClasses) {
+      console.log("Portable validation evidence:");
+      for (const [compClass, details] of Object.entries(node.portableValidationEvidence.compatibilityClasses)) {
+        console.log(`- Compatibility Class: ${compClass}`);
+        console.log(`  Success reuse count: ${details.successReuseCount}`);
+        console.log(`  Harm count: ${details.harmCount}`);
+        console.log(`  Last used at: ${new Date(details.lastUsedAt).toISOString()}`);
+      }
+    }
     console.log(`Current assessment: ${describeNodeAssessment(node)}`);
     console.log(`Quality band: ${node.quality.band}`);
     console.log(`Quality summary: ${node.quality.summary}`);
