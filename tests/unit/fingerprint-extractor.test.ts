@@ -78,6 +78,41 @@ describe("Fingerprint Extractor", () => {
       expect(hashA).toBe(hashB);
       expect(hashA).toMatch(/^[0-9a-f]{16}$/);
     });
+
+    it("guarantees fingerprint hash portability across different workspace paths and project scopes", () => {
+      const fp1 = {
+        schemaVersion: "1",
+        primaryLanguage: "typescript",
+        packageManager: "pnpm",
+        lockfileFamily: "pnpm",
+        frameworks: { react: 18 },
+        databaseOrORM: { prisma: 5 },
+        testBuildTools: { vitest: 1 },
+        hostRuntimeAdapters: {},
+        configMarkers: ["tsconfig.json", "package.json"],
+        workspaceRootPath: "/some/workspace/path",
+        projectRootScopeId: "scope-a"
+      };
+
+      const fp2 = {
+        schemaVersion: "1",
+        primaryLanguage: "typescript",
+        packageManager: "pnpm",
+        lockfileFamily: "pnpm",
+        frameworks: { react: 18 },
+        databaseOrORM: { prisma: 5 },
+        testBuildTools: { vitest: 1 },
+        hostRuntimeAdapters: {},
+        configMarkers: ["tsconfig.json", "package.json"],
+        workspaceRootPath: "/another/completely/different/path",
+        projectRootScopeId: "scope-b"
+      };
+
+      const hash1 = calculateFingerprintHash(fp1);
+      const hash2 = calculateFingerprintHash(fp2);
+
+      expect(hash1).toBe(hash2);
+    });
   });
 
   describe("SemVer Range Major Parsing", () => {

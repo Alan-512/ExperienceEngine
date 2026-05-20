@@ -30,7 +30,14 @@ type TransformersModule = {
 const LOCAL_PROVIDER_VERSION = "local-e5-v1";
 const DEFAULT_MODEL = "Xenova/multilingual-e5-small";
 const DEFAULT_DTYPE = "q8";
-let cachedProvider: Promise<SemanticEmbeddingProvider> | null = null;
+const providerCache = new Map<string, Promise<SemanticEmbeddingProvider>>();
+const getCacheKey = (options: ProviderOptions): string => {
+  const cacheDir = resolveCacheDir(options);
+  const model = resolveModel(options);
+  const dtype = resolveDtype(options);
+  const profile = options.config?.embeddingProfile ?? "standard";
+  return `${cacheDir}::${model}::${dtype}::${profile}`;
+};
 let testLoader: (() => Promise<TransformersModule>) | null = null;
 
 const toVector = (value: unknown): number[] => {
@@ -96,7 +103,7 @@ const isCorruptedModelCacheError = (error: unknown): boolean => {
 };
 
 export const clearLocalEmbeddingProviderCache = (): void => {
-  cachedProvider = null;
+  providerCache.clear();
 };
 
 export type ManagedEmbeddingCacheResetReport = {
@@ -124,13 +131,15 @@ export const createLocalEmbeddingProvider = async (
   const profile = options.config?.embeddingProfile ?? "standard";
   const { env, pipeline } = await loadTransformers();
 
+  let manifestId: string | undefined;
   if (profile === "strict-offline") {
     env.allowRemoteModels = false;
     env.allowLocalModels = true;
     env.cacheDir = cacheDir;
 
     // Validate offline manifest first. It will throw if manifest or assets are missing/invalid
-    loadOfflineManifestForModel(cacheDir, model);
+    const manifest = loadOfflineManifestForModel(cacheDir, model);
+    manifestId = manifest.id;
   } else {
     env.allowRemoteModels = true;
     env.allowLocalModels = true;
@@ -167,6 +176,7 @@ export const createLocalEmbeddingProvider = async (
     model,
     version: LOCAL_PROVIDER_VERSION,
     dimensions: probe.length,
+    manifestId,
     embedQuery(text: string) {
       return embed(formatInput("query", text));
     },
@@ -179,10 +189,18 @@ export const createLocalEmbeddingProvider = async (
 export const getLocalEmbeddingProvider = async (
   options: ProviderOptions = {}
 ): Promise<SemanticEmbeddingProvider> => {
-  if (!cachedProvider) {
-    cachedProvider = createLocalEmbeddingProvider(options);
+  const key = getCacheKey(options);
+  let providerPromise = providerCache.get(key);
+  if (!providerPromise) {
+    providerPromise = createLocalEmbeddingProvider(options);
+    providerPromise.catch(() => {
+      if (providerCache.get(key) === providerPromise) {
+        providerCache.delete(key);
+      }
+    });
+    providerCache.set(key, providerPromise);
   }
-  return cachedProvider;
+  return providerPromise;
 };
 
 export const resetManagedEmbeddingCache = async (

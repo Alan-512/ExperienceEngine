@@ -1,7 +1,20 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, copyFileSync } from "node:fs";
-import { join, dirname } from "node:path";
+import { join, dirname, isAbsolute } from "node:path";
 import { createHash } from "node:crypto";
 import type { OfflineAssetManifest } from "../../types/domain.js";
+
+export const isSafeRelativePath = (p: string): boolean => {
+  if (typeof p !== "string" || !p) return false;
+  if (isAbsolute(p)) return false;
+  if (/^[a-zA-Z]:/.test(p)) return false;
+  const parts = p.split(/[/\\]/);
+  for (const part of parts) {
+    if (part === ".." || part === ".") {
+      return false;
+    }
+  }
+  return true;
+};
 
 export const calculateFileSha256 = (filePath: string): string => {
   const content = readFileSync(filePath);
@@ -45,8 +58,8 @@ export const validateOfflineManifest = (
       throw new Error(`Invalid asset entry for key: ${key}.`);
     }
     const val = value as Record<string, unknown>;
-    if (typeof val.path !== "string" || !val.path) {
-      throw new Error(`Missing or invalid path for asset: ${key}.`);
+    if (typeof val.path !== "string" || !val.path || !isSafeRelativePath(val.path)) {
+      throw new Error(`Missing, invalid, or unsafe path for asset: ${key}. Path traversal detected or suspected.`);
     }
     if (typeof val.sha256 !== "string" || !val.sha256) {
       throw new Error(`Missing or invalid sha256 checksum for asset: ${key}.`);
@@ -69,7 +82,18 @@ export const validateOfflineManifest = (
     };
   }
   
+  let manifestId = typeof m.id === "string" ? m.id : undefined;
+  if (!manifestId) {
+    const assetKeysSorted = Object.keys(validatedAssets).sort();
+    const assetsString = assetKeysSorted
+      .map((key) => `${key}:${validatedAssets[key].sha256}`)
+      .join(";");
+    const idSource = `${m.modelId}|${m.dimensions}|${m.preprocessingVersion}|${assetsString}`;
+    manifestId = `derived-${createHash("sha256").update(idSource).digest("hex").slice(0, 16)}`;
+  }
+
   return {
+    id: manifestId,
     manifestVersion: m.manifestVersion,
     providerId: m.providerId,
     modelId: m.modelId,
@@ -134,6 +158,15 @@ export const importOfflineAssetPack = async (
     
     mkdirSync(dirname(targetPath), { recursive: true });
     copyFileSync(sourcePath, targetPath);
+  }
+
+  try {
+    const { clearLocalEmbeddingProviderCache } = await import("./local-provider.js");
+    const { clearEmbeddingRuntimeCaches } = await import("./embeddings.js");
+    clearLocalEmbeddingProviderCache();
+    clearEmbeddingRuntimeCaches();
+  } catch {
+    // Gracefully handle dynamic import edge cases
   }
 };
 

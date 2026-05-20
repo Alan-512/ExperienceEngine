@@ -22,7 +22,7 @@ export type MigrationReport = {
 
 export class VectorMigrationPipeline {
   /**
-   * 自动发现需要迁移的节点，并将它们的状态标记为 'pending'
+   * Automatically discovers experience nodes that need migration and marks their status as 'pending'.
    */
   discoverPendingNodes(db: DatabaseSync, currentSpace: EmbeddingSpace): number {
     const nodeRepo = new NodeRepository(db);
@@ -41,7 +41,7 @@ export class VectorMigrationPipeline {
         const needsStatusUpdate = node.migration_status !== "current";
 
         if (spaceMismatched || needsStatusUpdate) {
-          // 如果本身已经属于 current 了但是实际上空间不匹配，或者状态为空
+          // If the node status is current but its space is mismatched, or if its status is empty
           if (node.migration_status !== "pending") {
             const updatedNode: ExperienceNode = {
               ...node,
@@ -61,11 +61,11 @@ export class VectorMigrationPipeline {
   }
 
   /**
-   * 迁移单批待处理的节点。
-   * 为了避免长期占用 SQLite 的排他锁，
-   * 1. 我们先用一个微小的事务将 Batch 内待迁移节点锁定为 'migrating' 状态。
-   * 2. 然后在事务外进行异步 embedding 生成。
-   * 3. 生成好之后逐个节点用小事务提交更新。
+   * Migrates a single batch of pending experience nodes.
+   * To prevent long-held SQLite exclusive locks:
+   * 1. A short transaction locks the batch's target nodes to 'migrating' status.
+   * 2. Asynchronous embedding generation is performed outside the transaction.
+   * 3. Successful/failed node updates are committed one-by-one with small transactions.
    */
   async migrateBatch(
     db: DatabaseSync,
@@ -76,7 +76,7 @@ export class VectorMigrationPipeline {
     const batchSize = options.batchSize ?? 10;
     const config = options.config;
 
-    // 1. 获取并锁定这一批节点
+    // 1. Retrieve and lock this batch of nodes
     const nodesToLock = withTransaction(db, () => {
       const pendingRows = db
         .prepare(
@@ -87,11 +87,9 @@ export class VectorMigrationPipeline {
         .all(batchSize) as Array<Parameters<NodeRepository["mapNode"]>[0]>;
 
       const nodes = pendingRows.map((row) => {
-        // 使用 NodeRepository 原有的 mapNode 反序列化行
-        // 因为 mapNode 是 NodeRepository 的私有成员，我们在 NodeRepository 中用 public 方法包装或者直接在此调用
-        // 既然 node-repo.ts 已经导出了 NodeRepository 并且 allNodes 都是反序列化的，
-        // 我们可以直接从 nodeRepo.getById(row.id) 获取，但这会多次查询。
-        // 不过由于 batchSize 很小，我们可以直接提取 ids 并在 repo 批量加载：
+        // Deserialize the database row using NodeRepository.
+        // Since mapNode is private to NodeRepository, we retrieve via nodeRepo.getById.
+        // Because the batchSize is small, loading individually by ID is simple and safe.
         return nodeRepo.getById(row.id);
       }).filter(Boolean) as ExperienceNode[];
 
@@ -113,12 +111,12 @@ export class VectorMigrationPipeline {
     let succeeded = 0;
     let failed = 0;
 
-    // 2. 逐一执行异步重编码并单个事务更新
+    // 2. Perform asynchronous re-encoding one by one and commit with individual transactions
     for (const node of nodesToLock) {
       const retrievalText = node.retrieval_text?.trim() || `${node.trigger_pattern} ${node.compact_hint}`;
 
       try {
-        // 调用 embedPassageText 重编码
+        // Call embedPassageText to re-encode the text
         const embeddingResult = await embedPassageText(retrievalText, { config });
 
         const spaceMatched =
@@ -134,7 +132,7 @@ export class VectorMigrationPipeline {
           );
         }
 
-        // 3. 单个小事务写入成功状态
+        // 3. Commit successful migration in a small transaction
         withTransaction(db, () => {
           const freshNode = nodeRepo.getById(node.id);
           if (freshNode) {
@@ -157,7 +155,7 @@ export class VectorMigrationPipeline {
       } catch (error) {
         const errorMessage = error instanceof Error ? error.stack || error.message : String(error);
 
-        // 3. 单个小事务写入失败状态
+        // 3. Commit failed migration status in a small transaction
         withTransaction(db, () => {
           const freshNode = nodeRepo.getById(node.id);
           if (freshNode) {
@@ -182,7 +180,7 @@ export class VectorMigrationPipeline {
   }
 
   /**
-   * 自动开始整个向量迁移进程
+   * Automatically initiates the entire vector migration pipeline.
    */
   async runMigration(
     db: DatabaseSync,
@@ -215,7 +213,7 @@ export class VectorMigrationPipeline {
       succeeded += batchResult.succeeded;
       failed += batchResult.failed;
 
-      // 引入 Throttling 节流，把控制权还给事件循环
+      // Apply throttling to yield execution back to the event loop
       if (throttleGapMs > 0) {
         await new Promise((resolve) => setTimeout(resolve, throttleGapMs));
       }

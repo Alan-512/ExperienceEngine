@@ -30,7 +30,7 @@ const HOST_RUNTIME_ADAPTERS = [
 const escapeRegExp = (str: string) => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 
 /**
- * 扫描目录下的文件扩展名以探测主要语言
+ * Recursively scan file extensions under a directory to detect the primary language
  */
 const scanFileExtensions = (
   dir: string,
@@ -44,7 +44,7 @@ const scanFileExtensions = (
     for (const file of files) {
       if (state.count >= maxFiles) break;
       const fullPath = join(dir, file);
-      // 过滤非必要的庞大目录和构建输出目录
+      // Filter out heavy directories or build outputs
       if (
         file === "node_modules" ||
         file === ".git" ||
@@ -68,16 +68,16 @@ const scanFileExtensions = (
           }
         }
       } catch {
-        // 忽略 stat 失败
+        // Ignore stats failure
       }
     }
   } catch {
-    // 忽略 readdir 失败
+    // Ignore readdir failure
   }
 };
 
 /**
- * 探测项目的主开发语言
+ * Detect the primary development language of the project
  */
 export const detectPrimaryLanguage = (projectRoot: string): string => {
   if (existsSync(join(projectRoot, "tsconfig.json"))) {
@@ -117,7 +117,7 @@ export const detectPrimaryLanguage = (projectRoot: string): string => {
     return extToLang[maxExt];
   }
 
-  // 兜底读 package.json
+  // Fallback to package.json dependencies if scanning yielded no language match
   try {
     const pkgPath = join(projectRoot, "package.json");
     if (existsSync(pkgPath)) {
@@ -140,7 +140,7 @@ export type WorkspaceInfo = {
 };
 
 /**
- * 启发式探测 Monorepo 及 Workspace 和 Project 的根路径与 Scope ID
+ * Heuristically detect Monorepo, Workspace/Project roots, and Project Scope ID
  */
 export const detectWorkspaceAndProjectRoots = (cwd: string): WorkspaceInfo => {
   const projectRoot = resolve(cwd);
@@ -148,7 +148,7 @@ export const detectWorkspaceAndProjectRoots = (cwd: string): WorkspaceInfo => {
   let current = projectRoot;
   let foundWorkspace = false;
 
-  // 向上最多探测 5 级目录寻找 Monorepo 标识
+  // Traverse upwards up to 5 levels to locate Monorepo roots
   for (let i = 0; i < 5; i++) {
     const hasPnpmWorkspace = existsSync(join(current, "pnpm-workspace.yaml"));
     const hasLerna = existsSync(join(current, "lerna.json"));
@@ -179,7 +179,7 @@ export const detectWorkspaceAndProjectRoots = (cwd: string): WorkspaceInfo => {
   let packageManager = "npm";
   let lockfileFamily = "none";
 
-  // 检查锁文件的物理存在 (优先在 projectRoot，其次在 workspaceRoot)
+  // Check for physical existence of lockfiles (project root prioritized over workspace root)
   const checkDirs = foundWorkspace ? [projectRoot, workspaceRoot] : [projectRoot];
   for (const dir of checkDirs) {
     if (existsSync(join(dir, "pnpm-lock.yaml"))) {
@@ -223,7 +223,7 @@ export const detectWorkspaceAndProjectRoots = (cwd: string): WorkspaceInfo => {
 };
 
 /**
- * 健壮解析 package-lock.json 的依赖项主版本
+ * Robustly parse dependency major versions from package-lock.json
  */
 export const parsePackageLock = (contentStr: string, packagesToFind: string[]): Record<string, string> => {
   const result: Record<string, string> = {};
@@ -235,7 +235,7 @@ export const parsePackageLock = (contentStr: string, packagesToFind: string[]): 
         if (lock.packages[key]?.version) {
           result[pkg] = lock.packages[key].version;
         } else {
-          // 向上或子包遍历 packages 键值
+          // Fallback loop across nested package names inside lock packages
           for (const k of Object.keys(lock.packages)) {
             if (k === key || k.endsWith(`/node_modules/${pkg}`)) {
               result[pkg] = lock.packages[k].version;
@@ -253,13 +253,13 @@ export const parsePackageLock = (contentStr: string, packagesToFind: string[]): 
       }
     }
   } catch {
-    // 忽略异常
+    // Ignore error
   }
   return result;
 };
 
 /**
- * 极致鲁棒地通过行匹配解析 pnpm-lock.yaml 依赖版本
+ * Robustly parse dependency versions from pnpm-lock.yaml via line scans
  */
 export const parsePnpmLock = (contentStr: string, packagesToFind: string[]): Record<string, string> => {
   const result: Record<string, string> = {};
@@ -296,7 +296,7 @@ export const parsePnpmLock = (contentStr: string, packagesToFind: string[]): Rec
 };
 
 /**
- * 精准通过行扫描解析 yarn.lock 的依赖版本
+ * Robustly parse dependency versions from yarn.lock via line scans
  */
 export const parseYarnLock = (contentStr: string, packagesToFind: string[]): Record<string, string> => {
   const result: Record<string, string> = {};
@@ -324,7 +324,7 @@ export const parseYarnLock = (contentStr: string, packagesToFind: string[]): Rec
 };
 
 /**
- * 从 SemVer 范围字符串中启发式提取 Major 版本
+ * Extract the major version from a SemVer range string heuristically
  */
 export const extractMajorFromRange = (range: string): number => {
   const cleanRange = range.trim().replace(/^[\^~>=<*\s]+/, "");
@@ -336,7 +336,7 @@ export const extractMajorFromRange = (range: string): number => {
 };
 
 /**
- * 扫描项目中的配置文件特征项并排序
+ * Scan for common configuration markers in the project root and sort them
  */
 export const detectConfigMarkers = (projectRoot: string): string[] => {
   const possibleMarkers = [
@@ -371,7 +371,7 @@ export const detectConfigMarkers = (projectRoot: string): string[] => {
 };
 
 /**
- * 对任意对象和数组进行确定性 Stable 序列化
+ * Deterministically serialize any object or array (stable JSON)
  */
 export const stableStringify = (obj: any): string => {
   if (obj === null) return "null";
@@ -387,23 +387,47 @@ export const stableStringify = (obj: any): string => {
 };
 
 /**
- * 计算 ProjectFingerprint 剔除 timestamp 和自身哈希外的 16 位确定性哈希
+ * Compute a 16-character deterministic SHA-256 hash excluding timestamp and fingerprintHash
  */
 export const calculateFingerprintHash = (
   fingerprint: Omit<ProjectFingerprint, "fingerprintHash" | "timestamp">
 ): string => {
-  const stableJson = stableStringify(fingerprint);
+  const {
+    schemaVersion,
+    primaryLanguage,
+    packageManager,
+    lockfileFamily,
+    frameworks,
+    databaseOrORM,
+    testBuildTools,
+    hostRuntimeAdapters,
+    configMarkers
+  } = fingerprint;
+
+  const portableObj = {
+    schemaVersion,
+    primaryLanguage,
+    packageManager,
+    lockfileFamily,
+    frameworks,
+    databaseOrORM,
+    testBuildTools,
+    hostRuntimeAdapters,
+    configMarkers
+  };
+
+  const stableJson = stableStringify(portableObj);
   const fullHash = hashText(stableJson);
   return fullHash.slice(0, 16);
 };
 
 /**
- * 兼容性指纹提取主入口
+ * Main entry point for extracting the project compatibility fingerprint
  */
 export const extractProjectFingerprint = (cwd: string): ProjectFingerprint => {
   const info = detectWorkspaceAndProjectRoots(cwd);
 
-  // 1. 读取本地 package.json 依赖
+  // 1. Load dependencies from project-level package.json
   const localPkgPath = join(info.projectRoot, "package.json");
   const localDeps: Record<string, string> = {};
   if (existsSync(localPkgPath)) {
@@ -411,7 +435,7 @@ export const extractProjectFingerprint = (cwd: string): ProjectFingerprint => {
       const pkg = JSON.parse(readFileSync(localPkgPath, "utf-8"));
       Object.assign(localDeps, pkg.dependencies || {}, pkg.devDependencies || {});
     } catch {
-      // 容错忽略
+      // Graceful tolerance fallback
     }
   }
 
@@ -419,7 +443,7 @@ export const extractProjectFingerprint = (cwd: string): ProjectFingerprint => {
     new Set([...FRAMEWORKS, ...DATABASE_OR_ORM, ...TEST_BUILD_TOOLS, ...HOST_RUNTIME_ADAPTERS])
   );
 
-  // 2. 尝试从 projectRoot 到 workspaceRoot 寻找锁文件进行解析
+  // 2. Search for lockfiles from projectRoot up to workspaceRoot and parse their versions
   let lockfileContent = "";
   let lockfileResolved: Record<string, string> = {};
 
@@ -440,7 +464,7 @@ export const extractProjectFingerprint = (cwd: string): ProjectFingerprint => {
         loadedPath = p;
         break;
       } catch {
-        // 忽略
+        // Ignore
       }
     }
   }
@@ -456,7 +480,7 @@ export const extractProjectFingerprint = (cwd: string): ProjectFingerprint => {
     }
   }
 
-  // 3. 将本地 package.json 声明的包结合锁文件解析的绝对版本得到其主版本号
+  // 3. Extract major versions combining package.json declarations and lockfile versions
   const getCategoryMap = (pkgList: string[]): Record<string, number> => {
     const map: Record<string, number> = {};
     for (const pkg of pkgList) {
@@ -505,7 +529,7 @@ export const extractProjectFingerprint = (cwd: string): ProjectFingerprint => {
 };
 
 /**
- * 提取项目指纹并原子 upsert 持久化至 SQLite 数据库中
+ * Extract project fingerprint and atomically UPSERT into the SQLite database
  */
 export const persistProjectFingerprint = (db: DatabaseSync, cwd: string): ScopeFingerprint => {
   const fp = extractProjectFingerprint(cwd);

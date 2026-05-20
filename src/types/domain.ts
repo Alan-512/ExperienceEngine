@@ -688,6 +688,7 @@ export type ScopeFingerprint = {
 };
 
 export type OfflineAssetManifest = {
+  id?: string;
   manifestVersion: string;
   providerId: string;
   modelId: string;

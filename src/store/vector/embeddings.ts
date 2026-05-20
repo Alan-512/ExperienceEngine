@@ -255,6 +255,9 @@ const resolveProvider = async (options: EmbeddingOptions = {}): Promise<Semantic
       const { getLocalEmbeddingProvider } = await loadLocalEmbeddingProviderModule();
       return await getLocalEmbeddingProvider(options);
     } catch (error) {
+      if (options.config?.embeddingProfile === "strict-offline") {
+        throw error;
+      }
       if (isMissingLocalEmbeddingModule(error)) {
         return null;
       }
@@ -277,7 +280,7 @@ export const embedQueryText = async (
   if (!provider) {
     return toLegacyResult(value);
   }
-  const cacheKey = `${provider.provider}:${provider.model}:${provider.version}:query:${value}`;
+  const cacheKey = `${provider.provider}:${provider.model}:${provider.version}:${provider.dimensions}:${provider.manifestId ?? "none"}:query:${value}`;
   const cached = getCachedEmbedding(queryEmbeddingCache, cacheKey);
   if (cached) {
     return cached;
@@ -289,12 +292,16 @@ export const embedQueryText = async (
         provider: provider.provider,
         model: provider.model,
         version: provider.version,
-        dimensions: provider.dimensions
+        dimensions: provider.dimensions,
+        manifestId: provider.manifestId
       }
     };
     cacheEmbedding(queryEmbeddingCache, cacheKey, result);
     return result;
   } catch (error) {
+    if (options.config?.embeddingProfile === "strict-offline") {
+      throw error;
+    }
     const message = error instanceof Error ? error.message : String(error);
     warnLocalEmbeddingFallback(message);
     return toLegacyResult(value);
@@ -309,7 +316,7 @@ export const embedPassageText = async (
   if (!provider) {
     return toLegacyResult(value);
   }
-  const cacheKey = `${provider.provider}:${provider.model}:${provider.version}:passage:${value}`;
+  const cacheKey = `${provider.provider}:${provider.model}:${provider.version}:${provider.dimensions}:${provider.manifestId ?? "none"}:passage:${value}`;
   const cached = getCachedEmbedding(passageEmbeddingCache, cacheKey);
   if (cached) {
     return cached;
@@ -321,12 +328,16 @@ export const embedPassageText = async (
         provider: provider.provider,
         model: provider.model,
         version: provider.version,
-        dimensions: provider.dimensions
+        dimensions: provider.dimensions,
+        manifestId: provider.manifestId
       }
     };
     cacheEmbedding(passageEmbeddingCache, cacheKey, result);
     return result;
   } catch (error) {
+    if (options.config?.embeddingProfile === "strict-offline") {
+      throw error;
+    }
     const message = error instanceof Error ? error.message : String(error);
     warnLocalEmbeddingFallback(message);
     return toLegacyResult(value);

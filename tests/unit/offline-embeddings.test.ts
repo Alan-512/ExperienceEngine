@@ -3,8 +3,9 @@ import { writeFileSync, mkdirSync, existsSync, readFileSync } from "node:fs";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { createLocalEmbeddingProvider, setTransformersModuleLoaderForTests, clearLocalEmbeddingProviderCache } from "../../src/store/vector/local-provider.js";
-import { importOfflineAssetPack, exportOfflineAssetPack, loadOfflineManifestForModel } from "../../src/store/vector/offline-manifest.js";
+import { createLocalEmbeddingProvider, setTransformersModuleLoaderForTests, clearLocalEmbeddingProviderCache, getLocalEmbeddingProvider } from "../../src/store/vector/local-provider.js";
+import { importOfflineAssetPack, exportOfflineAssetPack, loadOfflineManifestForModel, isSafeRelativePath } from "../../src/store/vector/offline-manifest.js";
+import { embedQueryText, embedPassageText, clearEmbeddingProviderForTests, setEmbeddingProviderForTests } from "../../src/store/vector/embeddings.js";
 import { removeTempDirForTests } from "./temp-cleanup.js";
 import { createHash } from "node:crypto";
 
@@ -213,5 +214,204 @@ describe("Offline Embedding Profile And Staging", () => {
 
     expect(provider.provider).toBe("local");
     expect(mockTransformers.env.allowRemoteModels).toBe(true);
+  });
+
+  it("validates isSafeRelativePath correctly against path traversals and absolute paths", () => {
+    // Safe paths
+    expect(isSafeRelativePath("config.json")).toBe(true);
+    expect(isSafeRelativePath("assets/model.onnx")).toBe(true);
+    expect(isSafeRelativePath("a/b/c.txt")).toBe(true);
+
+    // Unsafe paths
+    expect(isSafeRelativePath("")).toBe(false);
+    expect(isSafeRelativePath("../config.json")).toBe(false);
+    expect(isSafeRelativePath("assets/../../config.json")).toBe(false);
+    expect(isSafeRelativePath("/absolute/path")).toBe(false);
+    expect(isSafeRelativePath("C:\\Windows\\win.ini")).toBe(false);
+    expect(isSafeRelativePath("a/../b")).toBe(false);
+    expect(isSafeRelativePath("a/./b")).toBe(false);
+  });
+
+  it("fails loudly in embedQueryText and embedPassageText under strict-offline mode on error", async () => {
+    const cacheDir = makeTempDir();
+
+    // Do not set up manifest, causing it to fail on load
+    const options = {
+      config: {
+        embeddingProfile: "strict-offline" as const,
+        embeddingProvider: "local" as const,
+        embeddingModel: "Xenova/multilingual-e5-small",
+        embeddingCacheDir: cacheDir
+      }
+    };
+
+    await expect(embedQueryText("hello", options)).rejects.toThrow(/Manifest file not found/);
+    await expect(embedPassageText("world", options)).rejects.toThrow(/Manifest file not found/);
+  });
+
+  it("partitions the local provider cache by config/profile/model/cacheDir", async () => {
+    const packDir1 = makeTempDir();
+    const packDir2 = makeTempDir();
+    const cacheDir1 = makeTempDir();
+    const cacheDir2 = makeTempDir();
+    setupMockAssetPack(packDir1);
+    setupMockAssetPack(packDir2);
+    await importOfflineAssetPack(packDir1, cacheDir1);
+    await importOfflineAssetPack(packDir2, cacheDir2);
+
+    const provider1 = await getLocalEmbeddingProvider({
+      config: {
+        embeddingProfile: "strict-offline",
+        embeddingProvider: "local",
+        embeddingModel: "Xenova/multilingual-e5-small",
+        embeddingCacheDir: cacheDir1
+      }
+    });
+
+    const provider2 = await getLocalEmbeddingProvider({
+      config: {
+        embeddingProfile: "strict-offline",
+        embeddingProvider: "local",
+        embeddingModel: "Xenova/multilingual-e5-small",
+        embeddingCacheDir: cacheDir2
+      }
+    });
+
+    // They should be different instances because they are partitioned by cacheDir
+    expect(provider1).not.toBe(provider2);
+  });
+
+  it("propagates manifestId to provider and embedding results in space metadata", async () => {
+    const packDir = makeTempDir();
+    const cacheDir = makeTempDir();
+    setupMockAssetPack(packDir);
+
+    // Inject manifest ID into the mock asset pack manifest
+    const manifestPath = join(packDir, "manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    manifest.id = "test-unique-manifest-id-123";
+    writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
+
+    await importOfflineAssetPack(packDir, cacheDir);
+
+    const options = {
+      config: {
+        embeddingProfile: "strict-offline" as const,
+        embeddingProvider: "local" as const,
+        embeddingModel: "Xenova/multilingual-e5-small",
+        embeddingCacheDir: cacheDir
+      }
+    };
+
+    const provider = await getLocalEmbeddingProvider(options);
+    expect(provider.manifestId).toBe("test-unique-manifest-id-123");
+
+    const queryRes = await embedQueryText("hello query", options);
+    expect(queryRes.space.manifestId).toBe("test-unique-manifest-id-123");
+
+    const passageRes = await embedPassageText("hello passage", options);
+    expect(passageRes.space.manifestId).toBe("test-unique-manifest-id-123");
+
+    clearEmbeddingProviderForTests();
+  });
+
+  it("derives a deterministic manifest ID when id is omitted from the manifest", async () => {
+    const packDir = makeTempDir();
+    const cacheDir = makeTempDir();
+    setupMockAssetPack(packDir);
+
+    // Ensure there is no id in the manifest file in packDir
+    const manifestPath = join(packDir, "manifest.json");
+    const manifest = JSON.parse(readFileSync(manifestPath, "utf8"));
+    delete manifest.id;
+    writeFileSync(manifestPath, JSON.stringify(manifest, null, 2), "utf8");
+
+    await importOfflineAssetPack(packDir, cacheDir);
+
+    const loadedManifest = loadOfflineManifestForModel(cacheDir, "Xenova/multilingual-e5-small");
+    expect(loadedManifest.id).toBeDefined();
+    expect(loadedManifest.id).toMatch(/^derived-[0-9a-f]{16}$/);
+
+    // Verify it is deterministic by checking that importing again with same assets produces the exact same derived ID
+    const cacheDir2 = makeTempDir();
+    await importOfflineAssetPack(packDir, cacheDir2);
+    const loadedManifest2 = loadOfflineManifestForModel(cacheDir2, "Xenova/multilingual-e5-small");
+    expect(loadedManifest.id).toBe(loadedManifest2.id);
+  });
+
+  it("partitions embedding caches by dimensions and manifestId", async () => {
+    const embedQueryMock1 = vi.fn().mockResolvedValue(new Array(384).fill(0.1));
+    const provider1: any = {
+      provider: "local",
+      model: "Xenova/multilingual-e5-small",
+      version: "local-e5-v1",
+      dimensions: 384,
+      manifestId: "manifest-A",
+      embedQuery: embedQueryMock1,
+      embedPassage: vi.fn()
+    };
+
+    const embedQueryMock2 = vi.fn().mockResolvedValue(new Array(384).fill(0.2));
+    const provider2: any = {
+      provider: "local",
+      model: "Xenova/multilingual-e5-small",
+      version: "local-e5-v1",
+      dimensions: 384,
+      manifestId: "manifest-B",
+      embedQuery: embedQueryMock2,
+      embedPassage: vi.fn()
+    };
+
+    // First call with provider1
+    setEmbeddingProviderForTests(provider1);
+    const res1 = await embedQueryText("same text query", { config: { embeddingProvider: "local" } });
+    expect(res1.embedding[0]).toBe(0.1);
+    expect(embedQueryMock1).toHaveBeenCalledTimes(1);
+
+    // Call again to verify cached
+    const res1Cached = await embedQueryText("same text query", { config: { embeddingProvider: "local" } });
+    expect(res1Cached.embedding[0]).toBe(0.1);
+    expect(embedQueryMock1).toHaveBeenCalledTimes(1);
+
+    // Switch to provider2 with different manifestId, same text query should NOT hit cache of provider1
+    setEmbeddingProviderForTests(provider2);
+    const res2 = await embedQueryText("same text query", { config: { embeddingProvider: "local" } });
+    expect(res2.embedding[0]).toBe(0.2);
+    expect(embedQueryMock2).toHaveBeenCalledTimes(1);
+
+    clearEmbeddingProviderForTests();
+  });
+
+  it("evicts rejected provider promises from cache to allow recovery on subsequent attempts", async () => {
+    let callCount = 0;
+    const mockLoader = async () => {
+      callCount++;
+      if (callCount === 1) {
+        throw new Error("Initialization failed on first call");
+      }
+      return mockTransformers;
+    };
+
+    setTransformersModuleLoaderForTests(mockLoader);
+
+    const options = {
+      config: {
+        embeddingProfile: "standard" as const,
+        embeddingProvider: "local" as const,
+        embeddingModel: "Xenova/multilingual-e5-small",
+        embeddingCacheDir: makeTempDir()
+      }
+    };
+
+    // First attempt should fail and reject the promise
+    await expect(getLocalEmbeddingProvider(options)).rejects.toThrow(/Initialization failed/);
+
+    // Second attempt should succeed because the rejected promise was evicted from cache
+    const provider = await getLocalEmbeddingProvider(options);
+    expect(provider).toBeDefined();
+    expect(provider.provider).toBe("local");
+    expect(callCount).toBe(2);
+
+    setTransformersModuleLoaderForTests(null);
   });
 });

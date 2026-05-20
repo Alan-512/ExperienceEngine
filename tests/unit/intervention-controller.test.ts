@@ -861,7 +861,12 @@ describe("decideIntervention", () => {
           helped_count: 1,
           harmed_count: 0,
           support_count: 2,
-          validation_state: "pending_reuse_validation"
+          validation_state: "pending_reuse_validation",
+          embedding: [1, 0, 0],
+          embedding_provider: "local",
+          embedding_model: "Xenova/multilingual-e5-small",
+          embedding_version: "local-e5-v1",
+          embedding_dimensions: 3
         }),
         node({
           id: "payments-close-runner-up",
@@ -874,7 +879,12 @@ describe("decideIntervention", () => {
           helped_count: 1,
           harmed_count: 0,
           support_count: 2,
-          validation_state: "pending_reuse_validation"
+          validation_state: "pending_reuse_validation",
+          embedding: [0.8, 0.6, 0],
+          embedding_provider: "local",
+          embedding_model: "Xenova/multilingual-e5-small",
+          embedding_version: "local-e5-v1",
+          embedding_dimensions: 3
         })
       ],
       stats,

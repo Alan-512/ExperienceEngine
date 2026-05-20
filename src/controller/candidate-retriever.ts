@@ -595,6 +595,8 @@ export const retrieveCandidateBundle = async (
       : "rerank";
   const semanticPool = semanticMode === "backfill" ? scopeLocalNodes : lexicalShortlist;
 
+  const hasActiveSpace = localQuery && localQuery.space.provider !== "legacy";
+
   const localSemanticRecords = semanticPool
     .filter(
       (node) =>
@@ -610,10 +612,12 @@ export const retrieveCandidateBundle = async (
   const legacyRecords = semanticPool
     .filter(
       (node) =>
-        !localQuery ||
-        node.migration_status === "pending" ||
-        node.migration_status === "migrating" ||
-        !isMatchingEmbeddingSpace(node, localQuery.space)
+        !hasActiveSpace
+          ? (!localQuery ||
+             node.migration_status === "pending" ||
+             node.migration_status === "migrating" ||
+             !isMatchingEmbeddingSpace(node, localQuery.space))
+          : false
     )
     .map((node) => ({
       id: node.id,
