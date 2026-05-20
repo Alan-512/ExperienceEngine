@@ -407,6 +407,18 @@ export class NodeRepository {
       .map((row) => this.mapNode(row as Parameters<typeof this.mapNode>[0]));
   }
 
+  listShadowProbeByExactScope(scopeId: string): ExperienceNode[] {
+    return this.db
+      .prepare(
+        `SELECT * FROM experience_nodes
+         WHERE scope_id = ?
+           AND delivery_state = 'shadow_probe'
+         ORDER BY updated_at DESC`
+      )
+      .all(scopeId)
+      .map((row) => this.mapNode(row as Parameters<typeof this.mapNode>[0]));
+  }
+
   listInjectableByExactScope(scopeId: string): ExperienceNode[] {
     return this.listLiveInjectableByExactScope(scopeId);
   }
