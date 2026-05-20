@@ -24,6 +24,25 @@ export class TrajectoryMatcher {
     events: ToolEvent[],
     outcome: "success" | "failure" | "unknown"
   ): TrajectoryMatchResult {
+    // Check for insufficient tool events / unsupported tool formats
+    const isSupportedTool = (toolName: string): boolean => {
+      const isCmd = /^(run_command|bash|execute_command|terminal|sh)$/i.test(toolName);
+      const isArtifact = /^(write_to_file|replace_file_content|multi_replace_file_content|view_file|read_file)$/i.test(toolName);
+      return isCmd || isArtifact;
+    };
+
+    const hasAnySupportedTool = events && events.some(e => isSupportedTool(e.tool_name));
+    
+    if (!events || events.length === 0 || !hasAnySupportedTool) {
+      return {
+        verdict: "trajectory_unknown",
+        confidence: "low",
+        matchedExpectationIds: [],
+        violatedExpectationIds: [],
+        evidenceRefs: []
+      };
+    }
+
     const normalizedEvents = events.map(e => CommandNormalizer.normalizeToolEvent(e));
     const matchedExpectationIds: string[] = [];
     const violatedExpectationIds: string[] = [];
@@ -31,10 +50,10 @@ export class TrajectoryMatcher {
     // De-duplicate evidence refs (ToolEvent.event_id)
     const evidenceRefsSet = new Set<string>();
 
-    // Exclude success_signal (which has success_ ID prefix) from standard command recommendations to prevent non_adoption false alarms
+    // Exclude success_signal (via e.requiredForAdoption !== false) from standard command recommendations to prevent non_adoption false alarms
     const recommendIds = new Set<string>([
       ...expectations.orderedExpectations.map(e => e.id),
-      ...expectations.unorderedExpectations.filter(e => e.type === "recommend" && !e.id.startsWith("success_")).map(e => e.id)
+      ...expectations.unorderedExpectations.filter(e => e.type === "recommend" && e.requiredForAdoption !== false).map(e => e.id)
     ]);
     const avoidIds = new Set<string>(
       expectations.unorderedExpectations.filter(e => e.type === "avoid").map(e => e.id)
@@ -165,6 +184,10 @@ export class TrajectoryMatcher {
       return false;
     };
 
+    const successExpectations = expectations.unorderedExpectations.filter(e => e.sourceField === "success_signal");
+    const hasSuccessSignal = successExpectations.length > 0;
+    const allSuccessSignalsMet = hasSuccessSignal && successExpectations.every(e => matchedExpectationIds.includes(e.id));
+
     if (hasViolatedAvoid) {
       if (isCausalHarmConfirmed()) {
         verdict = "guidance_caused_failure";
@@ -176,8 +199,24 @@ export class TrajectoryMatcher {
     } else {
       if (allRecommendsMet || (noRecommendsDefined && avoidIds.size > 0)) {
         if (outcome === "success") {
-          verdict = "guidance_prevented_failure";
-          confidence = "high";
+          // If we have an explicit success_signal defined, we MUST have successfully matched it 
+          // in order to upgrade the verdict to guidance_prevented_failure.
+          // Otherwise, a standard adopt + success outcome is simply adoption_detected.
+          if (hasSuccessSignal) {
+            if (allSuccessSignalsMet) {
+              verdict = "guidance_prevented_failure";
+              confidence = "high";
+            } else {
+              // Recommended steps were met and task succeeded, but success_signal expectation failed to match
+              verdict = "adoption_detected";
+              confidence = "medium";
+            }
+          } else {
+            // No success_signal defined, so recommended steps were adopted. 
+            // We cannot claim guidance_prevented_failure (no prevented-failure evidence chain).
+            verdict = "adoption_detected";
+            confidence = "medium";
+          }
         } else {
           verdict = "adoption_detected";
           confidence = "medium";

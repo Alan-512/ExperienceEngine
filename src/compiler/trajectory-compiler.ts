@@ -120,7 +120,11 @@ export class TrajectoryCompiler {
     if (recommendedSteps && Array.isArray(recommendedSteps)) {
       for (const step of recommendedSteps) {
         if (!step.trim()) continue;
-        const exp = this.compileStep(step, "recommend");
+        const exp = {
+          ...this.compileStep(step, "recommend"),
+          sourceField: "recommended_steps" as const,
+          requiredForAdoption: true
+        };
         if (exp.ordered) {
           orderedExpectations.push(exp);
         } else {
@@ -137,7 +141,9 @@ export class TrajectoryCompiler {
         // Avoid step expectations are ALWAYS unordered because they trigger non-adoption violations globally
         unorderedExpectations.push({
           ...exp,
-          ordered: false
+          ordered: false,
+          sourceField: "avoid_steps" as const,
+          requiredForAdoption: false
         });
       }
     }
@@ -148,7 +154,9 @@ export class TrajectoryCompiler {
       unorderedExpectations.push({
         ...exp,
         id: exp.id.replace("exp_", "success_"),
-        ordered: false
+        ordered: false,
+        sourceField: "success_signal" as const,
+        requiredForAdoption: false
       });
     }
 
@@ -157,7 +165,9 @@ export class TrajectoryCompiler {
       const exp = this.compileStep(stopCondition, "avoid");
       unorderedExpectations.push({
         ...exp,
-        ordered: false
+        ordered: false,
+        sourceField: "stop_condition" as const,
+        requiredForAdoption: false
       });
     }
 
@@ -166,7 +176,9 @@ export class TrajectoryCompiler {
       const exp = this.compileStep(escalationCondition, "avoid");
       unorderedExpectations.push({
         ...exp,
-        ordered: false
+        ordered: false,
+        sourceField: "escalation_condition" as const,
+        requiredForAdoption: false
       });
     }
 

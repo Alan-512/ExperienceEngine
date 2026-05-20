@@ -736,6 +736,8 @@ export type TrajectoryExpectation = {
   artifactPattern?: string;   // e.g. "ts", "json", "src/types/domain.ts"
   originalStep: string;       // Original prose for diagnostics
   ordered: boolean;           // Whether ordering constraint applies
+  sourceField?: "recommended_steps" | "avoid_steps" | "success_signal" | "stop_condition" | "escalation_condition";
+  requiredForAdoption?: boolean;
 };
 
 export type CompiledTrajectoryExpectations = {

@@ -21,8 +21,9 @@ describe("TrajectoryMatcher Engine Tests", () => {
       ];
 
       const resA = TrajectoryMatcher.match(compiled, eventsA, "success");
-      expect(resA.verdict).toBe("guidance_prevented_failure");
-      expect(resA.confidence).toBe("high");
+      // Standard recommended steps are adopted on success, but no success_signal defined -> adoption_detected
+      expect(resA.verdict).toBe("adoption_detected");
+      expect(resA.confidence).toBe("medium");
       expect(resA.matchedExpectationIds.length).toBe(3);
       expect(resA.violatedExpectationIds.length).toBe(0);
       expect(resA.evidenceRefs).toContain("e1");
@@ -36,7 +37,7 @@ describe("TrajectoryMatcher Engine Tests", () => {
       ];
 
       const resB = TrajectoryMatcher.match(compiled, eventsB, "success");
-      // Since one of the ordered recommendations is missing, it's adoption/non_adoption
+      // Since one of the ordered recommendations is missing, it's non_adoption
       expect(resB.verdict).toBe("non_adoption_detected");
       expect(resB.confidence).toBe("medium"); // Partially matched (at least one recommend matched)
       expect(resB.matchedExpectationIds.length).toBe(2); // checkout and push matched
@@ -54,7 +55,7 @@ describe("TrajectoryMatcher Engine Tests", () => {
       ];
 
       const res = TrajectoryMatcher.match(compiled, events, "success");
-      expect(res.verdict).toBe("guidance_prevented_failure");
+      expect(res.verdict).toBe("adoption_detected");
       expect(res.matchedExpectationIds.length).toBe(2);
       expect(res.violatedExpectationIds.length).toBe(0);
     });
@@ -119,8 +120,8 @@ describe("TrajectoryMatcher Engine Tests", () => {
       ];
 
       const res = TrajectoryMatcher.match(compiled, events, "success");
-      expect(res.verdict).toBe("guidance_prevented_failure");
-      expect(res.confidence).toBe("high");
+      expect(res.verdict).toBe("adoption_detected");
+      expect(res.confidence).toBe("medium");
       expect(res.matchedExpectationIds.length).toBe(1);
     });
 
@@ -134,8 +135,8 @@ describe("TrajectoryMatcher Engine Tests", () => {
       ];
 
       const res = TrajectoryMatcher.match(compiled, events, "success");
-      expect(res.verdict).toBe("guidance_prevented_failure");
-      expect(res.confidence).toBe("high");
+      expect(res.verdict).toBe("adoption_detected");
+      expect(res.confidence).toBe("medium");
     });
 
     it("should fuzzy match via substring fallback for spacing or underscores mismatch", () => {
@@ -146,8 +147,8 @@ describe("TrajectoryMatcher Engine Tests", () => {
       ];
 
       const res = TrajectoryMatcher.match(compiled, events, "success");
-      expect(res.verdict).toBe("guidance_prevented_failure");
-      expect(res.confidence).toBe("high");
+      expect(res.verdict).toBe("adoption_detected");
+      expect(res.confidence).toBe("medium");
     });
   });
 
@@ -177,13 +178,13 @@ describe("TrajectoryMatcher Engine Tests", () => {
     it("should handle purely avoid expectations successfully", () => {
       const compiled = TrajectoryCompiler.compileNodeExpectations([], ["avoid npm run dev"]);
       
-      // Case A: No avoid action was taken, outcome is success -> guidance_prevented_failure
+      // Case A: No avoid action was taken, outcome is success -> adoption_detected (no explicit success_signal to upgrade)
       const eventsA: ToolEvent[] = [
         { event_id: "e1", tool_name: "run_command", input_summary: "pnpm build", status: "success", started_at: "2026-05-20" }
       ];
       const resA = TrajectoryMatcher.match(compiled, eventsA, "success");
-      expect(resA.verdict).toBe("guidance_prevented_failure");
-      expect(resA.confidence).toBe("high");
+      expect(resA.verdict).toBe("adoption_detected");
+      expect(resA.confidence).toBe("medium");
 
       // Case B: No avoid action was taken, outcome is failure -> adoption_detected
       const resB = TrajectoryMatcher.match(compiled, eventsA, "failure");
@@ -202,8 +203,8 @@ describe("TrajectoryMatcher Engine Tests", () => {
       ];
 
       const res = TrajectoryMatcher.match(compiled, events, "success");
-      expect(res.verdict).toBe("guidance_prevented_failure");
-      expect(res.confidence).toBe("high");
+      expect(res.verdict).toBe("adoption_detected");
+      expect(res.confidence).toBe("medium");
     });
 
     it("should match generic prose fuzzy overlaps by keywords criteria", () => {
@@ -215,8 +216,8 @@ describe("TrajectoryMatcher Engine Tests", () => {
       ];
 
       const res = TrajectoryMatcher.match(compiled, events, "success");
-      expect(res.verdict).toBe("guidance_prevented_failure");
-      expect(res.confidence).toBe("high");
+      expect(res.verdict).toBe("adoption_detected");
+      expect(res.confidence).toBe("medium");
     });
   });
 
@@ -244,11 +245,30 @@ describe("TrajectoryMatcher Engine Tests", () => {
       const res = TrajectoryMatcher.match(compiled, events, "success");
       
       // Verified: Recommended step met, success_signal successfully matched in output_summary.
-      // And the success_signal (prefixed with success_) is correctly omitted from standard must-match recommends constraint to prevent false alarms.
+      // With explicit success_signal defined and successfully met, verdict is correctly upgraded to guidance_prevented_failure!
       expect(res.verdict).toBe("guidance_prevented_failure");
       expect(res.confidence).toBe("high");
       expect(res.matchedExpectationIds.length).toBe(2); // Both the step and success_signal matched
       expect(res.violatedExpectationIds.length).toBe(0);
+    });
+  });
+
+  describe("P1 trajectory_unknown Gating for Empty or Unsupported Events", () => {
+    it("should return trajectory_unknown when events timeline is empty", () => {
+      const compiled = TrajectoryCompiler.compileNodeExpectations(["pnpm test"], []);
+      const res = TrajectoryMatcher.match(compiled, [], "success");
+      expect(res.verdict).toBe("trajectory_unknown");
+      expect(res.confidence).toBe("low");
+    });
+
+    it("should return trajectory_unknown when events only contain unsupported tool formats", () => {
+      const compiled = TrajectoryCompiler.compileNodeExpectations(["pnpm test"], []);
+      const events: ToolEvent[] = [
+        { event_id: "e1", tool_name: "unsupported_custom_tool", input_summary: "some inputs", status: "success", started_at: "2026-05-20" }
+      ];
+      const res = TrajectoryMatcher.match(compiled, events, "success");
+      expect(res.verdict).toBe("trajectory_unknown");
+      expect(res.confidence).toBe("low");
     });
   });
 });
