@@ -271,4 +271,59 @@ describe("TrajectoryMatcher Engine Tests", () => {
       expect(res.confidence).toBe("low");
     });
   });
+
+  describe("P1 Only success_signal Nodes Matching", () => {
+    it("should match success_signal and return guidance_prevented_failure when no recommends or avoids are defined", () => {
+      const compiled = TrajectoryCompiler.compileNodeExpectations([], [], "The targeted test passes");
+      const events: ToolEvent[] = [
+        { 
+          event_id: "e1", 
+          tool_name: "Bash", 
+          input_summary: "pnpm test", 
+          output_summary: "The targeted test passes", 
+          status: "success", 
+          started_at: "2026-05-20" 
+        }
+      ];
+      const res = TrajectoryMatcher.match(compiled, events, "success");
+      expect(res.verdict).toBe("guidance_prevented_failure");
+      expect(res.confidence).toBe("high");
+    });
+
+    it("should return non_adoption_detected when only success_signal is defined but fails to match in timeline", () => {
+      const compiled = TrajectoryCompiler.compileNodeExpectations([], [], "The targeted test passes");
+      const events: ToolEvent[] = [
+        { 
+          event_id: "e1", 
+          tool_name: "Bash", 
+          input_summary: "pnpm test", 
+          output_summary: "some other output", 
+          status: "success", 
+          started_at: "2026-05-20" 
+        }
+      ];
+      const res = TrajectoryMatcher.match(compiled, events, "success");
+      expect(res.verdict).toBe("non_adoption_detected");
+      expect(res.confidence).toBe("low");
+    });
+  });
+
+  describe("P2 Completely Empty Trajectory Expectations", () => {
+    it("should return trajectory_unknown when no expectations are defined regardless of timeline events", () => {
+      const compiled = TrajectoryCompiler.compileNodeExpectations([], []);
+      const events: ToolEvent[] = [
+        { 
+          event_id: "e1", 
+          tool_name: "Bash", 
+          input_summary: "pnpm test", 
+          output_summary: "The targeted test passes", 
+          status: "success", 
+          started_at: "2026-05-20" 
+        }
+      ];
+      const res = TrajectoryMatcher.match(compiled, events, "success");
+      expect(res.verdict).toBe("trajectory_unknown");
+      expect(res.confidence).toBe("low");
+    });
+  });
 });

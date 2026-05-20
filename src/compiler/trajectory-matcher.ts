@@ -24,6 +24,17 @@ export class TrajectoryMatcher {
     events: ToolEvent[],
     outcome: "success" | "failure" | "unknown"
   ): TrajectoryMatchResult {
+    const totalExpectations = (expectations.orderedExpectations?.length || 0) + (expectations.unorderedExpectations?.length || 0);
+    if (totalExpectations === 0) {
+      return {
+        verdict: "trajectory_unknown",
+        confidence: "low",
+        matchedExpectationIds: [],
+        violatedExpectationIds: [],
+        evidenceRefs: []
+      };
+    }
+
     // Check for insufficient tool events / unsupported tool formats
     const isSupportedTool = (toolName: string): boolean => {
       const isCmd = /^(run_command|bash|execute_command|terminal|sh)$/i.test(toolName);
@@ -148,8 +159,24 @@ export class TrajectoryMatcher {
     let confidence: AttributionConfidence = "low";
 
     const hasViolatedAvoid = violatedAvoidCount > 0;
-    const allRecommendsMet = totalRecommendCount > 0 && violatedRecommendCount === 0;
-    const noRecommendsDefined = totalRecommendCount === 0;
+    const hasRecommends = totalRecommendCount > 0;
+    const hasAvoids = avoidIds.size > 0;
+    const successExpectations = expectations.unorderedExpectations.filter(e => e.sourceField === "success_signal");
+    const hasSuccessSignal = successExpectations.length > 0;
+    const allSuccessSignalsMet = hasSuccessSignal && successExpectations.every(e => matchedExpectationIds.includes(e.id));
+
+    let isAdopted = false;
+    if (hasRecommends) {
+      isAdopted = (violatedRecommendCount === 0);
+    } else {
+      if (hasAvoids) {
+        isAdopted = true;
+      } else if (hasSuccessSignal) {
+        isAdopted = allSuccessSignalsMet;
+      } else {
+        isAdopted = true;
+      }
+    }
 
     // OpenSpec P1: Avoid step violation defaults to non_adoption/contra_adoption, 
     // and CANNOT be assumed causal_harm unless a direct failed event or failure signature is correlated.
@@ -184,10 +211,6 @@ export class TrajectoryMatcher {
       return false;
     };
 
-    const successExpectations = expectations.unorderedExpectations.filter(e => e.sourceField === "success_signal");
-    const hasSuccessSignal = successExpectations.length > 0;
-    const allSuccessSignalsMet = hasSuccessSignal && successExpectations.every(e => matchedExpectationIds.includes(e.id));
-
     if (hasViolatedAvoid) {
       if (isCausalHarmConfirmed()) {
         verdict = "guidance_caused_failure";
@@ -197,7 +220,7 @@ export class TrajectoryMatcher {
         confidence = "medium";
       }
     } else {
-      if (allRecommendsMet || (noRecommendsDefined && avoidIds.size > 0)) {
+      if (isAdopted) {
         if (outcome === "success") {
           // If we have an explicit success_signal defined, we MUST have successfully matched it 
           // in order to upgrade the verdict to guidance_prevented_failure.
