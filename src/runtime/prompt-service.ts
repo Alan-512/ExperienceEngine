@@ -137,6 +137,7 @@ export class ExperiencePromptRuntimeService {
     session.context = mergeContext(session.context, context);
     const input = buildExperienceInput(session.context, session.toolEvents);
     const retrievalContext = buildRetrievalContext(input, session.context);
+    retrievalContext.db = this.db;
     const resolvedScope = resolveScope(session.context.cwd);
     if (session.context?.cwd) {
       try {

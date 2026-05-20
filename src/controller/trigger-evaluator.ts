@@ -1,4 +1,4 @@
-import type { ExperienceInput, ExperienceState, MatchScorecard, ScopeTaskStats, ValidationState } from "../types/domain.js";
+import type { ExperienceInput, ExperienceState, MatchScorecard, PortabilityScorecard, ScopeTaskStats, ValidationState } from "../types/domain.js";
 import { tokenize } from "../utils/text.js";
 
 export type TriggerCandidateQuality = {
@@ -16,6 +16,7 @@ export type TriggerCandidateQuality = {
   harmedCount: number;
   validationState?: ValidationState;
   matchScorecard?: MatchScorecard;
+  portabilityScorecard?: PortabilityScorecard;
   scoreMargin: number;
 };
 
@@ -48,18 +49,26 @@ export const evaluateTriggerRoute = (
   knownRiskSummaryOrContext?: string | TriggerEvaluationContext,
   threshold = 0.6
 ): TriggerRouteDecision => {
+  const evaluationContext =
+    typeof knownRiskSummaryOrContext === "string"
+      ? { knownRiskSummary: knownRiskSummaryOrContext }
+      : knownRiskSummaryOrContext;
+  const candidateQuality = evaluationContext?.candidateQuality;
+
+  if (candidateQuality && candidateQuality.scopeMatch === false) {
+    const band = candidateQuality.portabilityScorecard?.portabilityBand;
+    if (band === "incompatible" || band === "weakly_related") {
+      return { decision: "skip", reason: `cross_repo_blocked_by_portability_band_${band}` };
+    }
+  }
+
   if (input.task_type === "unknown") {
     return { decision: "skip", reason: "unknown_task_type" };
   }
 
   const failureRate =
     stats && stats.total_tasks > 0 ? stats.failed_tasks / stats.total_tasks : 0;
-  const evaluationContext =
-    typeof knownRiskSummaryOrContext === "string"
-      ? { knownRiskSummary: knownRiskSummaryOrContext }
-      : knownRiskSummaryOrContext;
   const knownRiskSummary = evaluationContext?.knownRiskSummary;
-  const candidateQuality = evaluationContext?.candidateQuality;
   const knownPattern = knownRiskSummary ?? input.context_summary;
   const taskRisk = overlapScore(input.task_summary, knownPattern);
   const contextRisk = overlapScore(input.context_summary ?? "", knownPattern);

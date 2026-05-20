@@ -146,6 +146,7 @@ export type RetrievalContext = {
   isReadOnly?: boolean;
   modulePaths?: string[];
   expectationCorrectionIntent?: boolean;
+  db?: any;
 };
 
 export type RetrievalPolicyStageName =

@@ -954,6 +954,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     this.maybeQueueAutonomousHygieneGovernance(session.context, "prompt_lookup");
     const input = buildExperienceInput(session.context, session.toolEvents);
     const retrievalContext = buildRetrievalContext(input, session.context);
+    retrievalContext.db = this.db;
     const resolvedScope = resolveScope(session.context.cwd);
     const existingScope = this.scopeRepo.getById(resolvedScope.scope_id);
 
