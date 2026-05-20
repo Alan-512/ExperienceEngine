@@ -174,16 +174,9 @@ export class CommandNormalizer {
     }
 
     // Handle host-native file tools
-    const fileTools = [
-      "write_to_file",
-      "replace_file_content",
-      "multi_replace_file_content",
-      "write_file",
-      "read_file",
-      "view_file"
-    ];
+    const isFileToolName = /^(write_to_file|replace_file_content|multi_replace_file_content|write_file|read_file|view_file|apply_patch)$/i.test(event.tool_name);
 
-    if (fileTools.includes(event.tool_name) && event.input_summary) {
+    if (isFileToolName && event.input_summary) {
       // input_summary usually contains the file path
       const pathStr = event.input_summary.trim();
       const basename = this.getBasename(pathStr);

@@ -38,7 +38,7 @@ export class TrajectoryMatcher {
     // Check for insufficient tool events / unsupported tool formats
     const isSupportedTool = (toolName: string): boolean => {
       const isCmd = /^(run_command|bash|execute_command|terminal|sh)$/i.test(toolName);
-      const isArtifact = /^(write_to_file|replace_file_content|multi_replace_file_content|view_file|read_file)$/i.test(toolName);
+      const isArtifact = /^(write_to_file|replace_file_content|multi_replace_file_content|view_file|read_file|write_file|apply_patch)$/i.test(toolName);
       return isCmd || isArtifact;
     };
 

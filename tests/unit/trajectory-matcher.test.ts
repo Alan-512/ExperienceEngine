@@ -326,4 +326,36 @@ describe("TrajectoryMatcher Engine Tests", () => {
       expect(res.confidence).toBe("low");
     });
   });
+
+  describe("P1 apply_patch and write_file Support", () => {
+    it("should match artifact expectations when tool_name is apply_patch or write_file", () => {
+      const compiled = TrajectoryCompiler.compileNodeExpectations(
+        ["modify src/index.ts", "write src/main.ts"], 
+        []
+      );
+
+      const events: ToolEvent[] = [
+        { 
+          event_id: "e1", 
+          tool_name: "apply_patch", 
+          input_summary: "src/index.ts", 
+          status: "success", 
+          started_at: "2026-05-20" 
+        },
+        { 
+          event_id: "e2", 
+          tool_name: "write_file", 
+          input_summary: "src/main.ts", 
+          status: "success", 
+          started_at: "2026-05-20" 
+        }
+      ];
+
+      const res = TrajectoryMatcher.match(compiled, events, "success");
+      expect(res.verdict).toBe("adoption_detected");
+      expect(res.confidence).toBe("medium");
+      expect(res.matchedExpectationIds.length).toBe(2);
+      expect(res.violatedExpectationIds.length).toBe(0);
+    });
+  });
 });
