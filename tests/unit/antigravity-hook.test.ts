@@ -270,4 +270,39 @@ describe("Antigravity hook command & payload handling", () => {
       contextSummary: undefined
     });
   });
+
+  it("skips prompt-time writes when Antigravity only reports a CLI flag as prompt", async () => {
+    const loop = behaviorLoopMock();
+
+    const output = await handleAntigravityHookPayload(
+      "PreInvocation",
+      {
+        conversationId: "session-unresolved-flag",
+        cwd: "/workspace/test-repo",
+        prompt: "--dangerously-skip-permissions"
+      },
+      loop as any
+    );
+
+    expect(loop.lookupHints).not.toHaveBeenCalled();
+    expect(output).toEqual({});
+  });
+
+  it("skips finalization when Antigravity only reports a CLI flag as prompt", async () => {
+    const loop = behaviorLoopMock();
+
+    const output = await handleAntigravityHookPayload(
+      "Stop",
+      {
+        conversationId: "session-unresolved-flag",
+        cwd: "/workspace/test-repo",
+        prompt: "--dangerously-skip-permissions",
+        lastMessage: "Finished execution successfully"
+      },
+      loop as any
+    );
+
+    expect(loop.finalizeTask).not.toHaveBeenCalled();
+    expect(output).toEqual({});
+  });
 });

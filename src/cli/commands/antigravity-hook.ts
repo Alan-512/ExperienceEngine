@@ -113,8 +113,13 @@ export const handleAntigravityHookPayload = async (
   if ((!prompt || isCliFlag(prompt)) && process.env.EXPERIENCE_ENGINE_PROMPT) {
     prompt = process.env.EXPERIENCE_ENGINE_PROMPT;
   }
+  const hasResolvedPrompt = Boolean(prompt.trim()) && !isCliFlag(prompt.trim());
 
   if (eventName === "PreInvocation") {
+    if (!hasResolvedPrompt) {
+      return {};
+    }
+
     const lookup = await behaviorLoop.lookupHints({
       cwd,
       prompt,
@@ -153,6 +158,10 @@ export const handleAntigravityHookPayload = async (
     });
     return {};
   } else if (eventName === "Stop") {
+    if (!hasResolvedPrompt) {
+      return {};
+    }
+
     const contextSummary = payload.lastMessage || payload.contextSummary || payload.last_assistant_message || undefined;
     const dedupMarker = acquireFinalizeDedupMarker({
       sessionId: conversationId,
