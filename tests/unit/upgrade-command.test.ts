@@ -81,7 +81,7 @@ describe("upgrade command", () => {
     runUpgradeCommand(undefined);
 
     expect(consoleLogSpy).toHaveBeenCalledWith(
-      "Usage: ee upgrade openclaw|claude-code|codex [--runtime-target posix|windows]"
+      "Usage: ee upgrade openclaw|claude-code|codex|antigravity [--runtime-target posix|windows] [--mcp-only] [--hooks]"
     );
   });
 });

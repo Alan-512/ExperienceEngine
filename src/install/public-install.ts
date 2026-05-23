@@ -53,6 +53,7 @@ export const buildHostInstallGuidance = (
   openclaw: PendingInstallGuidance | ReadyInstallGuidance;
   codex: PendingInstallGuidance | ReadyInstallGuidance;
   "claude-code": PendingInstallGuidance | ReadyInstallGuidance;
+  antigravity: PendingInstallGuidance | ReadyInstallGuidance;
 } => ({
   openclaw: {
     ready: true,
@@ -65,6 +66,10 @@ export const buildHostInstallGuidance = (
   "claude-code": {
     ready: true,
     commands: [buildClaudeMarketplaceAddCommand(), buildClaudePluginInstallCommand()]
+  },
+  antigravity: {
+    ready: true,
+    commands: ["ee install antigravity", "ee agy exec -C <project-path> \"<prompt>\""]
   }
 });
 
@@ -72,6 +77,7 @@ export const buildHostPostInstallOrientation = (): {
   openclaw: PostInstallOrientation;
   codex: PostInstallOrientation;
   "claude-code": PostInstallOrientation;
+  antigravity: PostInstallOrientation;
 } => ({
   openclaw: {
     setupState: "Installed",
@@ -87,5 +93,10 @@ export const buildHostPostInstallOrientation = (): {
     setupState: "Installed",
     nextStep:
       "Start a new Claude Code session. If shared ExperienceEngine state is not initialized yet, run `ee init` before your first real task."
+  },
+  antigravity: {
+    setupState: "Installed",
+    nextStep:
+      "Use `ee agy exec -C <project-path>` for headless CLI runs, or run `ee antigravity activate-project -C <project-path>` before opening Agent Desktop in a new project. If shared ExperienceEngine state is not initialized yet, run `ee init` before your first real task."
   }
 });

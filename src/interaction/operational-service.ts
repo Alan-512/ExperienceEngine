@@ -5,14 +5,16 @@ import {
   getOpenClawRepairHint,
   inspectOpenClawInstall
 } from "../install/openclaw-installer.js";
+import { inspectAntigravityInstall } from "../install/antigravity.js";
 import { fetchLatestGitHubReleaseStatus, type RemoteReleaseStatus } from "../version/remote-release.js";
 
-export type ExperienceAdapter = "openclaw" | "claude-code" | "codex";
+export type ExperienceAdapter = "openclaw" | "claude-code" | "codex" | "antigravity";
 
 type OperationalDeps = {
   inspectOpenClawInstall?: typeof inspectOpenClawInstall;
   inspectClaudeCodeInstall?: typeof inspectClaudeCodeInstall;
   inspectCodexInstall?: typeof inspectCodexInstall;
+  inspectAntigravityInstall?: typeof inspectAntigravityInstall;
   fetchLatestGitHubReleaseStatus?: typeof fetchLatestGitHubReleaseStatus;
 };
 
@@ -48,6 +50,15 @@ export class ExperienceOperationalService {
         adapter,
         local,
         recommendedNextStep: local.versionStatus.updateAvailable ? "ee upgrade codex" : undefined
+      };
+    }
+
+    if (adapter === "antigravity") {
+      const local = (this.deps.inspectAntigravityInstall ?? inspectAntigravityInstall)();
+      return {
+        adapter,
+        local,
+        recommendedNextStep: local.versionStatus.updateAvailable ? "ee upgrade antigravity" : undefined
       };
     }
 

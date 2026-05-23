@@ -7,6 +7,11 @@ import {
   installOpenClawAdapter,
   repairOpenClawAdapter
 } from "../install/openclaw-installer.js";
+import {
+  inspectAntigravityInstall,
+  installAntigravityAdapter,
+  repairAntigravityAdapter
+} from "../install/antigravity.js";
 import type { ExperienceAdapter } from "./operational-service.js";
 
 export type HighImpactOperation = "install" | "repair" | "upgrade";
@@ -44,12 +49,15 @@ type PlannedOperation = {
 
 export type OperationalActionsDeps = {
   inspectOpenClawInstall?: () => VersionInspection;
-  installOpenClawAdapter?: () => OpenClawInstallResult;
-  repairOpenClawAdapter?: () => OpenClawInstallResult;
+  installOpenClawAdapter?: () => OpenClawInstallResult | Promise<OpenClawInstallResult>;
+  repairOpenClawAdapter?: () => OpenClawInstallResult | Promise<OpenClawInstallResult>;
   inspectClaudeCodeInstall?: () => VersionInspection;
-  installClaudeCodeAdapter?: () => InstallResult;
+  installClaudeCodeAdapter?: () => InstallResult | Promise<InstallResult>;
   inspectCodexInstall?: () => VersionInspection;
-  installCodexAdapter?: () => InstallResult;
+  installCodexAdapter?: () => InstallResult | Promise<InstallResult>;
+  inspectAntigravityInstall?: () => VersionInspection;
+  installAntigravityAdapter?: () => InstallResult | Promise<InstallResult>;
+  repairAntigravityAdapter?: () => InstallResult | Promise<InstallResult>;
   tokenFactory?: PlanTokenFactory;
   now?: () => string;
 };
@@ -72,7 +80,7 @@ export type OperationalExecutionResult = {
 
 const supportedOperation = (adapter: ExperienceAdapter, operation: HighImpactOperation): boolean => {
   if (operation === "repair") {
-    return adapter === "openclaw";
+    return adapter === "openclaw" || adapter === "antigravity";
   }
 
   return true;
@@ -141,6 +149,9 @@ export class ExperienceOperationalActionsService {
     if (adapter === "claude-code") {
       return (this.deps.inspectClaudeCodeInstall ?? inspectClaudeCodeInstall)();
     }
+    if (adapter === "antigravity") {
+      return (this.deps.inspectAntigravityInstall ?? inspectAntigravityInstall)();
+    }
     return (this.deps.inspectCodexInstall ?? inspectCodexInstall)();
   }
 
@@ -172,7 +183,7 @@ export class ExperienceOperationalActionsService {
     };
   }
 
-  executePlannedOperation(args: { planId: string; confirmationToken: string }): OperationalExecutionResult {
+  async executePlannedOperation(args: { planId: string; confirmationToken: string }): Promise<OperationalExecutionResult> {
     const plan = this.plans.get(args.planId);
 
     if (!plan || plan.confirmationToken !== args.confirmationToken) {
@@ -184,7 +195,20 @@ export class ExperienceOperationalActionsService {
     const previousVersion = readRecordedVersion(this.inspect(plan.adapter));
 
     if (plan.operation === "repair") {
-      const report = (this.deps.repairOpenClawAdapter ?? repairOpenClawAdapter)();
+      if (plan.adapter === "antigravity") {
+        const report = await (this.deps.repairAntigravityAdapter ?? repairAntigravityAdapter)();
+        return {
+          status: "executed",
+          adapter: plan.adapter,
+          operation: plan.operation,
+          summary: plan.summary,
+          result: {
+            installedVersion: report.installedVersion,
+            previousVersion
+          }
+        };
+      }
+      const report = await (this.deps.repairOpenClawAdapter ?? repairOpenClawAdapter)();
       return {
         status: "executed",
         adapter: plan.adapter,
@@ -199,7 +223,7 @@ export class ExperienceOperationalActionsService {
     }
 
     if (plan.adapter === "openclaw") {
-      const report = (this.deps.installOpenClawAdapter ?? installOpenClawAdapter)();
+      const report = await (this.deps.installOpenClawAdapter ?? installOpenClawAdapter)();
       return {
         status: "executed",
         adapter: plan.adapter,
@@ -214,7 +238,7 @@ export class ExperienceOperationalActionsService {
     }
 
     if (plan.adapter === "claude-code") {
-      const report = (this.deps.installClaudeCodeAdapter ?? installClaudeCodeAdapter)();
+      const report = await (this.deps.installClaudeCodeAdapter ?? installClaudeCodeAdapter)();
       return {
         status: "executed",
         adapter: plan.adapter,
@@ -227,7 +251,21 @@ export class ExperienceOperationalActionsService {
       };
     }
 
-    const report = (this.deps.installCodexAdapter ?? installCodexAdapter)();
+    if (plan.adapter === "antigravity") {
+      const report = await (this.deps.installAntigravityAdapter ?? installAntigravityAdapter)();
+      return {
+        status: "executed",
+        adapter: plan.adapter,
+        operation: plan.operation,
+        summary: plan.summary,
+        result: {
+          installedVersion: report.installedVersion,
+          previousVersion
+        }
+      };
+    }
+
+    const report = await (this.deps.installCodexAdapter ?? installCodexAdapter)();
     return {
       status: "executed",
       adapter: plan.adapter,

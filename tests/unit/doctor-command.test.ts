@@ -190,7 +190,7 @@ describe("doctor command", () => {
         ["- OpenClaw learning loop: interaction_only"],
         ["- OpenClaw background learning default: disabled"],
         ["- OpenClaw async posttask default: disabled"],
-        ["- Host health details: ee doctor <codex|claude-code|openclaw>"],
+        ["- Host health details: ee doctor <codex|claude-code|openclaw|antigravity>"],
         ["Distillation summary:"],
         ["Embedding summary:"]
       ])
@@ -1300,6 +1300,90 @@ describe("doctor command", () => {
         ["- Offline readiness: Error"],
         ["- Offline manifest error: Missing or corrupt manifest file"],
         ["  Warning: Strict offline profile is set, but offline assets are not ready or are corrupt."]
+      ])
+    );
+  });
+
+  it("reports Antigravity user install separately from current project activation", async () => {
+    await runDoctorCommand("antigravity", {
+      inspectAntigravityInstall: () =>
+        ({
+          adapter: "antigravity",
+          installScope: "user",
+          installed: true,
+          versionStatus: {
+            recordedVersion: "0.1.0",
+            currentVersion: "0.1.0",
+            state: "current",
+            updateAvailable: false
+          },
+          packageRoot: "/tmp/ee",
+          captureDir: "/tmp/captures",
+          lifecycleMode: "host_native_hooks_validated",
+          mcpRegistered: true,
+          hooksRegistered: true,
+          hookContractSpikePassed: true,
+          cliAvailable: true,
+          agyCliAvailable: true,
+          agyCliPath: "C:\\Users\\123\\AppData\\Local\\agy\\bin\\agy.exe",
+          ideCliAvailable: true,
+          ideCliPath: "D:\\Antigravity\\bin\\antigravity",
+          cliValidatedInvocation: "ee agy exec -C <project-path> \"<prompt>\"",
+          cliProjectDiscoveryNote: "Wrapper auto-adds --add-dir.",
+          agentDesktopGlobalActivation: "unsupported",
+          projectWiring: {
+            cwd: "D:\\repo",
+            lifecycleMode: "host_native_hooks_validated",
+            mcpRegistered: true,
+            hooksRegistered: true,
+            hookContractSpikePassed: true,
+            serverName: "experienceengine",
+            serverCommand: "node dist/cli/index.js mcp-server"
+          },
+          serverName: "experienceengine",
+          serverCommand: "node dist/cli/index.js mcp-server",
+          hostWiring: {
+            wired: true,
+            enabled: true,
+            transport: "stdio",
+            command: "node dist/cli/index.js mcp-server"
+          }
+        }) as never,
+      fetchLatestGitHubReleaseStatus: async () => ({
+        source: "github-releases",
+        repository: "Alan-512/ExperienceEngine",
+        latestVersion: "0.1.0",
+        releaseUrl: null,
+        publishedAt: "2026-03-12T12:00:00Z",
+        state: "current",
+        updateAvailable: false
+      }),
+      inspectFirstValueReadiness: () => ({
+        rawRecords: 1,
+        taskRuns: 1,
+        candidates: 0,
+        nodes: 0,
+        nextStep: "Keep working in the same repo."
+      })
+    });
+
+    expect(consoleTableSpy).toHaveBeenCalledWith([
+      expect.objectContaining({
+        install_scope: "user",
+        current_project_mcp_registered: true,
+        current_project_hooks_registered: true,
+        agy_cli_available: true,
+        ide_cli_available: true,
+        agent_desktop_global_activation: "unsupported"
+      })
+    ]);
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["- User-level EE state: installed data and adapter state live under the configured ExperienceEngine home."],
+        ["- Current project activation: project .mcp.json and .agents/hooks.json are required until Antigravity exposes a verified global hook surface."],
+        ["- Current project: D:\\repo"],
+        ["- CLI validated invocation: ee agy exec -C <project-path> \"<prompt>\""],
+        ["- Agent Desktop project activation command: ee antigravity activate-project -C <project>"]
       ])
     );
   });

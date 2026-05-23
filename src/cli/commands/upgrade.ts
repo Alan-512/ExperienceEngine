@@ -2,6 +2,7 @@ import { inspectClaudeCodeInstall } from "../../install/claude-code-doctor.js";
 import { installClaudeCodeAdapter } from "../../install/claude-code-installer.js";
 import { inspectCodexInstall, installCodexAdapter } from "../../install/codex-installer.js";
 import { inspectOpenClawInstall, installOpenClawAdapter } from "../../install/openclaw-installer.js";
+import { inspectAntigravityInstall, installAntigravityAdapter } from "../../install/antigravity.js";
 import { buildCodexHookReviewGuidance } from "../../install/public-install.js";
 
 type UpgradeDeps = {
@@ -11,6 +12,8 @@ type UpgradeDeps = {
   installClaudeCodeAdapter?: typeof installClaudeCodeAdapter;
   inspectCodexInstall?: typeof inspectCodexInstall;
   installCodexAdapter?: typeof installCodexAdapter;
+  inspectAntigravityInstall?: typeof inspectAntigravityInstall;
+  installAntigravityAdapter?: typeof installAntigravityAdapter;
 };
 
 const readClaudeRuntimeTarget = (args: string[]): string | undefined => {
@@ -31,11 +34,11 @@ const readCodexRuntimeTarget = (args: string[]): string | undefined => {
   return undefined;
 };
 
-export const runUpgradeCommand = (
+export const runUpgradeCommand = async (
   target?: string,
   argsOrDeps: string[] | UpgradeDeps = [],
   maybeDeps: UpgradeDeps = {}
-): void => {
+): Promise<void> => {
   const args = Array.isArray(argsOrDeps) ? argsOrDeps : [];
   const deps = Array.isArray(argsOrDeps) ? maybeDeps : argsOrDeps;
   if (target === "openclaw") {
@@ -80,5 +83,28 @@ export const runUpgradeCommand = (
     return;
   }
 
-  console.log("Usage: ee upgrade openclaw|claude-code|codex [--runtime-target posix|windows]");
+  if (target === "antigravity") {
+    const inspect = deps.inspectAntigravityInstall ?? inspectAntigravityInstall;
+    const install = deps.installAntigravityAdapter ?? installAntigravityAdapter;
+    const before = inspect();
+    const mcpOnly = args.includes("--mcp-only")
+      ? true
+      : args.includes("--hooks")
+        ? false
+        : undefined;
+    const report = await install({ mcpOnly });
+    console.log(`Upgraded ${report.adapter} adapter.`);
+    console.log(`Version: ${before.versionStatus.recordedVersion ?? "unknown"} -> ${report.installedVersion}`);
+    console.log(`Server name: ${report.serverName}`);
+    console.log(`Server command: ${report.serverCommand}`);
+    console.log(`Lifecycle mode: ${report.lifecycleMode}`);
+    console.log(`Install scope: ${report.installScope}`);
+    console.log(`Current project: ${report.projectWiring.cwd}`);
+    console.log(`Current project MCP Registered: ${report.projectWiring.mcpRegistered ? "yes" : "no"}`);
+    console.log(`Current project Hooks Registered: ${report.projectWiring.hooksRegistered ? "yes" : "no"}`);
+    console.log("New Antigravity sessions in activated projects will use the updated hook command and MCP server.");
+    return;
+  }
+
+  console.log("Usage: ee upgrade openclaw|claude-code|codex|antigravity [--runtime-target posix|windows] [--mcp-only] [--hooks]");
 };

@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ExperienceOperationalActionsService } from "../../src/interaction/operational-actions-service.js";
 
 describe("ExperienceOperationalActionsService", () => {
-  it("creates plan tokens and executes an upgrade using canonical installer semantics", () => {
+  it("creates plan tokens and executes an upgrade using canonical installer semantics", async () => {
     const service = new ExperienceOperationalActionsService({
       tokenFactory: (() => {
         let count = 0;
@@ -28,7 +28,7 @@ describe("ExperienceOperationalActionsService", () => {
     expect(plan.confirmationToken).toBe("token-2");
     expect(plan.commandHint).toBe("ee upgrade codex");
 
-    const result = service.executePlannedOperation({
+    const result = await service.executePlannedOperation({
       planId: plan.planId,
       confirmationToken: plan.confirmationToken
     });
@@ -44,7 +44,7 @@ describe("ExperienceOperationalActionsService", () => {
     });
   });
 
-  it("rejects execution when the confirmation token is missing or stale", () => {
+  it("rejects execution when the confirmation token is missing or stale", async () => {
     const service = new ExperienceOperationalActionsService({
       tokenFactory: (() => {
         let count = 0;
@@ -62,12 +62,12 @@ describe("ExperienceOperationalActionsService", () => {
       operation: "install"
     });
 
-    expect(() =>
+    await expect(
       service.executePlannedOperation({
         planId: plan.planId,
         confirmationToken: "wrong-token"
       })
-    ).toThrow("Invalid or expired confirmation token");
+    ).rejects.toThrow("Invalid or expired confirmation token");
   });
 
   it("rejects unsupported repair targets during planning", () => {

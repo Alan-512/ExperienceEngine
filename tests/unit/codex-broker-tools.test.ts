@@ -311,7 +311,7 @@ describe("codex broker tools", () => {
       properties: {
         adapter: {
           type: "string",
-          enum: ["openclaw", "claude-code", "codex"]
+          enum: ["openclaw", "claude-code", "codex", "antigravity"]
         }
       }
     });

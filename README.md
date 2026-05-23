@@ -6,7 +6,7 @@ ExperienceEngine is a governance layer for coding agents that reuses real execut
 
 **Memory does addition. ExperienceEngine does governance.**
 
-Supported hosts today: `OpenClaw`, `Claude Code`, `Codex`
+Supported hosts today: `OpenClaw`, `Claude Code`, `Codex`, and validated Google Antigravity Agent Desktop support
 
 ## 10-Second Example
 
@@ -62,6 +62,9 @@ npm install -g @alan512/experienceengine
   - `/plugin marketplace add https://github.com/Alan-512/ExperienceEngine.git`
   - `/plugin install experienceengine@experienceengine`
   - `ee init`
+- `Google Antigravity`
+  - `ee install antigravity`
+  - `ee init`
 
 `ee init` initializes shared ExperienceEngine state after the host-specific installation step.
 
@@ -88,6 +91,7 @@ Do not use ExperienceEngine if:
 | `OpenClaw` | native plugin install | host-native | most complete today |
 | `Claude Code` | marketplace plugin, with `ee install claude-code` fallback | MCP + plugin hooks | supported |
 | `Codex` | `ee install codex`, with native MCP fallback | hooks + MCP | supported |
+| Google Antigravity Agent Desktop + `agy` CLI | `ee install antigravity`, `ee agy exec -C <project>` for CLI runs | MCP + validated native hooks | supported for activated Agent Desktop projects and `ee agy exec` |
 
 ## Why It Exists
 
@@ -304,7 +308,7 @@ Use the `ee` CLI when you need explicit operator validation or troubleshooting:
 
 ```bash
 ee init
-ee doctor <openclaw|claude-code|codex>
+ee doctor <openclaw|claude-code|codex|antigravity>
 ee status
 ee maintenance embedding-smoke
 ```
@@ -347,6 +351,7 @@ If you need explicit per-host control as an operator or while developing the pro
 ee install openclaw
 ee install claude-code
 ee install codex
+ee install antigravity
 ```
 
 <details>
@@ -364,6 +369,7 @@ Notes:
 - `Codex` installs Codex-native hooks plus the shared ExperienceEngine MCP server. `ee codex exec` remains the deterministic non-interactive fallback.
 - Codex `UserPromptSubmit` stays synchronous because it owns prompt-time experience injection. `PostToolUse` and `Stop` are queued for background processing by default. `PreToolUse` is not registered by default; set `EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED=1` only for synchronous gating experiments.
 - Codex App and Codex CLI both load repo-level project hooks when they open the same repo. If Codex says hooks need review, open `/hooks` and approve ExperienceEngine's `UserPromptSubmit`, `PostToolUse`, and `Stop` hooks. If `EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED=1` was used, approve `PreToolUse` too.
+- `Google Antigravity` currently means Antigravity Agent Desktop plus the standalone `agy` CLI, not the separate Antigravity IDE shell. EE data remains user-level under the configured ExperienceEngine home and project experience remains scope-isolated. `ee install antigravity` records user-level adapter capability and activates the current project by installing the shared MCP server in `.mcp.json` and validated lifecycle hooks in `.agents/hooks.json`; use `ee antigravity activate-project -C <project>` to activate another Agent Desktop project. For CLI runs, prefer `ee agy exec -C <project> "<prompt>"`; it auto-refreshes project wiring and invokes `agy --add-dir <project> --print ...`. Direct `agy` project auto-discovery can fail on Windows if symlink creation is not permitted. Antigravity supports both routine stdio MCP calls and an advanced artifact-assisted analyzer that automatically parses planning/verification markdown files (`task.md`, `walkthrough.md`, `implementation_plan.md`) for task outcomes, and reconciles them with runtime finalization telemetry.
 - `ee install ...` and `ee doctor ...` now warn if `npm` or `pnpm` uses a non-official registry, because managed model downloads are most reliable with `https://registry.npmjs.org`.
 - successful `ee install ...` also explains the cold-start expectation: capture starts immediately, but formal experience usually appears after a few similar tasks in the same repo.
 

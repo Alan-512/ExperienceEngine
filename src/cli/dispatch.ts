@@ -7,7 +7,7 @@ import {
 import { SURFACE_TIER_DEFINITIONS } from "../interaction/surface-tiers.js";
 
 const usageText =
-  "Usage: ee <install openclaw|claude-code|codex|upgrade openclaw|claude-code|codex|repair [openclaw|codex]|claude-hook|codex-hook|codex <exec ...>|codex-mcp-server|doctor [openclaw|claude-code|codex]|status|stats|inspect|feedback|disable|enable|cool|retire>"
+  "Usage: ee <install openclaw|claude-code|codex|antigravity|upgrade openclaw|claude-code|codex|antigravity|repair [openclaw|codex|antigravity]|claude-hook|codex-hook|antigravity-hook|codex <exec ...>|agy <exec ...>|antigravity <activate-project ...>|codex-mcp-server|doctor [openclaw|claude-code|codex|antigravity]|status|stats|inspect|feedback|disable|enable|cool|retire>"
   + " | helped|harmed"
   + " | backup|export|import <snapshot-path>|rollback <backup-id>"
   + " | maintenance embeddings-reset|embedding-smoke|governance drain|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
@@ -29,9 +29,10 @@ export const printCliUsage = (): void => {
   console.log("- Initialize shared state: ee init");
   console.log(`${SURFACE_TIER_DEFINITIONS.routine.label} workflows:`);
   console.log("- Host-first review/feedback: ask OpenClaw, Codex, or Claude Code what ExperienceEngine injected and mark helped/harmed in-session.");
-  console.log("- CLI fallback: ee status | ee doctor <openclaw|claude-code|codex> | ee inspect --last | ee helped | ee harmed");
+  console.log("- CLI fallback: ee status | ee doctor <openclaw|claude-code|codex|antigravity> | ee inspect --last | ee helped | ee harmed");
   console.log(`${SURFACE_TIER_DEFINITIONS.operator.label} workflows:`);
-  console.log("- Host setup and repair: ee install|upgrade|repair <openclaw|claude-code|codex>");
+  console.log("- Host setup and repair: ee install|upgrade|repair <openclaw|claude-code|codex|antigravity>");
+  console.log("- Antigravity CLI wrapper: ee agy exec -C <project> \"<prompt>\"");
   console.log("- Read-only review: ee inspect review | ee inspect hygiene | ee inspect export-drafts | ee inspect repo");
   console.log("- Managed state: ee backup | ee export | ee import <snapshot-path> | ee rollback <backup-id>");
   console.log(`${SURFACE_TIER_DEFINITIONS.advanced.label} workflows:`);
@@ -44,7 +45,7 @@ export const runCliCommand = async (command: string | undefined, args: string[])
   switch (command) {
     case "install": {
       const { runInstallCommand } = await import("./commands/install.js");
-      runInstallCommand(args[0], args.slice(1));
+      await runInstallCommand(args[0], args.slice(1));
       break;
     }
     case "backup": {
@@ -62,9 +63,24 @@ export const runCliCommand = async (command: string | undefined, args: string[])
       await runCodexHookCommand();
       break;
     }
+    case "antigravity-hook": {
+      const { runAntigravityHookCommand } = await import("./commands/antigravity-hook.js");
+      await runAntigravityHookCommand(args[0]);
+      break;
+    }
     case "codex": {
       const { runCodexCommand } = await import("./commands/codex.js");
       await runCodexCommand(args[0], args.slice(1));
+      break;
+    }
+    case "agy": {
+      const { runAgyCommand } = await import("./commands/agy-exec.js");
+      await runAgyCommand(args[0], args.slice(1));
+      break;
+    }
+    case "antigravity": {
+      const { runAntigravityCommand } = await import("./commands/antigravity.js");
+      await runAntigravityCommand(args[0], args.slice(1));
       break;
     }
     case "codex-mcp-server": {
@@ -104,7 +120,7 @@ export const runCliCommand = async (command: string | undefined, args: string[])
     }
     case "repair": {
       const { runRepairCommand } = await import("./commands/repair.js");
-      runRepairCommand(args[0]);
+      await runRepairCommand(args[0]);
       break;
     }
     case "status": {
@@ -129,7 +145,7 @@ export const runCliCommand = async (command: string | undefined, args: string[])
     }
     case "upgrade": {
       const { runUpgradeCommand } = await import("./commands/upgrade.js");
-      runUpgradeCommand(args[0], args.slice(1));
+      await runUpgradeCommand(args[0], args.slice(1));
       break;
     }
     case "stats": {

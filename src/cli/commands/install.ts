@@ -1,6 +1,7 @@
 import { installClaudeCodeAdapter } from "../../install/claude-code-installer.js";
 import { installCodexAdapter } from "../../install/codex-installer.js";
 import { installOpenClawAdapter } from "../../install/openclaw-installer.js";
+import { installAntigravityAdapter } from "../../install/antigravity.js";
 import { buildCodexHookReviewGuidance, buildHostPostInstallOrientation } from "../../install/public-install.js";
 import {
   buildRegistryRecommendationCommands,
@@ -12,6 +13,7 @@ type InstallDeps = {
   installOpenClawAdapter?: typeof installOpenClawAdapter;
   installClaudeCodeAdapter?: typeof installClaudeCodeAdapter;
   installCodexAdapter?: typeof installCodexAdapter;
+  installAntigravityAdapter?: typeof installAntigravityAdapter;
   readRegistryHealth?: typeof readRegistryHealth;
 };
 
@@ -60,11 +62,11 @@ const logPostInstallOrientation = (host: keyof ReturnType<typeof buildHostPostIn
   console.log(`[ExperienceEngine] Next step: ${orientation.nextStep}`);
 };
 
-export const runInstallCommand = (
+export const runInstallCommand = async (
   target?: string,
   argsOrDeps: string[] | InstallDeps = [],
   maybeDeps: InstallDeps = {}
-): void => {
+): Promise<void> => {
   const args = Array.isArray(argsOrDeps) ? argsOrDeps : [];
   const deps = Array.isArray(argsOrDeps) ? maybeDeps : argsOrDeps;
   const registryHealth = (deps.readRegistryHealth ?? readRegistryHealth)();
@@ -124,5 +126,31 @@ export const runInstallCommand = (
     return;
   }
 
-  console.log("Usage: ee install openclaw|claude-code|codex [--runtime-target posix|windows]");
+  if (target === "antigravity") {
+    const install = deps.installAntigravityAdapter ?? installAntigravityAdapter;
+    const mcpOnly = args.includes("--mcp-only")
+      ? true
+      : args.includes("--hooks")
+        ? false
+        : undefined;
+    const report = await install({ mcpOnly });
+    console.log(`Installed ${report.adapter} adapter.`);
+    console.log(`Install scope: ${report.installScope}`);
+    console.log(`Installed version: ${report.installedVersion}`);
+    console.log(`Package root: ${report.packageRoot}`);
+    console.log(`Server name: ${report.serverName}`);
+    console.log(`Server command: ${report.serverCommand}`);
+    console.log(`Lifecycle mode: ${report.lifecycleMode}`);
+    console.log(`Current project: ${report.projectWiring.cwd}`);
+    console.log(`Current project MCP Registered: ${report.projectWiring.mcpRegistered ? "yes" : "no"}`);
+    console.log(`Current project Hooks Registered: ${report.projectWiring.hooksRegistered ? "yes" : "no"}`);
+    console.log(`Agent Desktop global activation: ${report.agentDesktopGlobalActivation}`);
+    console.log(`Capture path: ${report.captureDir}`);
+    logRegistryHealth(registryHealth);
+    logPostInstallOrientation("antigravity");
+    logFirstValueGuidance();
+    return;
+  }
+
+  console.log("Usage: ee install openclaw|claude-code|codex|antigravity [--runtime-target posix|windows] [--mcp-only] [--hooks]");
 };

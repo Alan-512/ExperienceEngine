@@ -14,6 +14,7 @@ import {
   getOpenClawRepairHint,
   inspectOpenClawInstall
 } from "../../install/openclaw-installer.js";
+import { inspectAntigravityInstall } from "../../install/antigravity.js";
 import { buildHostInstallGuidance } from "../../install/public-install.js";
 import {
   buildRegistryRecommendationCommands,
@@ -34,6 +35,7 @@ type DoctorDeps = {
   inspectClaudeCodeInstall?: typeof inspectClaudeCodeInstall;
   inspectCodexInstall?: typeof inspectCodexInstall;
   inspectOpenClawInstall?: typeof inspectOpenClawInstall;
+  inspectAntigravityInstall?: typeof inspectAntigravityInstall;
   readRegistryHealth?: typeof readRegistryHealth;
   inspectFirstValueReadiness?: () => ExperienceFirstValueReadiness;
   inspectDecisionHealth?: () => ExperienceDecisionHealth;
@@ -479,6 +481,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     const codexStatus = (deps.inspectCodexInstall ?? inspectCodexInstall)();
     const claudeStatus = (deps.inspectClaudeCodeInstall ?? inspectClaudeCodeInstall)();
     const openclawStatus = (deps.inspectOpenClawInstall ?? inspectOpenClawInstall)();
+    const antigravityStatus = (deps.inspectAntigravityInstall ?? inspectAntigravityInstall)();
     const config = loadConfig();
     const installGuidance = buildHostInstallGuidance();
 
@@ -500,6 +503,12 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
         installed: openclawStatus.installed,
         wired: openclawStatus.hostWiring.wired,
         enabled: openclawStatus.hostState.enabled ?? false
+      },
+      {
+        host: "antigravity",
+        installed: antigravityStatus.installed,
+        wired: antigravityStatus.mcpRegistered,
+        enabled: antigravityStatus.mcpRegistered
       }
     ]);
     console.log("CLI summary:");
@@ -543,6 +552,15 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
       console.log(`  1. ${installGuidance["claude-code"].commands[0]}`);
       console.log(`  2. ${installGuidance["claude-code"].commands[1]}`);
     }
+    if (installGuidance.antigravity.ready) {
+      console.log("- Antigravity install: ready");
+      if (installGuidance.antigravity.commands) {
+        console.log(`  1. ${installGuidance.antigravity.commands[0]}`);
+        console.log(`  2. ${installGuidance.antigravity.commands[1]}`);
+      }
+    } else {
+      console.log(`- Antigravity install: ${installGuidance.antigravity.reason}`);
+    }
     if (codexStatus.learningLoop) {
       console.log(`- Codex learning loop: ${codexStatus.learningLoop.state}`);
       console.log(`- Codex instruction block: ${codexStatus.learningLoop.instructionState}`);
@@ -556,7 +574,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
         `- OpenClaw async posttask default: ${openclawStatus.runtimeDefaults.hybridPosttaskEnabled ? "enabled" : "disabled"}`
       );
     }
-    console.log("- Host health details: ee doctor <codex|claude-code|openclaw>");
+    console.log("- Host health details: ee doctor <codex|claude-code|openclaw|antigravity>");
     console.log("Distillation summary:");
     console.log(`- Provider: ${config.distillerProvider}`);
     console.log(`- Model: ${config.distillerModel}`);
@@ -619,9 +637,9 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     const aggregateSetupState =
       deriveSetupState({
         sharedInitialized: sharedSetup.initialized,
-        installed: codexStatus.installed || claudeStatus.installed || openclawStatus.installed,
+        installed: codexStatus.installed || claudeStatus.installed || openclawStatus.installed || antigravityStatus.installed,
         interactionReady:
-          codexStatus.hostWiring.enabled || isClaudeInteractionReady(claudeStatus) || (openclawStatus.hostState.enabled ?? false)
+          codexStatus.hostWiring.enabled || isClaudeInteractionReady(claudeStatus) || (openclawStatus.hostState.enabled ?? false) || antigravityStatus.mcpRegistered
       });
     logFirstValueReadiness(firstValueReadiness, aggregateSetupState);
     logLearningQualityHealth(learningQuality);
@@ -734,6 +752,79 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
         interactionReady: Boolean(status.hostWiring?.enabled || status.hostWiring?.wired)
       })
     );
+    return;
+  }
+
+  if (target === "antigravity") {
+    const inspect = deps.inspectAntigravityInstall ?? inspectAntigravityInstall;
+    const status = inspect();
+    const remoteStatus = await resolveRemoteStatus({
+      currentVersion: status.versionStatus.currentVersion
+    });
+    console.table([
+      {
+        adapter: status.adapter,
+        installed: status.installed,
+        recorded_version: status.versionStatus.recordedVersion ?? "",
+        current_version: status.versionStatus.currentVersion,
+        version_state: status.versionStatus.state,
+        upgrade_available: status.versionStatus.updateAvailable,
+        remote_latest_version: remoteStatus.latestVersion ?? "",
+        remote_state: remoteStatus.state,
+        remote_update_available: remoteStatus.updateAvailable,
+        install_scope: status.installScope,
+        server_name: status.serverName,
+        lifecycle_mode: status.lifecycleMode,
+        current_project_mcp_registered: status.projectWiring.mcpRegistered,
+        current_project_hooks_registered: status.projectWiring.hooksRegistered,
+        hook_contract_spike: status.hookContractSpikePassed,
+        agy_cli_available: status.agyCliAvailable,
+        agy_cli_path: status.agyCliPath ?? "",
+        ide_cli_available: status.ideCliAvailable,
+        ide_cli_path: status.ideCliPath ?? "",
+        agent_desktop_global_activation: status.agentDesktopGlobalActivation,
+        capture_dir: status.captureDir
+      }
+    ]);
+    console.log("Antigravity surfaces:");
+    console.log("- User-level EE state: installed data and adapter state live under the configured ExperienceEngine home.");
+    console.log("- Current project activation: project .mcp.json and .agents/hooks.json are required until Antigravity exposes a verified global hook surface.");
+    console.log(`- Current project: ${status.projectWiring.cwd}`);
+    console.log(`- Current project MCP: ${status.projectWiring.mcpRegistered ? "registered" : "not registered"}`);
+    console.log(`- Current project hooks: ${status.projectWiring.hooksRegistered ? "registered" : "not registered"}`);
+    console.log(`- Agent Desktop global activation: ${status.agentDesktopGlobalActivation}`);
+    console.log(`- CLI (agy): ${status.agyCliAvailable ? "available" : "not found"}`);
+    if (status.agyCliPath) {
+      console.log(`- CLI path: ${status.agyCliPath}`);
+    }
+    console.log(`- CLI validated invocation: ${status.cliValidatedInvocation}`);
+    if (status.cliProjectDiscoveryNote) {
+      console.log(`- CLI note: ${status.cliProjectDiscoveryNote}`);
+    }
+    console.log(`- IDE command: ${status.ideCliAvailable ? "available" : "not found"}; not adapted by this adapter.`);
+    if (status.ideCliPath) {
+      console.log(`- IDE command path: ${status.ideCliPath}`);
+    }
+    console.log("- Agent Desktop project activation command: ee antigravity activate-project -C <project>");
+    if (status.recommendedNextStep) {
+      console.log(`Recommended next step: ${status.recommendedNextStep}`);
+    }
+
+    if (status.versionStatus.updateAvailable) {
+      console.log("Recommended next step: ee upgrade antigravity");
+    }
+    logRemoteReleaseStatus("antigravity", remoteStatus);
+    logRegistryHealth(registryHealth);
+    logEvaluationMode();
+    logFirstValueReadiness(
+      firstValueReadiness,
+      deriveSetupState({
+        sharedInitialized: sharedSetup.initialized,
+        installed: status.installed,
+        interactionReady: status.mcpRegistered
+      })
+    );
+    logLearningQualityHealth(learningQuality);
     return;
   }
 

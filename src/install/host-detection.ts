@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 
-export type SupportedHostId = "codex" | "claude-code" | "openclaw";
+export type SupportedHostId = "codex" | "claude-code" | "openclaw" | "antigravity";
 
 export type DetectedHost = {
   id: SupportedHostId;
@@ -11,7 +11,8 @@ export type DetectedHost = {
 const HOSTS: DetectedHost[] = [
   { id: "codex", label: "Codex", command: "codex" },
   { id: "claude-code", label: "Claude Code", command: "claude" },
-  { id: "openclaw", label: "OpenClaw", command: "openclaw" }
+  { id: "openclaw", label: "OpenClaw", command: "openclaw" },
+  { id: "antigravity", label: "Google Antigravity", command: "agy" }
 ];
 
 const commandExists = (command: string): boolean => {

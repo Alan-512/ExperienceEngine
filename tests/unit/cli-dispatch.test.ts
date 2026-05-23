@@ -50,10 +50,10 @@ describe("CLI dispatch", () => {
     expect(output).toContain("ee init");
     expect(output).toContain("Routine workflows:");
     expect(output).toContain("Host-first review/feedback");
-    expect(output).toContain("ee status | ee doctor <openclaw|claude-code|codex> | ee inspect --last | ee helped | ee harmed");
+    expect(output).toContain("ee status | ee doctor <openclaw|claude-code|codex|antigravity> | ee inspect --last | ee helped | ee harmed");
     expect(output).toContain("ee inspect --last");
     expect(output).toContain("Operator workflows:");
-    expect(output).toContain("ee install|upgrade|repair <openclaw|claude-code|codex>");
+    expect(output).toContain("ee install|upgrade|repair <openclaw|claude-code|codex|antigravity>");
     expect(output).toContain("ee inspect review | ee inspect hygiene | ee inspect export-drafts | ee inspect repo");
     expect(output).toContain("Advanced / experimental workflows:");
     expect(output).toContain("Full command reference:");

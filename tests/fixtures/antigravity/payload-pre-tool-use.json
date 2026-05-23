@@ -1,0 +1,10 @@
+{
+  "conversationId": "0b03efea-7f1d-4aff-84a4-ce954372619b",
+  "workspacePaths": ["d:/project/ExperienceEngine"],
+  "artifactDirectoryPath": "C:/Users/123/.gemini/antigravity/brain/0b03efea-7f1d-4aff-84a4-ce954372619b",
+  "transcriptPath": "C:/Users/123/.gemini/antigravity/brain/0b03efea-7f1d-4aff-84a4-ce954372619b/transcript.jsonl",
+  "toolName": "run_command",
+  "toolInput": {
+    "CommandLine": "pnpm test"
+  }
+}

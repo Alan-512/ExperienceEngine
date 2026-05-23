@@ -203,7 +203,7 @@ export type ExperienceInputRecord = {
 export type TaskRun = {
   id: string;
   episode_id?: string;
-  host: "openclaw" | "claude-code" | "codex";
+  host: "openclaw" | "claude-code" | "codex" | "antigravity";
   scope_id: string;
   session_id?: string;
   task_type: ResolvedTaskType;

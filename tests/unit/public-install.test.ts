@@ -36,6 +36,13 @@ describe("public install guidance", () => {
           "/plugin marketplace add https://github.com/Alan-512/ExperienceEngine.git",
           "/plugin install experienceengine@experienceengine"
         ]
+      },
+      antigravity: {
+        ready: true,
+        commands: [
+          "ee install antigravity",
+          "ee agy exec -C <project-path> \"<prompt>\""
+        ]
       }
     });
   });
@@ -63,6 +70,11 @@ describe("public install guidance", () => {
         setupState: "Installed",
         nextStep:
           "Start a new Claude Code session. If shared ExperienceEngine state is not initialized yet, run `ee init` before your first real task."
+      },
+      antigravity: {
+        setupState: "Installed",
+        nextStep:
+          "Use `ee agy exec -C <project-path>` for headless CLI runs, or run `ee antigravity activate-project -C <project-path>` before opening Agent Desktop in a new project. If shared ExperienceEngine state is not initialized yet, run `ee init` before your first real task."
       }
     });
   });
