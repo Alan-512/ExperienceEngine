@@ -799,7 +799,10 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     console.log(`- Agent Desktop plugin: ${status.globalWiring.agentDesktopPluginRegistered ? "registered" : "not registered"} (${status.globalWiring.agentDesktopPluginDir})`);
     console.log(`- agy CLI plugin: ${status.globalWiring.agyCliPluginRegistered ? "registered" : "not registered"} (${status.globalWiring.agyCliPluginDir})`);
     console.log(`- IDE MCP cache: ${status.globalWiring.ideMcpToolCacheRegistered ? "observed" : "not observed"} (${status.globalWiring.ideMcpCacheDir})`);
-    console.log(`- IDE hooks: ${status.globalWiring.ideHooksRegistered ? "observed" : "not observed"} (${status.globalWiring.idePluginDir})`);
+    const ideHookSource = status.globalWiring.idePluginRegistered
+      ? status.globalWiring.idePluginDir
+      : status.globalWiring.agentDesktopPluginDir;
+    console.log(`- IDE hooks: ${status.globalWiring.ideHooksRegistered ? "observed" : "not observed"} (${ideHookSource})`);
     console.log(`- Agent Desktop MCP config: ${status.globalWiring.mcpRegistered ? "registered" : "not registered"} (${status.globalWiring.mcpConfigPath})`);
     console.log(`- Current project: ${status.projectWiring.cwd}`);
     console.log(`- Current project fallback MCP: ${status.projectWiring.mcpRegistered ? "registered" : "not registered"}`);
@@ -813,7 +816,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     if (status.cliProjectDiscoveryNote) {
       console.log(`- CLI note: ${status.cliProjectDiscoveryNote}`);
     }
-    console.log(`- IDE command: ${status.ideCliAvailable ? "available" : "not found"}; IDE hooks are not enabled unless the IDE surface reports hooks observed.`);
+    console.log(`- IDE command: ${status.ideCliAvailable ? "available" : "not found"}; IDE uses the global Antigravity plugin hooks when observed.`);
     if (status.ideCliPath) {
       console.log(`- IDE command path: ${status.ideCliPath}`);
     }

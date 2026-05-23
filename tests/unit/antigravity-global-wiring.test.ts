@@ -86,4 +86,17 @@ describe("Antigravity global wiring", () => {
     expect(report.ideHooksRegistered).toBe(false);
     expect(report.ideActivation).toBe("mcp_cache_observed");
   });
+
+  it("reports Antigravity IDE hooks through the global plugin surface", async () => {
+    const homeDir = makeTempDir();
+    const env = { EXPERIENCE_ENGINE_HOME: join(homeDir, ".experienceengine") };
+
+    await ensureAntigravityGlobalWiring({ homeDir, env });
+    const report = inspectAntigravityGlobalWiring({ homeDir });
+
+    expect(report.idePluginRegistered).toBe(false);
+    expect(report.agentDesktopPluginRegistered).toBe(true);
+    expect(report.ideHooksRegistered).toBe(true);
+    expect(report.ideActivation).toBe("hooks_observed");
+  });
 });

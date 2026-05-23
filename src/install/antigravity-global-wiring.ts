@@ -165,8 +165,9 @@ export const inspectAntigravityGlobalWiring = (options: AntigravityOptions = {})
   const agentDesktopPluginRegistered = pluginHasExperienceEngine(agentDesktopPluginDir);
   const agyCliPluginRegistered = pluginHasExperienceEngine(agyCliPluginDir);
   const idePluginRegistered = pluginHasExperienceEngine(idePluginDir);
-  const ideHooksRegistered = idePluginRegistered;
   const ideMcpToolCacheRegistered = ideMcpCacheHasExperienceEngine(ideMcpCacheDir);
+  const hooksRegistered = agentDesktopPluginRegistered && agyCliPluginRegistered;
+  const ideHooksRegistered = idePluginRegistered || agentDesktopPluginRegistered;
   const ideActivation: AntigravityIdeActivationState = ideHooksRegistered
     ? "hooks_observed"
     : ideMcpToolCacheRegistered
@@ -178,7 +179,6 @@ export const inspectAntigravityGlobalWiring = (options: AntigravityOptions = {})
     || mcpConfigHasExperienceEngine(sharedMcpConfigPath)
     || agentDesktopPluginRegistered
     || agyCliPluginRegistered;
-  const hooksRegistered = agentDesktopPluginRegistered && agyCliPluginRegistered;
   const lifecycleMode: AntigravityLifecycleMode = hooksRegistered ? "host_native_hooks_validated" : "mcp_only";
 
   return {
