@@ -1,5 +1,51 @@
-import { readFileSync, existsSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
 import { createSharedBehaviorLoop } from "../../adapters/shared-mcp/behavior-loop.js";
+import { resolveExperienceEnginePaths, resolveProductStateDir } from "../../config/path-resolver.js";
+import { hashText } from "../../utils/hashing.js";
+
+const FINALIZE_DEDUP_TTL_MS = 2 * 60 * 1000;
+
+const getFinalizeDedupTtlMs = (): number => {
+  const raw = process.env.EXPERIENCE_ENGINE_ANTIGRAVITY_FINALIZE_DEDUP_TTL_MS;
+  if (!raw) {
+    return FINALIZE_DEDUP_TTL_MS;
+  }
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : FINALIZE_DEDUP_TTL_MS;
+};
+
+const acquireFinalizeDedupMarker = (input: {
+  sessionId: string;
+  cwd: string;
+  prompt: string;
+  contextSummary?: string;
+}): { acquired: boolean; markerPath?: string } => {
+  const paths = resolveExperienceEnginePaths({ adapter: "antigravity" });
+  const markerDir = join(resolveProductStateDir(paths), "finalize-dedupe");
+  const markerName = `${hashText(JSON.stringify(input)).slice(0, 32)}.lock`;
+  const markerPath = join(markerDir, markerName);
+  const ttlMs = getFinalizeDedupTtlMs();
+
+  try {
+    if (existsSync(markerPath)) {
+      const ageMs = Date.now() - statSync(markerPath).mtimeMs;
+      if (ageMs <= ttlMs) {
+        return { acquired: false, markerPath };
+      }
+      rmSync(markerPath, { force: true });
+    }
+
+    mkdirSync(markerDir, { recursive: true });
+    writeFileSync(markerPath, new Date().toISOString(), { flag: "wx" });
+    return { acquired: true, markerPath };
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "EEXIST") {
+      return { acquired: false, markerPath };
+    }
+    return { acquired: true };
+  }
+};
 
 export const handleAntigravityHookPayload = async (
   eventName: string,
@@ -29,13 +75,17 @@ export const handleAntigravityHookPayload = async (
   const cwd =
     payload.cwd ||
     (payload.workspacePaths && payload.workspacePaths.length > 0 ? payload.workspacePaths[0] : null) ||
+    process.env.EXPERIENCE_ENGINE_PROJECT_CWD ||
     process.cwd();
 
   // 3. Resolve Prompt
   let prompt = payload.prompt || payload.userMessage || payload.text || "";
 
-  // Fallback: read first USER_INPUT from transcriptPath if prompt is missing
-  if (!prompt && payload.transcriptPath && existsSync(payload.transcriptPath)) {
+  // Antigravity CLI hook payloads can surface CLI flags in prompt fields. Prefer
+  // transcript USER_INPUT when the direct prompt is absent or clearly flag-like.
+  const isCliFlag = (p: string) => /^-{1,2}[\w-]+$/.test(p);
+
+  if ((!prompt || isCliFlag(prompt)) && payload.transcriptPath && existsSync(payload.transcriptPath)) {
     try {
       const content = readFileSync(payload.transcriptPath, "utf8");
       const lines = content.split("\n").filter(Boolean);
@@ -58,6 +108,10 @@ export const handleAntigravityHookPayload = async (
     } catch {
       // Ignore read errors
     }
+  }
+
+  if ((!prompt || isCliFlag(prompt)) && process.env.EXPERIENCE_ENGINE_PROMPT) {
+    prompt = process.env.EXPERIENCE_ENGINE_PROMPT;
   }
 
   if (eventName === "PreInvocation") {
@@ -99,12 +153,30 @@ export const handleAntigravityHookPayload = async (
     });
     return {};
   } else if (eventName === "Stop") {
-    await behaviorLoop.finalizeTask({
+    const contextSummary = payload.lastMessage || payload.contextSummary || payload.last_assistant_message || undefined;
+    const dedupMarker = acquireFinalizeDedupMarker({
       sessionId: conversationId,
       cwd,
       prompt,
-      contextSummary: payload.lastMessage || payload.contextSummary || payload.last_assistant_message || undefined
+      contextSummary
     });
+    if (!dedupMarker.acquired) {
+      return {};
+    }
+
+    try {
+      await behaviorLoop.finalizeTask({
+        sessionId: conversationId,
+        cwd,
+        prompt,
+        contextSummary
+      });
+    } catch (error) {
+      if (dedupMarker.markerPath) {
+        rmSync(dedupMarker.markerPath, { force: true });
+      }
+      throw error;
+    }
     return {};
   }
 

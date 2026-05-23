@@ -1330,7 +1330,21 @@ describe("doctor command", () => {
           ideCliPath: "D:\\Antigravity\\bin\\antigravity",
           cliValidatedInvocation: "ee agy exec -C <project-path> \"<prompt>\"",
           cliProjectDiscoveryNote: "Wrapper auto-adds --add-dir.",
-          agentDesktopGlobalActivation: "unsupported",
+          agentDesktopGlobalActivation: "supported",
+          globalWiring: {
+            lifecycleMode: "host_native_hooks_validated",
+            agentDesktopGlobalActivation: "supported",
+            agentDesktopPluginDir: "C:\\Users\\123\\.gemini\\config\\plugins\\experienceengine",
+            agentDesktopPluginRegistered: true,
+            agyCliPluginDir: "C:\\Users\\123\\.gemini\\antigravity-cli\\plugins\\experienceengine",
+            agyCliPluginRegistered: true,
+            mcpConfigPath: "C:\\Users\\123\\.gemini\\antigravity\\mcp_config.json",
+            mcpRegistered: true,
+            hooksRegistered: true,
+            hookContractSpikePassed: true,
+            serverName: "experienceengine",
+            serverCommand: "node dist/cli/index.js mcp-server"
+          },
           projectWiring: {
             cwd: "D:\\repo",
             lifecycleMode: "host_native_hooks_validated",
@@ -1372,18 +1386,24 @@ describe("doctor command", () => {
         install_scope: "user",
         current_project_mcp_registered: true,
         current_project_hooks_registered: true,
+        global_mcp_registered: true,
+        global_hooks_registered: true,
+        agent_desktop_plugin_registered: true,
+        agy_cli_plugin_registered: true,
         agy_cli_available: true,
         ide_cli_available: true,
-        agent_desktop_global_activation: "unsupported"
+        agent_desktop_global_activation: "supported"
       })
     ]);
     expect(consoleLogSpy.mock.calls).toEqual(
       expect.arrayContaining([
         ["- User-level EE state: installed data and adapter state live under the configured ExperienceEngine home."],
-        ["- Current project activation: project .mcp.json and .agents/hooks.json are required until Antigravity exposes a verified global hook surface."],
+        ["- Global activation: EE is installed as Antigravity user-level plugins for Agent Desktop and agy CLI when global hooks are registered."],
+        ["- Agent Desktop plugin: registered (C:\\Users\\123\\.gemini\\config\\plugins\\experienceengine)"],
+        ["- agy CLI plugin: registered (C:\\Users\\123\\.gemini\\antigravity-cli\\plugins\\experienceengine)"],
         ["- Current project: D:\\repo"],
         ["- CLI validated invocation: ee agy exec -C <project-path> \"<prompt>\""],
-        ["- Agent Desktop project activation command: ee antigravity activate-project -C <project>"]
+        ["- Project activation fallback: ee antigravity activate-project -C <project>"]
       ])
     );
   });

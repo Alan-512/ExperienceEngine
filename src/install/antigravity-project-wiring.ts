@@ -1,4 +1,6 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, unlinkSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { resolveExperienceEnginePaths } from "../config/path-resolver.js";
 import { handleAntigravityHookPayload } from "../cli/commands/antigravity-hook.js";
@@ -27,10 +29,81 @@ const getMcpConfigPath = (cwd: string): string => join(cwd, ".mcp.json");
 const getHooksConfigPath = (cwd: string): string => join(cwd, ".agents", "hooks.json");
 const getHookLauncherPath = (cwd: string): string => join(cwd, ".agents", "experienceengine-antigravity-hook.mjs");
 
+export const buildAntigravityHooksConfig = (commandPrefix: string): Record<string, unknown> => ({
+  experienceengine: {
+    PreInvocation: [
+      {
+        type: "command",
+        command: `${commandPrefix} PreInvocation`,
+        timeout: 10
+      }
+    ],
+    PreToolUse: [
+      {
+        matcher: "*",
+        hooks: [
+          {
+            type: "command",
+            command: `${commandPrefix} PreToolUse`,
+            timeout: 10
+          }
+        ]
+      }
+    ],
+    PostToolUse: [
+      {
+        matcher: "*",
+        hooks: [
+          {
+            type: "command",
+            command: `${commandPrefix} PostToolUse`,
+            timeout: 10
+          }
+        ]
+      }
+    ],
+    Stop: [
+      {
+        type: "command",
+        command: `${commandPrefix} Stop`,
+        timeout: 10
+      }
+    ]
+  }
+});
+
+export const buildAntigravityHookLauncher = (cliScript: string, productHome: string): string =>
+  [
+    'import { spawnSync } from "node:child_process";',
+    "",
+    "const eventName = process.argv[2] || \"unknown\";",
+    "const chunks = [];",
+    "for await (const chunk of process.stdin) {",
+    "  chunks.push(Buffer.from(chunk));",
+    "}",
+    "const stdinText = Buffer.concat(chunks).toString(\"utf8\");",
+    `const result = spawnSync(process.execPath, [${JSON.stringify(cliScript)}, "antigravity-hook", eventName], {`,
+    "  input: stdinText,",
+    "  encoding: \"utf8\",",
+    "  env: {",
+    "    ...process.env,",
+    `    EXPERIENCE_ENGINE_HOME: process.env.EXPERIENCE_ENGINE_HOME || ${JSON.stringify(productHome)}`,
+    "  }",
+    "});",
+    "if (result.stderr) {",
+    "  process.stderr.write(result.stderr);",
+    "}",
+    "process.stdout.write(result.stdout || \"{}\\n\");",
+    "process.exit(result.status ?? 0);",
+    ""
+  ].join("\n");
+
 export const runAntigravityHookSpikeVerification = async (): Promise<{ success: boolean; errors: string[] }> => {
   const errors: string[] = [];
   const packageRoot = resolveExperienceEnginePackageRoot();
   const fixturesDir = join(packageRoot, "tests/fixtures/antigravity");
+  const previousHome = process.env.EXPERIENCE_ENGINE_HOME;
+  const spikeHome = mkdtempSync(join(tmpdir(), "experienceengine-antigravity-spike-home-"));
 
   const mockBehaviorLoop = {
     lookupHints: async (args: any) => {
@@ -104,8 +177,9 @@ export const runAntigravityHookSpikeVerification = async (): Promise<{ success: 
     errors.push(`Failed to read/parse committed fixtures: ${err?.message || err}`);
   }
 
-  const tempTranscriptPath = join(packageRoot, ".agents", `temp-spike-transcript-${Date.now()}.jsonl`);
+  const tempTranscriptPath = join(packageRoot, ".agents", `temp-spike-transcript-${randomUUID()}.jsonl`);
   try {
+    process.env.EXPERIENCE_ENGINE_HOME = spikeHome;
     mkdirSync(dirname(tempTranscriptPath), { recursive: true });
     writeFileSync(
       tempTranscriptPath,
@@ -199,6 +273,11 @@ export const runAntigravityHookSpikeVerification = async (): Promise<{ success: 
   } catch (err: any) {
     errors.push(`Spike verification threw an unexpected exception: ${err?.message || err}`);
   } finally {
+    if (previousHome === undefined) {
+      delete process.env.EXPERIENCE_ENGINE_HOME;
+    } else {
+      process.env.EXPERIENCE_ENGINE_HOME = previousHome;
+    }
     try {
       if (existsSync(tempTranscriptPath)) {
         unlinkSync(tempTranscriptPath);
@@ -206,6 +285,7 @@ export const runAntigravityHookSpikeVerification = async (): Promise<{ success: 
     } catch {
       // Ignore cleanup error.
     }
+    rmSync(spikeHome, { recursive: true, force: true });
   }
 
   return {
@@ -324,34 +404,9 @@ export const ensureAntigravityProjectWiring = async (options: AntigravityOptions
     const hooksPath = getHooksConfigPath(cwd);
     mkdirSync(dirname(hooksPath), { recursive: true });
     const hookLauncherPath = getHookLauncherPath(cwd);
-    const launcherCliScript = JSON.stringify(portableCliScript);
-    const launcherProductHome = JSON.stringify(paths.productHome.replace(/\\/g, "/"));
     writeFileSync(
       hookLauncherPath,
-      [
-        'import { spawnSync } from "node:child_process";',
-        "",
-        "const eventName = process.argv[2] || \"unknown\";",
-        "const chunks = [];",
-        "for await (const chunk of process.stdin) {",
-        "  chunks.push(Buffer.from(chunk));",
-        "}",
-        "const stdinText = Buffer.concat(chunks).toString(\"utf8\");",
-        `const result = spawnSync(process.execPath, [${launcherCliScript}, "antigravity-hook", eventName], {`,
-        "  input: stdinText,",
-        "  encoding: \"utf8\",",
-        "  env: {",
-        "    ...process.env,",
-        `    EXPERIENCE_ENGINE_HOME: process.env.EXPERIENCE_ENGINE_HOME || ${launcherProductHome}`,
-        "  }",
-        "});",
-        "if (result.stderr) {",
-        "  process.stderr.write(result.stderr);",
-        "}",
-        "process.stdout.write(result.stdout || \"{}\\n\");",
-        "process.exit(result.status ?? 0);",
-        ""
-      ].join("\n"),
+      buildAntigravityHookLauncher(portableCliScript, paths.productHome.replace(/\\/g, "/")),
       "utf8"
     );
 
@@ -363,46 +418,7 @@ export const ensureAntigravityProjectWiring = async (options: AntigravityOptions
         // Ignore malformed config and recreate the ExperienceEngine hook block.
       }
     }
-    hooksConfig.experienceengine = {
-      PreInvocation: [
-        {
-          type: "command",
-          command: "node experienceengine-antigravity-hook.mjs PreInvocation",
-          timeout: 10
-        }
-      ],
-      PreToolUse: [
-        {
-          matcher: "*",
-          hooks: [
-            {
-              type: "command",
-              command: "node experienceengine-antigravity-hook.mjs PreToolUse",
-              timeout: 10
-            }
-          ]
-        }
-      ],
-      PostToolUse: [
-        {
-          matcher: "*",
-          hooks: [
-            {
-              type: "command",
-              command: "node experienceengine-antigravity-hook.mjs PostToolUse",
-              timeout: 10
-            }
-          ]
-        }
-      ],
-      Stop: [
-        {
-          type: "command",
-          command: "node experienceengine-antigravity-hook.mjs Stop",
-          timeout: 10
-        }
-      ]
-    };
+    hooksConfig.experienceengine = buildAntigravityHooksConfig("node experienceengine-antigravity-hook.mjs").experienceengine;
     writeFileSync(hooksPath, `${JSON.stringify(hooksConfig, null, 2)}\n`, "utf8");
     hooksRegistered = true;
   }

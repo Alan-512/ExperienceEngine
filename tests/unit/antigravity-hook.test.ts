@@ -1,7 +1,7 @@
 import { readFileSync, existsSync, writeFileSync, mkdtempSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { handleAntigravityHookPayload, resolveAntigravityHookEventName } from "../../src/cli/commands/antigravity-hook.js";
 import { removeTempDirForTests } from "./temp-cleanup.js";
 
@@ -20,6 +20,24 @@ const behaviorLoopMock = () => ({
 });
 
 describe("Antigravity hook command & payload handling", () => {
+  let previousHome: string | undefined;
+  let testHome: string;
+
+  beforeEach(() => {
+    previousHome = process.env.EXPERIENCE_ENGINE_HOME;
+    testHome = mkdtempSync(join(tmpdir(), "experienceengine-antigravity-hook-home-"));
+    process.env.EXPERIENCE_ENGINE_HOME = testHome;
+  });
+
+  afterEach(() => {
+    if (previousHome === undefined) {
+      delete process.env.EXPERIENCE_ENGINE_HOME;
+    } else {
+      process.env.EXPERIENCE_ENGINE_HOME = previousHome;
+    }
+    removeTempDirForTests(testHome);
+  });
+
   it("resolves the hook event from the CLI subcommand argument", () => {
     expect(resolveAntigravityHookEventName(undefined, ["node", "ee", "antigravity-hook", "PreToolUse"])).toBe("PreToolUse");
     expect(resolveAntigravityHookEventName("Stop", ["node", "ee", "antigravity-hook", "PreToolUse"])).toBe("Stop");
@@ -142,6 +160,21 @@ describe("Antigravity hook command & payload handling", () => {
     expect(output).toEqual({});
   });
 
+  it("deduplicates repeated Stop hooks for the same Antigravity turn", async () => {
+    const loop = behaviorLoopMock();
+    const payload = {
+      conversationId: "session-repeat-stop",
+      cwd: "/workspace/test-repo",
+      prompt: "Verify build correctness",
+      lastMessage: "Finished execution successfully"
+    };
+
+    await handleAntigravityHookPayload("Stop", payload, loop as any);
+    await handleAntigravityHookPayload("Stop", payload, loop as any);
+
+    expect(loop.finalizeTask).toHaveBeenCalledTimes(1);
+  });
+
   it("reads and parses the transcript.jsonl file to resolve the prompt if missing from payload", async () => {
     const loop = behaviorLoopMock();
     const tempDir = mkdtempSync(join(tmpdir(), "experienceengine-antigravity-test-"));
@@ -170,5 +203,71 @@ describe("Antigravity hook command & payload handling", () => {
 
     // Clean up
     removeTempDirForTests(tempDir);
+  });
+
+  it("prefers transcript prompt when Antigravity CLI payload prompt is a flag", async () => {
+    const loop = behaviorLoopMock();
+    const tempDir = mkdtempSync(join(tmpdir(), "experienceengine-antigravity-test-"));
+    const transcriptPath = join(tempDir, "transcript.jsonl");
+
+    writeFileSync(
+      transcriptPath,
+      JSON.stringify({
+        type: "USER_INPUT",
+        content: "<USER_REQUEST>Say OK only.</USER_REQUEST>"
+      }) + "\n",
+      "utf8"
+    );
+
+    await handleAntigravityHookPayload(
+      "Stop",
+      {
+        conversationId: "session-flag-prompt",
+        cwd: "/workspace/test-repo",
+        prompt: "--dangerously-skip-permissions",
+        transcriptPath
+      },
+      loop as any
+    );
+
+    expect(loop.finalizeTask).toHaveBeenCalledWith({
+      sessionId: "session-flag-prompt",
+      cwd: "/workspace/test-repo",
+      prompt: "Say OK only.",
+      contextSummary: undefined
+    });
+
+    removeTempDirForTests(tempDir);
+  });
+
+  it("prefers wrapper-provided prompt when Antigravity CLI payload prompt is a flag", async () => {
+    const loop = behaviorLoopMock();
+    const previousPrompt = process.env.EXPERIENCE_ENGINE_PROMPT;
+    process.env.EXPERIENCE_ENGINE_PROMPT = "Say OK only.";
+
+    try {
+      await handleAntigravityHookPayload(
+        "Stop",
+        {
+          conversationId: "session-env-prompt",
+          cwd: "/workspace/test-repo",
+          prompt: "--dangerously-skip-permissions"
+        },
+        loop as any
+      );
+    } finally {
+      if (previousPrompt === undefined) {
+        delete process.env.EXPERIENCE_ENGINE_PROMPT;
+      } else {
+        process.env.EXPERIENCE_ENGINE_PROMPT = previousPrompt;
+      }
+    }
+
+    expect(loop.finalizeTask).toHaveBeenCalledWith({
+      sessionId: "session-env-prompt",
+      cwd: "/workspace/test-repo",
+      prompt: "Say OK only.",
+      contextSummary: undefined
+    });
   });
 });

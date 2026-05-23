@@ -91,7 +91,7 @@ npm install -g @alan512/experienceengine
 | `OpenClaw` | 原生插件安装 | 宿主原生 | 当前最完整 |
 | `Claude Code` | marketplace 插件，保留 `ee install claude-code` fallback | MCP + plugin hooks | 已支持 |
 | `Codex` | `ee install codex`，保留原生 MCP fallback | hooks + MCP | 已支持 |
-| `Google Antigravity Agent Desktop` + `agy` CLI | `ee install antigravity`，CLI 运行使用 `ee agy exec -C <project>` | MCP + 已验证的原生 hooks | 已激活的 Agent Desktop 项目与 `ee agy exec` 已支持 |
+| `Google Antigravity Agent Desktop` + `agy` CLI | `ee install antigravity`，CLI 运行使用 `ee agy exec -C <project>` | MCP + 已验证的原生 hooks | 通过用户级 Antigravity plugin wiring 与 `ee agy exec` 支持 |
 
 ## 为什么要做这个
 
@@ -355,7 +355,7 @@ codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceeng
 
 说明：
 - `OpenClaw` 走 plugin/runtime integration，而不是 `src/adapters/`
-- `Google Antigravity` 当前指 Antigravity Agent Desktop 和独立 `agy` CLI，不包括独立的 Antigravity IDE 外壳。EE 数据仍然是用户级，放在配置的 ExperienceEngine home 下，不同项目通过 project scope 隔离经验。`ee install antigravity` 会记录用户级 adapter 能力，并激活当前项目：在项目 `.mcp.json` 中安装共享 MCP 服务，在 `.agents/hooks.json` 中安装已通过真实宿主验证的生命周期 hooks；另一个 Agent Desktop 项目可用 `ee antigravity activate-project -C <project>` 激活。CLI 运行优先使用 `ee agy exec -C <project> "<prompt>"`，它会自动刷新项目 wiring 并调用 `agy --add-dir <project> --print ...`。直接使用 `agy` 时，Windows 下项目自动发现可能因为无法创建 symlink 而不加载项目配置。Antigravity 既支持常规 stdio MCP 调用，也支持高级的“基于文档的因果归因分析器”，会自动解析规划/验证 Markdown 文件（`task.md`、`walkthrough.md`、`implementation_plan.md`）以评估任务执行状态，并与运行时 finalization 遥测数据进行对齐。
+- `Google Antigravity` 当前指 Antigravity Agent Desktop 和独立 `agy` CLI，不包括独立的 Antigravity IDE 外壳。EE 数据仍然是用户级，放在配置的 ExperienceEngine home 下，不同项目通过 project scope 隔离经验。`ee install antigravity` 会记录用户级 adapter 能力，并为 Agent Desktop 与 `agy` CLI 安装 Antigravity 用户级 plugin/MCP wiring；`ee antigravity activate-project -C <project>` 保留为项目级 fallback。CLI 运行优先使用 `ee agy exec -C <project> "<prompt>"`，它会调用 `agy --add-dir <project> --print ...`，因为 Windows 下直接 `agy` 项目自动发现可能因为无法创建 symlink 而不加载项目配置。Antigravity 既支持常规 stdio MCP 调用，也支持高级的“基于文档的因果归因分析器”，会自动解析规划/验证 Markdown 文件（`task.md`、`walkthrough.md`、`implementation_plan.md`）以评估任务执行状态，并与运行时 finalization 遥测数据进行对齐。
 - `Claude Code` 会安装 hooks 和共享 ExperienceEngine MCP 服务
 - `Codex` 会安装 Codex 原生 hooks 和共享 ExperienceEngine MCP 服务。`ee codex exec` 仍是确定性的非交互 fallback。
 - Codex 的 `UserPromptSubmit` 保持同步，因为它负责 prompt-time experience injection。`PostToolUse` 和 `Stop` 默认排队后在后台处理。`PreToolUse` 默认不注册；只有同步 gating 实验需要时才设置 `EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED=1` 启用。

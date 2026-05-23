@@ -141,6 +141,10 @@ export const runInstallCommand = async (
     console.log(`Server name: ${report.serverName}`);
     console.log(`Server command: ${report.serverCommand}`);
     console.log(`Lifecycle mode: ${report.lifecycleMode}`);
+    console.log(`Global MCP Registered: ${report.globalWiring.mcpRegistered ? "yes" : "no"}`);
+    console.log(`Global Hooks Registered: ${report.globalWiring.hooksRegistered ? "yes" : "no"}`);
+    console.log(`Agent Desktop plugin: ${report.globalWiring.agentDesktopPluginDir}`);
+    console.log(`agy CLI plugin: ${report.globalWiring.agyCliPluginDir}`);
     console.log(`Current project: ${report.projectWiring.cwd}`);
     console.log(`Current project MCP Registered: ${report.projectWiring.mcpRegistered ? "yes" : "no"}`);
     console.log(`Current project Hooks Registered: ${report.projectWiring.hooksRegistered ? "yes" : "no"}`);

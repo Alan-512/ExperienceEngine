@@ -11,6 +11,12 @@ import {
   type AntigravityOptions,
   type AntigravityProjectWiringReport
 } from "./antigravity-project-wiring.js";
+import {
+  ensureAntigravityGlobalWiring,
+  inspectAntigravityGlobalWiring,
+  type AntigravityGlobalActivationState,
+  type AntigravityGlobalWiringReport
+} from "./antigravity-global-wiring.js";
 
 export {
   ensureAntigravityProjectWiring,
@@ -20,8 +26,6 @@ export {
   type AntigravityOptions,
   type AntigravityProjectWiringReport
 };
-
-export type AntigravityGlobalActivationState = "unsupported" | "supported" | "unknown";
 
 export type AntigravityInstallState = {
   adapter: "antigravity";
@@ -37,6 +41,7 @@ export type AntigravityInstallState = {
   agentDesktopGlobalActivation: AntigravityGlobalActivationState;
   serverName: string;
   serverCommand: string;
+  globalWiring: AntigravityGlobalWiringReport;
   projectWiring: AntigravityProjectWiringReport;
 };
 
@@ -54,6 +59,7 @@ export type AntigravityInstallReport = {
   agentDesktopGlobalActivation: AntigravityGlobalActivationState;
   serverName: string;
   serverCommand: string;
+  globalWiring: AntigravityGlobalWiringReport;
   projectWiring: AntigravityProjectWiringReport;
   hostWiring: {
     wired: boolean;
@@ -82,6 +88,7 @@ export type AntigravityInspection = {
   cliValidatedInvocation: string;
   cliProjectDiscoveryNote?: string;
   agentDesktopGlobalActivation: AntigravityGlobalActivationState;
+  globalWiring: AntigravityGlobalWiringReport;
   projectWiring: AntigravityProjectWiringReport;
   recommendedNextStep?: string;
   serverName: string;
@@ -108,9 +115,16 @@ const findCommandPath = (command: string, env?: NodeJS.ProcessEnv): string | und
 };
 
 const resolveAntigravityRecommendedNextStep = (
+  globalWiring: AntigravityGlobalWiringReport,
   projectWiring: AntigravityProjectWiringReport,
   agyCliAvailable: boolean
 ): string | undefined => {
+  if (globalWiring.hooksRegistered && globalWiring.mcpRegistered) {
+    return agyCliAvailable
+      ? "Start Agent Desktop in any project, or use `ee agy exec -C <project> \"<prompt>\"` for headless CLI runs."
+      : "Start Agent Desktop in any project. Install or repair Antigravity CLI (`agy`) before using headless CLI validation.";
+  }
+
   if (!projectWiring.mcpRegistered || !projectWiring.hooksRegistered) {
     return agyCliAvailable
       ? "Run `ee agy exec -C <project> \"<prompt>\"` to auto-activate this project for CLI runs, or `ee antigravity activate-project -C <project>` before using Agent Desktop."
@@ -138,7 +152,8 @@ export const installAntigravityAdapter = async (options: AntigravityOptions = {}
   mkdirSync(resolveProductStateDir(paths), { recursive: true });
   mkdirSync(paths.captureDir, { recursive: true });
 
-  const projectWiring = await ensureAntigravityProjectWiring(options);
+  const globalWiring = await ensureAntigravityGlobalWiring(options);
+  const projectWiring = inspectAntigravityProjectWiring(options);
   const state: AntigravityInstallState = {
     adapter: "antigravity",
     installScope: "user",
@@ -146,13 +161,14 @@ export const installAntigravityAdapter = async (options: AntigravityOptions = {}
     installedVersion,
     packageRoot,
     captureDir: paths.captureDir,
-    lifecycleMode: projectWiring.lifecycleMode,
-    mcpRegistered: projectWiring.mcpRegistered,
-    hooksRegistered: projectWiring.hooksRegistered,
-    hookContractSpikePassed: projectWiring.hookContractSpikePassed,
-    agentDesktopGlobalActivation: "unsupported",
-    serverName: projectWiring.serverName,
-    serverCommand: projectWiring.serverCommand,
+    lifecycleMode: globalWiring.lifecycleMode,
+    mcpRegistered: globalWiring.mcpRegistered,
+    hooksRegistered: globalWiring.hooksRegistered,
+    hookContractSpikePassed: globalWiring.hookContractSpikePassed,
+    agentDesktopGlobalActivation: globalWiring.agentDesktopGlobalActivation,
+    serverName: globalWiring.serverName,
+    serverCommand: globalWiring.serverCommand,
+    globalWiring,
     projectWiring
   };
 
@@ -172,12 +188,13 @@ export const installAntigravityAdapter = async (options: AntigravityOptions = {}
     agentDesktopGlobalActivation: state.agentDesktopGlobalActivation,
     serverName: state.serverName,
     serverCommand: state.serverCommand,
+    globalWiring,
     projectWiring,
     hostWiring: {
-      wired: projectWiring.mcpRegistered,
-      command: projectWiring.serverCommand,
+      wired: globalWiring.mcpRegistered,
+      command: globalWiring.serverCommand,
       transport: "stdio",
-      enabled: projectWiring.mcpRegistered
+      enabled: globalWiring.mcpRegistered
     }
   };
 };
@@ -209,6 +226,7 @@ export const inspectAntigravityInstall = (options: AntigravityOptions = {}): Ant
         agentDesktopGlobalActivation: parsed.agentDesktopGlobalActivation ?? "unsupported",
         serverName: parsed.serverName ?? "experienceengine",
         serverCommand: parsed.serverCommand ?? "",
+        globalWiring: parsed.globalWiring as AntigravityGlobalWiringReport,
         projectWiring: parsed.projectWiring as AntigravityProjectWiringReport
       };
     } catch {
@@ -217,12 +235,13 @@ export const inspectAntigravityInstall = (options: AntigravityOptions = {}): Ant
   }
 
   const projectWiring = inspectAntigravityProjectWiring(options);
+  const globalWiring = inspectAntigravityGlobalWiring(options);
   const agyCliPath = findCommandPath("agy", env);
   const ideCliPath = findCommandPath("antigravity", env);
   const agyCliAvailable = Boolean(agyCliPath);
-  const installed = Boolean(installState || projectWiring.mcpRegistered);
-  const lifecycleMode = projectWiring.lifecycleMode;
-  const agentDesktopGlobalActivation = installState?.agentDesktopGlobalActivation ?? "unsupported";
+  const installed = Boolean(installState || globalWiring.mcpRegistered || projectWiring.mcpRegistered);
+  const lifecycleMode = globalWiring.mcpRegistered ? globalWiring.lifecycleMode : projectWiring.lifecycleMode;
+  const agentDesktopGlobalActivation = globalWiring.agentDesktopGlobalActivation;
 
   return {
     adapter: "antigravity",
@@ -232,9 +251,10 @@ export const inspectAntigravityInstall = (options: AntigravityOptions = {}): Ant
     packageRoot,
     captureDir: paths.captureDir,
     lifecycleMode,
-    mcpRegistered: projectWiring.mcpRegistered,
-    hooksRegistered: projectWiring.hooksRegistered,
-    hookContractSpikePassed: installState?.hookContractSpikePassed ?? projectWiring.hookContractSpikePassed,
+    mcpRegistered: globalWiring.mcpRegistered || projectWiring.mcpRegistered,
+    hooksRegistered: globalWiring.hooksRegistered || projectWiring.hooksRegistered,
+    hookContractSpikePassed:
+      installState?.hookContractSpikePassed ?? globalWiring.hookContractSpikePassed ?? projectWiring.hookContractSpikePassed,
     cliAvailable: agyCliAvailable,
     agyCliAvailable,
     agyCliPath,
@@ -242,17 +262,18 @@ export const inspectAntigravityInstall = (options: AntigravityOptions = {}): Ant
     ideCliPath,
     cliValidatedInvocation: "ee agy exec -C <project-path> \"<prompt>\"",
     cliProjectDiscoveryNote:
-      "The wrapper auto-adds `agy --add-dir <project-path>` and refreshes project wiring. Direct `agy` runs still need --add-dir on Windows.",
+      "The wrapper auto-adds `agy --add-dir <project-path>` for reliable workspace discovery on Windows.",
     agentDesktopGlobalActivation,
+    globalWiring,
     projectWiring,
-    recommendedNextStep: resolveAntigravityRecommendedNextStep(projectWiring, agyCliAvailable),
-    serverName: projectWiring.serverName,
-    serverCommand: projectWiring.serverCommand,
+    recommendedNextStep: resolveAntigravityRecommendedNextStep(globalWiring, projectWiring, agyCliAvailable),
+    serverName: globalWiring.serverName,
+    serverCommand: globalWiring.serverCommand,
     hostWiring: {
-      wired: projectWiring.mcpRegistered,
-      command: projectWiring.serverCommand,
+      wired: globalWiring.mcpRegistered || projectWiring.mcpRegistered,
+      command: globalWiring.mcpRegistered ? globalWiring.serverCommand : projectWiring.serverCommand,
       transport: "stdio",
-      enabled: projectWiring.mcpRegistered
+      enabled: globalWiring.mcpRegistered || projectWiring.mcpRegistered
     }
   };
 };

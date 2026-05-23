@@ -24,7 +24,21 @@ vi.mock("../../src/install/antigravity.js", async (importOriginal) => {
           mcpRegistered: true,
           hooksRegistered: true,
           installScope: "user",
-          agentDesktopGlobalActivation: "unsupported",
+          agentDesktopGlobalActivation: "supported",
+          globalWiring: {
+            lifecycleMode: "host_native_hooks_validated",
+            agentDesktopGlobalActivation: "supported",
+            agentDesktopPluginDir: "/mock/.gemini/config/plugins/experienceengine",
+            agentDesktopPluginRegistered: true,
+            agyCliPluginDir: "/mock/.gemini/antigravity-cli/plugins/experienceengine",
+            agyCliPluginRegistered: true,
+            mcpConfigPath: "/mock/.gemini/antigravity/mcp_config.json",
+            mcpRegistered: true,
+            hooksRegistered: true,
+            hookContractSpikePassed: true,
+            serverName: "experienceengine",
+            serverCommand: "node dist/cli/index.js mcp-server"
+          },
           projectWiring: {
             cwd: "/mock/project",
             mcpRegistered: true,
@@ -84,10 +98,12 @@ describe("Antigravity installer & command wiring", () => {
     expect(report.adapter).toBe("antigravity");
     expect(report.mcpRegistered).toBe(true);
     expect(report.hooksRegistered).toBe(true);
+    expect(report.globalWiring.agentDesktopPluginRegistered).toBe(true);
+    expect(report.globalWiring.agyCliPluginRegistered).toBe(true);
 
-    const mcpPath = join(tempDir, ".mcp.json");
-    const hooksPath = join(tempDir, ".agents", "hooks.json");
-    const launcherPath = join(tempDir, ".agents", "experienceengine-antigravity-hook.mjs");
+    const mcpPath = join(tempDir, ".gemini", "antigravity", "mcp_config.json");
+    const hooksPath = join(tempDir, ".gemini", "config", "plugins", "experienceengine", "hooks.json");
+    const launcherPath = join(tempDir, ".gemini", "config", "plugins", "experienceengine", "experienceengine-antigravity-hook.mjs");
 
     expect(existsSync(mcpPath)).toBe(true);
     expect(existsSync(hooksPath)).toBe(true);
@@ -101,10 +117,10 @@ describe("Antigravity installer & command wiring", () => {
     expect(hooksContent.experienceengine.PreToolUse).toBeDefined();
     expect(hooksContent.experienceengine.PostToolUse).toBeDefined();
     expect(hooksContent.experienceengine.Stop).toBeDefined();
-    expect(hooksContent.experienceengine.PreInvocation[0].command).toBe("node experienceengine-antigravity-hook.mjs PreInvocation");
-    expect(hooksContent.experienceengine.PreToolUse[0].hooks[0].command).toBe("node experienceengine-antigravity-hook.mjs PreToolUse");
-    expect(hooksContent.experienceengine.PostToolUse[0].hooks[0].command).toBe("node experienceengine-antigravity-hook.mjs PostToolUse");
-    expect(hooksContent.experienceengine.Stop[0].command).toBe("node experienceengine-antigravity-hook.mjs Stop");
+    expect(hooksContent.experienceengine.PreInvocation[0].command).toContain("PreInvocation");
+    expect(hooksContent.experienceengine.PreToolUse[0].hooks[0].command).toContain("PreToolUse");
+    expect(hooksContent.experienceengine.PostToolUse[0].hooks[0].command).toContain("PostToolUse");
+    expect(hooksContent.experienceengine.Stop[0].command).toContain("Stop");
   });
 
   it("installs in mcp-only mode if configured", async () => {
@@ -122,7 +138,7 @@ describe("Antigravity installer & command wiring", () => {
     expect(report.mcpRegistered).toBe(true);
     expect(report.hooksRegistered).toBe(false);
 
-    const hooksPath = join(tempDir, ".agents", "hooks.json");
+    const hooksPath = join(tempDir, ".gemini", "config", "plugins", "experienceengine", "hooks.json");
     expect(existsSync(hooksPath)).toBe(false);
   });
 
@@ -141,8 +157,8 @@ describe("Antigravity installer & command wiring", () => {
     expect(report.hooksRegistered).toBe(true);
     expect(report.lifecycleMode).toBe("host_native_hooks_validated");
 
-    const mcpPath = join(tempDir, ".mcp.json");
-    const hooksPath = join(tempDir, ".agents", "hooks.json");
+    const mcpPath = join(tempDir, ".gemini", "antigravity", "mcp_config.json");
+    const hooksPath = join(tempDir, ".gemini", "config", "plugins", "experienceengine", "hooks.json");
 
     expect(existsSync(mcpPath)).toBe(true);
     expect(existsSync(hooksPath)).toBe(true);
@@ -180,6 +196,8 @@ describe("Antigravity installer & command wiring", () => {
     expect(inspectAfter.installed).toBe(true);
     expect(inspectAfter.mcpRegistered).toBe(true);
     expect(inspectAfter.hooksRegistered).toBe(true);
+    expect(inspectAfter.projectWiring.mcpRegistered).toBe(false);
+    expect(inspectAfter.projectWiring.hooksRegistered).toBe(false);
   });
 
   it("wires repair adapter correctly", async () => {
@@ -212,6 +230,20 @@ describe("Antigravity installer & command wiring", () => {
           hooksRegistered: true,
           installScope: "user",
           agentDesktopGlobalActivation: "unsupported",
+          globalWiring: {
+            lifecycleMode: "host_native_hooks_validated",
+            agentDesktopGlobalActivation: "supported",
+            agentDesktopPluginDir: "/tmp/.gemini/config/plugins/experienceengine",
+            agentDesktopPluginRegistered: true,
+            agyCliPluginDir: "/tmp/.gemini/antigravity-cli/plugins/experienceengine",
+            agyCliPluginRegistered: true,
+            mcpConfigPath: "/tmp/.gemini/antigravity/mcp_config.json",
+            mcpRegistered: true,
+            hooksRegistered: true,
+            hookContractSpikePassed: true,
+            serverName: "experienceengine",
+            serverCommand: "node dist/cli/index.js mcp-server"
+          },
           projectWiring: {
             cwd: "/tmp/project",
             mcpRegistered: true,
@@ -235,6 +267,10 @@ describe("Antigravity installer & command wiring", () => {
         ["Server name: experienceengine"],
         ["Server command: node dist/cli/index.js mcp-server"],
         ["Lifecycle mode: host_native_hooks_validated"],
+        ["Global MCP Registered: yes"],
+        ["Global Hooks Registered: yes"],
+        ["Agent Desktop plugin: /tmp/.gemini/config/plugins/experienceengine"],
+        ["agy CLI plugin: /tmp/.gemini/antigravity-cli/plugins/experienceengine"],
         ["Current project: /tmp/project"],
         ["Current project MCP Registered: yes"],
         ["Current project Hooks Registered: yes"],
@@ -271,6 +307,20 @@ describe("Antigravity installer & command wiring", () => {
           hooksRegistered: true,
           installScope: "user",
           agentDesktopGlobalActivation: "unsupported",
+          globalWiring: {
+            lifecycleMode: "host_native_hooks_validated",
+            agentDesktopGlobalActivation: "supported",
+            agentDesktopPluginDir: "/tmp/.gemini/config/plugins/experienceengine",
+            agentDesktopPluginRegistered: true,
+            agyCliPluginDir: "/tmp/.gemini/antigravity-cli/plugins/experienceengine",
+            agyCliPluginRegistered: true,
+            mcpConfigPath: "/tmp/.gemini/antigravity/mcp_config.json",
+            mcpRegistered: true,
+            hooksRegistered: true,
+            hookContractSpikePassed: true,
+            serverName: "experienceengine",
+            serverCommand: "node dist/cli/index.js mcp-server"
+          },
           projectWiring: {
             cwd: "/tmp/project",
             mcpRegistered: true,

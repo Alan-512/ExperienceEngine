@@ -14,12 +14,14 @@ ExperienceEngine MUST distinguish Antigravity Agent Desktop, Antigravity IDE, an
 
 ### Requirement: Separate user-level install from project activation
 
-ExperienceEngine MUST treat the Antigravity adapter install as user-level EE capability while treating `.mcp.json` and `.agents/hooks.json` as project activation state.
+ExperienceEngine MUST treat the Antigravity adapter install as user-level EE capability. Supported Antigravity global plugin and MCP configuration surfaces are the preferred activation path; project `.mcp.json` and `.agents/hooks.json` wiring remains a fallback activation state.
 
 #### Scenario: Install user-level Antigravity capability
 - **WHEN** a user runs `ee install antigravity`
 - **THEN** ExperienceEngine writes adapter install state under the configured user-level ExperienceEngine home
-- **AND** project wiring is reported separately as current-project activation
+- **AND** it installs ExperienceEngine Antigravity plugin wiring under documented user-level Antigravity plugin locations for Agent Desktop and `agy` CLI
+- **AND** it registers the shared MCP server through a documented user-level Antigravity MCP configuration path when available
+- **AND** project wiring is reported separately as fallback current-project activation
 - **AND** ExperienceEngine data and learned experience remain in the shared ExperienceEngine home
 - **AND** project experience remains isolated by project scope rather than by duplicating per-project EE data stores
 
@@ -31,8 +33,10 @@ ExperienceEngine MUST treat the Antigravity adapter install as user-level EE cap
 
 #### Scenario: Run Antigravity CLI through the wrapper
 - **WHEN** a user runs `ee agy exec -C <project> "<prompt>"`
-- **THEN** ExperienceEngine ensures current project activation before spawning `agy`
-- **AND** it invokes `agy` with `--add-dir <project>` so the CLI loads project configuration
+- **THEN** ExperienceEngine uses user-level Antigravity plugin hooks when they are registered
+- **AND** it falls back to project activation only when global hooks are unavailable
+- **AND** it invokes `agy` with `--add-dir <project>` for reliable workspace discovery
+- **AND** it passes the project path to hooks through environment for Windows cases where the CLI hook payload omits workspace paths
 - **AND** it preserves the configured user-level ExperienceEngine home for hook execution
 
 ### Requirement: Gate native lifecycle implementation on Hook Contract Spike verification
@@ -69,17 +73,17 @@ ExperienceEngine MUST expose a host-neutral MCP server surface suitable for Anti
 
 ### Requirement: Support conservative Antigravity installer shell after hook spike verification
 
-`ee install antigravity` MUST initialize user-level Antigravity adapter state and activate the current project by registering the shared MCP server and validated lifecycle hooks. MCP-only mode remains available as an explicit fallback.
+`ee install antigravity` MUST initialize user-level Antigravity adapter state and register the shared MCP server plus validated lifecycle hooks through documented user-level Antigravity configuration surfaces. MCP-only mode remains available as an explicit fallback, and project activation remains available as a compatibility fallback.
 
 #### Scenario: Install Antigravity MCP and hook wiring
 
 - **WHEN** a user runs `ee install antigravity`
-- **THEN** ExperienceEngine adds its MCP configuration through a supported Agent Desktop project configuration surface or documented manual registration path
+- **THEN** ExperienceEngine adds its MCP configuration through a documented user-level Antigravity MCP configuration path
 - **AND** it adds validated Antigravity hook entries through documented hook configuration surfaces
 - **AND** it writes adapter install-state under the shared ExperienceEngine data home for `antigravity`
 - **AND** it reports setup state as `Installed` with `MCP registered`
 - **AND** it reports lifecycle mode as `host_native_hooks_validated` when hooks are installed or `mcp_only` when hooks are intentionally not installed
-- **AND** it prints the next validation instructions to start Antigravity Agent Desktop in an activated project or run `ee agy exec -C <project-path>` and query ExperienceEngine capabilities
+- **AND** it prints the next validation instructions to start Antigravity Agent Desktop in a project or run `ee agy exec -C <project-path>` and query ExperienceEngine capabilities
 
 #### Scenario: Install does not patch private Antigravity state
 
@@ -89,14 +93,15 @@ ExperienceEngine MUST expose a host-neutral MCP server surface suitable for Anti
 
 ### Requirement: Support doctor diagnostics for Antigravity wiring
 
-`ee doctor antigravity` MUST check Antigravity Agent Desktop/CLI surface availability, user-level ExperienceEngine install state, current-project MCP registration, current-project hook registration, and lifecycle mode separately.
+`ee doctor antigravity` MUST check Antigravity Agent Desktop/CLI surface availability, user-level ExperienceEngine install state, global plugin/MCP registration, fallback current-project MCP registration, fallback current-project hook registration, and lifecycle mode separately.
 
 #### Scenario: Inspect healthy Antigravity hook-backed installation
 
 - **WHEN** a user runs `ee doctor antigravity` and the installation state, MCP entry, and validated hook entries are present
 - **THEN** ExperienceEngine reports setup state as `Installed`
-- **AND** it shows current project `MCP registered`
-- **AND** it shows current project `Hooks registered`
+- **AND** it shows global `MCP registered`
+- **AND** it shows global `Hooks registered`
+- **AND** it shows fallback current project activation separately
 - **AND** it shows `Lifecycle mode: host_native_hooks_validated`
 - **AND** it reports `agy` CLI availability separately from any PATH-visible `antigravity` IDE command
 - **AND** it reports whether Agent Desktop global activation is verified, unsupported, or unknown

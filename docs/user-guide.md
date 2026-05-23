@@ -745,7 +745,7 @@ Diagnostics note:
 
 ### Google Antigravity Advanced Commands
 
-Antigravity has multiple product entries. ExperienceEngine's current `antigravity` adapter targets **Antigravity Agent Desktop** and the standalone **Antigravity CLI (`agy`)**. It does not adapt the separate Antigravity IDE shell. EE data remains user-level under the configured ExperienceEngine home, while project experience is isolated by project scope. Antigravity project activation still writes project `.mcp.json` and `.agents/hooks.json` because no supported global Antigravity hook surface has been verified.
+Antigravity has multiple product entries. ExperienceEngine's current `antigravity` adapter targets **Antigravity Agent Desktop** and the standalone **Antigravity CLI (`agy`)**. It does not adapt the separate Antigravity IDE shell. EE data remains user-level under the configured ExperienceEngine home, while project experience is isolated by project scope. Antigravity uses user-level plugin and MCP configuration by default; project `.mcp.json` and `.agents/hooks.json` activation remains available as a fallback.
 
 Explicit host install:
 
@@ -755,16 +755,20 @@ ee install antigravity
 
 What happens:
 - ExperienceEngine records user-level Antigravity adapter state under the configured ExperienceEngine home.
-- By default, it also activates the current project by installing the shared MCP server in the local project `.mcp.json` config and validated lifecycle hooks in `.agents/hooks.json`.
+- By default, it installs user-level Antigravity plugin wiring for Agent Desktop and `agy` CLI, plus global Agent Desktop MCP configuration.
+- It does not need to activate each new Agent Desktop project after user-level install. If global plugin loading is unavailable or needs recovery, use the project activation fallback.
 - The hook contract spike still runs before hook installation; if it fails, installation falls back to `mcp_only`. Use `--mcp-only` when you intentionally want only the MCP inspection/control surface.
-- All command paths in `hooks.json` and `.mcp.json` are registered using absolute paths resolved via `packageRoot` for portability.
+- All command paths in user-level `hooks.json` and `mcp_config.json` are registered using absolute paths resolved via `packageRoot` for portability.
 - Antigravity supports both stdio MCP calls and an advanced artifact-assisted analyzer that automatically parses planning and verification markdown files (`task.md`, `walkthrough.md`, `implementation_plan.md`) to reconstruct outcomes and check off completed tasks.
 - The installation ends with a short cold-start note so users know capture is active before the first formal hint appears.
 
 Local state changes:
 - user-level ExperienceEngine adapter state under `~/.experienceengine`
-- project MCP config in `.mcp.json`
-- project hooks config in `.agents/hooks.json`
+- Agent Desktop plugin under `~/.gemini/config/plugins/experienceengine`
+- Antigravity CLI plugin under `~/.gemini/antigravity-cli/plugins/experienceengine`
+- Agent Desktop MCP config under `~/.gemini/antigravity/mcp_config.json`
+- fallback project MCP config in `.mcp.json` only when `ee antigravity activate-project -C <project-path>` or a compatibility path writes it
+- fallback project hooks config in `.agents/hooks.json` only when project activation is used
 
 Useful commands:
 
@@ -784,9 +788,9 @@ ee doctor antigravity
 
 Success looks like:
 - doctor reports the adapter as installed and healthy.
-- `.mcp.json` and `.agents/hooks.json` are created with the correct configurations and paths.
+- global plugin/MCP files are created with the correct configurations and paths.
 - Antigravity Agent Desktop loads the MCP server successfully and can call an ExperienceEngine MCP tool such as `experienceengine_get_capabilities`.
-- `ee agy exec -C <project-path>` loads the same project MCP and hook files in headless CLI mode without requiring the user to remember `--add-dir`.
+- `ee agy exec -C <project-path>` loads the user-level plugin hooks in headless CLI mode while still supplying `--add-dir` for reliable workspace discovery.
 
 Validated CLI invocation:
 
@@ -797,9 +801,8 @@ ee agy exec -C <project-path> "<prompt>"
 Host note:
 - The Antigravity IDE application is out of scope for this adapter unless a future change adds IDE-specific integration.
 - The PATH-visible `antigravity` command may point to the separate IDE shell. `ee doctor antigravity` reports that command separately and uses `agy` for CLI availability.
-- `agy config --help` and `agy hooks --help` do not expose a verified global hooks/MCP configuration surface in the validated local CLI. Agent Desktop therefore still needs project activation through `ee install antigravity`, `ee repair antigravity`, or `ee antigravity activate-project -C <project>`.
-- `ee agy exec -C <project>` auto-refreshes project activation and invokes `agy --add-dir <project>` internally.
-- CLI/operator commands such as `ee install antigravity`, `ee doctor antigravity`, and `ee repair antigravity` configure and inspect user-level adapter state plus the current project MCP and hook wiring used by Agent Desktop and `agy`.
+- `ee agy exec -C <project>` invokes `agy --add-dir <project>` internally because direct `agy` workspace discovery can fail on Windows when symlink creation is unavailable.
+- CLI/operator commands such as `ee install antigravity`, `ee doctor antigravity`, and `ee repair antigravity` configure and inspect user-level adapter state plus global plugin/MCP wiring. `ee antigravity activate-project -C <project>` remains the fallback for project-local MCP and hook wiring.
 - ExperienceEngine installs relative-path hooks for prompt-time guidance (`PreInvocation`), tool-use allow/capture (`PreToolUse`, `PostToolUse`), and session-end finalization (`Stop`).
 - To prevent infinite loops during preinvocation, the hook mutations are structured to gate execution per session ID, ensuring safe one-time injection per prompt context.
 - If Antigravity says hooks are misconfigured or MCP registration is missing, run `ee repair antigravity`.
@@ -816,8 +819,8 @@ Source-repo host validation matrix:
 | WSL Codex CLI | Validated | WSL `codex exec` with shared `.codex/hooks.json` writes to the same ExperienceEngine home and `scope_id` as Windows Codex App. |
 | Claude Code on Windows | Validated | Real hooks fired `UserPromptSubmit`, `PreToolUse`, `PostToolUse`, and `SessionEnd`; `SessionEnd` drained through the background queue and wrote to the shared project scope. |
 | OpenClaw on WSL | Validated | WSL OpenClaw gateway loaded the current ExperienceEngine plugin and wrote task runs to the shared ExperienceEngine home. ExperienceEngine now resolves the real project root from OpenClaw hook payloads or nearby repo markers before scope resolution. If OpenClaw only reports its global workspace, ExperienceEngine isolates that session instead of reusing unrelated global-workspace experience. OpenClaw validated with `openrouter/tencent/hy3-preview:free`; the bare `tencent/hy3-preview:free` id is marked missing by OpenClaw's model registry. |
-| Google Antigravity Agent Desktop on Windows | Validated | Real Agent Desktop loaded project `.mcp.json` and `.agents/hooks.json`; MCP `experienceengine_get_capabilities` was callable; real hooks fired `PreInvocation`, `PreToolUse`, `PostToolUse`, and `Stop`; `PreToolUse` accepted `{ "decision": "allow" }`; task runs wrote to the shared project scope. Antigravity IDE is out of scope. |
-| Antigravity CLI (`agy`) on Windows | Validated with `--add-dir`; wrapper added | `agy --add-dir <project-path> --print --dangerously-skip-permissions --print-timeout 5m "<prompt>"` loaded project `.agents/hooks.json`; real hooks fired `PreInvocation`, `PreToolUse`, `PostToolUse`, and `Stop`; task runs wrote to the shared project scope. Direct project auto-discovery without `--add-dir` can fail when Windows symlink creation is not permitted, so users should prefer `ee agy exec -C <project>`. |
+| Google Antigravity Agent Desktop on Windows | Validated project hooks; global plugin wiring added | Real Agent Desktop loaded project `.mcp.json` and `.agents/hooks.json`; MCP `experienceengine_get_capabilities` was callable; real hooks fired `PreInvocation`, `PreToolUse`, `PostToolUse`, and `Stop`; `PreToolUse` accepted `{ "decision": "allow" }`; task runs wrote to the shared project scope. User-level plugin/MCP wiring is now the default install path and still needs final real-host validation. Antigravity IDE is out of scope. |
+| Antigravity CLI (`agy`) on Windows | Validated with `--add-dir`; wrapper added | `agy --add-dir <project-path> --print --dangerously-skip-permissions --print-timeout 5m "<prompt>"` loaded hooks and wrote task runs to the shared project scope. Direct project auto-discovery without `--add-dir` can fail when Windows symlink creation is not permitted, so users should prefer `ee agy exec -C <project>`. |
 
 This matrix is source-repo validation only. Published npm package validation and host-native marketplace validation must be called out separately during release preparation.
 

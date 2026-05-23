@@ -775,6 +775,10 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
         install_scope: status.installScope,
         server_name: status.serverName,
         lifecycle_mode: status.lifecycleMode,
+        global_mcp_registered: status.globalWiring.mcpRegistered,
+        global_hooks_registered: status.globalWiring.hooksRegistered,
+        agent_desktop_plugin_registered: status.globalWiring.agentDesktopPluginRegistered,
+        agy_cli_plugin_registered: status.globalWiring.agyCliPluginRegistered,
         current_project_mcp_registered: status.projectWiring.mcpRegistered,
         current_project_hooks_registered: status.projectWiring.hooksRegistered,
         hook_contract_spike: status.hookContractSpikePassed,
@@ -788,10 +792,13 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     ]);
     console.log("Antigravity surfaces:");
     console.log("- User-level EE state: installed data and adapter state live under the configured ExperienceEngine home.");
-    console.log("- Current project activation: project .mcp.json and .agents/hooks.json are required until Antigravity exposes a verified global hook surface.");
+    console.log("- Global activation: EE is installed as Antigravity user-level plugins for Agent Desktop and agy CLI when global hooks are registered.");
+    console.log(`- Agent Desktop plugin: ${status.globalWiring.agentDesktopPluginRegistered ? "registered" : "not registered"} (${status.globalWiring.agentDesktopPluginDir})`);
+    console.log(`- agy CLI plugin: ${status.globalWiring.agyCliPluginRegistered ? "registered" : "not registered"} (${status.globalWiring.agyCliPluginDir})`);
+    console.log(`- Agent Desktop MCP config: ${status.globalWiring.mcpRegistered ? "registered" : "not registered"} (${status.globalWiring.mcpConfigPath})`);
     console.log(`- Current project: ${status.projectWiring.cwd}`);
-    console.log(`- Current project MCP: ${status.projectWiring.mcpRegistered ? "registered" : "not registered"}`);
-    console.log(`- Current project hooks: ${status.projectWiring.hooksRegistered ? "registered" : "not registered"}`);
+    console.log(`- Current project fallback MCP: ${status.projectWiring.mcpRegistered ? "registered" : "not registered"}`);
+    console.log(`- Current project fallback hooks: ${status.projectWiring.hooksRegistered ? "registered" : "not registered"}`);
     console.log(`- Agent Desktop global activation: ${status.agentDesktopGlobalActivation}`);
     console.log(`- CLI (agy): ${status.agyCliAvailable ? "available" : "not found"}`);
     if (status.agyCliPath) {
@@ -805,7 +812,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     if (status.ideCliPath) {
       console.log(`- IDE command path: ${status.ideCliPath}`);
     }
-    console.log("- Agent Desktop project activation command: ee antigravity activate-project -C <project>");
+    console.log("- Project activation fallback: ee antigravity activate-project -C <project>");
     if (status.recommendedNextStep) {
       console.log(`Recommended next step: ${status.recommendedNextStep}`);
     }

@@ -1,6 +1,7 @@
 import { spawnSync as nodeSpawnSync, type SpawnSyncReturns } from "node:child_process";
 import { resolve } from "node:path";
 import { ensureAntigravityProjectWiring } from "../../install/antigravity.js";
+import { inspectAntigravityGlobalWiring } from "../../install/antigravity-global-wiring.js";
 
 const usageText = 'Usage: ee agy exec [-C <project>] [agy options...] "<prompt>"';
 
@@ -8,6 +9,7 @@ type SpawnSyncResult = Pick<SpawnSyncReturns<string | Buffer>, "status" | "signa
 
 type AgyExecDeps = {
   ensureAntigravityProjectWiring?: typeof ensureAntigravityProjectWiring;
+  inspectAntigravityGlobalWiring?: typeof inspectAntigravityGlobalWiring;
   spawnSync?: (
     command: string,
     args: string[],
@@ -90,10 +92,16 @@ export const runAgyCommand = async (subcommand?: string, args: string[] = [], de
     return;
   }
 
-  await (deps.ensureAntigravityProjectWiring ?? ensureAntigravityProjectWiring)({
+  const globalWiring = (deps.inspectAntigravityGlobalWiring ?? inspectAntigravityGlobalWiring)({
     cwd: parsed.cwd,
     env
   });
+  if (!globalWiring.hooksRegistered) {
+    await (deps.ensureAntigravityProjectWiring ?? ensureAntigravityProjectWiring)({
+      cwd: parsed.cwd,
+      env
+    });
+  }
 
   const childArgs = [
     "--add-dir",
@@ -107,7 +115,11 @@ export const runAgyCommand = async (subcommand?: string, args: string[] = [], de
   ];
   const result = (deps.spawnSync ?? nodeSpawnSync)("agy", childArgs, {
     cwd: parsed.cwd,
-    env,
+    env: {
+      ...env,
+      EXPERIENCE_ENGINE_PROJECT_CWD: parsed.cwd,
+      EXPERIENCE_ENGINE_PROMPT: parsed.prompt
+    },
     stdio: "inherit"
   });
 

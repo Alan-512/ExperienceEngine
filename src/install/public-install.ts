@@ -97,6 +97,6 @@ export const buildHostPostInstallOrientation = (): {
   antigravity: {
     setupState: "Installed",
     nextStep:
-      "Use `ee agy exec -C <project-path>` for headless CLI runs, or run `ee antigravity activate-project -C <project-path>` before opening Agent Desktop in a new project. If shared ExperienceEngine state is not initialized yet, run `ee init` before your first real task."
+      "Start Agent Desktop in any project, or use `ee agy exec -C <project-path>` for headless CLI runs. If shared ExperienceEngine state is not initialized yet, run `ee init` before your first real task."
   }
 });

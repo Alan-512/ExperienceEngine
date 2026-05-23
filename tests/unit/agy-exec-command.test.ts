@@ -41,6 +41,7 @@ describe("agy exec wrapper", () => {
     await runAgyCommand("exec", ["-C", "D:/repo", "Read README.md"], {
       cwd: () => "C:\\Users\\123",
       env: () => ({ EXPERIENCE_ENGINE_HOME: "C:\\Users\\123\\.experienceengine" }),
+      inspectAntigravityGlobalWiring: () => ({ hooksRegistered: false }) as never,
       ensureAntigravityProjectWiring: ensure,
       spawnSync: spawn
     });
@@ -62,7 +63,11 @@ describe("agy exec wrapper", () => {
       ],
       {
         cwd: "D:\\repo",
-        env: { EXPERIENCE_ENGINE_HOME: "C:\\Users\\123\\.experienceengine" },
+        env: {
+          EXPERIENCE_ENGINE_HOME: "C:\\Users\\123\\.experienceengine",
+          EXPERIENCE_ENGINE_PROJECT_CWD: "D:\\repo",
+          EXPERIENCE_ENGINE_PROMPT: "Read README.md"
+        },
         stdio: "inherit"
       }
     );
@@ -75,6 +80,7 @@ describe("agy exec wrapper", () => {
     await runAgyCommand("exec", ["-C", "D:/repo", "--log-file", "agy.log", "Summarize"], {
       cwd: () => "C:\\Users\\123",
       env: () => ({}),
+      inspectAntigravityGlobalWiring: () => ({ hooksRegistered: true }) as never,
       ensureAntigravityProjectWiring: vi.fn().mockResolvedValue({}),
       spawnSync: spawn
     });
