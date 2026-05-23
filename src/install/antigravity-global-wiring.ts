@@ -12,6 +12,7 @@ import {
 } from "./antigravity-project-wiring.js";
 
 export type AntigravityGlobalActivationState = "unsupported" | "supported" | "unknown";
+export type AntigravityIdeActivationState = "unsupported" | "mcp_cache_observed" | "hooks_observed";
 
 export type AntigravityGlobalWiringReport = {
   lifecycleMode: AntigravityLifecycleMode;
@@ -20,6 +21,12 @@ export type AntigravityGlobalWiringReport = {
   agentDesktopPluginRegistered: boolean;
   agyCliPluginDir: string;
   agyCliPluginRegistered: boolean;
+  idePluginDir: string;
+  idePluginRegistered: boolean;
+  ideHooksRegistered: boolean;
+  ideMcpCacheDir: string;
+  ideMcpToolCacheRegistered: boolean;
+  ideActivation: AntigravityIdeActivationState;
   mcpConfigPath: string;
   mcpRegistered: boolean;
   hooksRegistered: boolean;
@@ -35,6 +42,12 @@ const getAgentDesktopPluginDir = (homeDir?: string): string =>
 
 const getAgyCliPluginDir = (homeDir?: string): string =>
   join(resolveAntigravityHome(homeDir), ".gemini", "antigravity-cli", "plugins", "experienceengine");
+
+const getIdePluginDir = (homeDir?: string): string =>
+  join(resolveAntigravityHome(homeDir), ".gemini", "antigravity-ide", "plugins", "experienceengine");
+
+const getIdeMcpCacheDir = (homeDir?: string): string =>
+  join(resolveAntigravityHome(homeDir), ".gemini", "antigravity-ide", "mcp", "experienceengine");
 
 const getAgentDesktopMcpConfigPath = (homeDir?: string): string =>
   join(resolveAntigravityHome(homeDir), ".gemini", "antigravity", "mcp_config.json");
@@ -131,6 +144,11 @@ const pluginHasExperienceEngine = (pluginDir: string): boolean => {
   );
 };
 
+const ideMcpCacheHasExperienceEngine = (cacheDir: string): boolean =>
+  existsSync(join(cacheDir, "experienceengine_get_capabilities.json"))
+  || existsSync(join(cacheDir, "experienceengine_lookup_hints.json"))
+  || existsSync(join(cacheDir, "experienceengine_doctor.json"));
+
 const mcpConfigHasExperienceEngine = (mcpConfigPath: string): boolean => {
   const config = readJsonObject(mcpConfigPath);
   return Boolean(config.mcpServers?.experienceengine);
@@ -141,9 +159,19 @@ export const inspectAntigravityGlobalWiring = (options: AntigravityOptions = {})
   const cliScript = join(packageRoot, "dist/cli/index.js").replace(/\\/g, "/");
   const agentDesktopPluginDir = getAgentDesktopPluginDir(options.homeDir);
   const agyCliPluginDir = getAgyCliPluginDir(options.homeDir);
+  const idePluginDir = getIdePluginDir(options.homeDir);
+  const ideMcpCacheDir = getIdeMcpCacheDir(options.homeDir);
   const mcpConfigPath = getAgentDesktopMcpConfigPath(options.homeDir);
   const agentDesktopPluginRegistered = pluginHasExperienceEngine(agentDesktopPluginDir);
   const agyCliPluginRegistered = pluginHasExperienceEngine(agyCliPluginDir);
+  const idePluginRegistered = pluginHasExperienceEngine(idePluginDir);
+  const ideHooksRegistered = idePluginRegistered;
+  const ideMcpToolCacheRegistered = ideMcpCacheHasExperienceEngine(ideMcpCacheDir);
+  const ideActivation: AntigravityIdeActivationState = ideHooksRegistered
+    ? "hooks_observed"
+    : ideMcpToolCacheRegistered
+      ? "mcp_cache_observed"
+      : "unsupported";
   const sharedMcpConfigPath = getSharedMcpConfigPath(options.homeDir);
   const mcpRegistered =
     mcpConfigHasExperienceEngine(mcpConfigPath)
@@ -160,6 +188,12 @@ export const inspectAntigravityGlobalWiring = (options: AntigravityOptions = {})
     agentDesktopPluginRegistered,
     agyCliPluginDir,
     agyCliPluginRegistered,
+    idePluginDir,
+    idePluginRegistered,
+    ideHooksRegistered,
+    ideMcpCacheDir,
+    ideMcpToolCacheRegistered,
+    ideActivation,
     mcpConfigPath,
     mcpRegistered,
     hooksRegistered,

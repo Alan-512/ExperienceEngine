@@ -779,6 +779,9 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
         global_hooks_registered: status.globalWiring.hooksRegistered,
         agent_desktop_plugin_registered: status.globalWiring.agentDesktopPluginRegistered,
         agy_cli_plugin_registered: status.globalWiring.agyCliPluginRegistered,
+        ide_mcp_cache_registered: status.globalWiring.ideMcpToolCacheRegistered,
+        ide_hooks_registered: status.globalWiring.ideHooksRegistered,
+        ide_activation: status.globalWiring.ideActivation,
         current_project_mcp_registered: status.projectWiring.mcpRegistered,
         current_project_hooks_registered: status.projectWiring.hooksRegistered,
         hook_contract_spike: status.hookContractSpikePassed,
@@ -795,6 +798,8 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     console.log("- Global activation: EE is installed as Antigravity user-level plugins for Agent Desktop and agy CLI when global hooks are registered.");
     console.log(`- Agent Desktop plugin: ${status.globalWiring.agentDesktopPluginRegistered ? "registered" : "not registered"} (${status.globalWiring.agentDesktopPluginDir})`);
     console.log(`- agy CLI plugin: ${status.globalWiring.agyCliPluginRegistered ? "registered" : "not registered"} (${status.globalWiring.agyCliPluginDir})`);
+    console.log(`- IDE MCP cache: ${status.globalWiring.ideMcpToolCacheRegistered ? "observed" : "not observed"} (${status.globalWiring.ideMcpCacheDir})`);
+    console.log(`- IDE hooks: ${status.globalWiring.ideHooksRegistered ? "observed" : "not observed"} (${status.globalWiring.idePluginDir})`);
     console.log(`- Agent Desktop MCP config: ${status.globalWiring.mcpRegistered ? "registered" : "not registered"} (${status.globalWiring.mcpConfigPath})`);
     console.log(`- Current project: ${status.projectWiring.cwd}`);
     console.log(`- Current project fallback MCP: ${status.projectWiring.mcpRegistered ? "registered" : "not registered"}`);
@@ -808,7 +813,7 @@ export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): 
     if (status.cliProjectDiscoveryNote) {
       console.log(`- CLI note: ${status.cliProjectDiscoveryNote}`);
     }
-    console.log(`- IDE command: ${status.ideCliAvailable ? "available" : "not found"}; not adapted by this adapter.`);
+    console.log(`- IDE command: ${status.ideCliAvailable ? "available" : "not found"}; IDE hooks are not enabled unless the IDE surface reports hooks observed.`);
     if (status.ideCliPath) {
       console.log(`- IDE command path: ${status.ideCliPath}`);
     }

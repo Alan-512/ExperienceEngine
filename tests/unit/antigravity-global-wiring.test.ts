@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -71,5 +71,19 @@ describe("Antigravity global wiring", () => {
     expect(report.mcpRegistered).toBe(false);
     expect(report.hooksRegistered).toBe(false);
     expect(report.agentDesktopGlobalActivation).toBe("unknown");
+  });
+
+  it("reports Antigravity IDE MCP cache separately from native hook support", () => {
+    const homeDir = makeTempDir();
+    const ideMcpDir = join(homeDir, ".gemini", "antigravity-ide", "mcp", "experienceengine");
+    mkdirSync(ideMcpDir, { recursive: true });
+    writeFileSync(join(ideMcpDir, "experienceengine_get_capabilities.json"), "{}\n", "utf8");
+
+    const report = inspectAntigravityGlobalWiring({ homeDir });
+
+    expect(report.ideMcpCacheDir).toBe(ideMcpDir);
+    expect(report.ideMcpToolCacheRegistered).toBe(true);
+    expect(report.ideHooksRegistered).toBe(false);
+    expect(report.ideActivation).toBe("mcp_cache_observed");
   });
 });
