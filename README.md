@@ -91,7 +91,7 @@ Do not use ExperienceEngine if:
 | `OpenClaw` | native plugin install | host-native | most complete today |
 | `Claude Code` | marketplace plugin, with `ee install claude-code` fallback | MCP + plugin hooks | supported |
 | `Codex` | `ee install codex`, with native MCP fallback | hooks + MCP | supported |
-| Google Antigravity Agent Desktop + `agy` CLI | `ee install antigravity`, `ee agy exec -C <project>` for CLI runs | MCP + validated native hooks | supported through user-level Antigravity plugin wiring and `ee agy exec` |
+| Google Antigravity Agent Desktop + `agy` CLI + IDE | `ee install antigravity`, `ee agy exec -C <project>` for CLI runs | MCP + validated native hooks | supported through user-level Antigravity plugin wiring, `ee agy exec`, and observed IDE global hooks |
 
 ## Why It Exists
 

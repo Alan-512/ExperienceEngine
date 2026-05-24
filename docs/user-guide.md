@@ -745,7 +745,7 @@ Diagnostics note:
 
 ### Google Antigravity Advanced Commands
 
-Antigravity has multiple product entries. ExperienceEngine's current `antigravity` adapter targets **Antigravity Agent Desktop** and the standalone **Antigravity CLI (`agy`)**. It does not adapt the separate Antigravity IDE shell. EE data remains user-level under the configured ExperienceEngine home, while project experience is isolated by project scope. Antigravity uses user-level plugin and MCP configuration by default; project `.mcp.json` and `.agents/hooks.json` activation remains available as a fallback.
+Antigravity has multiple product entries. ExperienceEngine's current `antigravity` adapter targets **Antigravity Agent Desktop**, the standalone **Antigravity CLI (`agy`)**, and **Antigravity IDE** lifecycle hooks. EE data remains user-level under the configured ExperienceEngine home, while project experience is isolated by project scope. Antigravity uses user-level plugin and MCP configuration by default; project `.mcp.json` and `.agents/hooks.json` activation remains available as a fallback.
 
 Explicit host install:
 

@@ -91,7 +91,7 @@ npm install -g @alan512/experienceengine
 | `OpenClaw` | 原生插件安装 | 宿主原生 | 当前最完整 |
 | `Claude Code` | marketplace 插件，保留 `ee install claude-code` fallback | MCP + plugin hooks | 已支持 |
 | `Codex` | `ee install codex`，保留原生 MCP fallback | hooks + MCP | 已支持 |
-| `Google Antigravity Agent Desktop` + `agy` CLI | `ee install antigravity`，CLI 运行使用 `ee agy exec -C <project>` | MCP + 已验证的原生 hooks | 通过用户级 Antigravity plugin wiring 与 `ee agy exec` 支持 |
+| `Google Antigravity Agent Desktop` + `agy` CLI + IDE | `ee install antigravity`，CLI 运行使用 `ee agy exec -C <project>` | MCP + 已验证的原生 hooks | 通过用户级 Antigravity plugin wiring、`ee agy exec` 与已观察到的 IDE 全局 hooks 支持 |
 
 ## 为什么要做这个
 
