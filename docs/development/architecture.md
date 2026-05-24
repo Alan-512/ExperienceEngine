@@ -8,6 +8,24 @@
 
 ---
 
+## 0. 文档版本与状态
+
+| 字段 | 当前值 |
+| --- | --- |
+| 最近同步日期 | 2026-05-24 |
+| 最近同步范围 | 已提交架构到 `2c4f0b7 Add host trace capsule OpenSpec` |
+| 当前宿主基线 | OpenClaw、Claude Code、Codex、Antigravity |
+| Antigravity 状态 | 已记录用户级全局插件/MCP wiring、Agent Desktop、`agy` CLI、IDE hooks 观测、项目级 fallback 与 `ee agy exec -C <project>` 包装器 |
+| TraceCapsule 状态 | 已有 OpenSpec 设计与任务清单；当前文件暂不把未完成实现描述为现有架构 |
+| 更新原则 | 记录当前真实架构；进行中的实现只在代码落地并验证后同步到正文架构图 |
+
+维护提示：
+
+- 每次宿主适配、核心数据模型、SQLite 表、runtime flow、operator surface 发生变化时，先更新本段状态，再更新对应正文段落。
+- 如果有 OpenSpec 已创建但实现尚未完成，应在本段记录状态，不应把它混入“当前整体架构图”。
+
+---
+
 ## 1. 项目当前定位
 
 ExperienceEngine 当前定位为：
@@ -51,7 +69,7 @@ Host task
 
 ```text
 src/
-  adapters/              # 不同宿主的接入层，例如 Codex
+  adapters/              # 不同宿主的接入层，例如 OpenClaw / Claude Code / Codex / Antigravity
   analyzer/              # 任务信号分析、候选生成前的判断与归纳
   cli/                   # ee CLI 命令入口与命令分发
   config/                # 配置 schema、配置加载、路径解析
@@ -118,7 +136,7 @@ High-impact experience-store actions are guarded automatic mutations, never dire
 
 ```mermaid
 flowchart TD
-  User[User / Coding Task] --> Host[Host Agent<br/>OpenClaw / Claude Code / Codex]
+  User[User / Coding Task] --> Host[Host Agent<br/>OpenClaw / Claude Code / Codex / Antigravity]
 
   Host --> Adapter[Host Adapter Layer]
   Adapter --> RuntimePrompt[Prompt Runtime<br/>beforePromptBuild / lookup hints]
@@ -200,7 +218,28 @@ src/adapters/codex/mcp-server.ts
 OpenClaw
 Claude Code
 Codex
+Antigravity
 ```
+
+当前宿主状态：
+
+| 宿主 | 当前接入状态 | 主要入口 |
+| --- | --- | --- |
+| OpenClaw | 已支持宿主插件 / CLI / fallback 路径 | `src/plugin/openclaw-plugin.ts`, `src/install/openclaw-installer.ts` |
+| Claude Code | 已支持 hooks + 共享 MCP server | `src/cli/commands/claude-hook.ts`, `src/adapters/claude-code/*` |
+| Codex | 已支持 Codex-native hooks + 共享 MCP server + `ee codex exec` fallback | `src/cli/commands/codex-hook.ts`, `src/adapters/codex/*` |
+| Antigravity | 已支持用户级插件/MCP wiring、Agent Desktop、`agy` CLI、IDE hooks 观测、项目级 fallback | `src/cli/commands/antigravity-hook.ts`, `src/install/antigravity*.ts`, `src/adapters/antigravity/*` |
+
+Antigravity 的当前路径不是单一项目级配置。默认安装走用户级 global wiring：
+
+```text
+~/.gemini/config/plugins/experienceengine
+~/.gemini/antigravity-cli/plugins/experienceengine
+~/.gemini/antigravity/mcp_config.json
+~/.gemini/config/mcp_config.json
+```
+
+项目级 `.mcp.json` / `.agents/hooks.json` 仍作为 activation fallback 保留。
 
 ### 4.3 Adapter 层输入输出
 
@@ -226,6 +265,8 @@ ToolEvent
 CodexLookupArgs
 CodexToolResultArgs
 CodexFinalizeArgs
+Antigravity hook payload
+Shared MCP behavior-loop args
 ```
 
 ### 4.4 Codex MCP 暴露的核心工具
@@ -248,6 +289,38 @@ ExperienceRuntimeService
 ExperienceInteractionService
 ExperienceOperationalService
 ```
+
+### 4.5 Antigravity 当前接入边界
+
+Antigravity adapter 当前覆盖三个宿主入口：
+
+```text
+Agent Desktop
+agy CLI
+Antigravity IDE
+```
+
+用户级 global wiring 是主路径，项目级 activation 是 fallback。安装与检测主要由以下模块负责：
+
+```text
+src/install/antigravity.ts
+src/install/antigravity-global-wiring.ts
+src/install/antigravity-project-wiring.ts
+src/cli/commands/antigravity-hook.ts
+src/cli/commands/agy-exec.ts
+src/cli/commands/antigravity.ts
+```
+
+Antigravity hook 当前处理：
+
+```text
+PreInvocation  -> lookupHints / injectSteps
+PreToolUse     -> allow
+PostToolUse    -> recordToolResult
+Stop           -> finalizeTask + finalize dedupe
+```
+
+Antigravity 还包含 artifact-assisted analyzer，用于解析 `task.md`、`walkthrough.md`、`implementation_plan.md` 等规划/验证文件，并与 runtime finalization telemetry 对齐。
 
 ---
 
@@ -1166,7 +1239,10 @@ install
 backup
 claude-hook
 codex-hook
+antigravity-hook
 codex
+agy
+antigravity
 codex-mcp-server
 mcp-server
 doctor
@@ -1382,17 +1458,21 @@ flowchart TD
 3. src/types/domain.ts
 4. src/store/sqlite/schema.sql
 5. src/adapters/codex/mcp-server.ts
-6. src/runtime/prompt-service.ts
-7. src/runtime/service.ts
-8. src/input/input-adapter.ts
-9. src/analyzer/candidate-signals.ts
-10. src/analyzer/llm-learning-gate.ts
-11. src/controller/candidate-retriever.ts
-12. src/controller/intervention-controller.ts
-13. src/experience-management/node-lifecycle-governance.ts
-14. src/feedback/state-transition.ts
-15. src/interaction/service.ts
-16. src/cli/dispatch.ts
+6. src/adapters/shared-mcp/behavior-loop.ts
+7. src/cli/commands/antigravity-hook.ts
+8. src/install/antigravity.ts
+9. src/install/antigravity-global-wiring.ts
+10. src/runtime/prompt-service.ts
+11. src/runtime/service.ts
+12. src/input/input-adapter.ts
+13. src/analyzer/candidate-signals.ts
+14. src/analyzer/llm-learning-gate.ts
+15. src/controller/candidate-retriever.ts
+16. src/controller/intervention-controller.ts
+17. src/experience-management/node-lifecycle-governance.ts
+18. src/feedback/state-transition.ts
+19. src/interaction/service.ts
+20. src/cli/dispatch.ts
 ```
 
 ---

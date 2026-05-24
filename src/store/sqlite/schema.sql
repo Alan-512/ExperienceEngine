@@ -28,6 +28,8 @@ CREATE TABLE IF NOT EXISTS experience_input_records (
   context_summary TEXT,
   evidence_json TEXT NOT NULL,
   injected_node_ids_json TEXT NOT NULL,
+  trace_capsule_id TEXT,
+  trace_completeness REAL,
   created_at TEXT NOT NULL
 );
 
@@ -47,6 +49,8 @@ CREATE TABLE IF NOT EXISTS task_runs (
   failure_signature TEXT,
   learning_status TEXT,
   learning_reason TEXT,
+  trace_capsule_id TEXT,
+  trace_completeness REAL,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -413,3 +417,54 @@ CREATE INDEX IF NOT EXISTS idx_hygiene_governance_plans_scope ON hygiene_governa
 CREATE INDEX IF NOT EXISTS idx_hygiene_governance_actions_scope ON hygiene_governance_actions(scope_id, created_at);
 CREATE INDEX IF NOT EXISTS idx_hygiene_governance_approvals_scope ON hygiene_governance_approvals(scope_id, status);
 CREATE INDEX IF NOT EXISTS idx_hygiene_governance_snapshots_action ON hygiene_governance_snapshots(action_id);
+
+CREATE TABLE IF NOT EXISTS trace_capsules (
+  id TEXT PRIMARY KEY,
+  episode_id TEXT,
+  task_run_id TEXT,
+  scope_id TEXT NOT NULL,
+  session_id TEXT,
+  task_json TEXT NOT NULL,
+  outcome_json TEXT NOT NULL,
+  capture_metadata_json TEXT NOT NULL,
+  host_profile_json TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS trace_events (
+  id TEXT PRIMARY KEY,
+  trace_capsule_id TEXT NOT NULL,
+  event_type TEXT NOT NULL,
+  timestamp TEXT NOT NULL,
+  source_json TEXT NOT NULL,
+  payload_json TEXT NOT NULL,
+  FOREIGN KEY (trace_capsule_id) REFERENCES trace_capsules(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS trace_evidence_refs (
+  id TEXT PRIMARY KEY,
+  trace_capsule_id TEXT NOT NULL,
+  ref_type TEXT NOT NULL,
+  path_or_uri TEXT NOT NULL,
+  content_hash TEXT,
+  summary TEXT,
+  is_redacted INTEGER NOT NULL DEFAULT 0,
+  size_bytes INTEGER,
+  FOREIGN KEY (trace_capsule_id) REFERENCES trace_capsules(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_trace_capsules_episode_id ON trace_capsules(episode_id);
+CREATE INDEX IF NOT EXISTS idx_trace_capsules_task_run_id ON trace_capsules(task_run_id);
+CREATE INDEX IF NOT EXISTS idx_trace_capsules_session_id ON trace_capsules(session_id);
+CREATE INDEX IF NOT EXISTS idx_trace_events_capsule_id ON trace_events(trace_capsule_id);
+CREATE INDEX IF NOT EXISTS idx_trace_evidence_refs_capsule_id ON trace_evidence_refs(trace_capsule_id);
+
+CREATE TABLE IF NOT EXISTS host_capability_probes (
+  host TEXT NOT NULL,
+  capability TEXT NOT NULL,
+  state TEXT NOT NULL,
+  provenance TEXT NOT NULL,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (host, capability)
+);

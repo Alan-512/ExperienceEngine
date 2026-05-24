@@ -174,7 +174,7 @@ export class CommandNormalizer {
     }
 
     // Handle host-native file tools
-    const isFileToolName = /^(write_to_file|replace_file_content|multi_replace_file_content|write_file|read_file|view_file|apply_patch)$/i.test(event.tool_name);
+    const isFileToolName = /^(write_to_file|replace_file_content|multi_replace_file_content|write_file|read_file|view_file|apply_patch|file_change)$/i.test(event.tool_name);
 
     if (isFileToolName && event.input_summary) {
       const trimmed = event.input_summary.trim();

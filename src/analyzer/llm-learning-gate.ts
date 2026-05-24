@@ -591,33 +591,91 @@ const normalizeDraft = (candidate: Record<string, unknown>, input: ExperienceInp
   });
 };
 
+export const applyTraceLearningGatePolicy = (
+  input: ExperienceInput,
+  draft: ExperienceCandidateDraft
+): ExperienceCandidateDraft => {
+  if (!input.trace_capsule_id) {
+    return draft;
+  }
+
+  const isLowCompleteness = typeof input.trace_completeness === "number" && input.trace_completeness < 0.6;
+  const isUnstable = input.trace_is_unstable === true;
+
+  if (!isLowCompleteness && !isUnstable) {
+    return draft;
+  }
+
+  const signals = buildCandidateSignals(input);
+  const kind = draft.experience_kind || "none";
+
+  let satisfiesMinRules = false;
+
+  if (kind === "expectation_correction") {
+    // expectation correction BDD: requires user-origin correction evidence OR directional correction signal, AND success outcome
+    const hasCorrectionEvidence =
+      (signals.trace_windows?.correction_events_count ?? 0) > 0 ||
+      signals.directional_correction?.detected === true;
+    const hasCorrectedOrAccepted = input.outcome_signal === "success";
+    satisfiesMinRules = hasCorrectionEvidence && hasCorrectedOrAccepted;
+  } else if (kind === "verification_loop") {
+    // verification loop BDD: requires an objective verification event, and execution path affected
+    const hasVerificationEvent = (signals.trace_windows?.verification_events_count ?? 0) > 0;
+    const affectedExecution = signals.retry_count > 0 || input.outcome_signal === "success";
+    satisfiesMinRules = hasVerificationEvent && affectedExecution;
+  } else if (draft.node_type === "warning") {
+    // warning: requires at least one file change or tool failure
+    const hasFileChange = (signals.trace_windows?.file_change_events_count ?? 0) > 0;
+    const hasFailure = signals.retry_count > 0;
+    satisfiesMinRules = hasFileChange || hasFailure;
+  } else {
+    // successful fix: requires success outcome and retry_count > 0 or correction
+    const hasCorrection = (signals.trace_windows?.correction_events_count ?? 0) > 0;
+    satisfiesMinRules = input.outcome_signal === "success" && (signals.retry_count > 0 || hasCorrection);
+  }
+
+  if (!satisfiesMinRules) {
+    return {
+      ...draft,
+      promotion_signal: "normal",
+      promotion_reason: `restricted high confidence promotion because trace completeness is low (${input.trace_completeness}) or source is unstable, and minimum evidence rules were not satisfied`,
+      confidence_signal: "unconfirmed"
+    };
+  }
+
+  return draft;
+};
+
 const applyTaskManagementPromotionPolicy = (
   input: ExperienceInput,
   draft: ExperienceCandidateDraft
 ): ExperienceCandidateDraft => {
+  // Enforce trace learning gate policy first! (Task 5.3)
+  const tracePolicedDraft = applyTraceLearningGatePolicy(input, draft);
+
   const signals = deriveTaskManagementSignals(input);
   const preserveHighValue =
     signals.realDevLikely &&
     (
       signals.bugFixLike ||
-      draft.experience_kind === "expectation_correction" ||
+      tracePolicedDraft.experience_kind === "expectation_correction" ||
       input.task_type === "bug_fix" ||
       input.task_type === "config_debug" ||
       input.task_type === "integration_fix"
     );
 
-  if (draft.promotion_signal !== "high_value" || preserveHighValue) {
-    return draft;
+  if (tracePolicedDraft.promotion_signal !== "high_value" || preserveHighValue) {
+    return tracePolicedDraft;
   }
 
   const downgradeReason = signals.metaLike
     ? "downgraded from high_value because the task looked meta-like and still needs real-dev reuse evidence"
     : signals.validationLike
       ? "downgraded from high_value because the task looked validation-heavy and still needs real-dev reuse evidence"
-      : draft.promotion_reason;
+      : tracePolicedDraft.promotion_reason;
 
   return {
-    ...draft,
+    ...tracePolicedDraft,
     promotion_signal: "normal",
     promotion_reason: downgradeReason
   };

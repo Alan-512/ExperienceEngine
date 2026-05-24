@@ -30,6 +30,7 @@ export const openDatabase = (config: ExperienceEngineConfig): DatabaseSync => {
 
   const db = new DatabaseSync(dbPath);
   db.exec("PRAGMA busy_timeout = 5000");
+  db.exec("PRAGMA foreign_keys = ON;");
   return db;
 };
 
@@ -178,6 +179,10 @@ export const bootstrapDatabase = (db: DatabaseSync): void => {
   ensureColumn(db, "hybrid_invocation_traces", "worker_profile_version", "TEXT");
   ensureColumn(db, "hybrid_invocation_traces", "fallback_reason", "TEXT");
   ensureColumn(db, "hygiene_governance_schedules", "last_failure_class", "TEXT");
+  ensureColumn(db, "experience_input_records", "trace_capsule_id", "TEXT");
+  ensureColumn(db, "experience_input_records", "trace_completeness", "REAL");
+  ensureColumn(db, "task_runs", "trace_capsule_id", "TEXT");
+  ensureColumn(db, "task_runs", "trace_completeness", "REAL");
   ensureIndex(db, "idx_hygiene_governance_runs_scope", "hygiene_governance_runs", "scope_id");
   ensureIndex(db, "idx_hygiene_governance_plans_scope", "hygiene_governance_plans", "scope_id");
   ensureIndex(db, "idx_hygiene_governance_actions_scope", "hygiene_governance_actions", "scope_id");

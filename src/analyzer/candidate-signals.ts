@@ -30,10 +30,21 @@ export type CandidateSignalSummary = {
   criticality: boolean;
   improvement_room: boolean;
   recoverable_path: boolean;
+  trace_capsule_id?: string;
+  trace_completeness?: number;
+  trace_is_unstable?: boolean;
+  trace_windows?: {
+    correction_events_count: number;
+    verification_events_count: number;
+    file_change_events_count: number;
+    adoption_events_count: number;
+  };
 };
 
 const isCorrectionEvent = (event: ToolEvent): boolean =>
-  CORRECTION_TOOL_PATTERN.test(event.tool_name) || CORRECTION_OUTPUT_PATTERN.test(event.output_summary ?? "");
+  event.tool_name === "correction" ||
+  CORRECTION_TOOL_PATTERN.test(event.tool_name) ||
+  CORRECTION_OUTPUT_PATTERN.test(event.output_summary ?? "");
 
 const toEventDigest = (event: ToolEvent): string => {
   const detail = normalizeWhitespace(event.error_signature ?? event.output_summary ?? "");
@@ -271,6 +282,21 @@ export const buildCandidateSignals = (input: ExperienceInput): CandidateSignalSu
   const improvementRoom = input.outcome_signal === "failure" || retryCount > 0;
   const recoverablePath = input.outcome_signal === "success" || correctionSignals.length > 0;
 
+  const traceWindows = input.trace_capsule_id
+    ? {
+        correction_events_count: correctionEvents.length,
+        verification_events_count: input.tool_events.filter((e) => OBJECTIVE_VERIFICATION_PATTERN.test(e.tool_name)).length,
+        file_change_events_count: input.tool_events.filter(
+          (e) =>
+            e.tool_name.includes("file") ||
+            e.tool_name.includes("write") ||
+            e.tool_name.includes("patch") ||
+            e.tool_name.includes("editor")
+        ).length,
+        adoption_events_count: input.outcome_signal === "success" ? input.injected_node_ids.length : 0
+      }
+    : undefined;
+
   return {
     failure_signature: failureSignature,
     retry_count: retryCount,
@@ -280,6 +306,10 @@ export const buildCandidateSignals = (input: ExperienceInput): CandidateSignalSu
     tool_event_summary: toolEventSummary,
     criticality,
     improvement_room: improvementRoom,
-    recoverable_path: recoverablePath
+    recoverable_path: recoverablePath,
+    trace_capsule_id: input.trace_capsule_id,
+    trace_completeness: input.trace_completeness,
+    trace_is_unstable: input.trace_is_unstable,
+    trace_windows: traceWindows
   };
 };

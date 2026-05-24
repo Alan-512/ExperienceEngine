@@ -896,12 +896,44 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     }
   }
 
-  private deriveAttributionVerdict(input: ExperienceInput, node: ExperienceNode, delivered: boolean): {
+  private deriveAttributionVerdict(
+    input: ExperienceInput,
+    node: ExperienceNode,
+    delivered: boolean,
+    matchResult?: any
+  ): {
     verdict: AttributionVerdict;
     confidence: AttributionRecord["confidence"];
   } {
     if (!delivered) {
       return { verdict: "unknown", confidence: "low" };
+    }
+
+    if (input.trace_capsule_id) {
+      const isLowCompleteness = typeof input.trace_completeness === "number" && input.trace_completeness < 0.6;
+      const isUnstable = input.trace_is_unstable === true;
+
+      if ((isLowCompleteness || isUnstable) && (!matchResult || matchResult.verdict === "trajectory_unknown")) {
+        return { verdict: "unknown", confidence: "low" };
+      }
+
+      if (matchResult) {
+        if (matchResult.verdict === "guidance_prevented_failure") {
+          return { verdict: "strong_helped", confidence: "high" };
+        }
+        if (matchResult.verdict === "guidance_caused_failure") {
+          return { verdict: "strong_harmed", confidence: "high" };
+        }
+        if (matchResult.verdict === "adoption_detected") {
+          return { verdict: "weak_helped", confidence: "medium" };
+        }
+        if (matchResult.verdict === "contra_adoption_detected") {
+          return { verdict: "weak_harmed", confidence: "medium" };
+        }
+        if (matchResult.verdict === "non_adoption_detected") {
+          return { verdict: "neutral", confidence: "low" };
+        }
+      }
     }
 
     if (input.outcome_signal === "success") {
@@ -933,6 +965,9 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   }): void {
     const event = input.resolvedInjectionEvent;
     const evidenceRefs = [input.inputRecordId, input.taskRunId, event.injection_id];
+    if (input.experienceInput.trace_capsule_id) {
+      evidenceRefs.push(input.experienceInput.trace_capsule_id);
+    }
     const selectedNodeIds = new Set(event.injected_node_ids);
 
     for (const nodeId of selectedNodeIds) {
@@ -955,7 +990,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
         input.experienceInput.outcome_signal
       );
 
-      const attribution = this.deriveAttributionVerdict(input.experienceInput, node, event.delivered);
+      const attribution = this.deriveAttributionVerdict(input.experienceInput, node, event.delivered, matchResult);
       this.attributionRecordRepo.insert({
         id: stableId("attr", `${event.injection_id}:${nodeId}:automatic`),
         injection_id: event.injection_id,

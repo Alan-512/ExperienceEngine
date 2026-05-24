@@ -95,7 +95,7 @@ export const runCliCommand = async (command: string | undefined, args: string[])
     }
     case "doctor": {
       const { runDoctorCommand } = await import("./commands/doctor.js");
-      await runDoctorCommand(args[0]);
+      await runDoctorCommand(args[0], undefined, args.slice(1));
       break;
     }
     case "evaluate": {

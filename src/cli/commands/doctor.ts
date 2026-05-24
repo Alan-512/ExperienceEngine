@@ -470,7 +470,40 @@ const isClaudeInteractionReady = (status: {
     && status.hooksPresent.sessionEnd
   );
 
-export const runDoctorCommand = async (target?: string, deps: DoctorDeps = {}): Promise<void> => {
+export const runDoctorCommand = async (
+  target?: string,
+  deps: DoctorDeps = {},
+  extraArgs?: string[]
+): Promise<void> => {
+  if (extraArgs && (extraArgs.includes("--trace-capabilities") || extraArgs.includes("-t"))) {
+    if (!target || !["openclaw", "claude-code", "codex", "antigravity"].includes(target)) {
+      console.log("Error: Please specify a valid target host: openclaw | claude-code | codex | antigravity");
+      return;
+    }
+    const config = loadConfig();
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    try {
+      const { getHostTraceCapabilityProfile } = await import("../../adapters/trace-capabilities.js");
+      const profile = getHostTraceCapabilityProfile(target as any, db);
+      console.log("=".repeat(50));
+      console.log(`Host Trace Capability Profile: ${profile.host}`);
+      console.log("=".repeat(50));
+      console.log(`- Profile Version: ${profile.profile_version}`);
+      console.log(`- Adapter Version: ${profile.adapter_version}`);
+      console.log(`- Transcript Stability: ${profile.transcript_stability}`);
+      console.log(`- Tool Coverage: ${profile.tool_coverage.join(", ") || "none"}`);
+      console.log(`- Observed At: ${profile.observed_at}`);
+      console.log("\nCapabilities:");
+      for (const [name, cap] of Object.entries(profile.capabilities)) {
+        console.log(`- ${name}: ${cap.state} [provenance: ${cap.provenance}, updated: ${cap.updated_at}]`);
+      }
+    } finally {
+      db.close();
+    }
+    return;
+  }
+
   const resolveRemoteStatus = deps.fetchLatestGitHubReleaseStatus ?? fetchLatestGitHubReleaseStatus;
   const registryHealth = (deps.readRegistryHealth ?? readRegistryHealth)();
   const firstValueReadiness = (deps.inspectFirstValueReadiness ?? inspectFirstValueReadiness)();

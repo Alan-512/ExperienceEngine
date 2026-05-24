@@ -131,6 +131,9 @@ export type ExperienceInput = {
   outcome_signal: OutcomeSignal;
   context_summary?: string;
   injected_node_ids: string[];
+  trace_capsule_id?: string;
+  trace_completeness?: number;
+  trace_is_unstable?: boolean;
 };
 
 export type RetrievalContext = {
@@ -197,6 +200,8 @@ export type ExperienceInputRecord = {
   context_summary?: string;
   evidence: string[];
   injected_node_ids: string[];
+  trace_capsule_id?: string;
+  trace_completeness?: number;
   created_at: string;
 };
 
@@ -216,6 +221,8 @@ export type TaskRun = {
   failure_signature?: string;
   learning_status?: "captured" | "rejected" | "not_applicable";
   learning_reason?: string;
+  trace_capsule_id?: string;
+  trace_completeness?: number;
   created_at: string;
   updated_at: string;
 };
@@ -625,6 +632,15 @@ export type CandidateSourceSignal = {
     corrected_constraint?: string;
   };
   tool_event_summary: string[];
+  trace_capsule_id?: string;
+  trace_completeness?: number;
+  trace_is_unstable?: boolean;
+  trace_windows?: {
+    correction_events_count: number;
+    verification_events_count: number;
+    file_change_events_count: number;
+    adoption_events_count: number;
+  };
 };
 
 export type ExperienceCandidate = ExperienceCandidateDraft & {
@@ -757,5 +773,102 @@ export type NormalizedToolEvent = {
   artifactPath?: string;
   artifactPaths?: string[];
   status: "success" | "failure" | "unknown";
+};
+
+export type TraceTask = {
+  goal: string;
+  user_constraints?: string[];
+  user_non_goals?: string[];
+  acceptance_signals?: string[];
+  injected_expectations?: string[];
+  delivered_node_ids?: string[];
+};
+
+export type TraceEventSource = {
+  host: "openclaw" | "claude-code" | "codex" | "antigravity";
+  source_hook?: string;
+  adapter_version: string;
+  is_unstable?: boolean;
+};
+
+export type TraceEvent = {
+  id: string;
+  event_type:
+    | "prompt"
+    | "tool_call"
+    | "tool_result"
+    | "tool_failure"
+    | "file_change"
+    | "verification"
+    | "correction"
+    | "task_completion"
+    | "stop"
+    | "stop_failure"
+    | "compaction"
+    | "subagent_lifecycle"
+    | "permission_request"
+    | "other";
+  timestamp: string;
+  source: TraceEventSource;
+  payload: Record<string, any>;
+};
+
+export type EvidenceRef = {
+  id: string;
+  ref_type: "file" | "transcript" | "artifact" | "hook_payload" | "other";
+  path_or_uri: string;
+  content_hash?: string;
+  summary?: string;
+  is_redacted?: boolean;
+  size_bytes?: number;
+};
+
+export type TraceOutcome = {
+  outcome_signal: OutcomeSignal | "partial";
+  confidence: "low" | "medium" | "high";
+  failure_signature?: string;
+  summary?: string;
+  verified_by?: string[];
+};
+
+export type TraceCaptureMetadata = {
+  is_complete: boolean;
+  completeness_score: number;
+  metadata_only: boolean;
+  dropped_events_count: number;
+  redaction_applied: boolean;
+  size_bytes: number;
+};
+
+export type HostCapabilityState = {
+  state: "verified" | "documented" | "inferred" | "disabled" | "unavailable";
+  provenance: "verified" | "documented" | "inferred" | "disabled";
+  updated_at: string;
+};
+
+export type HostTraceCapabilityProfile = {
+  host: "openclaw" | "claude-code" | "codex" | "antigravity";
+  profile_version: string;
+  adapter_version: string;
+  capabilities: Record<string, HostCapabilityState>;
+  transcript_stability: "stable" | "unstable" | "none";
+  tool_coverage: string[];
+  observed_at: string;
+};
+
+export type TraceCapsule = {
+  id: string;
+  episode_id?: string;
+  task_run_id?: string;
+  scope_id: string;
+  session_id?: string;
+  task: TraceTask;
+  events: TraceEvent[];
+  evidence_refs: EvidenceRef[];
+  outcome: TraceOutcome;
+  capture_metadata: TraceCaptureMetadata;
+  host_profile: HostTraceCapabilityProfile;
+  created_at: string;
+  updated_at: string;
 };
 

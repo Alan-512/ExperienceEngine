@@ -13,7 +13,7 @@ describe("package manifest", () => {
     };
 
     expect(packageJson.name).toBe("@alan512/experienceengine");
-    expect(packageJson.version).toBe("0.4.0");
+    expect(packageJson.version).toBe("0.4.1");
     expect(packageJson.bin?.ee).toBe("dist/cli/index.js");
   });
 

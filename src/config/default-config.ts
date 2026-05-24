@@ -46,5 +46,10 @@ export const defaultConfig: ExperienceEngineConfig = {
   hybridExplainModelProfileVersion: "hybrid-explain-llm-v1",
   hybridAsyncPostmortemLlmEnabled: false,
   hybridPostmortemProviderMode: "shared_distiller",
-  hybridPostmortemModelProfileVersion: "hybrid-postmortem-llm-v1"
+  hybridPostmortemModelProfileVersion: "hybrid-postmortem-llm-v1",
+  traceCaptureEnabled: false,
+  traceMetadataOnly: true,
+  traceRetentionDays: 30,
+  traceMaxEvents: 100,
+  traceMaxEvidenceRefs: 50
 };

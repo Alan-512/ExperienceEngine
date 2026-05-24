@@ -47,7 +47,12 @@ export const configSchema = z.object({
   hybridExplainModelProfileVersion: z.string().default("hybrid-explain-llm-v1"),
   hybridAsyncPostmortemLlmEnabled: z.boolean().default(false),
   hybridPostmortemProviderMode: z.enum(["shared_distiller"]).default("shared_distiller"),
-  hybridPostmortemModelProfileVersion: z.string().default("hybrid-postmortem-llm-v1")
+  hybridPostmortemModelProfileVersion: z.string().default("hybrid-postmortem-llm-v1"),
+  traceCaptureEnabled: z.boolean().default(false),
+  traceMetadataOnly: z.boolean().default(true),
+  traceRetentionDays: z.number().int().min(1).default(30),
+  traceMaxEvents: z.number().int().min(1).default(100),
+  traceMaxEvidenceRefs: z.number().int().min(1).default(50)
 });
 
 export type ExperienceEngineConfig = z.infer<typeof configSchema>;
@@ -272,6 +277,29 @@ export const pluginConfigJsonSchema = {
     hybridPostmortemModelProfileVersion: {
       type: "string",
       description: "Version label for the provider-backed postmortem_review model profile."
+    },
+    traceCaptureEnabled: {
+      type: "boolean",
+      description: "Enable capturing host execution trace capsules for debugging and advanced attribution."
+    },
+    traceMetadataOnly: {
+      type: "boolean",
+      description: "Capture trace metadata only (no full event or evidence refs payload persistence) to save storage."
+    },
+    traceRetentionDays: {
+      type: "integer",
+      minimum: 1,
+      description: "Number of days to retain trace capsule rows in the local SQLite database."
+    },
+    traceMaxEvents: {
+      type: "integer",
+      minimum: 1,
+      description: "Maximum number of events retained per trace capsule to prevent unbounded log growth."
+    },
+    traceMaxEvidenceRefs: {
+      type: "integer",
+      minimum: 1,
+      description: "Maximum number of evidence refs retained per trace capsule."
     }
   }
 } as const;
@@ -406,5 +434,20 @@ export const pluginUiHints = {
   },
   hybridExplainModelProfileVersion: {
     label: "Hybrid Explain Model Profile Version"
+  },
+  traceCaptureEnabled: {
+    label: "Trace Capture Enabled"
+  },
+  traceMetadataOnly: {
+    label: "Trace Metadata Only"
+  },
+  traceRetentionDays: {
+    label: "Trace Retention Days"
+  },
+  traceMaxEvents: {
+    label: "Trace Max Events"
+  },
+  traceMaxEvidenceRefs: {
+    label: "Trace Max Evidence Refs"
   }
 } as const;
