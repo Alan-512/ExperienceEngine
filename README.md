@@ -150,8 +150,9 @@ Each node moves through that lifecycle using real task outcomes, not just time-b
 - let ExperienceEngine automatically reinforce, cool, quarantine, or retire guidance from real task outcomes
 - let autonomous hygiene governance use the configured LLM to cluster conflicts, merge duplicates, retire stale shadow-only guidance, downgrade risky delivery, and apply guarded high-impact experience-node changes automatically
 - override the last intervention as helpful or harmful when the automatic judgment needs correction
-- inspect active, cooling, quarantined, and retired experience
+- inspect active, cooling, quarantined, retired, and trace capsule execution experience
 - run across `OpenClaw`, `Claude Code`, and `Codex`
+- capture and project host execution trace capsules for rich causal attribution and learning eligibility checks
 
 ### Under The Hood
 
@@ -160,11 +161,11 @@ Each node moves through that lifecycle using real task outcomes, not just time-b
 - deterministic match scorecards with portability bands (`validated_portable`, `cautiously_portable`, `incompatible`) and SemVer mismatch penalties
 - post-task causal trajectory attributions (`adoption_detected`, `non_adoption_detected`, `unverifiable`)
 - quarantine shadow-probe lease cycles with no-harm counters and conservative restoration
-- host-agent driven inspection and feedback, with CLI fallback commands such as `ee inspect --last`, `ee helped`, and `ee harmed`
+- host-agent driven inspection and feedback, with CLI fallback commands such as `ee inspect --last`, `ee inspect --trace <capsule-id>`, `ee helped`, and `ee harmed`
 
 ### Interaction Surface Tiers
 
-- Routine: host-first review, `ee status`, `ee doctor <host>`, `ee inspect --last`, `ee helped`, and `ee harmed`
+- Routine: host-first review, `ee status`, `ee doctor <host>`, `ee inspect --last`, `ee inspect --trace <capsule-id>`, `ee helped`, and `ee harmed`
 - Operator: install, upgrade, repair, operator review, governance approvals, hygiene review, export drafts, and managed backup/export/import/rollback
 - Advanced / experimental: maintenance commands, raw evaluations, broker internals, and developer diagnostics
 

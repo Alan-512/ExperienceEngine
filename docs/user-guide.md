@@ -277,6 +277,16 @@ That output now tells you both:
 - why ExperienceEngine acted that way in plain language instead of only raw gate fields
 - how trustworthy the selected guidance currently is
 
+For deeper operator diagnostics of the host execution trace layer, you can inspect a specific execution trace capsule:
+
+```bash
+ee inspect --trace <capsule-id>
+ee inspect --trace <capsule-id> --projection
+```
+
+- `ee inspect --trace <capsule-id>`: Displays full execution trace capsule information, including normalized events, host capability profile, capture metadata, and evidence references.
+- `ee inspect --trace <capsule-id> --projection`: Projects the host-neutral trace capsule into a standard `ExperienceInput` record, evaluates learning eligibility (e.g. failure repair success, retry patterns), and displays projected tool events and eligibility diagnostics in plain text.
+
 When you inspect a specific node, ExperienceEngine now also shows a lightweight quality judgment layer:
 
 - a `quality band` (`strong`, `building`, or `risky`)
@@ -855,6 +865,8 @@ Useful fallback commands:
 ```bash
 # Routine fallback
 ee inspect --last
+ee inspect --trace <capsule-id>
+ee inspect --trace <capsule-id> --projection
 ee helped
 ee harmed
 
@@ -1147,3 +1159,20 @@ Managed backups and exports do not include:
 - arbitrary third-party plugin state
 
 If those matter to you, back them up separately.
+
+## Trace Capture Boundaries and Limits
+
+ExperienceEngine implements a strict, governed host execution trace capsule layer. To prevent database bloat, performance bottlenecks, and potential privacy leaks, the trace capture pipeline enforces the following boundaries and limits:
+
+### 1. Default Configuration & Privacy
+- **Metadata-Only Mode**: By default, full trace event payload persistence is disabled (`traceMetadataOnly = true`). The system only records lightweight trace metadata (completeness, duration, counts) until explicitly enabled via configuration.
+- **Secrets Redaction**: All raw execution trace event payloads, tool arguments, error messages, and command outputs are run through a robust multi-pass redaction filter. Standard API keys, passwords, bearer tokens, and private credentials are automatically scrubbed and replaced with SHA-256 deterministic markers before database write.
+
+### 2. Physical Limits & TTL Bounds
+- **Event Limits**: A single trace capsule is limited to a maximum of **100 events** (`traceMaxEvents`). If a long-running agent session generates more events, the oldest events are trimmed in a rolling fashion to enforce the boundary.
+- **Evidence References Limits**: Each trace capsule retains at most **50 evidence references** (`traceMaxEvidenceRefs`) (e.g. file paths, task artifacts, and transcript hooks).
+- **Time-to-Live (TTL)**: Traces are cleaned up automatically. Any trace capsule and its nested events/references older than **30 days** (`traceRetentionDays`) are permanently pruned during background maintenance cycles.
+
+### 3. Evaluation and Completeness Gates
+- **Completeness Threshold**: Trace capsules carry a computed completeness score from `0.0` to `1.0`. Low-completeness traces (completeness score `< 0.6`) or traces marked as unstable are restricted from promoting candidates to high-value active status unless they satisfy strict minimum evidence rules.
+

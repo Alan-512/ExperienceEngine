@@ -149,8 +149,9 @@ ExperienceEngine 工作在 context 层，不会修改宿主模型权重。
 - 查看某条 hint 为什么命中，或者为什么这次没有注入
 - 让 ExperienceEngine 根据真实任务结果自动强化、降温、隔离或退役 guidance
 - 当自动判断不准时，手动把最近一次介入标记为 helpful 或 harmful
-- 查看 active、cooling、quarantined、retired 等生命周期状态
+- 查看 active、cooling、quarantined、retired 以及 trace 轨迹胶囊执行经验等生命周期状态
 - 在 `OpenClaw`、`Claude Code`、`Codex` 三个宿主中使用
+- 捕获并投影宿主执行轨迹胶囊（Trace Capsule），用于富因果归因与学习准入校验
 
 ### 底层实现
 
@@ -159,7 +160,7 @@ ExperienceEngine 工作在 context 层，不会修改宿主模型权重。
 - 确定性的 match scorecard 包含移植分级（`validated_portable`、`cautiously_portable`、`incompatible`）与 SemVer 版本偏差惩罚
 - 任务后的因果轨迹归因评分（`adoption_detected`、`non_adoption_detected`、`unverifiable`）
 - 隔离节点的 shadow-probe 租期管理，包含无害通过计数器与保守恢复机制
-- 宿主 agent 内可直接查看和反馈经验，CLI fallback 包括 `ee inspect --last`、`ee helped`、`ee harmed`
+- 宿主 agent 内可直接查看和反馈经验，CLI fallback 包括 `ee inspect --last`、`ee inspect --trace <capsule-id>`、`ee helped`、`ee harmed`
 
 如果你想看 ExperienceNode 结构和治理字段，见：
 
@@ -288,7 +289,7 @@ OpenClaw 还支持这些 readiness / silence 问题：
 
 ExperienceEngine 的交互面分成三层：
 
-- Routine：宿主内 review、`ee status`、`ee doctor <host>`、`ee inspect --last`、`ee helped`、`ee harmed`
+- Routine：宿主内 review、`ee status`、`ee doctor <host>`、`ee inspect --last`、`ee inspect --trace <capsule-id>`、`ee helped`、`ee harmed`
 - Operator：install、upgrade、repair、operator review、hygiene review、export drafts、backup/export/import/rollback
 - Advanced / experimental：maintenance 命令、原始 evaluation、broker 内部动作、开发者诊断
 
