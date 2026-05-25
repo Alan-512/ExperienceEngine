@@ -9,6 +9,9 @@ import type { ExperienceLastInspection, ExperienceNodeDetail } from "../../inter
 import type { ExperienceQualityBandExplanation } from "../../interaction/quality-band.js";
 import type { HygieneFindingType, HygieneSeverity } from "../../maintenance/experience-hygiene.js";
 import type { ExportDraftRisk } from "../../maintenance/experience-export-drafts.js";
+import { TraceRepository } from "../../store/sqlite/repositories/trace-repo.js";
+import { projectTraceCapsule } from "../../input/projector.js";
+import { evaluateLearningEligibility } from "../../analyzer/llm-learning-gate.js";
 
 const NODE_STATES: ExperienceNode["state"][] = ["candidate", "priority_candidate", "active", "cooling", "retired"];
 const NODE_TYPES: ExperienceNode["node_type"][] = ["strategy", "warning"];
@@ -385,6 +388,28 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string,
       console.log(`Episode: ${record.episodeId}`);
     }
     console.log(`Scope: ${record.scopeId}`);
+    if (record.traceCapsuleId) {
+      console.log(`Trace capsule: ${record.traceCapsuleId}`);
+      if (record.traceCompleteness != null) {
+        console.log(`Trace completeness: ${record.traceCompleteness}`);
+      }
+      if (verbose) {
+        const db = openDatabase(loadConfig());
+        bootstrapDatabase(db);
+        const traceRepo = new TraceRepository(db);
+        const capsule = traceRepo.getById(record.traceCapsuleId);
+        if (capsule) {
+          console.log(`- Capture metadata:`);
+          console.log(`  - Is complete: ${capsule.capture_metadata.is_complete ? "yes" : "no"}`);
+          console.log(`  - Dropped events count: ${capsule.capture_metadata.dropped_events_count}`);
+          console.log(`  - Redaction applied: ${capsule.capture_metadata.redaction_applied ? "yes" : "no"}`);
+          console.log(`  - Size: ${capsule.capture_metadata.size_bytes} bytes`);
+          console.log(`  - Host: ${capsule.host_profile.host} (v${capsule.host_profile.adapter_version})`);
+          console.log(`  - Transcript stability: ${capsule.host_profile.transcript_stability}`);
+        }
+        db.close();
+      }
+    }
     console.log(`Task type: ${record.taskType}`);
     console.log(`Intervention: ${record.intervention}`);
     const deliveryStyleMode = record.scorecard?.mode ?? (record.intervention === "skip" ? "skip" : undefined);
@@ -679,6 +704,123 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string,
     }
 
     console.log(`Outcome: ${record.outcome}`);
+    return;
+  }
+
+  if (target === "--trace" || target === "trace") {
+    if (!arg1) {
+      console.log("Usage: ee inspect --trace <capsule-id> [--projection]");
+      return;
+    }
+
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+    const traceRepo = new TraceRepository(db);
+    const capsule = traceRepo.getById(arg1);
+    if (!capsule) {
+      console.log(`Trace capsule ${arg1} not found.`);
+      db.close();
+      return;
+    }
+
+    const isProjection = arg2 === "--projection" || arg2 === "projection" || extraArgs.includes("--projection") || extraArgs.includes("projection");
+
+    if (isProjection) {
+      const projected = projectTraceCapsule(capsule);
+      const eligibility = evaluateLearningEligibility(projected);
+
+      console.log("Trace Projection:");
+      console.log(`- Scope: ${projected.scope_id}`);
+      console.log(`- Task type: ${projected.task_type}`);
+      console.log(`- Task summary: ${projected.task_summary}`);
+      console.log(`- Outcome signal: ${projected.outcome_signal}`);
+      if (projected.trace_completeness != null) {
+        console.log(`- Trace completeness: ${projected.trace_completeness}`);
+      }
+      console.log(`- Trace is unstable: ${projected.trace_is_unstable ? "yes" : "no"}`);
+      if (projected.injected_node_ids.length) {
+        console.log(`- Injected node IDs: ${projected.injected_node_ids.join(", ")}`);
+      }
+
+      console.log("Projected Tool Events:");
+      for (const e of projected.tool_events) {
+        console.log(`- ${e.event_id} ${e.tool_name} status: ${e.status}, exit_code: ${e.exit_code ?? "none"}`);
+        if (e.input_summary) {
+          console.log(`  Input: ${e.input_summary.split("\n")[0]}`);
+        }
+        if (e.output_summary) {
+          console.log(`  Output: ${e.output_summary.split("\n")[0]}`);
+        }
+        if (e.error_signature) {
+          console.log(`  Error: ${e.error_signature}`);
+        }
+      }
+
+      console.log("Learning Eligibility:");
+      console.log(`- Eligible: ${eligibility.eligible ? "yes" : "no"}`);
+      console.log(`- Reason Code: ${eligibility.reasonCode}`);
+      console.log(`- Reason: ${eligibility.reason}`);
+    } else {
+      console.log(`Trace Capsule: ${capsule.id}`);
+      if (capsule.episode_id) console.log(`Episode: ${capsule.episode_id}`);
+      if (capsule.task_run_id) console.log(`Task Run: ${capsule.task_run_id}`);
+      console.log(`Scope: ${capsule.scope_id}`);
+      if (capsule.session_id) console.log(`Session: ${capsule.session_id}`);
+      console.log(`Created: ${capsule.created_at}`);
+      console.log(`Completeness Score: ${capsule.capture_metadata.completeness_score}`);
+      console.log(`Total events: ${capsule.events?.length ?? 0}`);
+
+      const eventCounts: Record<string, number> = {};
+      for (const event of capsule.events || []) {
+        eventCounts[event.event_type] = (eventCounts[event.event_type] || 0) + 1;
+      }
+      if (Object.keys(eventCounts).length) {
+        console.log("Event counts by type:");
+        for (const [type, count] of Object.entries(eventCounts)) {
+          console.log(`  - ${type}: ${count}`);
+        }
+      }
+
+      console.log("Metadata:");
+      console.log(`- Host: ${capsule.host_profile.host}`);
+      console.log(`- Host version: ${capsule.host_profile.adapter_version}`);
+      if (capsule.capture_metadata.dropped_events_count > 0) {
+        console.log(`- Dropped events count: ${capsule.capture_metadata.dropped_events_count}`);
+      }
+      console.log(`- Redaction applied: ${capsule.capture_metadata.redaction_applied ? "yes" : "no"}`);
+      console.log(`- Size: ${capsule.capture_metadata.size_bytes} bytes`);
+
+      console.log("Host Capabilities:");
+      for (const [capName, capState] of Object.entries(capsule.host_profile.capabilities || {})) {
+        console.log(`  - ${capName}: ${capState.state} (provenance: ${capState.provenance})`);
+      }
+      console.log(`Transcript stability: ${capsule.host_profile.transcript_stability}`);
+
+      if (capsule.evidence_refs?.length) {
+        console.log("Evidence Refs:");
+        for (const ref of capsule.evidence_refs) {
+          const size = ref.size_bytes != null ? ` (size: ${ref.size_bytes} bytes)` : "";
+          console.log(`  - ${ref.id} (type: ${ref.ref_type}) - ${ref.path_or_uri}${size} [redacted: ${ref.is_redacted ? "yes" : "no"}]`);
+          if (ref.summary) {
+            console.log(`    Summary: ${ref.summary}`);
+          }
+        }
+      }
+
+      console.log("Task:");
+      console.log(`- Goal: ${capsule.task.goal}`);
+      if (capsule.task.user_constraints?.length) {
+        console.log(`- User Constraints: ${capsule.task.user_constraints.join(", ")}`);
+      }
+      if (capsule.task.acceptance_signals?.length) {
+        console.log(`- Acceptance Signals: ${capsule.task.acceptance_signals.join(", ")}`);
+      }
+      if (capsule.task.injected_expectations?.length) {
+        console.log(`- Injected Expectations: ${capsule.task.injected_expectations.join(", ")}`);
+      }
+    }
+
+    db.close();
     return;
   }
 

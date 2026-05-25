@@ -170,6 +170,8 @@ export type ExperienceLastInspection = {
   timeline: ExperienceTimelineEntry[];
   learningStatus?: TaskRun["learning_status"];
   learningReason?: string;
+  traceCapsuleId?: string;
+  traceCompleteness?: number;
   summary: string;
   createdAt: string;
 };
@@ -1194,6 +1196,8 @@ export class ExperienceInteractionService {
       }),
       learningStatus: taskRun?.learning_status,
       learningReason: taskRun?.learning_reason,
+      traceCapsuleId: record.trace_capsule_id,
+      traceCompleteness: record.trace_completeness,
       summary: record.task_summary,
       createdAt: record.created_at
     };
@@ -1288,6 +1292,8 @@ export class ExperienceInteractionService {
       }),
       learningStatus: taskRun?.learning_status,
       learningReason: taskRun?.learning_reason,
+      traceCapsuleId: taskRun?.trace_capsule_id,
+      traceCompleteness: taskRun?.trace_completeness,
       summary,
       createdAt: event.created_at
     };

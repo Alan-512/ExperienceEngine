@@ -23,6 +23,7 @@ import {
   GovernanceRunRepository,
   GovernanceScheduleRepository
 } from "../../src/store/sqlite/repositories/hygiene-governance-repo.js";
+import { TraceRepository } from "../../src/store/sqlite/repositories/trace-repo.js";
 import { nowIso } from "../../src/utils/clock.js";
 import { ExperienceStateArtifactService } from "../../src/interaction/state-artifact-service.js";
 import type {
@@ -1731,6 +1732,194 @@ describe("inspect command", () => {
         ["Quarantine last release attempt at: 2026-05-20T19:30:35Z"],
         ["Quarantine release reason: passed_shadow_probe"],
         ["Quarantine no harm pass count: 1"]
+      ])
+    );
+  });
+
+  it("prints trace capsule details and projection with eligible diagnostics", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+
+    const traceRepo = new TraceRepository(db);
+    const capsule = {
+      id: "trace_capsule_test",
+      episode_id: "episode_trace_test",
+      task_run_id: "taskrun_trace_test",
+      scope_id: resolveScope("/repo").scope_id,
+      session_id: "session_trace_test",
+      task: {
+        goal: "Fix the trace surface implementation",
+        user_constraints: ["No performance regressions"],
+        user_non_goals: ["Refactoring the whole CLI"],
+        acceptance_signals: ["pnpm test passes"],
+        injected_expectations: ["Run pnpm test before finish"],
+        delivered_node_ids: ["node_inspect"]
+      },
+      events: [
+        {
+          id: "event_call_1",
+          event_type: "tool_call" as const,
+          timestamp: "2026-05-24T21:19:37.000Z",
+          source: {
+            host: "claude-code" as const,
+            adapter_version: "0.4.1"
+          },
+          payload: {
+            tool_call_id: "call_1",
+            tool_name: "run_command",
+            arguments: "pnpm test"
+          }
+        },
+        {
+          id: "event_result_1",
+          event_type: "tool_result" as const,
+          timestamp: "2026-05-24T21:19:38.000Z",
+          source: {
+            host: "claude-code" as const,
+            adapter_version: "0.4.1"
+          },
+          payload: {
+            tool_call_id: "call_1",
+            tool_name: "run_command",
+            status: "failure",
+            exit_code: 1,
+            result: "Tests failed"
+          }
+        },
+        {
+          id: "event_call_2",
+          event_type: "tool_call" as const,
+          timestamp: "2026-05-24T21:19:39.000Z",
+          source: {
+            host: "claude-code" as const,
+            adapter_version: "0.4.1"
+          },
+          payload: {
+            tool_call_id: "call_2",
+            tool_name: "run_command",
+            arguments: "pnpm test"
+          }
+        },
+        {
+          id: "event_result_2",
+          event_type: "tool_result" as const,
+          timestamp: "2026-05-24T21:19:40.000Z",
+          source: {
+            host: "claude-code" as const,
+            adapter_version: "0.4.1"
+          },
+          payload: {
+            tool_call_id: "call_2",
+            tool_name: "run_command",
+            status: "success",
+            exit_code: 0,
+            result: "Tests passed"
+          }
+        }
+      ],
+      evidence_refs: [
+        {
+          id: "ref_1",
+          ref_type: "file" as const,
+          path_or_uri: "src/cli/commands/inspect.ts",
+          size_bytes: 49000,
+          is_redacted: false,
+          summary: "Inspection command logic"
+        }
+      ],
+      outcome: {
+        outcome_signal: "success" as const,
+        confidence: "high" as const,
+        summary: "Trace surface completed successfully"
+      },
+      capture_metadata: {
+        is_complete: true,
+        completeness_score: 1.0,
+        metadata_only: false,
+        dropped_events_count: 0,
+        redaction_applied: false,
+        size_bytes: 1024
+      },
+      host_profile: {
+        host: "claude-code" as const,
+        profile_version: "1.0",
+        adapter_version: "0.4.1",
+        capabilities: {
+          tool_hooks: { state: "verified" as const, provenance: "verified" as const, updated_at: "2026-05-24T21:19:37.000Z" }
+        },
+        transcript_stability: "stable" as const,
+        tool_coverage: ["run_command"],
+        observed_at: "2026-05-24T21:19:37.000Z"
+      },
+      created_at: "2026-05-24T21:19:37.000Z",
+      updated_at: "2026-05-24T21:19:37.000Z"
+    };
+
+    traceRepo.upsert(capsule);
+
+    // Test 1: ee inspect --trace trace_capsule_test
+    runInspectCommand("--trace", "trace_capsule_test");
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Trace Capsule: trace_capsule_test"],
+        ["Episode: episode_trace_test"],
+        ["Task Run: taskrun_trace_test"],
+        [`Scope: ${resolveScope("/repo").scope_id}`],
+        ["Session: session_trace_test"],
+        ["Created: 2026-05-24T21:19:37.000Z"],
+        ["Completeness Score: 1"],
+        ["Total events: 4"],
+        ["Event counts by type:"],
+        ["  - tool_call: 2"],
+        ["  - tool_result: 2"],
+        ["Metadata:"],
+        ["- Host: claude-code"],
+        ["- Host version: 0.4.1"],
+        ["- Redaction applied: no"],
+        ["- Size: 1024 bytes"],
+        ["Host Capabilities:"],
+        ["  - tool_hooks: verified (provenance: verified)"],
+        ["Transcript stability: stable"],
+        ["Evidence Refs:"],
+        ["  - ref_1 (type: file) - src/cli/commands/inspect.ts (size: 49000 bytes) [redacted: no]"],
+        ["    Summary: Inspection command logic"],
+        ["Task:"],
+        ["- Goal: Fix the trace surface implementation"],
+        ["- User Constraints: No performance regressions"],
+        ["- Acceptance Signals: pnpm test passes"],
+        ["- Injected Expectations: Run pnpm test before finish"]
+      ])
+    );
+
+    consoleLogSpy.mockClear();
+
+    // Test 2: ee inspect --trace trace_capsule_test --projection
+    runInspectCommand("--trace", "trace_capsule_test", "--projection");
+
+    expect(consoleLogSpy.mock.calls).toEqual(
+      expect.arrayContaining([
+        ["Trace Projection:"],
+        [`- Scope: ${resolveScope("/repo").scope_id}`],
+        ["- Task type: bug_fix"],
+        ["- Task summary: Fix the trace surface implementation"],
+        ["- Outcome signal: success"],
+        ["- Trace completeness: 1"],
+        ["- Trace is unstable: no"],
+        ["- Injected node IDs: node_inspect"],
+        ["Projected Tool Events:"],
+        ["- call_1 run_command status: failure, exit_code: 1"],
+        ["  Input: pnpm test"],
+        ["  Output: Tests failed"],
+        ["- call_2 run_command status: success, exit_code: 0"],
+        ["  Input: pnpm test"],
+        ["  Output: Tests passed"],
+        ["Learning Eligibility:"],
+        ["- Eligible: yes"],
+        ["- Reason Code: failure_repair_success"],
+        ["- Reason: failure_repair_success: a concrete failure was followed by successful repair evidence"]
       ])
     );
   });
