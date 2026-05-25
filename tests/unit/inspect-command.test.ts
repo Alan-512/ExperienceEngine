@@ -1764,7 +1764,7 @@ describe("inspect command", () => {
           timestamp: "2026-05-24T21:19:37.000Z",
           source: {
             host: "claude-code" as const,
-            adapter_version: "0.4.1"
+            adapter_version: "0.4.2"
           },
           payload: {
             tool_call_id: "call_1",
@@ -1778,7 +1778,7 @@ describe("inspect command", () => {
           timestamp: "2026-05-24T21:19:38.000Z",
           source: {
             host: "claude-code" as const,
-            adapter_version: "0.4.1"
+            adapter_version: "0.4.2"
           },
           payload: {
             tool_call_id: "call_1",
@@ -1794,7 +1794,7 @@ describe("inspect command", () => {
           timestamp: "2026-05-24T21:19:39.000Z",
           source: {
             host: "claude-code" as const,
-            adapter_version: "0.4.1"
+            adapter_version: "0.4.2"
           },
           payload: {
             tool_call_id: "call_2",
@@ -1808,7 +1808,7 @@ describe("inspect command", () => {
           timestamp: "2026-05-24T21:19:40.000Z",
           source: {
             host: "claude-code" as const,
-            adapter_version: "0.4.1"
+            adapter_version: "0.4.2"
           },
           payload: {
             tool_call_id: "call_2",
@@ -1845,7 +1845,7 @@ describe("inspect command", () => {
       host_profile: {
         host: "claude-code" as const,
         profile_version: "1.0",
-        adapter_version: "0.4.1",
+        adapter_version: "0.4.2",
         capabilities: {
           tool_hooks: { state: "verified" as const, provenance: "verified" as const, updated_at: "2026-05-24T21:19:37.000Z" }
         },
@@ -1877,7 +1877,7 @@ describe("inspect command", () => {
         ["  - tool_result: 2"],
         ["Metadata:"],
         ["- Host: claude-code"],
-        ["- Host version: 0.4.1"],
+        ["- Host version: 0.4.2"],
         ["- Redaction applied: no"],
         ["- Size: 1024 bytes"],
         ["Host Capabilities:"],

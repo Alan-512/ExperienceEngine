@@ -66,7 +66,7 @@ export const getHostTraceCapabilityProfile = (
   db?: DatabaseSync
 ): HostTraceCapabilityProfile => {
   const profile_version = "1.0.0";
-  const adapter_version = "0.4.1";
+  const adapter_version = "0.4.2";
   const defaults = DEFAULT_CAPABILITIES[host] || {};
   
   const capabilities: Record<string, HostCapabilityState> = {};

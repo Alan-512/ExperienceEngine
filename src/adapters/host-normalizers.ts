@@ -113,7 +113,7 @@ export const normalizeClaudeEvent = (raw: any): TraceEvent => {
   const source: TraceEventSource = {
     host: "claude-code",
     source_hook: raw.eventName || "unknown",
-    adapter_version: "0.4.1",
+    adapter_version: "0.4.2",
     is_unstable: false
   };
 
@@ -192,7 +192,7 @@ export const normalizeCodexEvent = (raw: any): TraceEvent => {
   const source: TraceEventSource = {
     host: "codex",
     source_hook: raw.type || "unknown",
-    adapter_version: "0.4.1",
+    adapter_version: "0.4.2",
     is_unstable: false
   };
 
@@ -283,7 +283,7 @@ export const normalizeAntigravityEvent = (raw: any): TraceEvent => {
   const source: TraceEventSource = {
     host: "antigravity",
     source_hook: raw.name || "unknown",
-    adapter_version: "0.4.1",
+    adapter_version: "0.4.2",
     is_unstable: false
   };
 
@@ -374,7 +374,7 @@ export const normalizeOpenClawEvent = (raw: any): TraceEvent => {
   const source: TraceEventSource = {
     host: "openclaw",
     source_hook: raw.event || "unknown",
-    adapter_version: "0.4.1",
+    adapter_version: "0.4.2",
     is_unstable: false
   };
 
