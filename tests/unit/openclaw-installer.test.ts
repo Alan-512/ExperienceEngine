@@ -407,11 +407,13 @@ Recorded version: 0.2.0`;
     expect(entries).toContain("package/dist/store/sqlite/db.js");
     expect(entries).toContain("package/dist/store/sqlite/schema.sql");
     expect(entries).toContain("package/dist/plugin/openclaw-install-state.js");
+    expect(entries).toContain("package/dist/hybrid/capsule-builder.js");
+    expect(entries).toContain("package/dist/hybrid/worker-client.js");
+    expect(entries).toContain("package/dist/hybrid/postmortem-provider-client.js");
 
     expect(entries).not.toContain("package/dist/cli/index.js");
     expect(entries).not.toContain("package/dist/analyzer/llm-learning-gate.js");
     expect(entries).not.toContain("package/dist/distillation/queue-worker.js");
-    expect(entries).not.toContain("package/dist/hybrid/worker-client.js");
     expect(entries).not.toContain("package/dist/install/openclaw-installer.js");
     expect(entries).not.toContain("package/dist/install/openclaw-cli.js");
     expect(entries).not.toContain("package/dist/store/vector/api-embedding-provider.js");

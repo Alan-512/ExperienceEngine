@@ -102,7 +102,7 @@ class OpenClawExperiencePlugin implements ExperiencePlugin {
       const context = normalizePromptPayload(source);
       clearSessionFinalizeState(context.sessionId);
       const routineInteraction = await loadOpenClawRoutineInteractionModule().catch(() => null);
-      const routineIntent = routineInteraction?.detectOpenClawRoutineIntent(context.userMessage);
+      const routineIntent = routineInteraction?.detectOpenClawRoutineIntent?.(context.userMessage);
       if (routineIntent && routineInteraction) {
         this.runtime.captureWriter.capture("openclaw_routine_interaction", extractSessionKey(source), {
           intent: routineIntent,
@@ -154,7 +154,7 @@ class OpenClawExperiencePlugin implements ExperiencePlugin {
       this.runtime.captureWriter.capture("finalize", extractSessionKey(source), { payload, context: hookContext });
       const context = normalizePromptPayload(source);
       const routineInteraction = await loadOpenClawRoutineInteractionModule().catch(() => null);
-      if (routineInteraction?.detectOpenClawRoutineIntent(context.userMessage)) {
+      if (routineInteraction?.detectOpenClawRoutineIntent?.(context.userMessage)) {
         return payload;
       }
       if (!context.userMessage && !context.taskSummary) {

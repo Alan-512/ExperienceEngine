@@ -266,9 +266,6 @@ const OPENCLAW_DYNAMIC_IMPORT_PATTERN = /\bimport\(\s*["'](\.[^"']+)["']\s*\)/g;
 const OPENCLAW_EXCLUDED_RUNTIME_PATHS = new Set([
   "analyzer/llm-learning-gate.js",
   "distillation/queue-worker.js",
-  "hybrid/worker-client.js",
-  "hybrid/capsule-builder.js",
-  "hybrid/postmortem-provider-client.js",
   "install/openclaw-installer.js",
   "install/openclaw-cli.js",
   "store/vector/api-embedding-provider.js",
