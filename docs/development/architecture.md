@@ -12,11 +12,12 @@
 
 | 字段 | 当前值 |
 | --- | --- |
-| 最近同步日期 | 2026-05-24 |
-| 最近同步范围 | 已提交架构到 `2c4f0b7 Add host trace capsule OpenSpec` |
+| 最近同步日期 | 2026-05-25 |
+| 最近同步范围 | `v0.4.2` 发布后架构：host trace capsule、trace 持久化边界、OpenClaw runtime closure 修复、Antigravity 用户级 wiring、npm/GitHub/ClawHub 发布状态 |
 | 当前宿主基线 | OpenClaw、Claude Code、Codex、Antigravity |
+| 发布基线 | `v0.4.2` 已发布到 npm、GitHub Release 和 ClawHub；ClawHub package latest 指向 `0.4.2`，后台 scan 可能仍异步显示 `pending` |
 | Antigravity 状态 | 已记录用户级全局插件/MCP wiring、Agent Desktop、`agy` CLI、IDE hooks 观测、项目级 fallback 与 `ee agy exec -C <project>` 包装器 |
-| TraceCapsule 状态 | 已有 OpenSpec 设计与任务清单；当前文件暂不把未完成实现描述为现有架构 |
+| TraceCapsule 状态 | 已落地为 runtime trace 输入模型和诊断快照模型；normal mode 只持久化 `trace_provenance_json` / `trace_completeness` 摘要，不写 full trace capsule/events；诊断快照需显式开启并命中 host/scope allowlist |
 | 更新原则 | 记录当前真实架构；进行中的实现只在代码落地并验证后同步到正文架构图 |
 
 维护提示：
@@ -51,6 +52,7 @@ task signals -> distilled experience -> retrieval -> short intervention -> feedb
 ```text
 Host task
   -> Host adapter
+  -> Host trace/provenance normalization
   -> Runtime input
   -> Task signal / Tool event
   -> Experience input record
@@ -60,6 +62,14 @@ Host task
   -> Attribution / Review
   -> Node lifecycle update
 ```
+
+`v0.4.2` 之后的 trace 边界是：
+
+```text
+Read wide. Distill carefully. Persist narrow.
+```
+
+也就是说，EE 会尽量读取各宿主可提供的 trace / tool / outcome 证据，用于归因和经验提炼；但普通学习路径不会把完整 trace 作为长期事实表持久化。长期存储的默认结果是提炼后的 experience、治理状态、任务摘要和最小 trace provenance。完整 trace capsule / event 只属于显式开启的诊断快照路径。
 
 ---
 
@@ -139,12 +149,14 @@ flowchart TD
   User[User / Coding Task] --> Host[Host Agent<br/>OpenClaw / Claude Code / Codex / Antigravity]
 
   Host --> Adapter[Host Adapter Layer]
+  Adapter --> Trace[Trace Normalization<br/>capability profile / provenance]
   Adapter --> RuntimePrompt[Prompt Runtime<br/>beforePromptBuild / lookup hints]
   Adapter --> RuntimeTask[Task Runtime<br/>tool result / finalize task]
   Adapter --> Interaction[Interaction Surface<br/>inspect / feedback / status]
 
   RuntimePrompt --> InputAdapter[Input Adapter<br/>buildExperienceInput]
   RuntimeTask --> InputAdapter
+  Trace --> RuntimeTask
 
   InputAdapter --> ExperienceInput[ExperienceInput]
   ExperienceInput --> RetrievalContext[RetrievalContext]
@@ -158,6 +170,8 @@ flowchart TD
   RuntimeTask --> InputRecord[ExperienceInputRecord]
   RuntimeTask --> TaskRun[TaskRun]
   RuntimeTask --> Outcome[OutcomeRecord]
+  RuntimeTask --> TraceSummary[Trace Provenance Summary]
+  RuntimeTask -. diagnostic only .-> TraceCapsule[Trace Capsule / Events]
 
   InputRecord --> LearningGate[Learning Gate / Analyzer]
   LearningGate --> Candidate[ExperienceCandidate]
@@ -182,6 +196,8 @@ flowchart TD
   InputRecord --> SQLite
   TaskRun --> SQLite
   Outcome --> SQLite
+  TraceSummary --> SQLite
+  TraceCapsule -. opt-in diagnostic snapshot .-> SQLite
   Candidate --> SQLite
   DistillationJob --> SQLite
   Node --> SQLite
@@ -230,6 +246,23 @@ Antigravity
 | Codex | 已支持 Codex-native hooks + 共享 MCP server + `ee codex exec` fallback | `src/cli/commands/codex-hook.ts`, `src/adapters/codex/*` |
 | Antigravity | 已支持用户级插件/MCP wiring、Agent Desktop、`agy` CLI、IDE hooks 观测、项目级 fallback | `src/cli/commands/antigravity-hook.ts`, `src/install/antigravity*.ts`, `src/adapters/antigravity/*` |
 
+当前发布/分发状态：
+
+| 渠道 | 当前状态 |
+| --- | --- |
+| npm | `@alan512/experienceengine@0.4.2` 已发布，`latest=0.4.2` |
+| GitHub | `v0.4.2` tag 和 GitHub Release 已发布 |
+| ClawHub | `@alan512/experienceengine@0.4.2` code-plugin package 已发布，latest 指向 `0.4.2`，source ref 为 `v0.4.2` |
+
+当前 trace capability 基线：
+
+| 宿主 | trace 使用边界 |
+| --- | --- |
+| OpenClaw | 支持 tool / lifecycle 事件归一化；normal mode 写 provenance 摘要；诊断 allowlist 可写 `trace_capsules` / `trace_events` |
+| Claude Code | 支持 hook/session 事件投影；normal mode 写 provenance 摘要，不依赖完整 transcript 持久化 |
+| Codex | 支持 wrapper / hook / MCP 生命周期事件；normal mode 写 provenance 摘要，不写 full trace snapshot |
+| Antigravity | 支持 Agent Desktop、`agy` CLI、IDE hooks 和 artifact-assisted analyzer；normal mode 写 provenance 摘要，诊断模式可保留快照 |
+
 Antigravity 的当前路径不是单一项目级配置。默认安装走用户级 global wiring：
 
 ```text
@@ -268,6 +301,17 @@ CodexFinalizeArgs
 Antigravity hook payload
 Shared MCP behavior-loop args
 ```
+
+trace 相关的 adapter 输出包括：
+
+```text
+TraceEvent[]
+HostTraceCapabilityProfile
+TraceProvenanceSummary
+optional diagnostic TraceCapsule
+```
+
+这些对象的持久化边界由 runtime 决定。adapter 负责尽量归一化宿主证据，runtime 负责决定 normal mode 只保留摘要，还是在诊断开关和 allowlist 命中时写入完整快照。
 
 ### 4.4 Codex MCP 暴露的核心工具
 
@@ -427,6 +471,10 @@ waitForBackgroundLearning()
 16. 写入 ReviewEvent
 17. 更新 ExperienceNode
 18. 维护 RuntimeCaptureWriter
+19. 维护 runtime trace event buffer
+20. 构造 trace capability profile 与 trace provenance summary
+21. 在 normal mode 下只把 trace 摘要写入 task/input records
+22. 在诊断快照模式下写入 bounded TraceCapsule / TraceEvent / EvidenceRef
 ```
 
 ### 5.4 Runtime session state
@@ -440,7 +488,27 @@ toolEvents: ToolEvent[]
 toolEventKeys: Set<string>
 injectedNodeIds: string[]
 lastInjectionEvent?: InjectionEvent
+traceEvents?: TraceEvent[]
 ```
+
+### 5.5 Host trace boundary
+
+`ExperienceRuntimeService` 现在同时处理 runtime trace capture 和 trace persistence boundary。
+
+核心规则：
+
+```text
+traceCaptureEnabled=true
+  -> 允许运行时读取并归一化宿主 trace 证据
+  -> 用于 attribution / distillation / learning gate
+  -> normal mode 只持久化 trace_provenance_json、trace_completeness、trace_is_unstable 等摘要
+
+tracePersistDiagnosticSnapshots=true + host/scope allowlist 命中
+  -> 额外写入 trace_capsules、trace_events、trace_evidence_refs
+  -> 受 traceRetentionDays、traceMaxEvents、traceMaxEvidenceRefs 限制
+```
+
+这条边界确保 EE 不是 raw agent trace recorder。完整 trace 是诊断资产；经验库的主数据仍然是 distilled experience 和治理元数据。
 
 ---
 
@@ -522,6 +590,9 @@ correction_signals
 directional_correction
 evidence_driven_reversal
 tool_event_summary
+trace_capsule_id?
+trace_completeness?
+trace_provenance?
 ```
 
 相关生成逻辑：
@@ -1151,7 +1222,29 @@ injection_events
 attribution_records
 repo_policies
 scope_task_stats
+scope_fingerprints
+trace_capsules
+trace_events
+trace_evidence_refs
+host_capability_probes
+hygiene_governance_schedules
+hygiene_governance_runs
+hygiene_governance_plans
+hygiene_governance_actions
+hygiene_governance_approvals
+hygiene_governance_snapshots
 ```
+
+trace 表存在于 schema 中，但它们不是 normal learning 的必写表：
+
+```text
+experience_input_records.trace_provenance_json
+task_runs.trace_provenance_json
+experience_input_records.trace_completeness
+task_runs.trace_completeness
+```
+
+是 normal mode 的长期 provenance 摘要；`trace_capsules`、`trace_events`、`trace_evidence_refs` 只在诊断快照模式或 legacy 数据读取时使用。
 
 ### 12.2 表关系图
 
@@ -1166,18 +1259,24 @@ erDiagram
   SCOPES ||--o{ SCOPE_TASK_STATS : has
   SCOPES ||--o{ HYBRID_REVIEW_ARTIFACTS : has
   SCOPES ||--o{ HYBRID_INVOCATION_TRACES : has
+  SCOPES ||--o{ TRACE_CAPSULES : diagnostic_trace_for
+  SCOPES ||--o{ HYGIENE_GOVERNANCE_RUNS : governs
 
   EXPERIENCE_INPUT_RECORDS ||--o{ EXPERIENCE_CANDIDATES : source_for
+  EXPERIENCE_INPUT_RECORDS ||--o| TRACE_CAPSULES : optional_diagnostic_link
   EXPERIENCE_CANDIDATES ||--o{ DISTILLATION_JOBS : has
 
   TASK_RUNS ||--o{ OUTCOME_RECORDS : has
   TASK_RUNS ||--o{ REVIEW_EVENTS : has
   TASK_RUNS ||--o{ HYBRID_REVIEW_ARTIFACTS : has
+  TASK_RUNS ||--o| TRACE_CAPSULES : optional_diagnostic_link
 
   EXPERIENCE_NODES ||--o{ REVIEW_EVENTS : reviewed_by
   EXPERIENCE_NODES ||--o{ ATTRIBUTION_RECORDS : attributed_by
 
   INJECTION_EVENTS ||--o{ ATTRIBUTION_RECORDS : resolved_by
+  TRACE_CAPSULES ||--o{ TRACE_EVENTS : contains
+  TRACE_CAPSULES ||--o{ TRACE_EVIDENCE_REFS : references
 ```
 
 ---
@@ -1214,6 +1313,7 @@ inspectRepoSummary
 inspectReview
 inspectHygiene
 inspectExportDrafts
+inspectTrace
 explainLastDecision
 feedbackLast
 feedbackNode
@@ -1267,6 +1367,18 @@ enable
 cool
 retire
 ```
+
+trace inspection 的当前边界：
+
+```text
+ee inspect --last --verbose
+  -> 展示 trace summary / completeness / provenance / full snapshot 是否保留
+
+ee inspect --trace <capsule-id>
+  -> 仅在 diagnostic snapshot 或 legacy trace capsule 存在时可用
+```
+
+因此 operator 默认看到的是 distilled/summary 视图；完整 trace 只作为显式诊断入口暴露。
 
 ---
 
@@ -1371,6 +1483,7 @@ sequenceDiagram
   participant Host
   participant Adapter
   participant Runtime as ExperienceRuntimeService
+  participant Trace as Trace Capsule Boundary
   participant Store as SQLite
   participant Gate as LlmLearningGate
   participant Worker as DistillationQueueWorker
@@ -1378,10 +1491,17 @@ sequenceDiagram
   Host->>Adapter: finalize_task(sessionId, prompt, contextSummary)
   Adapter->>Runtime: finalizeTask
   Runtime->>Runtime: buildFinalizedInput
+  Runtime->>Trace: build trace profile / provenance
+  Trace-->>Runtime: traced ExperienceInput / TaskRun / InputRecord
   Runtime->>Store: upsert scope
   Runtime->>Store: upsert ExperienceInputRecord
   Runtime->>Store: upsert TaskRun
   Runtime->>Store: upsert OutcomeRecord
+  alt diagnostic snapshot enabled and allowlisted
+    Runtime->>Store: upsert TraceCapsule / TraceEvents / EvidenceRefs
+  else normal mode
+    Runtime->>Store: persist trace summary only
+  end
   Runtime->>Store: update ScopeTaskStats
   Runtime->>Gate: analyze finalized task
   Gate-->>Runtime: LearningGateResult
@@ -1462,17 +1582,19 @@ flowchart TD
 7. src/cli/commands/antigravity-hook.ts
 8. src/install/antigravity.ts
 9. src/install/antigravity-global-wiring.ts
-10. src/runtime/prompt-service.ts
-11. src/runtime/service.ts
-12. src/input/input-adapter.ts
-13. src/analyzer/candidate-signals.ts
-14. src/analyzer/llm-learning-gate.ts
-15. src/controller/candidate-retriever.ts
-16. src/controller/intervention-controller.ts
-17. src/experience-management/node-lifecycle-governance.ts
-18. src/feedback/state-transition.ts
-19. src/interaction/service.ts
-20. src/cli/dispatch.ts
+10. src/adapters/trace-capabilities.ts
+11. src/runtime/prompt-service.ts
+12. src/runtime/service.ts
+13. src/store/sqlite/repositories/trace-repo.ts
+14. src/input/input-adapter.ts
+15. src/analyzer/candidate-signals.ts
+16. src/analyzer/llm-learning-gate.ts
+17. src/controller/candidate-retriever.ts
+18. src/controller/intervention-controller.ts
+19. src/experience-management/node-lifecycle-governance.ts
+20. src/feedback/state-transition.ts
+21. src/interaction/service.ts
+22. src/cli/dispatch.ts
 ```
 
 ---
@@ -1548,6 +1670,7 @@ flowchart LR
 
 ```text
 Host agent 产生任务与工具信号；
+Adapter 和 Runtime 会尽量读取宿主 trace 证据，并在 normal mode 下只保留 provenance 摘要；
 Runtime 将信号变成 ExperienceInput 和任务记录；
 Learning pipeline 将部分任务记录变成 candidate 和 node；
 Retrieval / Intervention 在后续任务中查找并注入 node；

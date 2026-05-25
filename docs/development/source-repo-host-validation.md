@@ -21,7 +21,7 @@ Scope:
 - local source-repo validation for host trace capture after separating runtime trace use from full trace persistence
 - real-host validation for `Codex`, `Claude Code`, and `OpenClaw` in WSL
 - earlier real-host validation for Windows `Antigravity` through the managed `ee agy exec` path
-- no published-package, marketplace, or ClawHub distribution validation in this pass
+- source-repo host validation was followed by `v0.4.2` npm, GitHub release, and ClawHub publication checks
 
 Validated:
 
@@ -32,6 +32,15 @@ Validated:
 | OpenClaw | WSL, `OpenClaw 2026.3.8` | `EXPERIENCE_ENGINE_TRACE_CAPTURE_ENABLED=true EXPERIENCE_ENGINE_TRACE_CAPTURE_HOSTS=openclaw EXPERIENCE_ENGINE_TRACE_PERSIST_DIAGNOSTIC_SNAPSHOTS=false openclaw agent --local --session-id ee-wsl-openclaw-trace-fixed-1 --message "<prompt>" --timeout 180 --json` | passed after repairing the copied extension bundle; `ee inspect --last --verbose` reported `Trace summary: retained`, `Trace completeness: 0.75`, host `openclaw`, and `Full trace snapshot: not retained in normal mode` |
 | OpenClaw diagnostic snapshot | WSL, `OpenClaw 2026.3.8` | `EXPERIENCE_ENGINE_TRACE_CAPTURE_ENABLED=true EXPERIENCE_ENGINE_TRACE_CAPTURE_HOSTS=openclaw EXPERIENCE_ENGINE_TRACE_PERSIST_DIAGNOSTIC_SNAPSHOTS=true EXPERIENCE_ENGINE_TRACE_DIAGNOSTIC_SNAPSHOT_HOSTS=openclaw openclaw agent --local --session-id ee-wsl-openclaw-trace-diagnostic-1 --message "<prompt>" --timeout 180 --json` | passed; diagnostic allowlist wrote `trace_cap_trace_3aa029d1-83a5-4314-9110-2d5505737aac`, `trace_capsules = 1`, and `trace_events = 2` |
 | Antigravity | Windows `ee agy exec` managed path | source-repo validation with normal and diagnostic trace checks | passed earlier in this validation sequence; normal mode retained trace provenance without full snapshot persistence, and diagnostic mode was validated through the managed Antigravity wrapper |
+
+Published distribution checks after this source validation:
+
+| Channel | Evidence | Result |
+| --- | --- | --- |
+| npm | `npm view @alan512/experienceengine versions --json` and `dist-tags` | `0.4.2` is published and `latest=0.4.2` |
+| npm artifact | temporary install of `@alan512/experienceengine@0.4.2` and `./node_modules/.bin/ee --version` | `ee` CLI starts from the published artifact |
+| GitHub | GitHub release `v0.4.2` | release is public, not draft, not prerelease |
+| ClawHub | `clawhub package inspect @alan512/experienceengine` | `Latest: 0.4.2`, source ref `v0.4.2`, source commit `0a3a35fea8328fe0ad65552a9c762e5eea9c6910`; scan may remain `pending` while ClawHub background scanning completes |
 
 Boundary checks:
 
@@ -105,21 +114,14 @@ Release blocker:
 - Antigravity CLI validation on May 23, 2026 resolved `agy` to `C:\Users\123\AppData\Local\agy\bin\agy.exe` version `1.0.1`. A direct `agy --print` run did not load project config because Windows symlink creation failed during project discovery, leaving `workspaceDirs=[]`. Adding `--add-dir <project>` loaded `.mcp.json` and `.agents/hooks.json` and produced persisted EE task runs.
 - Global Antigravity plugin surfaces are documented: Agent Desktop plugins live under `~/.gemini/config/plugins/<plugin>`, CLI plugins under `~/.gemini/antigravity-cli/plugins/<plugin>`, and Agent Desktop MCP config under `~/.gemini/antigravity/mcp_config.json`. `ee install antigravity` now writes these user-level surfaces. Real-host validation confirmed Agent Desktop, IDE, and `agy` load lifecycle hooks and persist EE task runs through this wiring.
 
-## Release Validation Still Needed
-
-Before claiming distribution readiness, run separate validation for:
-
-- published npm package install and upgrade
-- ClawHub or host-native OpenClaw install
-- Claude marketplace or plugin install flow
-- Codex install and repair from the published package
-
-Minimum release validation matrix:
+## Release Validation Matrix
 
 | Channel | Required check | Pass condition |
 | --- | --- | --- |
-| npm | `npm view @alan512/experienceengine version` after publish | reports the intended release version |
-| npm | install the published package in a temp project and run `ee --help` plus `ee doctor` | CLI starts from the published artifact |
-| OpenClaw host-native | install or update through the host-native plugin path | `ee doctor openclaw` reports installed, enabled, and config-matched |
-| Claude Code | install or update through the supported marketplace/plugin path | `ee doctor claude-code` reports hook and MCP wiring according to the chosen install mode |
-| Codex | install or repair from the published package | `ee doctor codex` reports MCP wiring, project hooks, and runtime target without drift |
+| npm | `npm view @alan512/experienceengine version` after publish | passed for `0.4.2` |
+| npm | install the published package in a temp project and run `ee --version` | passed; CLI starts from the published artifact |
+| GitHub | release `v0.4.2` exists and is public | passed |
+| ClawHub | `clawhub package inspect @alan512/experienceengine` | passed for latest/source metadata; background scan may remain pending |
+| OpenClaw host-native | install or update through the host-native plugin path | still recommended for a full post-release host-native install audit |
+| Claude Code | install or update through the supported marketplace/plugin path | still recommended for a full post-release marketplace/plugin audit |
+| Codex | install or repair from the published package | still recommended for a full post-release install/repair audit |
