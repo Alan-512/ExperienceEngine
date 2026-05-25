@@ -21,12 +21,16 @@ const behaviorLoopMock = () => ({
 
 describe("Antigravity hook command & payload handling", () => {
   let previousHome: string | undefined;
+  let previousPrompt: string | undefined;
   let testHome: string;
 
   beforeEach(() => {
     previousHome = process.env.EXPERIENCE_ENGINE_HOME;
     testHome = mkdtempSync(join(tmpdir(), "experienceengine-antigravity-hook-home-"));
     process.env.EXPERIENCE_ENGINE_HOME = testHome;
+
+    previousPrompt = process.env.EXPERIENCE_ENGINE_PROMPT;
+    delete process.env.EXPERIENCE_ENGINE_PROMPT;
   });
 
   afterEach(() => {
@@ -34,6 +38,11 @@ describe("Antigravity hook command & payload handling", () => {
       delete process.env.EXPERIENCE_ENGINE_HOME;
     } else {
       process.env.EXPERIENCE_ENGINE_HOME = previousHome;
+    }
+    if (previousPrompt === undefined) {
+      delete process.env.EXPERIENCE_ENGINE_PROMPT;
+    } else {
+      process.env.EXPERIENCE_ENGINE_PROMPT = previousPrompt;
     }
     removeTempDirForTests(testHome);
   });

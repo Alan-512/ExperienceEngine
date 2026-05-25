@@ -469,6 +469,9 @@ Recorded version: 0.2.0`;
     expect(() =>
       installOpenClawAdapter({
         homeDir,
+        packageSourceBuilder() {
+          return join(homeDir, "tmp", "experienceengine-openclaw.tgz");
+        },
         runner() {
           throw new Error("openclaw not found");
         }
