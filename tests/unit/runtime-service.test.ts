@@ -96,14 +96,13 @@ afterEach(() => {
 });
 
 describe("ExperienceRuntimeService finalize transaction", () => {
-  it("persists a metadata-only trace capsule and links finalized records when trace capture is enabled", async () => {
+  it("uses runtime trace evidence and persists summary provenance without writing trace tables in normal mode", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
     const service = new ExperienceRuntimeService(
       loadConfig({
         sqlitePath,
         traceCaptureEnabled: true,
-        traceMetadataOnly: true,
         traceCaptureHosts: ["antigravity"]
       }),
       undefined,
@@ -135,42 +134,41 @@ describe("ExperienceRuntimeService finalize transaction", () => {
       contextSummary: "Trace capture metadata was recorded."
     });
 
-    expect(finalized.trace_capsule_id).toBeDefined();
+    expect(finalized.trace_capsule_id).toBeUndefined();
     expect(finalized.trace_completeness).toBeGreaterThan(0);
+    expect(finalized.trace_provenance?.host).toBe("antigravity");
+    expect(finalized.trace_provenance?.evidence_category_counts.prompt).toBeGreaterThan(0);
 
     const db = new DatabaseSync(sqlitePath);
     try {
-      const capsule = db.prepare("SELECT id, capture_metadata_json FROM trace_capsules LIMIT 1").get() as {
-        id: string;
-        capture_metadata_json: string;
-      };
+      const capsuleCount = (db.prepare("SELECT count(*) AS count FROM trace_capsules").get() as { count: number }).count;
       const eventCount = (db.prepare("SELECT count(*) AS count FROM trace_events").get() as { count: number }).count;
       const linkedRecord = db
-        .prepare("SELECT trace_capsule_id, trace_completeness FROM experience_input_records LIMIT 1")
-        .get() as { trace_capsule_id: string; trace_completeness: number };
-      const metadata = JSON.parse(capsule.capture_metadata_json) as { metadata_only: boolean; dropped_events_count: number };
+        .prepare("SELECT trace_capsule_id, trace_completeness, trace_provenance_json FROM experience_input_records LIMIT 1")
+        .get() as { trace_capsule_id: string | null; trace_completeness: number; trace_provenance_json: string };
+      const provenance = JSON.parse(linkedRecord.trace_provenance_json) as { host: string; dropped_events_count: number };
 
-      expect(capsule.id).toBe(finalized.trace_capsule_id);
-      expect(metadata.metadata_only).toBe(true);
-      expect(metadata.dropped_events_count).toBeGreaterThan(0);
+      expect(capsuleCount).toBe(0);
       expect(eventCount).toBe(0);
-      expect(linkedRecord.trace_capsule_id).toBe(finalized.trace_capsule_id);
+      expect(linkedRecord.trace_capsule_id).toBeNull();
       expect(linkedRecord.trace_completeness).toBe(finalized.trace_completeness);
+      expect(provenance.host).toBe("antigravity");
+      expect(provenance.dropped_events_count).toBeGreaterThan(0);
     } finally {
       db.close();
     }
   });
 
-  it("persists full normalized trace events only for explicit host full-capture allowlists", async () => {
+  it("persists diagnostic trace snapshots only for explicit host allowlists", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
     const service = new ExperienceRuntimeService(
       loadConfig({
         sqlitePath,
         traceCaptureEnabled: true,
-        traceMetadataOnly: false,
         traceCaptureHosts: ["codex"],
-        traceFullCaptureHosts: ["codex"]
+        tracePersistDiagnosticSnapshots: true,
+        traceDiagnosticSnapshotHosts: ["codex"]
       }),
       undefined,
       { disableBackgroundLearning: true }
@@ -220,7 +218,7 @@ describe("ExperienceRuntimeService finalize transaction", () => {
     }
   });
 
-  it("keeps trace event persistence metadata-only when full capture is not explicitly allowlisted", async () => {
+  it("maps deprecated full-capture allowlists to diagnostic snapshot persistence", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
     const service = new ExperienceRuntimeService(
@@ -228,7 +226,8 @@ describe("ExperienceRuntimeService finalize transaction", () => {
         sqlitePath,
         traceCaptureEnabled: true,
         traceMetadataOnly: false,
-        traceCaptureHosts: ["codex"]
+        traceCaptureHosts: ["codex"],
+        traceFullCaptureHosts: ["codex"]
       }),
       undefined,
       { disableBackgroundLearning: true }
@@ -260,13 +259,14 @@ describe("ExperienceRuntimeService finalize transaction", () => {
 
     const db = new DatabaseSync(sqlitePath);
     try {
+      expect(finalized.trace_capsule_id).toBeDefined();
       const metadata = db.prepare("SELECT capture_metadata_json FROM trace_capsules WHERE id = ?").get(finalized.trace_capsule_id!) as {
         capture_metadata_json: string;
       };
       const eventCount = (db.prepare("SELECT count(*) AS count FROM trace_events").get() as { count: number }).count;
 
-      expect(JSON.parse(metadata.capture_metadata_json).metadata_only).toBe(true);
-      expect(eventCount).toBe(0);
+      expect(JSON.parse(metadata.capture_metadata_json).metadata_only).toBe(false);
+      expect(eventCount).toBeGreaterThan(0);
     } finally {
       db.close();
     }

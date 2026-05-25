@@ -282,7 +282,8 @@ export const buildCandidateSignals = (input: ExperienceInput): CandidateSignalSu
   const improvementRoom = input.outcome_signal === "failure" || retryCount > 0;
   const recoverablePath = input.outcome_signal === "success" || correctionSignals.length > 0;
 
-  const traceWindows = input.trace_capsule_id
+  const hasTraceEvidence = Boolean(input.trace_capsule_id || input.trace_provenance);
+  const traceWindows = hasTraceEvidence
     ? {
         correction_events_count: correctionEvents.length,
         verification_events_count: input.tool_events.filter((e) => OBJECTIVE_VERIFICATION_PATTERN.test(e.tool_name)).length,

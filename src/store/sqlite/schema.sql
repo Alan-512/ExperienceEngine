@@ -30,6 +30,7 @@ CREATE TABLE IF NOT EXISTS experience_input_records (
   injected_node_ids_json TEXT NOT NULL,
   trace_capsule_id TEXT,
   trace_completeness REAL,
+  trace_provenance_json TEXT,
   created_at TEXT NOT NULL
 );
 
@@ -51,6 +52,7 @@ CREATE TABLE IF NOT EXISTS task_runs (
   learning_reason TEXT,
   trace_capsule_id TEXT,
   trace_completeness REAL,
+  trace_provenance_json TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

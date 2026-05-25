@@ -150,9 +150,9 @@ Each node moves through that lifecycle using real task outcomes, not just time-b
 - let ExperienceEngine automatically reinforce, cool, quarantine, or retire guidance from real task outcomes
 - let autonomous hygiene governance use the configured LLM to cluster conflicts, merge duplicates, retire stale shadow-only guidance, downgrade risky delivery, and apply guarded high-impact experience-node changes automatically
 - override the last intervention as helpful or harmful when the automatic judgment needs correction
-- inspect active, cooling, quarantined, retired, and trace capsule execution experience
+- inspect active, cooling, quarantined, retired, and trace-backed execution experience
 - run across `OpenClaw`, `Claude Code`, and `Codex`
-- capture and project host execution trace capsules for rich causal attribution and learning eligibility checks
+- capture host execution trace evidence for richer causal attribution while persisting distilled experience and bounded provenance by default
 
 ### Under The Hood
 

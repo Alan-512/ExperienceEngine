@@ -595,7 +595,7 @@ export const applyTraceLearningGatePolicy = (
   input: ExperienceInput,
   draft: ExperienceCandidateDraft
 ): ExperienceCandidateDraft => {
-  if (!input.trace_capsule_id) {
+  if (!input.trace_capsule_id && !input.trace_provenance) {
     return draft;
   }
 

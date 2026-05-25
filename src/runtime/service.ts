@@ -60,7 +60,7 @@ import {
   normalizeOpenClawEvent
 } from "../adapters/host-normalizers.js";
 import { getHostTraceCapabilityProfile } from "../adapters/trace-capabilities.js";
-import type { HostTraceCapabilityProfile, TraceCapsule, TraceEvent } from "../types/domain.js";
+import type { HostTraceCapabilityProfile, TraceCapsule, TraceEvent, TraceProvenanceSummary } from "../types/domain.js";
 import { RuntimeCaptureWriter } from "../plugin/runtime-capture.js";
 import { normalizeToolResult } from "../plugin/hooks/tool-result-persist.js";
 import { extractToolResultsFromPayload } from "../plugin/runtime-helpers.js";
@@ -377,15 +377,15 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     return scopeId ? includesTraceScope(this.config.traceCaptureScopes, scopeId, context.cwd) : true;
   }
 
-  private shouldPersistFullTraceEvents(context: HostPromptContext, scopeId: string): boolean {
-    if (this.config.traceMetadataOnly || !this.isTraceCaptureEnabledFor(context, scopeId)) {
+  private shouldPersistDiagnosticTraceSnapshot(context: HostPromptContext, scopeId: string): boolean {
+    if (!this.config.tracePersistDiagnosticSnapshots || !this.isTraceCaptureEnabledFor(context, scopeId)) {
       return false;
     }
 
     const host = normalizeTraceHost(context.host);
     return (
-      this.config.traceFullCaptureHosts.includes(host) ||
-      this.config.traceFullCaptureScopes.some((pattern) => pattern === scopeId || (context.cwd ? context.cwd.includes(pattern) : false))
+      this.config.traceDiagnosticSnapshotHosts.includes(host) ||
+      this.config.traceDiagnosticSnapshotScopes.some((pattern) => pattern === scopeId || (context.cwd ? context.cwd.includes(pattern) : false))
     );
   }
 
@@ -401,6 +401,39 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
 
   private buildTraceHostProfile(host: TaskRun["host"]): HostTraceCapabilityProfile {
     return getHostTraceCapabilityProfile(host, this.db);
+  }
+
+  private buildTraceProvenanceSummary(input: {
+    hostProfile: HostTraceCapabilityProfile;
+    events: TraceEvent[];
+    completenessScore: number;
+    droppedEventsCount: number;
+    redactionApplied: boolean;
+    diagnosticSnapshotId?: string;
+  }): TraceProvenanceSummary {
+    const evidenceCategoryCounts: Record<string, number> = {};
+    for (const event of input.events) {
+      evidenceCategoryCounts[event.event_type] = (evidenceCategoryCounts[event.event_type] ?? 0) + 1;
+    }
+
+    const capabilityStates = new Set(Object.values(input.hostProfile.capabilities).map((capability) => capability.state));
+    const capabilityState = capabilityStates.size === 1
+      ? [...capabilityStates][0] ?? "unavailable"
+      : capabilityStates.size > 1
+        ? "mixed"
+        : "unavailable";
+
+    return {
+      completeness_score: input.completenessScore,
+      host: input.hostProfile.host,
+      capability_state: capabilityState,
+      evidence_category_counts: evidenceCategoryCounts,
+      dropped_events_count: input.droppedEventsCount,
+      redaction_applied: input.redactionApplied,
+      source_provenance: "runtime_trace",
+      learning_use_reason: input.completenessScore >= 0.6 ? "trace evidence available for distillation" : "trace evidence available but incomplete",
+      diagnostic_snapshot_id: input.diagnosticSnapshotId
+    };
   }
 
   private persistTraceCapsuleForFinalizedRun(input: {
@@ -438,10 +471,10 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     this.captureTraceEvent(input.sessionId, input.context, rawStopEvent);
 
     const observedEvents = input.session.traceEvents ?? [];
-    const fullEventPersistence = this.shouldPersistFullTraceEvents(input.context, scopeId);
+    const diagnosticSnapshotPersistence = this.shouldPersistDiagnosticTraceSnapshot(input.context, scopeId);
     const maxEvents = this.config.traceMaxEvents;
-    const persistedEvents = fullEventPersistence ? observedEvents.slice(-maxEvents) : [];
-    const droppedEventsCount = fullEventPersistence
+    const persistedEvents = diagnosticSnapshotPersistence ? observedEvents.slice(-maxEvents) : [];
+    const droppedEventsCount = diagnosticSnapshotPersistence
       ? Math.max(0, observedEvents.length - persistedEvents.length)
       : observedEvents.length;
     const hasPrompt = observedEvents.some((event) => event.event_type === "prompt" || event.event_type === "correction");
@@ -465,61 +498,75 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     const capsuleId = `trace_cap_${createId("trace")}`;
     const now = nowIso();
     const traceCompleteness = Math.min(1, completenessScore);
+    const hostProfile = this.buildTraceHostProfile(host);
+    const traceProvenance = this.buildTraceProvenanceSummary({
+      hostProfile,
+      events: observedEvents,
+      completenessScore: traceCompleteness,
+      droppedEventsCount,
+      redactionApplied: observedEvents.length > 0,
+      diagnosticSnapshotId: diagnosticSnapshotPersistence ? capsuleId : undefined
+    });
     const tracedInput: ExperienceInput = {
       ...input.experienceInput,
-      trace_capsule_id: capsuleId,
-      trace_completeness: traceCompleteness
+      trace_capsule_id: diagnosticSnapshotPersistence ? capsuleId : undefined,
+      trace_completeness: traceCompleteness,
+      trace_provenance: traceProvenance
     };
     const tracedRecord: ExperienceInputRecord = {
       ...input.record,
-      trace_capsule_id: capsuleId,
-      trace_completeness: traceCompleteness
+      trace_capsule_id: diagnosticSnapshotPersistence ? capsuleId : undefined,
+      trace_completeness: traceCompleteness,
+      trace_provenance: traceProvenance
     };
     const tracedTaskRun: TaskRun = {
       ...input.taskRun,
-      trace_capsule_id: capsuleId,
+      trace_capsule_id: diagnosticSnapshotPersistence ? capsuleId : undefined,
       trace_completeness: traceCompleteness,
+      trace_provenance: traceProvenance,
       updated_at: now
     };
 
-    const capsule: TraceCapsule = {
-      id: capsuleId,
-      scope_id: scopeId,
-      episode_id: input.episodeId,
-      task_run_id: input.taskRun.id,
-      session_id: input.sessionId,
-      task: {
-        goal: input.experienceInput.task_summary || input.context.taskSummary || input.context.userMessage || "",
-        user_constraints: [],
-        injected_expectations: input.session.lastInjectionEvent?.scorecard?.recommendation
-          ? [input.session.lastInjectionEvent.scorecard.recommendation]
-          : [],
-        delivered_node_ids: input.experienceInput.injected_node_ids
-      },
-      events: persistedEvents,
-      evidence_refs: [],
-      outcome: {
-        outcome_signal: input.experienceInput.outcome_signal,
-        confidence: hasStop ? "medium" : "low",
-        summary: input.context.contextSummary ?? input.experienceInput.context_summary ?? input.experienceInput.task_summary,
-        failure_signature: input.experienceInput.tool_events.find((event) => event.status === "failure")?.error_signature
-      },
-      capture_metadata: {
-        is_complete: traceCompleteness >= 0.75,
-        completeness_score: traceCompleteness,
-        metadata_only: !fullEventPersistence,
-        dropped_events_count: droppedEventsCount,
-        redaction_applied: observedEvents.length > 0,
-        size_bytes: JSON.stringify(persistedEvents).length
-      },
-      host_profile: this.buildTraceHostProfile(host),
-      created_at: now,
-      updated_at: now
-    };
+    if (diagnosticSnapshotPersistence) {
+      const capsule: TraceCapsule = {
+        id: capsuleId,
+        scope_id: scopeId,
+        episode_id: input.episodeId,
+        task_run_id: input.taskRun.id,
+        session_id: input.sessionId,
+        task: {
+          goal: input.experienceInput.task_summary || input.context.taskSummary || input.context.userMessage || "",
+          user_constraints: [],
+          injected_expectations: input.session.lastInjectionEvent?.scorecard?.recommendation
+            ? [input.session.lastInjectionEvent.scorecard.recommendation]
+            : [],
+          delivered_node_ids: input.experienceInput.injected_node_ids
+        },
+        events: persistedEvents,
+        evidence_refs: [],
+        outcome: {
+          outcome_signal: input.experienceInput.outcome_signal,
+          confidence: hasStop ? "medium" : "low",
+          summary: input.context.contextSummary ?? input.experienceInput.context_summary ?? input.experienceInput.task_summary,
+          failure_signature: input.experienceInput.tool_events.find((event) => event.status === "failure")?.error_signature
+        },
+        capture_metadata: {
+          is_complete: traceCompleteness >= 0.75,
+          completeness_score: traceCompleteness,
+          metadata_only: false,
+          dropped_events_count: droppedEventsCount,
+          redaction_applied: observedEvents.length > 0,
+          size_bytes: JSON.stringify(persistedEvents).length
+        },
+        host_profile: hostProfile,
+        created_at: now,
+        updated_at: now
+      };
 
-    this.traceRepo.upsert(capsule);
-    this.traceRepo.cleanupOldTraces(this.config.traceRetentionDays);
-    this.traceRepo.cleanupCapsuleLimits(capsuleId, this.config.traceMaxEvents, this.config.traceMaxEvidenceRefs);
+      this.traceRepo.upsert(capsule);
+      this.traceRepo.cleanupOldTraces(this.config.traceRetentionDays);
+      this.traceRepo.cleanupCapsuleLimits(capsuleId, this.config.traceMaxEvents, this.config.traceMaxEvidenceRefs);
+    }
     this.inputRepo.upsert(tracedRecord);
     this.taskRunRepo.upsert(tracedTaskRun);
 
@@ -1210,6 +1257,8 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     const evidenceRefs = [input.inputRecordId, input.taskRunId, event.injection_id];
     if (input.experienceInput.trace_capsule_id) {
       evidenceRefs.push(input.experienceInput.trace_capsule_id);
+    } else if (input.experienceInput.trace_provenance) {
+      evidenceRefs.push(`trace_provenance:${input.taskRunId}`);
     }
     const selectedNodeIds = new Set(event.injected_node_ids);
 

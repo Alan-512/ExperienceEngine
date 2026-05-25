@@ -181,8 +181,10 @@ export const bootstrapDatabase = (db: DatabaseSync): void => {
   ensureColumn(db, "hygiene_governance_schedules", "last_failure_class", "TEXT");
   ensureColumn(db, "experience_input_records", "trace_capsule_id", "TEXT");
   ensureColumn(db, "experience_input_records", "trace_completeness", "REAL");
+  ensureColumn(db, "experience_input_records", "trace_provenance_json", "TEXT");
   ensureColumn(db, "task_runs", "trace_capsule_id", "TEXT");
   ensureColumn(db, "task_runs", "trace_completeness", "REAL");
+  ensureColumn(db, "task_runs", "trace_provenance_json", "TEXT");
   ensureIndex(db, "idx_hygiene_governance_runs_scope", "hygiene_governance_runs", "scope_id");
   ensureIndex(db, "idx_hygiene_governance_plans_scope", "hygiene_governance_plans", "scope_id");
   ensureIndex(db, "idx_hygiene_governance_actions_scope", "hygiene_governance_actions", "scope_id");

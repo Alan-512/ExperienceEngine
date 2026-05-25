@@ -14,6 +14,7 @@ type InputRecordRow = {
   injected_node_ids_json: string;
   trace_capsule_id?: string | null;
   trace_completeness?: number | null;
+  trace_provenance_json?: string | null;
   created_at: string;
 };
 
@@ -34,6 +35,7 @@ export class InputRecordRepository {
       injected_node_ids: JSON.parse(row.injected_node_ids_json) as string[],
       trace_capsule_id: row.trace_capsule_id ?? undefined,
       trace_completeness: typeof row.trace_completeness === "number" ? row.trace_completeness : undefined,
+      trace_provenance: row.trace_provenance_json ? JSON.parse(row.trace_provenance_json) : undefined,
       created_at: row.created_at
     };
   }
@@ -52,15 +54,16 @@ export class InputRecordRepository {
       injected_node_ids_json: JSON.stringify(record.injected_node_ids),
       trace_capsule_id: record.trace_capsule_id ?? null,
       trace_completeness: typeof record.trace_completeness === "number" ? record.trace_completeness : null,
+      trace_provenance_json: record.trace_provenance ? JSON.stringify(record.trace_provenance) : null,
       created_at: record.created_at
     };
 
     this.db
       .prepare(
         `INSERT INTO experience_input_records
-          (record_id, episode_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary, evidence_json, injected_node_ids_json, trace_capsule_id, trace_completeness, created_at)
+          (record_id, episode_id, scope_id, session_id, task_type, task_summary, outcome_signal, context_summary, evidence_json, injected_node_ids_json, trace_capsule_id, trace_completeness, trace_provenance_json, created_at)
          VALUES
-          (@record_id, @episode_id, @scope_id, @session_id, @task_type, @task_summary, @outcome_signal, @context_summary, @evidence_json, @injected_node_ids_json, @trace_capsule_id, @trace_completeness, @created_at)
+          (@record_id, @episode_id, @scope_id, @session_id, @task_type, @task_summary, @outcome_signal, @context_summary, @evidence_json, @injected_node_ids_json, @trace_capsule_id, @trace_completeness, @trace_provenance_json, @created_at)
          ON CONFLICT(record_id) DO UPDATE SET
           episode_id = excluded.episode_id,
           outcome_signal = excluded.outcome_signal,
@@ -68,7 +71,8 @@ export class InputRecordRepository {
           evidence_json = excluded.evidence_json,
           injected_node_ids_json = excluded.injected_node_ids_json,
           trace_capsule_id = excluded.trace_capsule_id,
-          trace_completeness = excluded.trace_completeness`
+          trace_completeness = excluded.trace_completeness,
+          trace_provenance_json = excluded.trace_provenance_json`
       )
       .run(payload);
     return record;

@@ -151,7 +151,7 @@ ExperienceEngine 工作在 context 层，不会修改宿主模型权重。
 - 当自动判断不准时，手动把最近一次介入标记为 helpful 或 harmful
 - 查看 active、cooling、quarantined、retired 以及 trace 轨迹胶囊执行经验等生命周期状态
 - 在 `OpenClaw`、`Claude Code`、`Codex` 三个宿主中使用
-- 捕获并投影宿主执行轨迹胶囊（Trace Capsule），用于富因果归因与学习准入校验
+- 捕获宿主执行轨迹证据用于富因果归因与学习准入校验，默认只长期保存提炼后的经验和有界 provenance
 
 ### 底层实现
 

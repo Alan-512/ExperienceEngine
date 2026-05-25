@@ -53,6 +53,9 @@ export const defaultConfig: ExperienceEngineConfig = {
   traceCaptureScopes: [],
   traceFullCaptureHosts: [],
   traceFullCaptureScopes: [],
+  tracePersistDiagnosticSnapshots: false,
+  traceDiagnosticSnapshotHosts: [],
+  traceDiagnosticSnapshotScopes: [],
   traceRetentionDays: 30,
   traceMaxEvents: 100,
   traceMaxEvidenceRefs: 50

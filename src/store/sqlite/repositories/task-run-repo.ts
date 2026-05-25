@@ -19,6 +19,7 @@ type TaskRunRow = {
   learning_reason: string | null;
   trace_capsule_id?: string | null;
   trace_completeness?: number | null;
+  trace_provenance_json?: string | null;
   created_at: string;
   updated_at: string;
 };
@@ -45,6 +46,7 @@ export class TaskRunRepository {
       learning_reason: row.learning_reason ?? undefined,
       trace_capsule_id: row.trace_capsule_id ?? undefined,
       trace_completeness: typeof row.trace_completeness === "number" ? row.trace_completeness : undefined,
+      trace_provenance: row.trace_provenance_json ? JSON.parse(row.trace_provenance_json) : undefined,
       created_at: row.created_at,
       updated_at: row.updated_at
     };
@@ -55,10 +57,10 @@ export class TaskRunRepository {
       .prepare(
         `INSERT INTO task_runs
           (id, episode_id, host, scope_id, session_id, task_type, task_summary, prompt_excerpt, context_summary,
-           started_at, ended_at, final_status, failure_signature, learning_status, learning_reason, trace_capsule_id, trace_completeness, created_at, updated_at)
+           started_at, ended_at, final_status, failure_signature, learning_status, learning_reason, trace_capsule_id, trace_completeness, trace_provenance_json, created_at, updated_at)
          VALUES
           (@id, @episode_id, @host, @scope_id, @session_id, @task_type, @task_summary, @prompt_excerpt, @context_summary,
-           @started_at, @ended_at, @final_status, @failure_signature, @learning_status, @learning_reason, @trace_capsule_id, @trace_completeness, @created_at, @updated_at)
+           @started_at, @ended_at, @final_status, @failure_signature, @learning_status, @learning_reason, @trace_capsule_id, @trace_completeness, @trace_provenance_json, @created_at, @updated_at)
          ON CONFLICT(id) DO UPDATE SET
           episode_id = excluded.episode_id,
           ended_at = excluded.ended_at,
@@ -70,6 +72,7 @@ export class TaskRunRepository {
           context_summary = excluded.context_summary,
           trace_capsule_id = excluded.trace_capsule_id,
           trace_completeness = excluded.trace_completeness,
+          trace_provenance_json = excluded.trace_provenance_json,
           updated_at = excluded.updated_at`
       )
       .run({
@@ -90,6 +93,7 @@ export class TaskRunRepository {
         learning_reason: taskRun.learning_reason ?? null,
         trace_capsule_id: taskRun.trace_capsule_id ?? null,
         trace_completeness: typeof taskRun.trace_completeness === "number" ? taskRun.trace_completeness : null,
+        trace_provenance_json: taskRun.trace_provenance ? JSON.stringify(taskRun.trace_provenance) : null,
         created_at: taskRun.created_at,
         updated_at: taskRun.updated_at
       });

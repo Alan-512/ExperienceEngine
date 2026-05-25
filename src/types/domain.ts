@@ -133,6 +133,7 @@ export type ExperienceInput = {
   injected_node_ids: string[];
   trace_capsule_id?: string;
   trace_completeness?: number;
+  trace_provenance?: TraceProvenanceSummary;
   trace_is_unstable?: boolean;
 };
 
@@ -202,6 +203,7 @@ export type ExperienceInputRecord = {
   injected_node_ids: string[];
   trace_capsule_id?: string;
   trace_completeness?: number;
+  trace_provenance?: TraceProvenanceSummary;
   created_at: string;
 };
 
@@ -223,6 +225,7 @@ export type TaskRun = {
   learning_reason?: string;
   trace_capsule_id?: string;
   trace_completeness?: number;
+  trace_provenance?: TraceProvenanceSummary;
   created_at: string;
   updated_at: string;
 };
@@ -840,6 +843,18 @@ export type TraceCaptureMetadata = {
   size_bytes: number;
 };
 
+export type TraceProvenanceSummary = {
+  completeness_score: number;
+  host: "openclaw" | "claude-code" | "codex" | "antigravity";
+  capability_state: "verified" | "documented" | "inferred" | "disabled" | "unavailable" | "mixed";
+  evidence_category_counts: Record<string, number>;
+  dropped_events_count: number;
+  redaction_applied: boolean;
+  source_provenance: "runtime_trace";
+  learning_use_reason: string;
+  diagnostic_snapshot_id?: string;
+};
+
 export type HostCapabilityState = {
   state: "verified" | "documented" | "inferred" | "disabled" | "unavailable";
   provenance: "verified" | "documented" | "inferred" | "disabled";
@@ -871,4 +886,3 @@ export type TraceCapsule = {
   created_at: string;
   updated_at: string;
 };
-

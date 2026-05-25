@@ -409,6 +409,18 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string,
         }
         db.close();
       }
+    } else if (record.traceProvenance) {
+      console.log("Trace summary: retained");
+      console.log(`Trace completeness: ${record.traceProvenance.completeness_score}`);
+      if (verbose) {
+        console.log(`- Host: ${record.traceProvenance.host}`);
+        console.log(`- Capability state: ${record.traceProvenance.capability_state}`);
+        console.log(`- Evidence categories: ${JSON.stringify(record.traceProvenance.evidence_category_counts)}`);
+        console.log(`- Dropped events count: ${record.traceProvenance.dropped_events_count}`);
+        console.log(`- Redaction applied: ${record.traceProvenance.redaction_applied ? "yes" : "no"}`);
+        console.log(`- Learning use reason: ${record.traceProvenance.learning_use_reason}`);
+        console.log("- Full trace snapshot: not retained in normal mode");
+      }
     }
     console.log(`Task type: ${record.taskType}`);
     console.log(`Intervention: ${record.intervention}`);
@@ -718,7 +730,8 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string,
     const traceRepo = new TraceRepository(db);
     const capsule = traceRepo.getById(arg1);
     if (!capsule) {
-      console.log(`Trace capsule ${arg1} not found.`);
+      console.log(`Diagnostic trace snapshot ${arg1} not found.`);
+      console.log("Normal trace-backed tasks retain summary/provenance only; use `ee inspect --last --verbose` or `ee inspect review` for summary-only trace diagnostics.");
       db.close();
       return;
     }
@@ -1031,17 +1044,25 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string,
       const traceCount = (db.prepare("SELECT count(*) as count FROM trace_capsules").get() as any)?.count ?? 0;
       const avgCompleteness = (
         db
-          .prepare("SELECT avg(CAST(json_extract(capture_metadata_json, '$.completeness_score') AS REAL)) as avg_score FROM trace_capsules")
+          .prepare(
+            `SELECT avg(score) as avg_score FROM (
+               SELECT trace_completeness as score FROM experience_input_records WHERE trace_completeness IS NOT NULL
+               UNION ALL
+               SELECT CAST(json_extract(capture_metadata_json, '$.completeness_score') AS REAL) as score FROM trace_capsules
+             )`
+          )
           .get() as any
       )?.avg_score ?? 0;
       const eventCount = (db.prepare("SELECT count(*) as count FROM trace_events").get() as any)?.count ?? 0;
       const linkedRecords = (db.prepare("SELECT count(*) as count FROM experience_input_records WHERE trace_capsule_id IS NOT NULL").get() as any)?.count ?? 0;
+      const summaryRecords = (db.prepare("SELECT count(*) as count FROM experience_input_records WHERE trace_provenance_json IS NOT NULL").get() as any)?.count ?? 0;
 
       console.log("\nTrace Capture Quality & Projection Diagnostics:");
-      console.log(`- Total Trace Capsules: ${traceCount}`);
+      console.log(`- Diagnostic Trace Snapshots: ${traceCount}`);
       console.log(`- Average Capture Completeness: ${(avgCompleteness * 100).toFixed(1)}%`);
       console.log(`- Total Normalized Trace Events: ${eventCount}`);
       console.log(`- Projected Trace Linked Records: ${linkedRecords}`);
+      console.log(`- Summary-only Trace Records: ${summaryRecords}`);
     } catch (err) {
       // safe fallback
     } finally {

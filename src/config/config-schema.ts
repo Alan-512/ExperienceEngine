@@ -54,6 +54,9 @@ export const configSchema = z.object({
   traceCaptureScopes: z.array(z.string()).default([]),
   traceFullCaptureHosts: z.array(z.enum(["openclaw", "claude-code", "codex", "antigravity"])).default([]),
   traceFullCaptureScopes: z.array(z.string()).default([]),
+  tracePersistDiagnosticSnapshots: z.boolean().default(false),
+  traceDiagnosticSnapshotHosts: z.array(z.enum(["openclaw", "claude-code", "codex", "antigravity"])).default([]),
+  traceDiagnosticSnapshotScopes: z.array(z.string()).default([]),
   traceRetentionDays: z.number().int().min(1).default(30),
   traceMaxEvents: z.number().int().min(1).default(100),
   traceMaxEvidenceRefs: z.number().int().min(1).default(50)
@@ -284,11 +287,11 @@ export const pluginConfigJsonSchema = {
     },
     traceCaptureEnabled: {
       type: "boolean",
-      description: "Enable capturing host execution trace capsules for debugging and advanced attribution."
+      description: "Enable runtime host trace capture for distillation and attribution. This does not persist full trace details by itself."
     },
     traceMetadataOnly: {
       type: "boolean",
-      description: "Capture trace metadata only (no full event or evidence refs payload persistence) to save storage."
+      description: "Deprecated compatibility flag. `true` disables diagnostic trace snapshot persistence; `false` only enables snapshots when paired with diagnostic host or scope allowlists."
     },
     traceCaptureHosts: {
       type: "array",
@@ -303,12 +306,26 @@ export const pluginConfigJsonSchema = {
     traceFullCaptureHosts: {
       type: "array",
       items: { type: "string", enum: ["openclaw", "claude-code", "codex", "antigravity"] },
-      description: "Hosts explicitly allowed to persist full normalized trace events when trace metadata-only mode is disabled."
+      description: "Deprecated compatibility alias for diagnostic trace snapshot host allowlist."
     },
     traceFullCaptureScopes: {
       type: "array",
       items: { type: "string" },
-      description: "Scopes explicitly allowed to persist full normalized trace events when trace metadata-only mode is disabled."
+      description: "Deprecated compatibility alias for diagnostic trace snapshot scope allowlist."
+    },
+    tracePersistDiagnosticSnapshots: {
+      type: "boolean",
+      description: "Persist bounded diagnostic trace snapshots. Normal learning does not require this and does not write trace capsule rows when disabled."
+    },
+    traceDiagnosticSnapshotHosts: {
+      type: "array",
+      items: { type: "string", enum: ["openclaw", "claude-code", "codex", "antigravity"] },
+      description: "Hosts explicitly allowed to persist diagnostic trace snapshots."
+    },
+    traceDiagnosticSnapshotScopes: {
+      type: "array",
+      items: { type: "string" },
+      description: "Scopes explicitly allowed to persist diagnostic trace snapshots."
     },
     traceRetentionDays: {
       type: "integer",
@@ -476,6 +493,15 @@ export const pluginUiHints = {
   },
   traceFullCaptureScopes: {
     label: "Trace Full Capture Scopes"
+  },
+  tracePersistDiagnosticSnapshots: {
+    label: "Trace Persist Diagnostic Snapshots"
+  },
+  traceDiagnosticSnapshotHosts: {
+    label: "Trace Diagnostic Snapshot Hosts"
+  },
+  traceDiagnosticSnapshotScopes: {
+    label: "Trace Diagnostic Snapshot Scopes"
   },
   traceRetentionDays: {
     label: "Trace Retention Days"

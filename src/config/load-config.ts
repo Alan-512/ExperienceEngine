@@ -36,6 +36,35 @@ export const loadConfig = (
       ? env.EXPERIENCE_ENGINE_INLINE_NOTICES === "true"
       : overrides.noticesInline ?? settings.notices?.inline ?? defaultConfig.noticesInline;
 
+  const traceMetadataOnly =
+    env.EXPERIENCE_ENGINE_TRACE_METADATA_ONLY !== undefined
+      ? env.EXPERIENCE_ENGINE_TRACE_METADATA_ONLY === "true"
+      : overrides.traceMetadataOnly ?? defaultConfig.traceMetadataOnly;
+  const traceFullCaptureHosts =
+    parseStringList(env.EXPERIENCE_ENGINE_TRACE_FULL_CAPTURE_HOSTS) ??
+    overrides.traceFullCaptureHosts ??
+    defaultConfig.traceFullCaptureHosts;
+  const traceFullCaptureScopes =
+    parseStringList(env.EXPERIENCE_ENGINE_TRACE_FULL_CAPTURE_SCOPES) ??
+    overrides.traceFullCaptureScopes ??
+    defaultConfig.traceFullCaptureScopes;
+  const traceDiagnosticSnapshotHosts =
+    parseStringList(env.EXPERIENCE_ENGINE_TRACE_DIAGNOSTIC_SNAPSHOT_HOSTS) ??
+    overrides.traceDiagnosticSnapshotHosts ??
+    traceFullCaptureHosts ??
+    defaultConfig.traceDiagnosticSnapshotHosts;
+  const traceDiagnosticSnapshotScopes =
+    parseStringList(env.EXPERIENCE_ENGINE_TRACE_DIAGNOSTIC_SNAPSHOT_SCOPES) ??
+    overrides.traceDiagnosticSnapshotScopes ??
+    traceFullCaptureScopes ??
+    defaultConfig.traceDiagnosticSnapshotScopes;
+  const explicitDiagnosticSnapshotPersistence =
+    env.EXPERIENCE_ENGINE_TRACE_PERSIST_DIAGNOSTIC_SNAPSHOTS !== undefined
+      ? env.EXPERIENCE_ENGINE_TRACE_PERSIST_DIAGNOSTIC_SNAPSHOTS === "true"
+      : overrides.tracePersistDiagnosticSnapshots;
+  const legacyDiagnosticSnapshotPersistence =
+    traceMetadataOnly === false && (traceFullCaptureHosts.length > 0 || traceFullCaptureScopes.length > 0);
+
   const parsed = configSchema.parse({
     dataDir: paths.dataDir,
     sqlitePath: paths.sqlitePath,
@@ -226,10 +255,7 @@ export const loadConfig = (
       env.EXPERIENCE_ENGINE_TRACE_CAPTURE_ENABLED !== undefined
         ? env.EXPERIENCE_ENGINE_TRACE_CAPTURE_ENABLED === "true"
         : overrides.traceCaptureEnabled ?? defaultConfig.traceCaptureEnabled,
-    traceMetadataOnly:
-      env.EXPERIENCE_ENGINE_TRACE_METADATA_ONLY !== undefined
-        ? env.EXPERIENCE_ENGINE_TRACE_METADATA_ONLY === "true"
-        : overrides.traceMetadataOnly ?? defaultConfig.traceMetadataOnly,
+    traceMetadataOnly,
     traceCaptureHosts:
       parseStringList(env.EXPERIENCE_ENGINE_TRACE_CAPTURE_HOSTS) ??
       overrides.traceCaptureHosts ??
@@ -238,14 +264,14 @@ export const loadConfig = (
       parseStringList(env.EXPERIENCE_ENGINE_TRACE_CAPTURE_SCOPES) ??
       overrides.traceCaptureScopes ??
       defaultConfig.traceCaptureScopes,
-    traceFullCaptureHosts:
-      parseStringList(env.EXPERIENCE_ENGINE_TRACE_FULL_CAPTURE_HOSTS) ??
-      overrides.traceFullCaptureHosts ??
-      defaultConfig.traceFullCaptureHosts,
-    traceFullCaptureScopes:
-      parseStringList(env.EXPERIENCE_ENGINE_TRACE_FULL_CAPTURE_SCOPES) ??
-      overrides.traceFullCaptureScopes ??
-      defaultConfig.traceFullCaptureScopes,
+    traceFullCaptureHosts,
+    traceFullCaptureScopes,
+    tracePersistDiagnosticSnapshots:
+      explicitDiagnosticSnapshotPersistence ??
+      legacyDiagnosticSnapshotPersistence ??
+      defaultConfig.tracePersistDiagnosticSnapshots,
+    traceDiagnosticSnapshotHosts,
+    traceDiagnosticSnapshotScopes,
     traceRetentionDays: env.EXPERIENCE_ENGINE_TRACE_RETENTION_DAYS
       ? Number(env.EXPERIENCE_ENGINE_TRACE_RETENTION_DAYS)
       : overrides.traceRetentionDays ?? defaultConfig.traceRetentionDays,
