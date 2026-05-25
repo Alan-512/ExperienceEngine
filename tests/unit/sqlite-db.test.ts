@@ -235,6 +235,61 @@ describe("bootstrapDatabase", () => {
 
     expect(tableNames).toContain("scope_fingerprints");
   });
+
+  it("adds current trace capsule columns to legacy trace tables", () => {
+    const runtimeDir = makeTempDir();
+    const dbPath = join(runtimeDir, "experienceengine.db");
+    const db = new DatabaseSync(dbPath);
+
+    db.exec(`
+      CREATE TABLE trace_capsules (
+        id TEXT PRIMARY KEY,
+        scope_id TEXT NOT NULL,
+        task_json TEXT NOT NULL,
+        outcome_json TEXT NOT NULL,
+        capture_metadata_json TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      );
+      CREATE TABLE trace_events (
+        id TEXT PRIMARY KEY
+      );
+      CREATE TABLE trace_evidence_refs (
+        id TEXT PRIMARY KEY
+      );
+    `);
+
+    bootstrapDatabase(db);
+
+    const capsuleColumns = (db.prepare("PRAGMA table_info(trace_capsules)").all() as Array<{ name: string }>).map((column) => column.name);
+    const eventColumns = (db.prepare("PRAGMA table_info(trace_events)").all() as Array<{ name: string }>).map((column) => column.name);
+    const refColumns = (db.prepare("PRAGMA table_info(trace_evidence_refs)").all() as Array<{ name: string }>).map((column) => column.name);
+
+    expect(capsuleColumns).toEqual(expect.arrayContaining([
+      "episode_id",
+      "task_run_id",
+      "session_id",
+      "host_profile_json"
+    ]));
+    expect(eventColumns).toEqual(expect.arrayContaining([
+      "trace_capsule_id",
+      "event_type",
+      "timestamp",
+      "source_json",
+      "payload_json"
+    ]));
+    expect(refColumns).toEqual(expect.arrayContaining([
+      "trace_capsule_id",
+      "ref_type",
+      "path_or_uri",
+      "content_hash",
+      "summary",
+      "is_redacted",
+      "size_bytes"
+    ]));
+
+    db.close();
+  });
 });
 
 describe("withTransaction", () => {

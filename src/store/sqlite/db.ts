@@ -39,6 +39,13 @@ const columnExists = (db: DatabaseSync, table: string, column: string): boolean 
   return rows.some((row) => row.name === column);
 };
 
+const tableExists = (db: DatabaseSync, table: string): boolean => {
+  const row = db
+    .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = ? LIMIT 1")
+    .get(table) as { name: string } | undefined;
+  return Boolean(row);
+};
+
 const ensureColumn = (db: DatabaseSync, table: string, column: string, definition: string): boolean => {
   if (!columnExists(db, table, column)) {
     db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`);
@@ -50,6 +57,39 @@ const ensureColumn = (db: DatabaseSync, table: string, column: string, definitio
 
 const ensureIndex = (db: DatabaseSync, indexName: string, table: string, column: string): void => {
   db.exec(`CREATE INDEX IF NOT EXISTS ${indexName} ON ${table}(${column})`);
+};
+
+const ensureTraceSchemaColumns = (db: DatabaseSync): void => {
+  if (tableExists(db, "trace_capsules")) {
+    ensureColumn(db, "trace_capsules", "episode_id", "TEXT");
+    ensureColumn(db, "trace_capsules", "task_run_id", "TEXT");
+    ensureColumn(db, "trace_capsules", "scope_id", "TEXT NOT NULL DEFAULT ''");
+    ensureColumn(db, "trace_capsules", "session_id", "TEXT");
+    ensureColumn(db, "trace_capsules", "task_json", "TEXT NOT NULL DEFAULT '{}'");
+    ensureColumn(db, "trace_capsules", "outcome_json", "TEXT NOT NULL DEFAULT '{\"outcome_signal\":\"unknown\",\"confidence\":\"low\"}'");
+    ensureColumn(db, "trace_capsules", "capture_metadata_json", "TEXT NOT NULL DEFAULT '{\"is_complete\":false,\"completeness_score\":0,\"metadata_only\":true,\"dropped_events_count\":0,\"redaction_applied\":false,\"size_bytes\":0}'");
+    ensureColumn(db, "trace_capsules", "host_profile_json", "TEXT NOT NULL DEFAULT '{\"host\":\"openclaw\",\"profile_version\":\"legacy\",\"adapter_version\":\"legacy\",\"capabilities\":{},\"transcript_stability\":\"none\",\"tool_coverage\":[],\"observed_at\":\"1970-01-01T00:00:00.000Z\"}'");
+    ensureColumn(db, "trace_capsules", "created_at", "TEXT NOT NULL DEFAULT '1970-01-01T00:00:00.000Z'");
+    ensureColumn(db, "trace_capsules", "updated_at", "TEXT NOT NULL DEFAULT '1970-01-01T00:00:00.000Z'");
+  }
+
+  if (tableExists(db, "trace_events")) {
+    ensureColumn(db, "trace_events", "trace_capsule_id", "TEXT");
+    ensureColumn(db, "trace_events", "event_type", "TEXT NOT NULL DEFAULT 'unknown'");
+    ensureColumn(db, "trace_events", "timestamp", "TEXT NOT NULL DEFAULT '1970-01-01T00:00:00.000Z'");
+    ensureColumn(db, "trace_events", "source_json", "TEXT NOT NULL DEFAULT '{}'");
+    ensureColumn(db, "trace_events", "payload_json", "TEXT NOT NULL DEFAULT '{}'");
+  }
+
+  if (tableExists(db, "trace_evidence_refs")) {
+    ensureColumn(db, "trace_evidence_refs", "trace_capsule_id", "TEXT");
+    ensureColumn(db, "trace_evidence_refs", "ref_type", "TEXT NOT NULL DEFAULT 'metadata'");
+    ensureColumn(db, "trace_evidence_refs", "path_or_uri", "TEXT NOT NULL DEFAULT ''");
+    ensureColumn(db, "trace_evidence_refs", "content_hash", "TEXT");
+    ensureColumn(db, "trace_evidence_refs", "summary", "TEXT");
+    ensureColumn(db, "trace_evidence_refs", "is_redacted", "INTEGER NOT NULL DEFAULT 0");
+    ensureColumn(db, "trace_evidence_refs", "size_bytes", "INTEGER");
+  }
 };
 
 const backfillExperienceNodeDeliveryState = (db: DatabaseSync, forceAllRows = false): void => {
@@ -72,6 +112,7 @@ const backfillExperienceNodeDeliveryState = (db: DatabaseSync, forceAllRows = fa
 export const bootstrapDatabase = (db: DatabaseSync): void => {
   const schemaPath = resolveSQLiteSchemaPath(moduleDir);
   const schema = readFileSync(schemaPath, "utf8");
+  ensureTraceSchemaColumns(db);
   db.exec(schema);
 
   ensureColumn(db, "experience_nodes", "retrieval_text", "TEXT");
@@ -185,6 +226,7 @@ export const bootstrapDatabase = (db: DatabaseSync): void => {
   ensureColumn(db, "task_runs", "trace_capsule_id", "TEXT");
   ensureColumn(db, "task_runs", "trace_completeness", "REAL");
   ensureColumn(db, "task_runs", "trace_provenance_json", "TEXT");
+  ensureTraceSchemaColumns(db);
   ensureIndex(db, "idx_hygiene_governance_runs_scope", "hygiene_governance_runs", "scope_id");
   ensureIndex(db, "idx_hygiene_governance_plans_scope", "hygiene_governance_plans", "scope_id");
   ensureIndex(db, "idx_hygiene_governance_actions_scope", "hygiene_governance_actions", "scope_id");
