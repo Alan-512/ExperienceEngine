@@ -12,6 +12,49 @@ This is local source validation only. It does not prove published npm, Claude ma
 - WSL shared home link: `/home/seed/.experienceengine`
 - project scope: `scope_21d15aea1db0`
 
+## Latest Trace Boundary Snapshot
+
+Date: May 25, 2026
+
+Scope:
+
+- local source-repo validation for host trace capture after separating runtime trace use from full trace persistence
+- real-host validation for `Codex`, `Claude Code`, and `OpenClaw` in WSL
+- earlier real-host validation for Windows `Antigravity` through the managed `ee agy exec` path
+- no published-package, marketplace, or ClawHub distribution validation in this pass
+
+Validated:
+
+| Host | Runtime | Command or evidence | Result |
+| --- | --- | --- | --- |
+| Codex | WSL, `codex-cli 0.130.0` | `EXPERIENCE_ENGINE_TRACE_CAPTURE_ENABLED=true EXPERIENCE_ENGINE_TRACE_CAPTURE_HOSTS=codex EXPERIENCE_ENGINE_TRACE_PERSIST_DIAGNOSTIC_SNAPSHOTS=false node dist/cli/index.js codex exec -C /mnt/d/project/ExperienceEngine -s read-only "<prompt>"` | passed; `ee inspect --last --verbose` reported `Trace summary: retained`, `Trace completeness: 1`, host `codex`, and `Full trace snapshot: not retained in normal mode` |
+| Claude Code | WSL, `claude 2.1.92` | `claude -p --permission-mode bypassPermissions "<prompt>"` after setting the Claude default model to `nvidia/nemotron-3-super-120b-a12b:free` | passed for EE trace boundary; stdout may be empty, but SQLite recorded host `claude-code`, final status `success`, `trace_provenance_json`, `trace_completeness = 0.5`, and no `trace_capsule_id` |
+| OpenClaw | WSL, `OpenClaw 2026.3.8` | `EXPERIENCE_ENGINE_TRACE_CAPTURE_ENABLED=true EXPERIENCE_ENGINE_TRACE_CAPTURE_HOSTS=openclaw EXPERIENCE_ENGINE_TRACE_PERSIST_DIAGNOSTIC_SNAPSHOTS=false openclaw agent --local --session-id ee-wsl-openclaw-trace-fixed-1 --message "<prompt>" --timeout 180 --json` | passed after repairing the copied extension bundle; `ee inspect --last --verbose` reported `Trace summary: retained`, `Trace completeness: 0.75`, host `openclaw`, and `Full trace snapshot: not retained in normal mode` |
+| OpenClaw diagnostic snapshot | WSL, `OpenClaw 2026.3.8` | `EXPERIENCE_ENGINE_TRACE_CAPTURE_ENABLED=true EXPERIENCE_ENGINE_TRACE_CAPTURE_HOSTS=openclaw EXPERIENCE_ENGINE_TRACE_PERSIST_DIAGNOSTIC_SNAPSHOTS=true EXPERIENCE_ENGINE_TRACE_DIAGNOSTIC_SNAPSHOT_HOSTS=openclaw openclaw agent --local --session-id ee-wsl-openclaw-trace-diagnostic-1 --message "<prompt>" --timeout 180 --json` | passed; diagnostic allowlist wrote `trace_cap_trace_3aa029d1-83a5-4314-9110-2d5505737aac`, `trace_capsules = 1`, and `trace_events = 2` |
+| Antigravity | Windows `ee agy exec` managed path | source-repo validation with normal and diagnostic trace checks | passed earlier in this validation sequence; normal mode retained trace provenance without full snapshot persistence, and diagnostic mode was validated through the managed Antigravity wrapper |
+
+Boundary checks:
+
+- normal mode writes compact `trace_provenance_json` on task records and does not create new `trace_capsules` or `trace_events` rows
+- diagnostic snapshot persistence is opt-in and requires `EXPERIENCE_ENGINE_TRACE_PERSIST_DIAGNOSTIC_SNAPSHOTS=true` plus a host or scope allowlist match
+- after the OpenClaw diagnostic run, SQLite showed one diagnostic capsule and two events; before the diagnostic run, normal-mode `Codex`, `Claude Code`, and `OpenClaw` validation left `trace_capsules = 0` and `trace_events = 0`
+- `ee inspect --last --verbose` distinguishes normal retained summaries from diagnostic full snapshots
+
+OpenClaw repair note:
+
+- WSL `ee doctor openclaw` initially showed the copied extension bundle was current by version but failed at runtime because the packaged runtime closure omitted static hybrid imports needed by `interaction/service.js`
+- the fix was to include `hybrid/capsule-builder.js`, `hybrid/worker-client.js`, and `hybrid/postmortem-provider-client.js` in the OpenClaw packaged runtime closure
+- post-repair `ee doctor openclaw` reported installed/current `0.4.1`, `host_status = loaded`, `config_matches = true`, `restart_recommended = false`, and `install_drift = false`
+- the remaining duplicate `feishu` plugin warning is external OpenClaw host configuration noise, not ExperienceEngine install drift
+
+Repository verification:
+
+| Check | Result |
+| --- | --- |
+| `pnpm typecheck` | passed |
+| `pnpm test` | passed, `163` files and `1090` tests |
+| `pnpm build` | passed before WSL host repair |
+
 ## Latest Maintenance Snapshot
 
 Date: May 14, 2026
