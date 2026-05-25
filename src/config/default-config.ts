@@ -49,6 +49,10 @@ export const defaultConfig: ExperienceEngineConfig = {
   hybridPostmortemModelProfileVersion: "hybrid-postmortem-llm-v1",
   traceCaptureEnabled: false,
   traceMetadataOnly: true,
+  traceCaptureHosts: [],
+  traceCaptureScopes: [],
+  traceFullCaptureHosts: [],
+  traceFullCaptureScopes: [],
   traceRetentionDays: 30,
   traceMaxEvents: 100,
   traceMaxEvidenceRefs: 50

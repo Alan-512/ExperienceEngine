@@ -96,6 +96,182 @@ afterEach(() => {
 });
 
 describe("ExperienceRuntimeService finalize transaction", () => {
+  it("persists a metadata-only trace capsule and links finalized records when trace capture is enabled", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const service = new ExperienceRuntimeService(
+      loadConfig({
+        sqlitePath,
+        traceCaptureEnabled: true,
+        traceMetadataOnly: true,
+        traceCaptureHosts: ["antigravity"]
+      }),
+      undefined,
+      { disableBackgroundLearning: true }
+    );
+
+    const prompt = "Fix the trace capture path without storing raw transcripts.";
+    await service.beforePromptBuild({
+      host: "antigravity",
+      sessionId: "trace-metadata-only",
+      cwd: "/repo-trace",
+      userMessage: prompt,
+      taskSummary: prompt
+    });
+    await service.persistToolResult({
+      sessionId: "trace-metadata-only",
+      toolName: "run_command",
+      inputSummary: "pnpm typecheck",
+      outputSummary: "typecheck passed",
+      status: "success",
+      exitCode: 0
+    });
+    const finalized = await service.finalizeTask({
+      host: "antigravity",
+      sessionId: "trace-metadata-only",
+      cwd: "/repo-trace",
+      userMessage: prompt,
+      taskSummary: prompt,
+      contextSummary: "Trace capture metadata was recorded."
+    });
+
+    expect(finalized.trace_capsule_id).toBeDefined();
+    expect(finalized.trace_completeness).toBeGreaterThan(0);
+
+    const db = new DatabaseSync(sqlitePath);
+    try {
+      const capsule = db.prepare("SELECT id, capture_metadata_json FROM trace_capsules LIMIT 1").get() as {
+        id: string;
+        capture_metadata_json: string;
+      };
+      const eventCount = (db.prepare("SELECT count(*) AS count FROM trace_events").get() as { count: number }).count;
+      const linkedRecord = db
+        .prepare("SELECT trace_capsule_id, trace_completeness FROM experience_input_records LIMIT 1")
+        .get() as { trace_capsule_id: string; trace_completeness: number };
+      const metadata = JSON.parse(capsule.capture_metadata_json) as { metadata_only: boolean; dropped_events_count: number };
+
+      expect(capsule.id).toBe(finalized.trace_capsule_id);
+      expect(metadata.metadata_only).toBe(true);
+      expect(metadata.dropped_events_count).toBeGreaterThan(0);
+      expect(eventCount).toBe(0);
+      expect(linkedRecord.trace_capsule_id).toBe(finalized.trace_capsule_id);
+      expect(linkedRecord.trace_completeness).toBe(finalized.trace_completeness);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("persists full normalized trace events only for explicit host full-capture allowlists", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const service = new ExperienceRuntimeService(
+      loadConfig({
+        sqlitePath,
+        traceCaptureEnabled: true,
+        traceMetadataOnly: false,
+        traceCaptureHosts: ["codex"],
+        traceFullCaptureHosts: ["codex"]
+      }),
+      undefined,
+      { disableBackgroundLearning: true }
+    );
+
+    const prompt = "Verify trace full capture stores normalized events.";
+    await service.beforePromptBuild({
+      host: "codex",
+      sessionId: "trace-full-capture",
+      cwd: "/repo-trace-full",
+      userMessage: prompt,
+      taskSummary: prompt
+    });
+    await service.persistToolResult({
+      sessionId: "trace-full-capture",
+      toolName: "custom_tool",
+      inputSummary: "inspect project files",
+      outputSummary: "project files inspected",
+      status: "success",
+      exitCode: 0
+    });
+    const finalized = await service.finalizeTask({
+      host: "codex",
+      sessionId: "trace-full-capture",
+      cwd: "/repo-trace-full",
+      userMessage: prompt,
+      taskSummary: prompt,
+      contextSummary: "Full trace events were persisted."
+    });
+
+    const db = new DatabaseSync(sqlitePath);
+    try {
+      expect(finalized.trace_capsule_id).toBeDefined();
+      const traceCapsuleId = finalized.trace_capsule_id!;
+      const events = db
+        .prepare("SELECT event_type, source_json FROM trace_events WHERE trace_capsule_id = ? ORDER BY timestamp ASC, id ASC")
+        .all(traceCapsuleId) as Array<{ event_type: string; source_json: string }>;
+      const metadata = db.prepare("SELECT capture_metadata_json FROM trace_capsules WHERE id = ?").get(traceCapsuleId) as {
+        capture_metadata_json: string;
+      };
+
+      expect(JSON.parse(metadata.capture_metadata_json).metadata_only).toBe(false);
+      expect(events.map((event) => event.event_type)).toEqual(expect.arrayContaining(["prompt", "tool_call", "tool_result", "stop"]));
+      expect(events.every((event) => JSON.parse(event.source_json).host === "codex")).toBe(true);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("keeps trace event persistence metadata-only when full capture is not explicitly allowlisted", async () => {
+    const runtimeDir = makeTempDir();
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    const service = new ExperienceRuntimeService(
+      loadConfig({
+        sqlitePath,
+        traceCaptureEnabled: true,
+        traceMetadataOnly: false,
+        traceCaptureHosts: ["codex"]
+      }),
+      undefined,
+      { disableBackgroundLearning: true }
+    );
+
+    const prompt = "Capture trace metadata without full event persistence.";
+    await service.beforePromptBuild({
+      host: "codex",
+      sessionId: "trace-no-full-allow",
+      cwd: "/repo-trace-no-full",
+      userMessage: prompt,
+      taskSummary: prompt
+    });
+    await service.persistToolResult({
+      sessionId: "trace-no-full-allow",
+      toolName: "custom_tool",
+      inputSummary: "inspect project files",
+      outputSummary: "project files inspected",
+      status: "success",
+      exitCode: 0
+    });
+    const finalized = await service.finalizeTask({
+      host: "codex",
+      sessionId: "trace-no-full-allow",
+      cwd: "/repo-trace-no-full",
+      userMessage: prompt,
+      taskSummary: prompt
+    });
+
+    const db = new DatabaseSync(sqlitePath);
+    try {
+      const metadata = db.prepare("SELECT capture_metadata_json FROM trace_capsules WHERE id = ?").get(finalized.trace_capsule_id!) as {
+        capture_metadata_json: string;
+      };
+      const eventCount = (db.prepare("SELECT count(*) AS count FROM trace_events").get() as { count: number }).count;
+
+      expect(JSON.parse(metadata.capture_metadata_json).metadata_only).toBe(true);
+      expect(eventCount).toBe(0);
+    } finally {
+      db.close();
+    }
+  });
+
   it("queues autonomous hygiene governance after finalization without blocking the host response", async () => {
     const runtimeDir = makeTempDir();
     const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");

@@ -225,7 +225,7 @@ export class TraceRepository {
     
     // SQLite foreign key cascade delete will remove associated trace_events and trace_evidence_refs automatically
     const result = this.db.prepare("DELETE FROM trace_capsules WHERE created_at < ?").run(cutOff);
-    return result.changes;
+    return Number(result.changes);
   }
 
   /**

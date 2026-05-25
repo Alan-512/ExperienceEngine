@@ -23,7 +23,7 @@ describe("Trace Learning and Attribution Integration", () => {
         }
       ],
       evidence_refs: [],
-      outcome: { outcome_signal: "success", summary: "Completed fix in provider routing" },
+      outcome: { outcome_signal: "success", confidence: "high", summary: "Completed fix in provider routing" },
       capture_metadata: {
         is_complete: true,
         completeness_score: 1.0,
@@ -59,14 +59,7 @@ describe("Trace Learning and Attribution Integration", () => {
       compact_hint: "Move the fix to provider routing.",
       success_signal: "success",
       evidence_summary: "User correction supported",
-      source_kind: "system_derived",
-      usage_count: 0,
-      helped_count: 0,
-      harmed_count: 0,
-      support_count: 0,
-      origin_record_ids: [],
-      helped_record_ids: [],
-      harmed_record_ids: []
+      source_kind: "system_derived"
     };
 
     // Low-completeness trace gate check
@@ -84,7 +77,7 @@ describe("Trace Learning and Attribution Integration", () => {
       task: { goal: "Fix the UI", user_constraints: [] },
       events: [],
       evidence_refs: [],
-      outcome: { outcome_signal: "success", summary: "Fixed" },
+      outcome: { outcome_signal: "success", confidence: "high", summary: "Fixed" },
       capture_metadata: {
         is_complete: false,
         completeness_score: 0.2,
@@ -116,14 +109,7 @@ describe("Trace Learning and Attribution Integration", () => {
       compact_hint: "Fix UI",
       success_signal: "success",
       evidence_summary: "Lack of correction event",
-      source_kind: "system_derived",
-      usage_count: 0,
-      helped_count: 0,
-      harmed_count: 0,
-      support_count: 0,
-      origin_record_ids: [],
-      helped_record_ids: [],
-      harmed_record_ids: []
+      source_kind: "system_derived"
     };
 
     const policed = applyTraceLearningGatePolicy(input, draft);
@@ -175,7 +161,7 @@ describe("Trace Learning and Attribution Integration", () => {
         }
       ],
       evidence_refs: [],
-      outcome: { outcome_signal: "success", summary: "Fixed" },
+      outcome: { outcome_signal: "success", confidence: "high", summary: "Fixed" },
       capture_metadata: {
         is_complete: true,
         completeness_score: 1.0,
@@ -212,14 +198,7 @@ describe("Trace Learning and Attribution Integration", () => {
       compact_hint: "Move the fix to provider routing.",
       success_signal: "success",
       evidence_summary: "User correction supported",
-      source_kind: "system_derived",
-      usage_count: 0,
-      helped_count: 0,
-      harmed_count: 0,
-      support_count: 0,
-      origin_record_ids: [],
-      helped_record_ids: [],
-      harmed_record_ids: []
+      source_kind: "system_derived"
     };
 
     // Evaluate under low completeness trace

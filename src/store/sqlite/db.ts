@@ -214,6 +214,9 @@ export const withTransaction = <T>(db: DatabaseSync, operation: () => T): T => {
       begun = true;
       break;
     } catch (error) {
+      if (error instanceof Error && error.message.includes("cannot start a transaction within a transaction")) {
+        return operation();
+      }
       if (!isBusyLockError(error) || attempt === 4) {
         throw error;
       }

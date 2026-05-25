@@ -1024,6 +1024,30 @@ export const runInspectCommand = (target?: string, arg1?: string, arg2?: string,
     if (report.sections.governance) {
       console.log(`- governance: ${report.sections.governance.drillDown.cli}`);
     }
+
+    const db = openDatabase(loadConfig());
+    bootstrapDatabase(db);
+    try {
+      const traceCount = (db.prepare("SELECT count(*) as count FROM trace_capsules").get() as any)?.count ?? 0;
+      const avgCompleteness = (
+        db
+          .prepare("SELECT avg(CAST(json_extract(capture_metadata_json, '$.completeness_score') AS REAL)) as avg_score FROM trace_capsules")
+          .get() as any
+      )?.avg_score ?? 0;
+      const eventCount = (db.prepare("SELECT count(*) as count FROM trace_events").get() as any)?.count ?? 0;
+      const linkedRecords = (db.prepare("SELECT count(*) as count FROM experience_input_records WHERE trace_capsule_id IS NOT NULL").get() as any)?.count ?? 0;
+
+      console.log("\nTrace Capture Quality & Projection Diagnostics:");
+      console.log(`- Total Trace Capsules: ${traceCount}`);
+      console.log(`- Average Capture Completeness: ${(avgCompleteness * 100).toFixed(1)}%`);
+      console.log(`- Total Normalized Trace Events: ${eventCount}`);
+      console.log(`- Projected Trace Linked Records: ${linkedRecords}`);
+    } catch (err) {
+      // safe fallback
+    } finally {
+      db.close();
+    }
+
     return;
   }
 

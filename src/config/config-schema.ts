@@ -50,6 +50,10 @@ export const configSchema = z.object({
   hybridPostmortemModelProfileVersion: z.string().default("hybrid-postmortem-llm-v1"),
   traceCaptureEnabled: z.boolean().default(false),
   traceMetadataOnly: z.boolean().default(true),
+  traceCaptureHosts: z.array(z.enum(["openclaw", "claude-code", "codex", "antigravity"])).default([]),
+  traceCaptureScopes: z.array(z.string()).default([]),
+  traceFullCaptureHosts: z.array(z.enum(["openclaw", "claude-code", "codex", "antigravity"])).default([]),
+  traceFullCaptureScopes: z.array(z.string()).default([]),
   traceRetentionDays: z.number().int().min(1).default(30),
   traceMaxEvents: z.number().int().min(1).default(100),
   traceMaxEvidenceRefs: z.number().int().min(1).default(50)
@@ -286,6 +290,26 @@ export const pluginConfigJsonSchema = {
       type: "boolean",
       description: "Capture trace metadata only (no full event or evidence refs payload persistence) to save storage."
     },
+    traceCaptureHosts: {
+      type: "array",
+      items: { type: "string", enum: ["openclaw", "claude-code", "codex", "antigravity"] },
+      description: "Optional host allowlist for trace capture. Empty means all supported hosts when trace capture is enabled."
+    },
+    traceCaptureScopes: {
+      type: "array",
+      items: { type: "string" },
+      description: "Optional scope allowlist for trace capture. Empty means all scopes when trace capture is enabled."
+    },
+    traceFullCaptureHosts: {
+      type: "array",
+      items: { type: "string", enum: ["openclaw", "claude-code", "codex", "antigravity"] },
+      description: "Hosts explicitly allowed to persist full normalized trace events when trace metadata-only mode is disabled."
+    },
+    traceFullCaptureScopes: {
+      type: "array",
+      items: { type: "string" },
+      description: "Scopes explicitly allowed to persist full normalized trace events when trace metadata-only mode is disabled."
+    },
     traceRetentionDays: {
       type: "integer",
       minimum: 1,
@@ -440,6 +464,18 @@ export const pluginUiHints = {
   },
   traceMetadataOnly: {
     label: "Trace Metadata Only"
+  },
+  traceCaptureHosts: {
+    label: "Trace Capture Hosts"
+  },
+  traceCaptureScopes: {
+    label: "Trace Capture Scopes"
+  },
+  traceFullCaptureHosts: {
+    label: "Trace Full Capture Hosts"
+  },
+  traceFullCaptureScopes: {
+    label: "Trace Full Capture Scopes"
   },
   traceRetentionDays: {
     label: "Trace Retention Days"

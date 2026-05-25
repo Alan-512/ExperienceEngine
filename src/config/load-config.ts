@@ -10,6 +10,12 @@ type LoadConfigOptions = {
   homeDir?: string;
 };
 
+const parseStringList = (value: string | undefined): string[] | undefined =>
+  value
+    ?.split(",")
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+
 export const loadConfig = (
   overrides: Partial<ExperienceEngineConfig> = {},
   options: LoadConfigOptions = {}
@@ -215,7 +221,40 @@ export const loadConfig = (
       env.EXPERIENCE_ENGINE_HYBRID_POSTMORTEM_MODEL_PROFILE_VERSION ??
       overrides.hybridPostmortemModelProfileVersion ??
       settings.hybrid?.postmortem_model_profile_version ??
-      defaultConfig.hybridPostmortemModelProfileVersion
+      defaultConfig.hybridPostmortemModelProfileVersion,
+    traceCaptureEnabled:
+      env.EXPERIENCE_ENGINE_TRACE_CAPTURE_ENABLED !== undefined
+        ? env.EXPERIENCE_ENGINE_TRACE_CAPTURE_ENABLED === "true"
+        : overrides.traceCaptureEnabled ?? defaultConfig.traceCaptureEnabled,
+    traceMetadataOnly:
+      env.EXPERIENCE_ENGINE_TRACE_METADATA_ONLY !== undefined
+        ? env.EXPERIENCE_ENGINE_TRACE_METADATA_ONLY === "true"
+        : overrides.traceMetadataOnly ?? defaultConfig.traceMetadataOnly,
+    traceCaptureHosts:
+      parseStringList(env.EXPERIENCE_ENGINE_TRACE_CAPTURE_HOSTS) ??
+      overrides.traceCaptureHosts ??
+      defaultConfig.traceCaptureHosts,
+    traceCaptureScopes:
+      parseStringList(env.EXPERIENCE_ENGINE_TRACE_CAPTURE_SCOPES) ??
+      overrides.traceCaptureScopes ??
+      defaultConfig.traceCaptureScopes,
+    traceFullCaptureHosts:
+      parseStringList(env.EXPERIENCE_ENGINE_TRACE_FULL_CAPTURE_HOSTS) ??
+      overrides.traceFullCaptureHosts ??
+      defaultConfig.traceFullCaptureHosts,
+    traceFullCaptureScopes:
+      parseStringList(env.EXPERIENCE_ENGINE_TRACE_FULL_CAPTURE_SCOPES) ??
+      overrides.traceFullCaptureScopes ??
+      defaultConfig.traceFullCaptureScopes,
+    traceRetentionDays: env.EXPERIENCE_ENGINE_TRACE_RETENTION_DAYS
+      ? Number(env.EXPERIENCE_ENGINE_TRACE_RETENTION_DAYS)
+      : overrides.traceRetentionDays ?? defaultConfig.traceRetentionDays,
+    traceMaxEvents: env.EXPERIENCE_ENGINE_TRACE_MAX_EVENTS
+      ? Number(env.EXPERIENCE_ENGINE_TRACE_MAX_EVENTS)
+      : overrides.traceMaxEvents ?? defaultConfig.traceMaxEvents,
+    traceMaxEvidenceRefs: env.EXPERIENCE_ENGINE_TRACE_MAX_EVIDENCE_REFS
+      ? Number(env.EXPERIENCE_ENGINE_TRACE_MAX_EVIDENCE_REFS)
+      : overrides.traceMaxEvidenceRefs ?? defaultConfig.traceMaxEvidenceRefs
   });
 
   return parsed;
