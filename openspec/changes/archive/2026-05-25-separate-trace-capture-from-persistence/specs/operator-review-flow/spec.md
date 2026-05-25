@@ -46,6 +46,8 @@ ExperienceEngine SHALL link summary items to existing detailed inspection surfac
 - **THEN** its drill-down references use the same source names and command/resource identifiers documented for CLI and MCP inspection
 - **AND** those references do not point to mutation, restore, export, lifecycle-control actions, or diagnostic snapshot persistence changes
 
+## ADDED Requirements
+
 ### Requirement: Operator review flow reports trace provenance without exposing full trace by default
 
 ExperienceEngine SHALL expose trace summary and provenance diagnostics through operator review without requiring or displaying full pre-distillation trace events.
