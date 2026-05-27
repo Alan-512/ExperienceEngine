@@ -30,6 +30,44 @@ afterEach(() => {
 });
 
 describe("Claude Code installer", () => {
+  it("preserves an existing Claude MCP ExperienceEngine home when reinstalling without explicit env", () => {
+    const homeDir = makeTempDir();
+    const projectDir = makeTempDir();
+    const existingHome = join(makeTempDir(), ".experienceengine-existing");
+    const commands: string[] = [];
+
+    const report = installClaudeCodeAdapter({
+      homeDir,
+      projectDir,
+      env: {},
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        commands.push(key);
+        if (key === "claude mcp get experienceengine") {
+          return `experienceengine:
+  Scope: Project config (shared via .mcp.json)
+  Status: Connected
+  Type: stdio
+  Command: node
+  Args: --no-warnings /tmp/experienceengine/dist/cli/index.js mcp-server
+  Environment:
+    EXPERIENCE_ENGINE_HOME=${existingHome}
+
+To remove this server, run: claude mcp remove "experienceengine" -s project`;
+        }
+        return "";
+      }
+    });
+
+    const addCommand = commands.find((command) => command.startsWith("claude mcp add"));
+    expect(report.paths.productHome).toBe(existingHome);
+    expect(report.homeResolution?.source).toBe("host");
+    expect(report.homeResolution?.drift).toBe(true);
+    expect(addCommand).toContain(`EXPERIENCE_ENGINE_HOME_WINDOWS=${existingHome}`);
+    expect(existsSync(join(existingHome, "adapters", "claude-code", "install.json"))).toBe(true);
+    expect(existsSync(join(homeDir, ".experienceengine", "adapters", "claude-code", "install.json"))).toBe(false);
+  });
+
   it("writes project-local hook configuration and install state", () => {
     const homeDir = makeTempDir();
     const projectDir = makeTempDir();

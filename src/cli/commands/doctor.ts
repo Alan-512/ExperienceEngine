@@ -247,6 +247,38 @@ const logClaudeRuntimeStatus = (status?: {
   }
 };
 
+const logExperienceHomeResolution = (status?: {
+  homeResolution?: {
+    source: string;
+    hostHome?: string;
+    resolvedHome?: string;
+    defaultHome?: string;
+    drift: boolean;
+  };
+}): void => {
+  if (!status?.homeResolution) {
+    return;
+  }
+
+  const resolution = status.homeResolution;
+  console.log("ExperienceEngine home:");
+  console.log(`- Source: ${resolution.source}`);
+  if (resolution.resolvedHome) {
+    console.log(`- Active home: ${resolution.resolvedHome}`);
+  }
+  if (resolution.hostHome) {
+    console.log(`- Host recorded home: ${resolution.hostHome}`);
+  }
+  if (resolution.defaultHome) {
+    console.log(`- Default home: ${resolution.defaultHome}`);
+  }
+  if (resolution.drift) {
+    console.log(
+      "Warning: host ExperienceEngine home differs from the default home. EE will preserve the host-recorded home instead of silently switching data roots."
+    );
+  }
+};
+
 const logCodexRuntimeStatus = (status?: {
   paths?: {
     productHome?: string;
@@ -708,6 +740,7 @@ export const runDoctorCommand = async (
     ]);
     logDistillationStatus(status.distillationStatus);
     logClaudeRuntimeStatus(status);
+    logExperienceHomeResolution(status);
     if (status.duplicateHookSources) {
       console.log(
         "Warning: duplicate Claude hook sources detected. Disable the ExperienceEngine marketplace plugin or remove the duplicate hook source so Claude uses only project-local hooks."
@@ -768,6 +801,7 @@ export const runDoctorCommand = async (
     logRemoteReleaseStatus("codex", remoteStatus);
     logDistillationStatus(status.distillationStatus);
     logCodexRuntimeStatus(status);
+    logExperienceHomeResolution(status);
     logCodexLearningLoopStatus(status);
     logDecisionHealth(decisionHealth);
     logLearningQualityHealth(learningQuality);

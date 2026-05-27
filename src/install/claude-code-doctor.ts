@@ -24,6 +24,10 @@ import {
   resolveClaudeRuntimeTarget,
   type ClaudeRuntimeTarget
 } from "./claude-runtime-target.js";
+import {
+  buildEnvWithRecordedExperienceHome,
+  describeExperienceHomeResolution
+} from "./experience-home.js";
 
 type ClaudeHookMatcher = {
   matcher?: string;
@@ -117,9 +121,13 @@ const isMarketplaceManagedClaudeHost = (hostInfo: ClaudeMcpServerInfo | null): b
 
 export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
   const runner = options.runner ?? ((command) => runClaudeCommand(command)) as ClaudeCommandRunner;
+  const baseEnv = options.env ?? process.env;
+  const hostInfo = inspectClaudeHost(runner, options.cliEnv);
+  const marketplaceHome = extractClaudeHostEnvValue(hostInfo?.env, "EXPERIENCE_ENGINE_HOME");
+  const env = buildEnvWithRecordedExperienceHome(baseEnv, marketplaceHome);
   const paths = resolveExperienceEnginePaths({
     adapter: "claude-code",
-    env: options.env,
+    env,
     homeDir: options.homeDir
   });
   const packageRoot = resolveExperienceEnginePackageRoot();
@@ -130,7 +138,7 @@ export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
   const installState = paths.usedInstallState
     ? (JSON.parse(readFileSync(paths.installStatePath, "utf8")) as ClaudeInstallState)
     : null;
-  const runtimeTarget = installState?.runtimeTarget ?? resolveClaudeRuntimeTarget({ env: options.env ?? process.env });
+  const runtimeTarget = installState?.runtimeTarget ?? resolveClaudeRuntimeTarget({ env });
   const launcherPaths = ensureClaudeLaunchers({
     productHome: paths.productHome,
     packageRoot
@@ -147,8 +155,6 @@ export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
     windowsHook: resolvedLauncherPaths.hook,
     windowsMcpServer: resolvedLauncherPaths.mcpServer
   });
-  const hostInfo = inspectClaudeHost(runner, options.cliEnv);
-  const marketplaceHome = extractClaudeHostEnvValue(hostInfo?.env, "EXPERIENCE_ENGINE_HOME");
   const marketplaceState = readClaudeMarketplaceRuntimeState(marketplaceHome);
   const globalSettings = readClaudeGlobalSettings(options.homeDir);
   const marketplacePluginEnabled = globalSettings?.enabledPlugins?.["experienceengine@experienceengine"] === true;
@@ -179,11 +185,22 @@ export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
     : hasLocalManagedHooks ||
       Boolean(marketplaceState?.last_hook_seen_at || marketplaceState?.last_mcp_seen_at) ||
       (Boolean(hostInfo?.commandDisplay) && hookSource !== "missing");
-  const config = loadConfig({}, { env: options.env ?? process.env, homeDir: options.homeDir });
+  const config = loadConfig({}, { env, homeDir: options.homeDir });
   const resolutionEnv: NodeJS.ProcessEnv = {
-    ...(options.env ?? process.env),
+    ...env,
     EXPERIENCE_ENGINE_ADAPTER: "claude-code"
   };
+  const defaultPaths = resolveExperienceEnginePaths({
+    adapter: "claude-code",
+    env: { ...baseEnv, EXPERIENCE_ENGINE_HOME: undefined },
+    homeDir: options.homeDir
+  });
+  const homeResolution = describeExperienceHomeResolution(
+    baseEnv,
+    paths.productHome,
+    defaultPaths.productHome,
+    marketplaceHome
+  );
   const distillationResolution = resolveDistillationResolution({
     env: resolutionEnv,
     homeDir: options.homeDir,
@@ -217,6 +234,7 @@ export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
       scope: hostInfo?.scope ?? installState?.hostWiring?.scope,
       status: hostInfo?.status ?? installState?.hostWiring?.status
     },
+    homeResolution,
     distillationStatus: {
       distillationMode: distillationResolution.distillationMode,
       distillationSource: distillationResolution.distillationSource,

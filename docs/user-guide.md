@@ -107,6 +107,7 @@ Install ExperienceEngine through the host setup flow for:
     - `ee install codex`
   - native/manual fallback:
     - `codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y @alan512/experienceengine codex-mcp-server`
+  - if you already have an ExperienceEngine home, replace `$HOME/.experienceengine` with that existing path; the managed installer preserves a previously registered host home instead of silently switching data roots
   - after the managed path, start a new Codex session in this repo so Codex-native hooks, MCP wiring, and the `AGENTS.md` instruction block are picked up
   - the manual MCP fallback only installs the tool surface; use `ee install codex` or `ee repair codex` when hook lifecycle capture/injection is needed
 - `Claude Code`

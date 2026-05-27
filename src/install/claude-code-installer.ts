@@ -24,6 +24,12 @@ import {
   type ClaudeRuntimeTarget
 } from "./claude-runtime-target.js";
 import { setHybridSettings } from "../config/settings-store.js";
+import {
+  buildEnvWithRecordedExperienceHome,
+  describeExperienceHomeResolution,
+  extractEnvValue,
+  type ExperienceHomeResolution
+} from "./experience-home.js";
 
 type ClaudeHookCommand = {
   type: "command";
@@ -78,6 +84,7 @@ export type ClaudeCodeInstallReport = {
     scope?: string;
     status?: string;
   };
+  homeResolution?: ExperienceHomeResolution;
 };
 
 const readJsonFile = <T>(filePath: string): T | null => {
@@ -199,11 +206,18 @@ const inspectClaudeHost = (
   }
 };
 
+const extractClaudeHostHome = (hostInfo: ReturnType<typeof inspectClaudeHost>): string | undefined =>
+  extractEnvValue(hostInfo?.env, "EXPERIENCE_ENGINE_HOME");
+
 export const installClaudeCodeAdapter = (options: InstallerOptions = {}): ClaudeCodeInstallReport => {
   const runner = options.runner ?? ((command) => runClaudeCommand(command)) as ClaudeCommandRunner;
+  const baseEnv = options.env ?? process.env;
+  const existingHost = inspectClaudeHost(runner, options.cliEnv);
+  const hostHome = extractClaudeHostHome(existingHost);
+  const env = buildEnvWithRecordedExperienceHome(baseEnv, hostHome);
   const paths = resolveExperienceEnginePaths({
     adapter: "claude-code",
-    env: options.env ?? process.env,
+    env,
     homeDir: options.homeDir
   });
   const packageRoot = resolveExperienceEnginePackageRoot();
@@ -212,7 +226,7 @@ export const installClaudeCodeAdapter = (options: InstallerOptions = {}): Claude
   const settingsPath = join(projectDir, ".claude", "settings.local.json");
   const runtimeTarget = resolveClaudeRuntimeTarget({
     requested: options.runtimeTarget,
-    env: options.env ?? process.env
+    env
   });
   const launcherPaths = ensureClaudeLaunchers({
     productHome: paths.productHome,
@@ -223,8 +237,13 @@ export const installClaudeCodeAdapter = (options: InstallerOptions = {}): Claude
   const mergedSettings = mergeExperienceEngineHooks(settings, hookCommand);
   const globalSettings = disableMarketplaceExperienceEnginePlugin(readClaudeGlobalSettings(options.homeDir).settings);
   const globalSettingsPath = readClaudeGlobalSettings(options.homeDir).path;
-  const effectiveConfig = loadConfig({}, { env: options.env ?? process.env, homeDir: options.homeDir });
-  const existingHost = inspectClaudeHost(runner, options.cliEnv);
+  const effectiveConfig = loadConfig({}, { env, homeDir: options.homeDir });
+  const defaultPaths = resolveExperienceEnginePaths({
+    adapter: "claude-code",
+    env: { ...baseEnv, EXPERIENCE_ENGINE_HOME: undefined },
+    homeDir: options.homeDir
+  });
+  const homeResolution = describeExperienceHomeResolution(baseEnv, paths.productHome, defaultPaths.productHome, hostHome);
 
   mkdirSync(paths.dataDir, { recursive: true });
   mkdirSync(resolveProductStateDir(paths), { recursive: true });
@@ -251,7 +270,7 @@ export const installClaudeCodeAdapter = (options: InstallerOptions = {}): Claude
       postmortem_provider_mode: effectiveConfig.hybridPostmortemProviderMode,
       postmortem_model_profile_version: effectiveConfig.hybridPostmortemModelProfileVersion
     },
-    { env: options.env, homeDir: options.homeDir }
+    { env, homeDir: options.homeDir }
   );
   writeFileSync(settingsPath, `${JSON.stringify(mergedSettings, null, 2)}\n`, "utf8");
   writeFileSync(globalSettingsPath, `${JSON.stringify(globalSettings, null, 2)}\n`, "utf8");
@@ -317,6 +336,7 @@ export const installClaudeCodeAdapter = (options: InstallerOptions = {}): Claude
       transport: hostInfo?.transport,
       scope: hostInfo?.scope,
       status: hostInfo?.status
-    }
+    },
+    homeResolution
   };
 };

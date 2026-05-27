@@ -38,6 +38,42 @@ afterEach(() => {
 describe("Codex installer", () => {
   const currentVersion = readCurrentPackageVersion();
 
+  it("preserves an existing Codex MCP ExperienceEngine home when reinstalling without explicit env", () => {
+    const homeDir = makeTempDir();
+    const existingHome = join(makeTempDir(), ".experienceengine-existing");
+    const commands: string[] = [];
+
+    const report = installCodexAdapter({
+      homeDir,
+      cwd: homeDir,
+      env: {},
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        commands.push(key);
+        if (key === "codex mcp get experienceengine") {
+          return `experienceengine
+  enabled: true
+  transport: stdio
+  command: node
+  args: --no-warnings /tmp/experienceengine/dist/cli/index.js codex-mcp-server
+  cwd: -
+  env: EXPERIENCE_ENGINE_HOME=${existingHome}
+  startup_timeout_sec: 120
+  remove: codex mcp remove experienceengine`;
+        }
+        return "";
+      }
+    });
+
+    const addCommand = commands.find((command) => command.startsWith("codex mcp add experienceengine"));
+    expect(report.paths.productHome).toBe(existingHome);
+    expect(report.homeResolution?.source).toBe("host");
+    expect(report.homeResolution?.drift).toBe(true);
+    expect(addCommand).toContain(`EXPERIENCE_ENGINE_HOME=${existingHome}`);
+    expect(existsSync(join(existingHome, "adapters", "codex", "install.json"))).toBe(true);
+    expect(existsSync(join(homeDir, ".experienceengine", "adapters", "codex", "install.json"))).toBe(false);
+  });
+
   it("classifies WSL WindowsApps Codex shims as a PATH risk", () => {
     const status = classifyCodexCliPath(
       "/mnt/c/Users/seed/AppData/Local/Microsoft/WindowsApps/codex",

@@ -46,6 +46,12 @@ import { buildVersionStatus, readCurrentPackageVersion } from "../version/packag
 import { bootstrapDatabase, openDatabase } from "../store/sqlite/db.js";
 import { TaskRunRepository } from "../store/sqlite/repositories/task-run-repo.js";
 import { resolveScope } from "../input/scope-resolver.js";
+import {
+  buildEnvWithRecordedExperienceHome,
+  describeExperienceHomeResolution,
+  extractEnvValue,
+  type ExperienceHomeResolution
+} from "./experience-home.js";
 
 type InstallerOptions = {
   env?: NodeJS.ProcessEnv;
@@ -76,6 +82,7 @@ export type CodexInstallReport = {
     command?: string;
     transport?: string;
   };
+  homeResolution?: ExperienceHomeResolution;
   instruction?: {
     path: string;
     state: "present";
@@ -259,6 +266,20 @@ const inspectCodexHost = (
   }
 };
 
+const extractCodexHostHome = (hostInfo: CodexMcpServerInfo | null): string | undefined =>
+  extractEnvValue(hostInfo?.env, "EXPERIENCE_ENGINE_HOME");
+
+export const resolveCodexInstallerPaths = (options: InstallerOptions = {}): ResolvedPathInfo => {
+  const runner = options.runner ?? defaultCodexCommandRunner;
+  const baseEnv = options.env ?? process.env;
+  const hostHome = extractCodexHostHome(inspectCodexHost(runner, options.cliEnv));
+  return resolveExperienceEnginePaths({
+    adapter: "codex",
+    env: buildEnvWithRecordedExperienceHome(baseEnv, hostHome),
+    homeDir: options.homeDir
+  });
+};
+
 const inspectCliFallback = (env: NodeJS.ProcessEnv = process.env): CodexCliFallbackStatus => {
   const result = spawnSync("sh", ["-c", "command -v ee"], {
     encoding: "utf8",
@@ -344,16 +365,20 @@ const inspectCodexCliPath = (
 
 export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstallReport => {
   const runner = options.runner ?? defaultCodexCommandRunner;
+  const baseEnv = options.env ?? process.env;
+  const existing = inspectCodexHost(runner, options.cliEnv);
+  const hostHome = extractCodexHostHome(existing);
+  const env = buildEnvWithRecordedExperienceHome(baseEnv, hostHome);
   const paths = resolveExperienceEnginePaths({
     adapter: "codex",
-    env: options.env ?? process.env,
+    env,
     homeDir: options.homeDir
   });
   const packageRoot = resolveExperienceEnginePackageRoot();
   const installedVersion = readCurrentPackageVersion(packageRoot);
   const runtimeTarget = resolveCodexRuntimeTarget({
     requested: options.runtimeTarget,
-    env: options.env ?? process.env
+    env
   });
   const launchers = ensureCodexLaunchers({
     productHome: paths.productHome,
@@ -362,7 +387,6 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
   removeProjectCodexMcpServerSections("experienceengine", {
     cwd: options.cwd
   });
-  const existing = inspectCodexHost(runner, options.cliEnv);
   const instructionPath = resolveCodexInstructionPath(options.cwd);
   const projectHookLauncher = ensureCodexProjectHookLauncher({
     cwd: options.cwd ?? process.cwd(),
@@ -371,7 +395,13 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
     runtimeTarget
   });
   const hookCommand = projectHookLauncher.command;
-  const includePreToolUse = (options.env ?? process.env).EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED === "1";
+  const includePreToolUse = env.EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED === "1";
+  const defaultPaths = resolveExperienceEnginePaths({
+    adapter: "codex",
+    env: { ...baseEnv, EXPERIENCE_ENGINE_HOME: undefined },
+    homeDir: options.homeDir
+  });
+  const homeResolution = describeExperienceHomeResolution(baseEnv, paths.productHome, defaultPaths.productHome, hostHome);
 
   mkdirSync(paths.dataDir, { recursive: true });
   mkdirSync(resolveProductStateDir(paths), { recursive: true });
@@ -446,8 +476,8 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
     },
     hooks,
     captureDir: paths.captureDir,
-    hostWiring: state.hostWiring
-    ,
+    hostWiring: state.hostWiring,
+    homeResolution,
     instruction: {
       path: instruction.path,
       state: "present"
@@ -457,19 +487,22 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
 
 export const inspectCodexInstall = (options: InstallerOptions = {}) => {
   const runner = options.runner ?? defaultCodexCommandRunner;
+  const baseEnv = options.env ?? process.env;
+  const hostInfo = inspectCodexHost(runner, options.cliEnv);
+  const hostHome = extractCodexHostHome(hostInfo);
+  const env = buildEnvWithRecordedExperienceHome(baseEnv, hostHome);
   const paths = resolveExperienceEnginePaths({
     adapter: "codex",
-    env: options.env ?? process.env,
+    env,
     homeDir: options.homeDir
   });
   const installState = existsSync(paths.installStatePath)
     ? (JSON.parse(readFileSync(paths.installStatePath, "utf8")) as CodexInstallState)
     : null;
   const packageRoot = resolveExperienceEnginePackageRoot();
-  const hostInfo = inspectCodexHost(runner, options.cliEnv);
   const runtimeTarget = resolveCodexRuntimeTarget({
     requested: options.runtimeTarget,
-    env: options.env ?? process.env
+    env
   });
   const launchers = resolveCodexLauncherPaths({
     productHome: paths.productHome
@@ -479,22 +512,28 @@ export const inspectCodexInstall = (options: InstallerOptions = {}) => {
     cwd: options.cwd,
     hookCommand,
     runtimeTarget,
-    includePreToolUse: (options.env ?? process.env).EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED === "1"
+    includePreToolUse: env.EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED === "1"
   });
   const instructionPath = resolveCodexInstructionPath(options.cwd);
   const instruction = inspectManagedInstructionBlock(instructionPath);
-  const config = loadConfig({}, { env: options.env ?? process.env, homeDir: options.homeDir });
+  const config = loadConfig({}, { env, homeDir: options.homeDir });
   const learningLoop = inspectCodexLearningLoop({
     config,
     cwd: options.cwd,
     instruction
   });
   const cliFallback = inspectCliFallback(options.cliEnv ?? options.env ?? process.env);
-  const codexCli = inspectCodexCliPath(runtimeTarget, options.cliEnv ?? options.env ?? process.env);
+  const codexCli = inspectCodexCliPath(runtimeTarget, options.cliEnv ?? env);
   const resolutionEnv: NodeJS.ProcessEnv = {
-    ...(options.env ?? process.env),
+    ...env,
     EXPERIENCE_ENGINE_ADAPTER: "codex"
   };
+  const defaultPaths = resolveExperienceEnginePaths({
+    adapter: "codex",
+    env: { ...baseEnv, EXPERIENCE_ENGINE_HOME: undefined },
+    homeDir: options.homeDir
+  });
+  const homeResolution = describeExperienceHomeResolution(baseEnv, paths.productHome, defaultPaths.productHome, hostHome);
   const distillationResolution = resolveDistillationResolution({
     env: resolutionEnv,
     homeDir: options.homeDir,
@@ -531,6 +570,7 @@ export const inspectCodexInstall = (options: InstallerOptions = {}) => {
       transport: hostInfo?.transport,
       enabled: hostInfo?.enabled ?? false
     },
+    homeResolution,
     codexCli,
     cliFallback,
     instruction,

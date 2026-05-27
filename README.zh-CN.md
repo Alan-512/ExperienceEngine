@@ -352,6 +352,8 @@ ee install antigravity
 codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y @alan512/experienceengine codex-mcp-server
 ```
 
+如果你已经有 ExperienceEngine home，请把 `$HOME/.experienceengine` 替换为现有路径。托管的 `ee install codex` 会保留宿主已注册的 home，避免静默切换数据根目录。
+
 </details>
 
 说明：

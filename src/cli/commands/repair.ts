@@ -1,10 +1,13 @@
-import { resolveExperienceEnginePaths } from "../../config/path-resolver.js";
 import { repairCodexProjectHooks } from "../../install/codex-hooks.js";
 import { resolveCodexRuntimeTarget, ensureCodexProjectHookLauncher } from "../../install/codex-runtime-target.js";
 import { repairOpenClawAdapter } from "../../install/openclaw-installer.js";
 import { repairAntigravityAdapter } from "../../install/antigravity.js";
 import { resolveExperienceEnginePackageRoot } from "../../install/openclaw-cli.js";
-import { resolveCodexInstructionPath, upsertManagedInstructionBlock } from "../../install/codex-installer.js";
+import {
+  resolveCodexInstructionPath,
+  resolveCodexInstallerPaths,
+  upsertManagedInstructionBlock
+} from "../../install/codex-installer.js";
 import { buildCodexHookReviewGuidance } from "../../install/public-install.js";
 
 export const runRepairCommand = async (target?: string): Promise<void> => {
@@ -23,7 +26,7 @@ export const runRepairCommand = async (target?: string): Promise<void> => {
   }
 
   if (target === "codex") {
-    const paths = resolveExperienceEnginePaths({ adapter: "codex" });
+    const paths = resolveCodexInstallerPaths();
     const packageRoot = resolveExperienceEnginePackageRoot();
     const runtimeTarget = resolveCodexRuntimeTarget();
     const hookLauncher = ensureCodexProjectHookLauncher({
