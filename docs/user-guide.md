@@ -649,16 +649,14 @@ ee install claude-code
 ```
 
 What happens:
-- ExperienceEngine writes Claude hooks into `.claude/settings.local.json`
-- ExperienceEngine registers its shared MCP server with Claude Code for the current project
+- ExperienceEngine writes Claude hooks into the global user settings file `~/.claude/settings.json`
+- ExperienceEngine registers its shared MCP server with Claude Code globally (`-s user` mode)
 - install ends with a short cold-start note so users know capture is active before the first formal hint appears
 
 Local state changes:
-- project file `.claude/settings.local.json`
-- project file `.mcp.json`
+- global user settings file `~/.claude/settings.json`
 - ExperienceEngine-managed product state under `~/.experienceengine`
-
-These project files are local host-wiring artifacts. They are intended for local use and should normally stay out of version control.
+- Any duplicate project-local settings and `.mcp.json` files are automatically pruned to prevent conflicts
 
 After install:
 - new Claude sessions use the updated hooks
@@ -699,14 +697,15 @@ ee install codex
 What happens:
 - ExperienceEngine registers its shared MCP server with Codex
 - new Codex MCP sessions can use ExperienceEngine interaction surfaces
-- ExperienceEngine writes Codex-native project hooks and enables the `hooks` feature
+- ExperienceEngine writes Codex-native global hooks and enables the `hooks` feature
 - first use after managed setup may require manual Codex hook approval; open `/hooks` and approve `UserPromptSubmit`, `PostToolUse`, and `Stop`
 - install ends with a short cold-start note so users know capture is active before the first formal hint appears
 
 Local state changes:
-- project hook config in `.codex/hooks.json`
-- Codex MCP config in the active runtime's `~/.codex/config.toml`
+- global user hook config in `~/.codex/hooks.json`
+- global user Codex MCP config in the active runtime's `~/.codex/config.toml`
 - ExperienceEngine-managed product state under `~/.experienceengine`
+- Any duplicate project-local hook configurations and `.cmd` launchers are pruned safely
 
 Useful commands:
 
@@ -738,9 +737,9 @@ Host note:
 - `UserPromptSubmit` is synchronous because it decides prompt-time injection
 - `PostToolUse` and `Stop` are queued for background processing by default
 - `PreToolUse` is not registered by default; set `EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED=1` only for synchronous gating experiments
-- in a Windows Codex App + WSL Codex CLI repo, `.codex/hooks.json` is shared project hook wiring, while MCP config is owned by each runtime's Codex home
-- Codex hook review is not CLI-only: any Codex surface that loads the repo project hooks can ask for approval; approve `UserPromptSubmit`, `PostToolUse`, and `Stop`, plus `PreToolUse` only when explicitly enabled
-- `ee repair codex` refreshes project hooks and removes stale project-scoped ExperienceEngine MCP config
+- `~/.codex/hooks.json` is the global user hook wiring, while MCP config is owned by each runtime's Codex home
+- Codex hook review is not CLI-only: any Codex surface that loads the global hooks can ask for approval; approve `UserPromptSubmit`, `PostToolUse`, and `Stop`, plus `PreToolUse` only when explicitly enabled
+- `ee repair codex` refreshes global hooks and removes stale project-scoped ExperienceEngine MCP config
 - if Codex still cannot see ExperienceEngine or doctor reports hook drift, run `ee repair codex`
 - `ee codex exec` is a deterministic wrapper for non-interactive runs
 - the wrapper owns `lookup -> child codex exec -> record -> finalize` outside the child process
@@ -750,9 +749,9 @@ Host note:
 - `codex exec review` is not wrapped yet; keep using native Codex review or the MCP/CLI surfaces for review workflows
 
 Diagnostics note:
-- `ee doctor codex` separates project hook health, hooks feature enablement, MCP registration, and PATH-visible `ee` CLI fallback
-- Windows Codex App can have healthy project hooks even when a Windows `codex` CLI is not installed
-- WSL Codex CLI must have its own MCP registration in the WSL Codex home; it can still reuse the same repo `.codex/hooks.json`
+- `ee doctor codex` separates global hook health, hooks feature enablement, MCP registration, and PATH-visible `ee` CLI fallback
+- Windows Codex App can have healthy global hooks even when a Windows `codex` CLI is not installed
+- WSL Codex CLI must have its own MCP registration in the WSL Codex home; it reuses the same global `~/.codex/hooks.json`
 - on WSL, `ee doctor codex` also warns when `codex` resolves to a WindowsApps shim instead of the Linux Codex CLI
 
 ### Google Antigravity Advanced Commands
