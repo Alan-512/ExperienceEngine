@@ -1,7 +1,7 @@
 {
   "id": "experienceengine",
   "name": "ExperienceEngine",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Context-aware experience intervention controller for coding and debugging tasks.",
   "configSchema": {
     "type": "object",

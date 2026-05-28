@@ -106,10 +106,11 @@ export const toWindowsRuntimePath = (value: string): string => {
 };
 
 const ensurePosixLauncher = (path: string, packageRoot: string, command: "codex-mcp-server" | "codex-hook"): void => {
+  const posixRoot = packageRoot.replace(/\\/g, "/").replace(/^([A-Za-z]):\//, (_, drive) => `/mnt/${drive.toLowerCase()}/`);
   const script = `#!/usr/bin/env bash
 set -euo pipefail
-exec node --no-warnings "${joinRuntimePath(packageRoot, "dist/cli/index.js")}" ${command} "$@"
-`;
+exec node --no-warnings "${posixRoot}/dist/cli/index.js" ${command} "$@"
+`.replace(/\r\n/g, "\n");
   writeFileSync(path, script, "utf8");
   chmodSync(path, 0o755);
 };

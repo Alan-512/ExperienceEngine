@@ -9,6 +9,9 @@ describe("resolveHybridPostmortemProviderEndpoint", () => {
       hybridPostmortemProviderMode: "shared_distiller",
       distillerProvider: "openai",
       distillerModel: "gpt-5.4-mini"
+    }, {
+      env: {},
+      homeDir: "/tmp/non-existent-home"
     });
 
     const resolved = resolveHybridPostmortemProviderEndpoint(config, {
@@ -29,10 +32,14 @@ describe("resolveHybridPostmortemProviderEndpoint", () => {
       hybridPostmortemProviderMode: "shared_distiller",
       distillerProvider: "openai_compatible",
       distillerModel: "gpt-5.4-mini"
+    }, {
+      env: {},
+      homeDir: "/tmp/non-existent-home"
     });
 
     const resolved = resolveHybridPostmortemProviderEndpoint(config, {
-      env: {}
+      env: {},
+      homeDir: "/tmp/non-existent-home"
     });
 
     expect(resolved).toEqual({

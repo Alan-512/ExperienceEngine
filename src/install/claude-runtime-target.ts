@@ -68,30 +68,38 @@ export const resolveClaudeRuntimeTarget = (
 };
 
 export const toWindowsRuntimePath = (value: string): string => {
-  if (isWindowsMountedPath(value)) {
-    return normalizeWindowsDrivePath(value);
-  }
-
-  const resolved = resolve(value);
-  if (/^[A-Za-z]:\\/.test(resolved)) {
-    return resolved;
-  }
-
-  if (process.platform === "linux") {
-    try {
-      const converted = execFileSync("wslpath", ["-w", resolved], {
-        stdio: "pipe",
-        encoding: "utf8"
-      }).trim();
-      if (converted) {
-        return converted;
-      }
-    } catch {
-      // Fall through to mounted-path normalization.
+  try {
+    if (isWindowsMountedPath(value)) {
+      return normalizeWindowsDrivePath(value);
     }
-  }
 
-  return normalizeWindowsDrivePath(resolved);
+    const resolved = resolve(value);
+    if (/^[A-Za-z]:\\/.test(resolved)) {
+      return resolved;
+    }
+
+    if (process.platform === "linux") {
+      try {
+        const converted = execFileSync("wslpath", ["-w", resolved], {
+          stdio: "pipe",
+          encoding: "utf8"
+        }).trim();
+        if (converted) {
+          return converted;
+        }
+      } catch {
+        // Fall through
+      }
+    }
+
+    // Safe best-effort conversion instead of throwing a terminal Error:
+    if (resolved.startsWith("/")) {
+      return "C:\\" + resolved.slice(1).replace(/\//g, "\\");
+    }
+    return resolved;
+  } catch {
+    return value;
+  }
 };
 
 export const toPosixRuntimePath = (value: string): string => {
@@ -114,10 +122,11 @@ export const toPosixRuntimePath = (value: string): string => {
 const resolveRealPath = (value: string): string => (existsSync(value) ? realpathSync(value) : resolve(value));
 
 const ensurePosixLauncher = (path: string, packageRoot: string, command: "claude-hook" | "mcp-server"): void => {
+  const posixRoot = toPosixRuntimePath(packageRoot);
   const script = `#!/usr/bin/env bash
 set -euo pipefail
-exec node --no-warnings "${join(packageRoot, "dist/cli/index.js")}" ${command} "$@"
-`;
+exec node --no-warnings "${posixRoot}/dist/cli/index.js" ${command} "$@"
+`.replace(/\r\n/g, "\n");
   writeFileSync(path, script, "utf8");
   chmodSync(path, 0o755);
 };

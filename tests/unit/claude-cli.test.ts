@@ -9,7 +9,7 @@ describe("Claude CLI wiring", () => {
     const command = buildClaudeAddCommand("/mnt/d/tmp/experienceengine", "/mnt/d/tmp/ee-home");
 
     expect(command.bin).toBe("claude");
-    expect(command.args.slice(0, 5)).toEqual(["mcp", "add", "-s", "project", "experienceengine"]);
+    expect(command.args.slice(0, 5)).toEqual(["mcp", "add", "-s", "user", "experienceengine"]);
     expect(command.args).toContain("EXPERIENCE_ENGINE_HOME_WINDOWS=D:\\tmp\\ee-home");
     expect(command.args).toContain("EXPERIENCE_ENGINE_HOME_POSIX=/mnt/d/tmp/ee-home");
     expect(command.args).toContain("EXPERIENCE_ENGINE_PACKAGE_ROOT_WINDOWS=D:\\tmp\\experienceengine");

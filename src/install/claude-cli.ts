@@ -84,7 +84,7 @@ export const buildClaudeAddCommand = (
       "mcp",
       "add",
       "-s",
-      "project",
+      "user",
       CLAUDE_EXPERIENCEENGINE_SERVER,
       "-e",
       `EXPERIENCE_ENGINE_HOME_WINDOWS=${toWindowsRuntimePath(experienceEngineHome)}`,
@@ -99,7 +99,7 @@ export const buildClaudeAddCommand = (
       "-e",
       launcher
     ],
-    description: "Register the ExperienceEngine MCP server with Claude Code",
+    description: "Register the ExperienceEngine MCP server globally with Claude Code",
     env: cliEnv
   };
 };
@@ -113,8 +113,8 @@ export const buildClaudeGetCommand = (cliEnv?: NodeJS.ProcessEnv): ClaudeCommand
 
 export const buildClaudeRemoveCommand = (cliEnv?: NodeJS.ProcessEnv): ClaudeCommand => ({
   bin: "claude",
-  args: ["mcp", "remove", CLAUDE_EXPERIENCEENGINE_SERVER],
-  description: "Remove the existing ExperienceEngine MCP server registration from Claude Code",
+  args: ["mcp", "remove", "-s", "user", CLAUDE_EXPERIENCEENGINE_SERVER],
+  description: "Remove the existing ExperienceEngine MCP server registration globally from Claude Code",
   env: cliEnv
 });
 

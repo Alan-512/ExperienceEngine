@@ -81,10 +81,14 @@ describe("hybrid phase 2 explain eval gate", () => {
       hybridExplainProviderMode: "shared_distiller",
       distillerProvider: "openai_compatible",
       distillerModel: "gpt-5.4-mini"
+    }, {
+      env: {},
+      homeDir: "/tmp/non-existent-home"
     });
 
     const resolved = resolveHybridExplainProviderEndpoint(config, {
-      env: {}
+      env: {},
+      homeDir: "/tmp/non-existent-home"
     });
 
     expect(resolved).toEqual({

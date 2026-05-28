@@ -1,4 +1,5 @@
 import type { DatabaseSync } from "node:sqlite";
+import { dirname } from "node:path";
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import { buildInjectionScorecard } from "../controller/injection-scorecard.js";
 import { buildBenchmarkSummary, type BenchmarkSummary } from "../evaluation/benchmark-summary.js";
@@ -1047,7 +1048,7 @@ export class ExperienceInteractionService {
       inspection
     });
     const providerResolution = this.config.hybridExplainLlmEnabled
-      ? resolveHybridExplainProviderEndpoint(this.config)
+      ? resolveHybridExplainProviderEndpoint(this.config, { homeDir: dirname(this.config.dataDir) })
       : { status: "disabled" as const, reason: "Phase 2 provider-backed explain is disabled." };
     const phase2ExplainRequested = this.config.hybridExplainLlmEnabled;
     const useProvider = providerResolution.status === "configured";

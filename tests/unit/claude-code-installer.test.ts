@@ -85,7 +85,7 @@ To remove this server, run: claude mcp remove "experienceengine" -s project`;
           }
 
           return `experienceengine:
-  Scope: Project config (shared via .mcp.json)
+  Scope: Global config (shared via settings.json)
   Status: ✓ Connected
   Type: stdio
   Command: node
@@ -93,12 +93,12 @@ To remove this server, run: claude mcp remove "experienceengine" -s project`;
   Environment:
     EXPERIENCE_ENGINE_HOME=${join(homeDir, ".experienceengine")}
 
-To remove this server, run: claude mcp remove "experienceengine" -s project`;
+To remove this server, run: claude mcp remove "experienceengine" -s user`;
         }
         return "";
       }
     });
-    const settingsPath = join(projectDir, ".claude", "settings.local.json");
+    const settingsPath = join(homeDir, ".claude", "settings.json");
     const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as {
       hooks?: Record<string, Array<{ matcher?: string; hooks: Array<{ command: string; timeout?: number }> }>>;
     };
@@ -118,12 +118,12 @@ To remove this server, run: claude mcp remove "experienceengine" -s project`;
     expect(settings.hooks?.PostToolUse?.[0]?.matcher).toBe("*");
     expect(settings.hooks?.PostToolUseFailure?.[0]?.matcher).toBe("*");
     expect(settings.hooks?.SessionEnd).toHaveLength(1);
-    expect(settings.hooks?.UserPromptSubmit?.[0]?.hooks[0]?.command).toContain("experienceengine-claude-hook");
-    expect(settings.hooks?.UserPromptSubmit?.[0]?.hooks[0]?.command).not.toContain("node -e");
+    expect(settings.hooks?.UserPromptSubmit?.[0]?.hooks[0]?.command).toContain("node -e");
+    expect(settings.hooks?.UserPromptSubmit?.[0]?.hooks[0]?.command).toContain("claude-hook");
     expect(settings.hooks?.UserPromptSubmit?.[0]?.hooks[0]?.timeout).toBe(30);
     expect(settings.hooks?.SessionEnd?.[0]?.hooks[0]?.timeout).toBe(120);
     expect(commands[0]).toBe("claude mcp get experienceengine");
-    expect(commands[1]).toContain("claude mcp add -s project experienceengine -e");
+    expect(commands[1]).toContain("claude mcp add -s user experienceengine -e");
     expect(commands[1]).toContain("EXPERIENCE_ENGINE_HOME_WINDOWS=");
     expect(commands[1]).toContain("EXPERIENCE_ENGINE_HOME_POSIX=");
     expect(commands[1]).toContain("-- node -e");
@@ -141,10 +141,10 @@ To remove this server, run: claude mcp remove "experienceengine" -s project`;
   it("merges ExperienceEngine hooks without clobbering unrelated settings", () => {
     const homeDir = makeTempDir();
     const projectDir = makeTempDir();
-    const settingsPath = join(projectDir, ".claude", "settings.local.json");
+    const settingsPath = join(homeDir, ".claude", "settings.json");
 
-    rmSync(join(projectDir, ".claude"), { recursive: true, force: true });
-    mkdirSync(join(projectDir, ".claude"), { recursive: true });
+    rmSync(join(homeDir, ".claude"), { recursive: true, force: true });
+    mkdirSync(join(homeDir, ".claude"), { recursive: true });
     writeFileSync(
       settingsPath,
       `${JSON.stringify(
@@ -190,9 +190,9 @@ To remove this server, run: claude mcp remove "experienceengine" -s project`;
   it("removes stale ExperienceEngine hook variants before writing the current hook command", () => {
     const homeDir = makeTempDir();
     const projectDir = makeTempDir();
-    const settingsPath = join(projectDir, ".claude", "settings.local.json");
+    const settingsPath = join(homeDir, ".claude", "settings.json");
 
-    mkdirSync(join(projectDir, ".claude"), { recursive: true });
+    mkdirSync(join(homeDir, ".claude"), { recursive: true });
     writeFileSync(
       settingsPath,
       `${JSON.stringify(
@@ -259,7 +259,7 @@ To remove this server, run: claude mcp remove "experienceengine" -s project`;
           }
 
           return `experienceengine:
-  Scope: Project config (shared via .mcp.json)
+  Scope: Global config (shared via settings.json)
   Status: ✓ Connected
   Type: stdio
   Command: cmd.exe
@@ -267,13 +267,13 @@ To remove this server, run: claude mcp remove "experienceengine" -s project`;
   Environment:
     EXPERIENCE_ENGINE_HOME=D:\\ExperienceEngineData\\.experienceengine
 
-To remove this server, run: claude mcp remove "experienceengine" -s project`;
+To remove this server, run: claude mcp remove "experienceengine" -s user`;
         }
         return "";
       }
     });
 
-    const settingsPath = join(projectDir, ".claude", "settings.local.json");
+    const settingsPath = join(homeDir, ".claude", "settings.json");
     const settings = JSON.parse(readFileSync(settingsPath, "utf8")) as {
       hooks?: Record<string, Array<{ matcher?: string; hooks: Array<{ command: string }> }>>;
     };
@@ -283,9 +283,8 @@ To remove this server, run: claude mcp remove "experienceengine" -s project`;
     };
     const hookLauncher = readFileSync(installState.launcherPaths?.hook ?? "", "utf8");
 
-    expect(settings.hooks?.UserPromptSubmit?.[0]?.hooks[0]?.command).toContain("cmd.exe /c");
-    expect(settings.hooks?.UserPromptSubmit?.[0]?.hooks[0]?.command).toContain("experienceengine-claude-hook.cmd");
-    expect(settings.hooks?.UserPromptSubmit?.[0]?.hooks[0]?.command).not.toContain("node -e");
+    expect(settings.hooks?.UserPromptSubmit?.[0]?.hooks[0]?.command).toContain("node -e");
+    expect(settings.hooks?.UserPromptSubmit?.[0]?.hooks[0]?.command).toContain("claude-hook");
     expect(commands[1]).toContain("-e EXPERIENCE_ENGINE_HOME_WINDOWS=");
     expect(commands[1]).toContain("-e EXPERIENCE_ENGINE_HOME_POSIX=");
     expect(commands[1]).toContain("-e EXPERIENCE_ENGINE_PACKAGE_ROOT_WINDOWS=");

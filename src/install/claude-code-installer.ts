@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { loadConfig } from "../config/load-config.js";
@@ -19,6 +19,7 @@ import {
 import { readCurrentPackageVersion } from "../version/package-version.js";
 import {
   buildClaudeHookCommandForTarget,
+  buildCrossRuntimeClaudeHookCommand,
   ensureClaudeLaunchers,
   resolveClaudeRuntimeTarget,
   type ClaudeRuntimeTarget
@@ -92,7 +93,15 @@ const readJsonFile = <T>(filePath: string): T | null => {
     return null;
   }
 
-  return JSON.parse(readFileSync(filePath, "utf8")) as T;
+  try {
+    const content = readFileSync(filePath, "utf8").trim();
+    if (!content) {
+      return null;
+    }
+    return JSON.parse(content) as T;
+  } catch {
+    return null;
+  }
 };
 
 const readClaudeGlobalSettings = (homeDir?: string): { path: string; settings: ClaudeGlobalSettings } => {
@@ -223,7 +232,7 @@ export const installClaudeCodeAdapter = (options: InstallerOptions = {}): Claude
   const packageRoot = resolveExperienceEnginePackageRoot();
   const installedVersion = readCurrentPackageVersion(packageRoot);
   const projectDir = resolve(options.projectDir ?? process.cwd());
-  const settingsPath = join(projectDir, ".claude", "settings.local.json");
+  const settingsPath = readClaudeGlobalSettings(options.homeDir).path;
   const runtimeTarget = resolveClaudeRuntimeTarget({
     requested: options.runtimeTarget,
     env
@@ -232,11 +241,13 @@ export const installClaudeCodeAdapter = (options: InstallerOptions = {}): Claude
     productHome: paths.productHome,
     packageRoot
   });
-  const hookCommand = buildClaudeHookCommandForTarget(runtimeTarget, launcherPaths);
+  const hookCommand = buildCrossRuntimeClaudeHookCommand({
+    packageRoot,
+    productHome: paths.productHome
+  });
   const settings = readJsonFile<ClaudeSettings>(settingsPath) ?? {};
-  const mergedSettings = mergeExperienceEngineHooks(settings, hookCommand);
-  const globalSettings = disableMarketplaceExperienceEnginePlugin(readClaudeGlobalSettings(options.homeDir).settings);
-  const globalSettingsPath = readClaudeGlobalSettings(options.homeDir).path;
+  const disabledMarketplaceSettings = disableMarketplaceExperienceEnginePlugin(settings as ClaudeGlobalSettings);
+  const mergedSettings = mergeExperienceEngineHooks(disabledMarketplaceSettings as ClaudeSettings, hookCommand);
   const effectiveConfig = loadConfig({}, { env, homeDir: options.homeDir });
   const defaultPaths = resolveExperienceEnginePaths({
     adapter: "claude-code",
@@ -249,7 +260,53 @@ export const installClaudeCodeAdapter = (options: InstallerOptions = {}): Claude
   mkdirSync(resolveProductStateDir(paths), { recursive: true });
   mkdirSync(paths.captureDir, { recursive: true });
   mkdirSync(dirname(settingsPath), { recursive: true });
-  mkdirSync(dirname(globalSettingsPath), { recursive: true });
+
+  // Clean up project-local .claude/settings.local.json
+  const localSettingsPath = join(projectDir, ".claude", "settings.local.json");
+  if (existsSync(localSettingsPath)) {
+    try {
+      const localSettings = readJsonFile<ClaudeSettings>(localSettingsPath);
+      if (localSettings && localSettings.hooks) {
+        removeStaleExperienceEngineHooks(localSettings.hooks, "UserPromptSubmit", undefined);
+        removeStaleExperienceEngineHooks(localSettings.hooks, "PreToolUse", "*");
+        removeStaleExperienceEngineHooks(localSettings.hooks, "PostToolUse", "*");
+        removeStaleExperienceEngineHooks(localSettings.hooks, "PostToolUseFailure", "*");
+        removeStaleExperienceEngineHooks(localSettings.hooks, "SessionEnd", undefined);
+        const hasAnyHooks = Object.values(localSettings.hooks).some((entry) => entry.length > 0);
+        if (!hasAnyHooks) {
+          delete localSettings.hooks;
+        }
+      }
+      if (localSettings && Object.keys(localSettings).length === 0) {
+        unlinkSync(localSettingsPath);
+      } else if (localSettings) {
+        writeFileSync(localSettingsPath, `${JSON.stringify(localSettings, null, 2)}\n`, "utf8");
+      }
+    } catch {
+      // Safe fallback
+    }
+  }
+
+  // Clean up project-local .mcp.json
+  const localMcpPath = join(projectDir, ".mcp.json");
+  if (existsSync(localMcpPath) && projectDir !== packageRoot) {
+    try {
+      const localMcp = readJsonFile<any>(localMcpPath);
+      if (localMcp && localMcp.mcpServers) {
+        delete localMcp.mcpServers.experienceengine;
+        if (Object.keys(localMcp.mcpServers).length === 0) {
+          delete localMcp.mcpServers;
+        }
+      }
+      if (localMcp && Object.keys(localMcp).length === 0) {
+        unlinkSync(localMcpPath);
+      } else if (localMcp) {
+        writeFileSync(localMcpPath, `${JSON.stringify(localMcp, null, 2)}\n`, "utf8");
+      }
+    } catch {
+      // Safe fallback
+    }
+  }
 
   setHybridSettings(
     {
@@ -273,7 +330,6 @@ export const installClaudeCodeAdapter = (options: InstallerOptions = {}): Claude
     { env, homeDir: options.homeDir }
   );
   writeFileSync(settingsPath, `${JSON.stringify(mergedSettings, null, 2)}\n`, "utf8");
-  writeFileSync(globalSettingsPath, `${JSON.stringify(globalSettings, null, 2)}\n`, "utf8");
 
   if (existingHost?.name === "experienceengine") {
     runClaudeCommand(buildClaudeRemoveCommand(options.cliEnv), runner);

@@ -107,7 +107,13 @@ const readClaudeGlobalSettings = (homeDir?: string): ClaudeGlobalSettings | null
     return null;
   }
 
-  return JSON.parse(readFileSync(path, "utf8")) as ClaudeGlobalSettings;
+  try {
+    const content = readFileSync(path, "utf8").trim();
+    if (!content) return null;
+    return JSON.parse(content) as ClaudeGlobalSettings;
+  } catch {
+    return null;
+  }
 };
 
 const isMarketplaceManagedClaudeHost = (hostInfo: ClaudeMcpServerInfo | null): boolean => {
@@ -132,9 +138,28 @@ export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
   });
   const packageRoot = resolveExperienceEnginePackageRoot();
   const projectDir = resolve(options.projectDir ?? process.cwd());
-  const settingsPath = join(projectDir, ".claude", "settings.local.json");
-  const settings =
-    existsSync(settingsPath) ? (JSON.parse(readFileSync(settingsPath, "utf8")) as ClaudeSettings) : null;
+  const globalSettingsPath = join(resolve(options.homeDir ?? homedir()), ".claude", "settings.json");
+  const localSettingsPath = join(projectDir, ".claude", "settings.local.json");
+
+  let settings: ClaudeSettings | null = null;
+  let settingsPath = globalSettingsPath;
+
+  if (existsSync(globalSettingsPath)) {
+    try {
+      settings = JSON.parse(readFileSync(globalSettingsPath, "utf8")) as ClaudeSettings;
+    } catch {
+      // Ignored
+    }
+  }
+
+  if (!settings?.hooks && existsSync(localSettingsPath)) {
+    try {
+      settings = JSON.parse(readFileSync(localSettingsPath, "utf8")) as ClaudeSettings;
+      settingsPath = localSettingsPath;
+    } catch {
+      // Ignored
+    }
+  }
   const installState = paths.usedInstallState
     ? (JSON.parse(readFileSync(paths.installStatePath, "utf8")) as ClaudeInstallState)
     : null;

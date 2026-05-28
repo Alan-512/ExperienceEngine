@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import {
@@ -17,6 +17,7 @@ import {
 } from "./codex-cli.js";
 import {
   buildCodexProjectHookCommand,
+  buildCrossRuntimeCodexHookCommand,
   ensureCodexLaunchers,
   ensureCodexProjectHookLauncher,
   resolveCodexLauncherPaths,
@@ -387,14 +388,27 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
   removeProjectCodexMcpServerSections("experienceengine", {
     cwd: options.cwd
   });
+
+  const localCodexDir = join(options.cwd ?? process.cwd(), ".codex");
+  const localHooksPath = join(localCodexDir, "hooks.json");
+  const localHookCmd = join(localCodexDir, "experienceengine-codex-hook.cmd");
+  
+  if (existsSync(localHooksPath)) {
+    try {
+      rmSync(localHooksPath, { force: true });
+    } catch {}
+  }
+  if (existsSync(localHookCmd)) {
+    try {
+      rmSync(localHookCmd, { force: true });
+    } catch {}
+  }
+
   const instructionPath = resolveCodexInstructionPath(options.cwd);
-  const projectHookLauncher = ensureCodexProjectHookLauncher({
-    cwd: options.cwd ?? process.cwd(),
+  const hookCommand = buildCrossRuntimeCodexHookCommand({
     packageRoot,
-    productHome: paths.productHome,
-    runtimeTarget
+    productHome: paths.productHome
   });
-  const hookCommand = projectHookLauncher.command;
   const includePreToolUse = env.EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED === "1";
   const defaultPaths = resolveExperienceEnginePaths({
     adapter: "codex",
@@ -422,6 +436,7 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
   });
   const hooks = repairCodexProjectHooks({
     cwd: options.cwd,
+    homeDir: options.homeDir,
     hookCommand,
     runtimeTarget,
     includePreToolUse
@@ -507,9 +522,13 @@ export const inspectCodexInstall = (options: InstallerOptions = {}) => {
   const launchers = resolveCodexLauncherPaths({
     productHome: paths.productHome
   });
-  const hookCommand = buildCodexProjectHookCommand(options.cwd ?? process.cwd());
+  const hookCommand = buildCrossRuntimeCodexHookCommand({
+    packageRoot,
+    productHome: paths.productHome
+  });
   const hooks: CodexHookInspection = inspectCodexProjectHooks({
     cwd: options.cwd,
+    homeDir: options.homeDir,
     hookCommand,
     runtimeTarget,
     includePreToolUse: env.EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED === "1"

@@ -1,3 +1,4 @@
+import { dirname } from "node:path";
 import { repairCodexProjectHooks } from "../../install/codex-hooks.js";
 import { resolveCodexRuntimeTarget, ensureCodexProjectHookLauncher } from "../../install/codex-runtime-target.js";
 import { repairOpenClawAdapter } from "../../install/openclaw-installer.js";
@@ -37,6 +38,7 @@ export const runRepairCommand = async (target?: string): Promise<void> => {
     });
     const hooks = repairCodexProjectHooks({
       cwd: process.cwd(),
+      homeDir: dirname(paths.productHome),
       hookCommand: hookLauncher.command,
       runtimeTarget,
       includePreToolUse: process.env.EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED === "1"

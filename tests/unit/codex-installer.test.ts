@@ -146,8 +146,7 @@ env_key = "OPENROUTER_API_KEY"
     const hooks = JSON.parse(readFileSync(join(homeDir, ".codex", "hooks.json"), "utf8")) as {
       hooks: Record<string, unknown>;
     };
-    expect(JSON.stringify(hooks)).toContain("experienceengine-codex-hook.cmd");
-    expect(JSON.stringify(hooks)).not.toContain("node -e");
+    expect(JSON.stringify(hooks)).toContain("node -e");
     expect(JSON.stringify(hooks)).toContain("codex-hook");
     expect(hooks.hooks.PreToolUse).toBeUndefined();
     expect(commands[0]).toBe("codex mcp get experienceengine");
@@ -314,12 +313,14 @@ codex_hooks = true
       }
     });
 
-    const config = readFileSync(join(projectDir, ".codex", "config.toml"), "utf8");
-    expect(config).not.toContain("[mcp_servers.experienceengine]");
-    expect(config).not.toContain("[mcp_servers.experienceengine.env]");
-    expect(config).toContain("[features]");
-    expect(config).toContain("hooks = true");
-    expect(config).not.toContain("codex_hooks");
+    const localConfig = readFileSync(join(projectDir, ".codex", "config.toml"), "utf8");
+    expect(localConfig).not.toContain("[mcp_servers.experienceengine]");
+    expect(localConfig).not.toContain("[mcp_servers.experienceengine.env]");
+
+    const globalConfig = readFileSync(join(homeDir, ".codex", "config.toml"), "utf8");
+    expect(globalConfig).toContain("[features]");
+    expect(globalConfig).toContain("hooks = true");
+    expect(globalConfig).not.toContain("codex_hooks");
   });
 
   it("reports current host wiring for doctor output", () => {
@@ -557,9 +558,8 @@ codex_hooks = true
     const hooks = JSON.parse(readFileSync(join(homeDir, ".codex", "hooks.json"), "utf8")) as {
       hooks: Record<string, unknown>;
     };
-    expect(JSON.stringify(hooks)).toContain("cmd.exe /c");
-    expect(JSON.stringify(hooks)).toContain("experienceengine-codex-hook.cmd");
-    expect(JSON.stringify(hooks)).not.toContain("node -e");
+    expect(JSON.stringify(hooks)).toContain("node -e");
+    expect(JSON.stringify(hooks)).toContain("codex-hook");
   });
 
   it("inspects the current runtime target instead of reusing a shared-home install target", () => {

@@ -45,7 +45,7 @@ describe("repair command", () => {
 
     runRepairCommand("codex");
 
-    const hooksPath = join(cwd, ".codex", "hooks.json");
+    const hooksPath = join(home, ".codex", "hooks.json");
     const hooks = JSON.parse(readFileSync(hooksPath, "utf8")) as {
       hooks: Record<string, unknown>;
     };

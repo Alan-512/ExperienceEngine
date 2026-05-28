@@ -1,4 +1,4 @@
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
@@ -273,10 +273,12 @@ To remove this server, run: claude mcp remove "experienceengine"`;
 
     mkdirSync(marketplaceHome, { recursive: true });
     mkdirSync(join(homeDir, ".claude"), { recursive: true });
+    const currentSettings = JSON.parse(readFileSync(join(homeDir, ".claude", "settings.json"), "utf8"));
     writeFileSync(
       join(homeDir, ".claude", "settings.json"),
       JSON.stringify(
         {
+          ...currentSettings,
           enabledPlugins: {
             "experienceengine@experienceengine": true
           }
@@ -356,10 +358,12 @@ To remove this server, run: claude mcp remove "experienceengine" -s project`;
 
     mkdirSync(marketplaceHome, { recursive: true });
     mkdirSync(join(homeDir, ".claude"), { recursive: true });
+    const currentSettings = JSON.parse(readFileSync(join(homeDir, ".claude", "settings.json"), "utf8"));
     writeFileSync(
       join(homeDir, ".claude", "settings.json"),
       JSON.stringify(
         {
+          ...currentSettings,
           enabledPlugins: {
             "experienceengine@experienceengine": false
           }

@@ -1,3 +1,4 @@
+import { dirname } from "node:path";
 import { buildCandidateSignals } from "../analyzer/candidate-signals.js";
 import { buildInjectionScorecard } from "../controller/injection-scorecard.js";
 import { classifyFailureAttributionReason } from "../feedback/automatic-attribution.js";
@@ -961,7 +962,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     });
 
     const providerResolution = this.config.hybridAsyncPostmortemLlmEnabled
-      ? resolveHybridPostmortemProviderEndpoint(this.config)
+      ? resolveHybridPostmortemProviderEndpoint(this.config, { homeDir: dirname(this.config.dataDir) })
       : { status: "disabled" as const, reason: "Phase 3 provider-backed postmortem review is disabled." };
     const result =
       this.config.hybridAsyncPostmortemLlmEnabled && providerResolution.status === "unavailable"

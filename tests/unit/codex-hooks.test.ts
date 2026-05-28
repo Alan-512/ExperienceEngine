@@ -54,6 +54,7 @@ describe("Codex hook config helpers", () => {
     const cwd = makeTempDir();
     const status = inspectCodexProjectHooks({
       cwd,
+      homeDir: cwd,
       hookCommand: "/tmp/experienceengine-codex-hook",
       runtimeTarget: "posix"
     });
@@ -98,6 +99,7 @@ describe("Codex hook config helpers", () => {
 
     const result = repairCodexProjectHooks({
       cwd,
+      homeDir: cwd,
       hookCommand: "/tmp/experienceengine-codex-hook",
       runtimeTarget: "posix"
     });
@@ -154,6 +156,7 @@ describe("Codex hook config helpers", () => {
 
     const result = repairCodexProjectHooks({
       cwd,
+      homeDir: cwd,
       hookCommand: "cmd.exe /c \"D:/project/.codex/experienceengine-codex-hook.cmd\"",
       runtimeTarget: "windows"
     });
@@ -179,6 +182,7 @@ describe("Codex hook config helpers", () => {
     const cwd = makeTempDir();
     const result = repairCodexProjectHooks({
       cwd,
+      homeDir: cwd,
       hookCommand: "/tmp/experienceengine-codex-hook",
       runtimeTarget: "posix",
       includePreToolUse: true
@@ -200,6 +204,7 @@ describe("Codex hook config helpers", () => {
 
     const result = repairCodexProjectHooks({
       cwd,
+      homeDir: cwd,
       hookCommand: "/tmp/experienceengine-codex-hook",
       runtimeTarget: "posix"
     });

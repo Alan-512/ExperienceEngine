@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
+import { homedir } from "node:os";
 
 export const CODEX_HOOK_EVENTS = ["UserPromptSubmit", "PreToolUse", "PostToolUse", "Stop"] as const;
 export type CodexHookEvent = (typeof CODEX_HOOK_EVENTS)[number];
@@ -44,6 +45,10 @@ export type CodexHookRepairResult = CodexHookInspection & {
 
 const EXPERIENCEENGINE_CODEX_HOOK_MARKERS = ["experienceengine-codex-hook", " codex-hook", "'codex-hook'"];
 const EXPERIENCEENGINE_CLAUDE_HOOK_MARKERS = ["experienceengine-claude-hook", " claude-hook"];
+
+export const resolveGlobalCodexDir = (homeDir = homedir()): string => join(homeDir, ".codex");
+export const resolveGlobalCodexHooksPath = (homeDir = homedir()): string => join(resolveGlobalCodexDir(homeDir), "hooks.json");
+export const resolveGlobalCodexConfigPath = (homeDir = homedir()): string => join(resolveGlobalCodexDir(homeDir), "config.toml");
 
 export const resolveProjectCodexDir = (cwd = process.cwd()): string => join(cwd, ".codex");
 export const resolveProjectCodexHooksPath = (cwd = process.cwd()): string => join(resolveProjectCodexDir(cwd), "hooks.json");
@@ -240,12 +245,24 @@ const inspectParsedHooks = (
 
 export const inspectCodexProjectHooks = (options: {
   cwd?: string;
+  homeDir?: string;
   hookCommand: string;
   runtimeTarget?: "posix" | "windows";
   includePreToolUse?: boolean;
 }): CodexHookInspection => {
-  const hooksPath = resolveProjectCodexHooksPath(options.cwd);
-  const configPath = resolveProjectCodexConfigPath(options.cwd);
+  const globalHooksPath = resolveGlobalCodexHooksPath(options.homeDir);
+  const globalConfigPath = resolveGlobalCodexConfigPath(options.homeDir);
+  const localHooksPath = resolveProjectCodexHooksPath(options.cwd);
+  const localConfigPath = resolveProjectCodexConfigPath(options.cwd);
+
+  let hooksPath = globalHooksPath;
+  let configPath = globalConfigPath;
+
+  if (!existsSync(globalHooksPath) && existsSync(localHooksPath)) {
+    hooksPath = localHooksPath;
+    configPath = localConfigPath;
+  }
+
   const featureEnabled = existsSync(configPath) ? isCodexHooksFeatureEnabled(readFileSync(configPath, "utf8")) : false;
   const hooksFile = readHooksFile(hooksPath);
   if (hooksFile.parseError) {
@@ -294,12 +311,13 @@ export const inspectCodexProjectHooks = (options: {
 
 export const repairCodexProjectHooks = (options: {
   cwd?: string;
+  homeDir?: string;
   hookCommand: string;
   runtimeTarget?: "posix" | "windows";
   includePreToolUse?: boolean;
 }): CodexHookRepairResult => {
-  const hooksPath = resolveProjectCodexHooksPath(options.cwd);
-  const configPath = resolveProjectCodexConfigPath(options.cwd);
+  const hooksPath = resolveGlobalCodexHooksPath(options.homeDir);
+  const configPath = resolveGlobalCodexConfigPath(options.homeDir);
   const feature = ensureCodexHooksFeatureEnabled(configPath);
   const hooksFile = readHooksFile(hooksPath);
   if (hooksFile.parseError) {
