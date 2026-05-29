@@ -1,422 +1,852 @@
 # ExperienceEngine
 
-[English README](./README.md) | 简体中文
+[English](./README.md) | 简体中文
 
-ExperienceEngine 是一个面向编程 Agent 的治理层。它复用真实执行经验，但不会把 memory 变成噪声堆积。它只会在相关时注入简短、任务相关的 guidance，并持续记录这次介入到底是帮到了还是干扰了结果。
+**面向编程 Agent 的本地经验治理层。**
 
-**Memory 做加法，ExperienceEngine 做治理。**
+ExperienceEngine 通过将先前的任务结果转化为简短且受治理的提示词边界提示（prompt-boundary hints），帮助编程 Agent 避免重复犯相同的执行错误。
 
-当前支持的宿主：`OpenClaw`、`Claude Code`、`Codex`、`Google Antigravity Agent Desktop`
+> Memory 帮助 Agent 记住上下文。
+> ExperienceEngine 治理先前的执行经验是否应该介入。
+
+当前支持的宿主：**Codex**、**Claude Code**、**OpenClaw** 和 **Google Antigravity**（通过不同的 hook / MCP / 插件路径）。
+
+---
 
 ## 10 秒理解
 
 没有 ExperienceEngine：
-- agent 会在相似仓库里重复犯同样的 SQLite migration 错误
-- 它会先打开数据库、再补 migration，然后在错误方向上浪费几轮
+
+* 编程 Agent 遇到 SQLite 启动失败。
+* 它花了好几轮去调试连接池设置。
+* 最终它发现了真正的问题：在执行数据库迁移（migration）之前就打开了数据库连接。
+* 几天后，在类似的仓库或任务中，它又重复了相同的失败路径。
 
 有 ExperienceEngine：
-- 它会在真正调用工具之前注入一条很短的约束，例如：`先执行 migration，再打开数据库连接`
-- 宿主 agent 会直接避开上次已经踩过的错路，而不是重新试错
-- 任务结束后，ExperienceEngine 通常会根据真实结果自动更新这条 guidance
-- 如果这条 guidance 后面开始伤害相似任务，ExperienceEngine 会把它降温、隔离或退役
 
-任务流：`任务信号 -> 提炼经验 -> 检索 -> 短提示注入 -> 反馈 -> 治理`
+* 先前的 失败-修复-成功 路径被提炼为一个可复用的经验节点。
+* 当相似的任务开始时，ExperienceEngine 可能会注入一条精简的提示：
 
-<details>
-<summary>宿主里的示例对话</summary>
+```text
+Run the migration before opening the DB connection.
+```
 
-用户：修一下这个仓库里的 SQLite 启动失败问题。
+* 运行结束后，ExperienceEngine 会追踪该提示是帮到了（helped）、干扰了（harmed）还是保持不确定（uncertain）。
+* 如果该提示持续有帮助，它的信任度会提升。
+* 如果它开始对相似任务产生负面影响，它会被降温（cool down）、隔离（quarantine）或退役（retire）。
 
-宿主 agent：ExperienceEngine 在这个仓库里找到了一个之前成功过的修复模式：`先执行 migration，再打开数据库连接。` 我会先补 migration，然后再重试启动。
+核心循环：
 
-用户：为什么这条 ExperienceEngine 提示会命中？
+```text
+task signals (任务信号)
+→ distilled experience (提炼经验)
+→ hybrid retrieval (混合检索)
+→ compact intervention (精简介入)
+→ helped/harmed feedback (帮到/伤害反馈)
+→ governance (治理)
+```
 
-宿主 agent：它匹配到了这个仓库里过去一次相同的 SQLite 启动失败，以及当时成功的 migration-first 修复路径。
+---
 
-用户：所以 ExperienceEngine 的作用，是提前把我从同样的错路上拉回来？
+## 为什么要做这个
 
-宿主 agent：对。它在下一次工具调用前复用了这个仓库里的成功路径，而且这次任务结束后通常会自动判断这条经验到底帮到了还是干扰了结果。
+Coding Agent 已经非常强大。它们能够处理大型代码库、调用工具、执行多步任务，并通常能从错误中恢复。
 
-</details>
+但有一类失败模式仍然频繁出现：
 
-![`ee inspect --last --verbose` 示例输出](./docs/assets/readme/inspect-last-example.svg)
+> Agent 最终解决了问题，但稍后在相似的任务中又重复了相同的失败执行路径。
+
+这不仅仅是上下文记忆（context-memory）问题。
+这是一个**执行治理（execution-governance）**问题。
+
+ExperienceEngine 旨在回答：
+
+> 先前的执行经验何时应当主动引导或约束未来的编码任务？
+
+---
+
+## Memory vs ExperienceEngine
+
+| 层级 | 主要工作 | 示例 |
+| ---------------- | ----------------------------------------------------------------------- | ------------------------------------------------- |
+| Memory           | 记住事实、偏好和上下文                                                                | “此仓库使用 pnpm。”                            |
+| RAG              | 检索文档或以前的内容                                                                 | “这是 migration 文档。”                      |
+| ExperienceEngine | 治理先前的执行经验是否应当影响未来的行为 | “在打开数据库连接之前先运行 migration。” |
+
+ExperienceEngine **不是**为了替代 Memory 或 RAG。
+
+它是一个独立的层，专注于：
+
+* 重复的失败路径
+* 任务结果
+* 提示边界介入（prompt-boundary interventions）
+* 帮到/伤害反馈（helped/harmed feedback）
+* 对 guidance 的生命周期治理
+
+---
+
+## ExperienceEngine 的功能
+
+ExperienceEngine 可以：
+
+* 从 Coding Agent 的运行中捕获真实的任务信号
+* 将重复的 失败-修复-成功 路径提炼为结构化的经验节点
+* 在任务开始前检索匹配的经验
+* 注入精简的、针对具体任务的 guidance，而不是将冗长的记忆全部塞进 prompt 中
+* 追踪 Agent 是否遵循或违反了注入的 guidance
+* 记录 帮到/伤害/不确定（helped/harmed/uncertain）的结果
+* 随着时间的推移对 guidance 进行强化、降温、隔离或退役
+* 默认将经验限制在仓库/工作空间范围内（repo/workspace scoped）
+* 支持谨慎的跨范围（cross-scope）复用，而不是盲目地将一个仓库的教训应用到另一个仓库
+
+---
+
+## 架构
+
+```mermaid
+flowchart LR
+  A[User task] --> B[Host agent]
+  B --> C[Before prompt build]
+  C --> D[Retrieve matching experience]
+  D --> E[Compact intervention]
+  E --> F[Agent reasoning + tools]
+  F --> G[Tool results / failures / corrections]
+  G --> H[Task finalization]
+  H --> I[Trajectory-aware attribution]
+  I --> J[Helped / harmed / uncertain feedback]
+  J --> K[Governance: reinforce / cool / quarantine / retire]
+  K --> D
+```
+
+ExperienceEngine 工作在**上下文和宿主集成层**。
+It does not modify the host model’s weights.
+
+---
+
+## 经验节点模型
+
+ExperienceEngine 不存储泛化的记忆，例如：
+
+```text
+SQLite 问题与 migration 相关。
+```
+
+It tries to distill execution experience into structured nodes:
+
+```text
+触发模式：
+此仓库中的 SQLite 启动崩溃。
+
+精简提示：
+Run the migration before opening the DB connection.
+
+推荐步骤：
+1. 运行 migration。
+2. 重新启动应用。
+3. 仅在启动仍然失败时才调查连接池。
+
+避免步骤：
+不要一上来就调试连接池设置。
+
+成功信号：
+在运行 migration 后启动成功。
+
+证据总结：
+先前的任务在进行连接池调试后失败，随后在 migration 优先启动后成功。
+```
+
+经验节点可以包含：
+
+* 触发模式（trigger pattern）
+* 精简提示（compact hint）
+* 目标（goal）
+* 推荐步骤（recommended steps）
+* 避免步骤（avoid steps）
+* 备用步骤（fallback steps）
+* 成功信号（success signal）
+* 终止/升级条件（stop / escalation conditions）
+* 证据总结（evidence summary）
+* 来源记录（origin records）
+* 帮到/伤害记录（helped / harmed records）
+* 生命周期状态（lifecycle state）
+* 交付状态（delivery state）
+* 可移植性证据（portability evidence）
+
+---
+
+## 生命周期 vs 交付状态
+
+ExperienceEngine 将**存储状态**与**交付行为**分离开来。
+
+生命周期状态（Lifecycle state）：
+
+```text
+candidate (候选)
+→ priority_candidate (高优候选)
+→ active (活跃)
+→ cooling (降温)
+→ retired (退役)
+```
+
+交付状态（Delivery state）：
+
+```text
+shadow_only (仅影子投放)
+→ conservative_only (仅保守投放)
+→ eligible (符合投放条件)
+→ quarantined (已隔离)
+→ shadow_probe (影子探测)
+→ retired (已退役)
+```
+
+这种分离至关重要，因为一个节点可以存在于存储中，而不被允许直接影响 Agent。
+
+例如：
+
+* 一个新的候选节点可以保持 `shadow_only`。
+* 一个有希望但未经验证的节点可以保持 `conservative_only`。
+* 一个在相同范围内经过验证的节点可以变为 `eligible`。
+* 有害的 guidance 可以变为 `quarantined`。
+* 被隔离的 guidance 可以通过 `shadow_probe` 进行谨慎的测试。
+* 反复有害的 guidance 可以被退役（retired）。
+
+---
+
+## 帮到 / 伤害反馈
+
+ExperienceEngine 不会仅仅因为某个提示被检索出来，就假定它是好的。
+
+在任务结束之后，它可以记录一次介入究竟是：
+
+* 帮到了（helped）
+* 弱帮到（weakly helped）
+* 中性（neutral）
+* 保持未知（stayed unknown）
+* 弱伤害（weakly harmed）
+* 强伤害（strongly harmed）
+
+轨迹感知归因（Trajectory-aware attribution）会在可行时，将注入的预期与观察到的工具事件进行对比。
+
+轨迹判决的例子包括：
+
+```text
+adoption_detected (检测到采纳)
+non_adoption_detected (未检测到采纳)
+contra_adoption_detected (检测到反向采纳)
+guidance_prevented_failure (Guidance 阻止了失败)
+guidance_caused_failure (Guidance 导致了失败)
+trajectory_unknown (轨迹未知)
+```
+
+当轨迹证据不完整时，ExperienceEngine 会使用来自结果信号、失败特征和伤害检测的保守备用归因。
+
+也可以进行手动反馈：
+
+```bash
+ee helped
+ee harmed
+```
+
+手动反馈主要用于纠正自动判决，而不是用于对每次运行都进行人工打分。
+
+---
+
+## 宿主支持矩阵
+
+| 宿主 | 安装路径 | 日常交互 | 成熟度 |
+| ------------------ | ----------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------ |
+| Codex              | `ee install codex`                                                | hooks + MCP                            | 已支持                                                    |
+| Claude Code        | 插件市场（marketplace）路径，保留 `ee install claude-code` 作为备用 | MCP + 插件 hooks                     | 已支持                                                    |
+| OpenClaw           | 原生插件安装                                             | 宿主原生插件/运行时集成 | 当前最完整的宿主原生路径                         |
+| Google Antigravity | `ee install antigravity`，CLI 运行使用 `ee agy exec -C <project>` | MCP + 用户级插件/hooks 连线   | 通过 Agent Desktop / `agy` / 已观察到的 IDE hook 支持 |
+
+不同的宿主暴露了不同的 hook 表面，因此集成路径和成熟度也有所不同。
+
+---
 
 ## 快速开始
 
-最快的宿主安装路径：
-
-如果你需要使用 `ee init`、`ee install ...` 或其他 operator 命令，请先安装 CLI：
+### 1. 安装 CLI
 
 ```bash
 npm install -g @alan512/experienceengine
 ```
 
-- `OpenClaw`
-  - `openclaw plugins install @alan512/experienceengine`
-  - `openclaw gateway restart`
-  - `ee init`
-- `Codex`
-  - `ee install codex`
-  - `ee init`
-- `Claude Code`
-  - `/plugin marketplace add https://github.com/Alan-512/ExperienceEngine.git`
-  - `/plugin install experienceengine@experienceengine`
-  - `ee init`
-- `Google Antigravity`
-  - `ee install antigravity`
-  - `ee init`
+需要 Node.js `>=20`。
 
-`ee init` 用于在宿主安装完成后初始化共享的 ExperienceEngine 状态。
+### 2. 选择你的宿主
 
-如果你需要更详细的宿主安装说明、fallback 路径、ready 状态说明或 operator 工作流，跳转到 [完整安装与运维说明](#完整安装与运维说明)。
+#### Codex
 
-## 适合谁用
+```bash
+ee install codex
+ee init
+```
 
-以下情况适合使用 ExperienceEngine：
-- 你会在相似仓库或相似工作流里反复使用 coding agent
-- 你想要的是**短小、介入式 guidance**，而不是泛化的 memory recall
-- 你关心历史经验到底是**帮到了还是害了**
-- 你希望过时 guidance 能自动降温或退役，而不是越积越多
+然后，在你的仓库中开启一个新的 Codex 会话。
 
-以下情况不适合：
-- 你只想要一个个人笔记型 memory
-- 你想要通用文档 RAG
-- 你的工作流几乎不重复
-- 你希望系统默认记住所有东西
+如果 Codex 要求你审查 hooks，请打开：
 
-## 宿主支持矩阵
+```text
+/hooks
+```
 
-| 宿主 | 安装路径 | 日常交互 | 成熟度 |
-|---|---|---|---|
-| `OpenClaw` | 原生插件安装 | 宿主原生 | 当前最完整 |
-| `Claude Code` | marketplace 插件，保留 `ee install claude-code` fallback | MCP + plugin hooks | 已支持 |
-| `Codex` | `ee install codex`，保留原生 MCP fallback | hooks + MCP | 已支持 |
-| `Google Antigravity Agent Desktop` + `agy` CLI + IDE | `ee install antigravity`，CLI 运行使用 `ee agy exec -C <project>` | MCP + 已验证的原生 hooks | 通过用户级 Antigravity plugin wiring、`ee agy exec` 与已观察到的 IDE 全局 hooks 支持 |
+并批准 ExperienceEngine 的 hooks：
 
-## 为什么要做这个
+```text
+UserPromptSubmit
+PostToolUse
+Stop
+```
 
-Coding agent 会重复犯同类错误，通常不是因为模型不够聪明，而是因为之前的执行经验没有被**以可治理的方式**复用。
+`PreToolUse` 默认不注册。它仅用于同步门控（gating）实验。
 
-ExperienceEngine 的目标不是通用 memory 累积，而是**介入治理**。
+#### Claude Code
 
-## 为什么不是 Memory / RAG
+推荐的插件市场（marketplace）路径：
 
-| 问题 | Memory 系统 | ExperienceEngine |
-|---|---|---|
-| 跨会话保存事实和偏好 | 可以 | 不是核心目标 |
-| 捕获失败 -> 修复 -> 成功的经验路径 | 部分支持，通常依赖人工 | 可以，来自真实任务信号 |
-| 知道一条回忆到底有没有帮助 | 通常不行 | 可以，逐次记录 |
-| 自动退役过时或有害 guidance | 通常不行 | 可以，内建 cooling / retired 生命周期 |
-| 保持提示短小、任务相关 | 不是核心目标 | 是 |
-| 通用文档检索 | 常见适用场景 | 不是核心目标 |
+```text
+/plugin marketplace add https://github.com/Alan-512/ExperienceEngine.git
+/plugin install experienceengine@experienceengine
+```
 
-## 为什么它不是另一层记忆
-
-ExperienceEngine 不是想比宿主“记住更多东西”。它的核心价值，是持续治理一条已经学到的 guidance 还应不应该继续影响后续任务。
-
-- 大部分学习动作发生在任务之后，所以当前任务不需要等待整条经验处理链路跑完
-- 每条经验节点都会经历 `candidate`、`active`、`cooling`、`retired` 这样的生命周期
-- “存下来” 和 “还能不能继续上线” 是分开的，所以有害 guidance 可以被降温、隔离，或者退出正常注入路径
-- 任务结束后的审查会继续判断这条 hint 到底是帮到了、伤害了，还是仍然不确定
-- 即使这次没有注入 hint，delivery decision 也会被记录下来，所以之后仍然能解释为什么跳过
-- 同仓库高匹配经验在成功复用后可以从保守投放提升到正常投放；跨仓库复用默认仍保持保守，除非后续证据更强
-- 计算跨仓库的 portability scorecard 和 SemVer 兼容惩罚，防范跨 scope 的不安全经验复用
-- 任务结束后的因果轨迹归因（Causal Trajectory Attribution）确保只有在 agent 真正采纳了注入约束时，才计入 outcome 反馈
-- 提供隔离租期（quarantine lease）与 shadow probe 周期，引导隔离节点通过无害验证后安全、保守地恢复，同时完整保留历史记录
-- 这个产品追求的是“生产安全的经验复用”，不是“尽量多记、尽量多召回”
-
-## 它在 Agent Loop 里的位置
-
-从高层看，ExperienceEngine 围绕 agent loop 的位置是这样的：
-
-- `用户任务`
-- `before_prompt_build`：检索并注入匹配经验
-- `agent 推理 + 工具调用`：捕获失败、重试、修正和结果
-- `task finalize`：把候选信号提炼成可复用经验
-- `helped / harmed`：提升、降温或退役节点
-
-ExperienceEngine 工作在 context 层，不会修改宿主模型权重。
-
-## 经验生命周期
-
-`任务信号 -> candidate -> active -> cooling -> retired`
-
-每条经验都根据真实任务结果演化，而不是按时间粗暴清理。帮到任务的经验会被强化，反复有害的经验会被降温或退役。
-
-## 现在能做什么
-
-- 在相似编码任务里复用短 guidance
-- 查看某条 hint 为什么命中，或者为什么这次没有注入
-- 让 ExperienceEngine 根据真实任务结果自动强化、降温、隔离或退役 guidance
-- 当自动判断不准时，手动把最近一次介入标记为 helpful 或 harmful
-- 查看 active、cooling、quarantined、retired 以及 trace 轨迹胶囊执行经验等生命周期状态
-- 在 `OpenClaw`、`Claude Code`、`Codex` 三个宿主中使用
-- 捕获宿主执行轨迹证据用于富因果归因与学习准入校验，默认只长期保存提炼后的经验和有界 provenance
-
-### 底层实现
-
-- MCP 原生交互面，加上 CLI / operator fallback
-- 支持 API 与本地回退的语义检索（包含 `strict-offline` 离线配置、模型 manifest 校验和向量迁移状态）
-- 确定性的 match scorecard 包含移植分级（`validated_portable`、`cautiously_portable`、`incompatible`）与 SemVer 版本偏差惩罚
-- 任务后的因果轨迹归因评分（`adoption_detected`、`non_adoption_detected`、`unverifiable`）
-- 隔离节点的 shadow-probe 租期管理，包含无害通过计数器与保守恢复机制
-- 宿主 agent 内可直接查看和反馈经验，CLI fallback 包括 `ee inspect --last`、`ee inspect --trace <capsule-id>`、`ee helped`、`ee harmed`
-
-如果你想看 ExperienceNode 结构和治理字段，见：
-
-- [Experience Model Overview](./docs/development/experience-model.md)
-
-## 当前状态
-
-- Stable：核心经验生命周期、inspect/helped/harmed loop、宿主集成、CLI/operator fallback
-- 推荐优先路径：使用你已经在用的宿主；如果从零开始，`OpenClaw` 目前是最完整的原生插件路径
-- 仍在演进：retrieval 调优、provider 策略、更高级的宿主 UX
-- 如果你还没有固定宿主，建议先从 `OpenClaw` 开始。
-
-## 什么叫第一次真正成功
-
-安装并初始化后，第一次真正体现价值的信号通常是：
-
-- 一类重复任务不再重走之前已经犯过的错路
-- ExperienceEngine 只注入一条很短、和当前仓库直接相关的约束，而不是把上下文塞满
-- 宿主能解释为什么这条 hint 会命中，或者为什么这次没有注入
-- 任务结果通常会自动影响以后是否继续投放这条经验
-- `ee inspect --last` 能看到最近的介入和相关节点状态
-
-## 前置条件
-
-安装宿主前，请先确认对应宿主 CLI 已能在当前机器正常工作：
-
-- `openclaw`
-- `claude`
-- `codex`
-
-**ExperienceEngine 不会替你安装这些宿主 CLI。** 它只会接入一个已经可用的宿主环境。
-
-OpenClaw 说明：
-- 需要本机已有可正常工作的 OpenClaw，且支持原生插件安装
-- 下面的 OpenClaw 路径默认要求 `openclaw plugins install` 和 `openclaw gateway restart` 可用
-- ExperienceEngine 会从 OpenClaw hook payload 或附近仓库标记解析真实项目根目录；如果 OpenClaw 只上报全局 workspace，ExperienceEngine 会把该会话隔离起来，避免复用不相干的全局 workspace 经验
-
-通用包要求：
-- 发布包要求 Node.js `>=20`
-
-## 完整安装与运维说明
-
-### 按宿主安装
-
-ExperienceEngine 现在不再把 `ee` CLI 当成适用于所有宿主的统一首要安装入口。
-
-请先从宿主自己的安装路径接入：
-
-- `OpenClaw`
-  - 宿主原生插件安装：
-    - `openclaw plugins install @alan512/experienceengine`
-  - 安装后，在开始真实任务前先重启 gateway：
-    - `openclaw gateway restart`
-- `Codex`
-  - EE 托管安装：
-    - `ee install codex`
-  - 原生 / 手工 fallback：
-    - 如果你需要直接 MCP wiring，可参考后面的高级示例
-  - 无论走哪条路径，首次接入后都建议在仓库里开启一个新的 Codex 会话，让项目 hooks、MCP 配置和 `AGENTS.md` 指令块生效
-  - 托管安装后的首次使用，需要在 Codex 里打开 `/hooks`，批准 ExperienceEngine 的 `UserPromptSubmit`、`PostToolUse`、`Stop` hooks
-  - 如果同一个仓库同时用于 Windows Codex App 和 WSL Codex CLI，全局 `~/.codex/hooks.json` 会被两个运行时共享，而 MCP 配置则归每个运行时的 Codex home 自行管理
-- `Claude Code`
-  - 宿主原生 marketplace 安装：
-    - 先添加 GitHub marketplace：
-    - `/plugin marketplace add https://github.com/Alan-512/ExperienceEngine.git`
-  - 再安装插件：
-    - `/plugin install experienceengine@experienceengine`
-  - 如果你需要显式 hooks + MCP wiring，仍可使用：
-    - `ee install claude-code`
-  - 安装后建议开启一个新的 Claude Code 会话，让插件 hooks 和 bundled MCP 配置生效
-
-无论哪个宿主，整体流程都是一样的：
-
-1. 通过宿主路径安装 ExperienceEngine
-2. 执行一次 `ee init` 初始化共享状态
-3. 重启或新开宿主会话，直到仓库变成 `Ready`
-4. 日常检查和反馈优先留在宿主内部完成
-5. 需要验证、修复或深度排障时，再退回 `ee` CLI
-
-### 共享初始化
-
-`ee init` 属于 ExperienceEngine 的共享初始化，不是某个宿主自己的安装步骤。
-
-- 第一次接入任意宿主后执行一次，用来配置：
-  - distillation provider / model / auth
-  - embedding 模式 / provider
-  - 共享 provider secret
-- 后续再接入其他宿主，会复用同一个 ExperienceEngine home、配置和共享 secret
-
-安装完成后，ExperienceEngine 应该把用户引导到下一步状态：
-
-- 如果宿主 wiring 已完成，产品至少是 `Installed`
-- 执行完 `ee init` 后，进入 `Initialized`
-- 宿主或仓库完成 reload 并能开始真实任务后，进入 `Ready`
-
-最小共享初始化示例：
-
-1. `ee init distillation --provider openai --model gpt-4.1-mini --auth-mode api_key`
-2. `ee init secret OPENAI_API_KEY <your-api-key>`
-3. `ee init embedding --mode api --api-provider openai --model text-embedding-3-small`
-4. `ee init show`
-
-如果你更想用 Gemini 或 Jina 做 embedding，可以沿用同样的 `ee init embedding` 流程，只替换 provider 和 model。
-
-### 日常使用与 Operator 使用
-
-日常使用时，优先直接问宿主 agent 当前的 ExperienceEngine 状态。默认主路径是自动结果归因；手动 feedback 主要用于你觉得自动判断不准时的纠偏。
-
-例如：
-
-- “ExperienceEngine 刚刚注入了什么？”
-- “为什么那条 ExperienceEngine 提示会命中？”
-- “为什么这次 ExperienceEngine 没有注入？”
-- “把刚才那次 ExperienceEngine 介入标记为 helpful 或 harmful。”
-
-正常使用里，你不应该需要手动给每次介入都打分。ExperienceEngine 的默认路径是根据真实任务结果自动学习；只有当自动判断明显不对时，你再手动纠偏。
-
-OpenClaw 还支持这些 readiness / silence 问题：
-
-- “ExperienceEngine 这里 ready 了吗？”
-- “这个仓库里的 ExperienceEngine 还在 warming up 吗？”
-- “刚才为什么 ExperienceEngine 没有注入？”
-
-对于 `OpenClaw`、`Codex`、`Claude Code`，常规 review / feedback 路径都应优先留在宿主内部完成。
-只有宿主侧路径不可用，或者你需要显式 operator 控制时，再退回 CLI。
-
-ExperienceEngine 的交互面分成三层：
-
-- Routine：宿主内 review、`ee status`、`ee doctor <host>`、`ee inspect --last`、`ee inspect --trace <capsule-id>`、`ee helped`、`ee harmed`
-- Operator：install、upgrade、repair、operator review、hygiene review、export drafts、backup/export/import/rollback
-- Advanced / experimental：maintenance 命令、原始 evaluation、broker 内部动作、开发者诊断
-
-层级和风险是两个概念。比如 `ee inspect review` 是 operator 层但只读；install/upgrade/rollback 是 operator 层且属于 high-impact，需要保留现有保护。
-
-当你需要显式运维、验证或排障时，可以用：
+然后运行：
 
 ```bash
 ee init
-ee doctor <openclaw|claude-code|codex|antigravity>
-ee status
-ee maintenance embedding-smoke
 ```
 
-### Ready 与 Value 状态
-
-ExperienceEngine 把 onboarding 和 value 拆成两层：
-
-- `Setup state`
-  - `Installed`
-  - `Initialized`
-  - `Ready`
-- `Value state`
-  - `Warming up`
-  - `First value reached`
-
-这不是一条严格线性阶梯。一个仓库可以已经 `Ready`，但还处于 `Warming up`。
-
-`First value reached` 只应该在真实任务里已经出现可见价值时才成立。仅仅显示 onboarding 文案或 warm-up 提示，不算 first value。
-
-## 安装模型
-
-ExperienceEngine 明确拆分：
-- 宿主安装
-- 共享初始化
-- operator 工作流
-
-宿主仍然是主交互面。
-`ee` 仍然是显式的 operator 面，用于 setup、验证、修复、状态查看和维护。
-对于 Codex，`ee status` 和 `ee doctor codex` 还会显示 `ee` CLI fallback 是否在 `PATH` 上可用。Codex 的 MCP 接入在 CLI fallback 缺失时仍可能正常工作，但 `ee inspect --last` 这类命令需要 PATH 里有 `ee`，或者使用显式的包调用方式。
-如果同一个仓库同时用于 Windows Codex App 和 WSL Codex CLI，全局 `~/.codex/hooks.json` 是全局用户级 hook wiring，而 MCP 配置则归每个运行时的 Codex home 自行管理。`ee repair codex` 会刷新全局 hooks 并移除过期的项目级 ExperienceEngine MCP 配置，避免 Windows App 和 WSL CLI 争用同一个配置文件。
-
-## 高级按宿主命令（仅限 Operator / 开发者）
-
-大多数用户可以跳过这一节，直接使用上面的宿主安装路径。
-
-如果你是运维者、开发者，或者确实想显式控制某个宿主，仍可使用：
+备用路径：
 
 ```bash
-ee install openclaw
 ee install claude-code
-ee install codex
-ee install antigravity
+ee init
 ```
 
-<details>
-<summary>Codex 原生 / 手工 MCP fallback 示例</summary>
+开启一个新的 Claude Code 会话，以便加载插件 hooks 和 MCP 配置。
+
+#### OpenClaw
 
 ```bash
-codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y @alan512/experienceengine codex-mcp-server
+openclaw plugins install @alan512/experienceengine
+openclaw gateway restart
+ee init
 ```
 
-如果你已经有 ExperienceEngine home，请把 `$HOME/.experienceengine` 替换为现有路径。托管的 `ee install codex` 会保留宿主已注册的 home，避免静默切换数据根目录。
+OpenClaw 目前拥有最深度的宿主原生插件集成。
 
-</details>
+#### Google Antigravity
 
-说明：
-- `OpenClaw` 走 plugin/runtime integration，而不是 `src/adapters/`
-- `Google Antigravity` 当前指已验证生命周期自动化的 Antigravity Agent Desktop、独立 `agy` CLI 和 Antigravity IDE。IDE 外壳会作为单独 surface 跟踪，因为它的 MCP tool cache 位于 `~/.gemini/antigravity-ide`；真实宿主验证显示 IDE 会加载共享全局插件 hooks：`~/.gemini/config/plugins/experienceengine/hooks.json`。`ee doctor antigravity` 会报告 IDE 命令是否存在、是否观察到 IDE MCP tool cache、以及是否通过全局插件 surface 观察到 IDE hooks。EE 数据仍然是用户级，放在配置的 ExperienceEngine home 下，不同项目通过 project scope 隔离经验。`ee install antigravity` 会记录用户级 adapter 能力，并为 Agent Desktop 与 `agy` CLI 安装 Antigravity 用户级 plugin/MCP wiring；`ee antigravity activate-project -C <project>` 保留为项目级 fallback。CLI 运行优先使用 `ee agy exec -C <project> "<prompt>"`，它会调用 `agy --add-dir <project> --print ...`，因为 Windows 下直接 `agy` 项目自动发现可能因为无法创建 symlink 而不加载项目配置。Antigravity 既支持常规 stdio MCP 调用，也支持高级的“基于文档的因果归因分析器”，会自动解析规划/验证 Markdown 文件（`task.md`、`walkthrough.md`、`implementation_plan.md`）以评估任务执行状态，并与运行时 finalization 遥测数据进行对齐。
-- `Claude Code` 会安装 hooks 和共享 ExperienceEngine MCP 服务
-- `Codex` 会安装 Codex 原生 hooks 和共享 ExperienceEngine MCP 服务。`ee codex exec` 仍是确定性的非交互 fallback。
-- Codex 的 `UserPromptSubmit` 保持同步，因为它负责 prompt-time experience injection。`PostToolUse` 和 `Stop` 默认排队后在后台处理。`PreToolUse` 默认不注册；只有同步 gating 实验需要时才设置 `EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED=1` 启用。
-- Codex App 和 Codex CLI 在打开同一个仓库时都会加载全局用户级 hooks。如果 Codex 提示 hooks 需要 review，打开 `/hooks` 并批准 ExperienceEngine 的全局 `UserPromptSubmit`、`PostToolUse` 和 `Stop` hooks；如果启用了 `EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED=1`，再批准 `PreToolUse`。
-- `ee install ...` 与 `ee doctor ...` 会在 `npm` / `pnpm` 使用非官方 registry 时给出提示，因为受管模型下载在 `https://registry.npmjs.org` 下最稳定
-- 成功执行 `ee install ...` 后，也会提醒冷启动预期：capture 会立刻开始，但 formal experience 一般需要在同一仓库里出现几次相似任务后才会形成
+```bash
+ee install antigravity
+ee init
+```
 
-这些命令属于 operator fallback，不是默认公开安装路径。
+对于 CLI 运行：
+
+```bash
+ee agy exec -C <project-path> "<prompt>"
+```
+
+Antigravity 支持覆盖了 Agent Desktop、独立的 `agy` CLI，以及在有条件的情况下已观察到的 IDE 全局 hook/MCP 表面。
+
+---
+
+## 共享初始化
+
+`ee init` 配置共享的 ExperienceEngine 状态。
+
+它可以配置：
+
+* 提炼（distillation）提供商
+* 提炼模型
+* 提供商认证方式
+* 向量嵌入（embedding）模式
+* 向量嵌入提供商
+* 共享凭据（secrets）
+
+示例：
+
+```bash
+ee init distillation --provider openai --model gpt-4.1-mini --auth-mode api_key
+ee init secret OPENAI_API_KEY <your-api-key>
+ee init embedding --mode api --api-provider openai --model text-embedding-3-small
+ee init show
+```
+
+你也可以通过相同的 `ee init embedding` 流程配置 Gemini 或 Jina 进行向量嵌入。
+
+---
 
 ## 数据目录
 
-默认情况下，ExperienceEngine 的产品状态保存在：
+默认情况下，ExperienceEngine 将产品状态保存在：
 
 ```text
 ~/.experienceengine
 ```
 
-其中包括：
-- SQLite 数据库
-- 产品设置
-- 各 adapter 的 install state
-- 可选本地 embedding 模型缓存，默认位于 `~/.experienceengine/models/embeddings`
-- 受管备份与导出快照
+该管理状态包括：
+
+* SQLite 数据库
+* 产品设置
+* 每个适配器（adapter）的安装状态
+* 可选的本地 embedding 模型缓存
+* 受管备份
+* 导出文件
+* 回滚快照
+
+模型和 embedding 提供商取决于配置。
+ExperienceEngine 对产品状态是“本地优先”的，但除非专门配置，否则并不一定完全离线运行。
+
+---
 
 ## Embedding 默认行为
 
 当前默认行为：
 
-- `embeddingProvider = "api"`
-- provider 优先级：OpenAI -> Gemini -> Jina
-- 如果没有任何 API provider 可用，会回退到 legacy hash-based retrieval
-- 本地语义 embedding 是可选增强，默认安装不再包含本地模型运行时
+* `embeddingProvider = "api"`
+* 提供商优先级：OpenAI → Gemini → Jina
+* 如果没有任何 API 提供商可用，ExperienceEngine 将回退到传统的基于哈希的检索（legacy hash-based retrieval）
+* 本地语义 embedding 是可选增强，默认情况下不安装
 
-常用环境变量：
+常用的环境变量：
 
-- `EXPERIENCE_ENGINE_EMBEDDING_PROVIDER=local`
-  - 安装可选本地运行时后，强制完全本地 embedding：
-    `npm install -g @huggingface/transformers`
-- `EXPERIENCE_ENGINE_EMBEDDING_API_PROVIDER=openai|gemini|jina`
-  - 强制指定某个 API embedding provider
+```bash
+EXPERIENCE_ENGINE_EMBEDDING_PROVIDER=local
+EXPERIENCE_ENGINE_EMBEDDING_API_PROVIDER=openai|gemini|jina
+```
 
-## 用户手册
+如果需要在安装了可选本地运行时后强制使用本地 embedding：
 
-完整用户文档见：
+```bash
+npm install -g @huggingface/transformers
+```
 
-- [ExperienceEngine 用户手册](./docs/user-guide.md)
+---
 
-用户手册里包含安装、宿主差异、首次验证、维护命令和故障排查说明。
+## 日常使用
 
-## 自动 Hygiene Governance
+在日常使用中，优先停留在你的宿主 Agent 内部。
 
-ExperienceEngine 会把 hygiene governance 当成宿主附着的自动能力，而不是要求用户定期手动运行 CLI。宿主启动、prompt lookup、posttask finalization 和 stop 路径只做廉价 due check；真正是否执行由每个 scope 持久化的 schedule、lease、backoff、finding hash 和 action budget 决定。因此用户频繁打开或关闭宿主，只会增加廉价检查，不会放大治理频率。
+可以问以下问题：
 
-自动治理会沿用用户给 EE 配置好的 LLM 做冲突聚类和治理计划，然后由确定性 validator 控制写库。通过校验的经验库动作会自动执行：低风险动作包括 exact duplicate merge、stale shadow-only retirement、delivery downgrade 和 quarantine；高影响经验节点动作走 guarded 自动执行，例如语义/冲突 merge 会保留证据并把 canonical 限制在保守投递，promotion 只会进入 conservative delivery，delete record 只做 soft-retire 并保留 rollback snapshot。broad rewrite、export writing、repo policy change 和 restore 不属于自动经验治理，默认拒绝。
+```text
+What did ExperienceEngine just inject? (ExperienceEngine 刚刚注入了什么？)
+Why did that ExperienceEngine hint match? (为什么那条 ExperienceEngine 提示会命中？)
+Why didn't ExperienceEngine inject anything just now? (为什么刚才 ExperienceEngine 没有注入任何内容？)
+Mark the last ExperienceEngine intervention as helpful. (把刚才那次 ExperienceEngine 介入标记为 helpful。)
+Mark the last ExperienceEngine intervention as harmful. (把刚才那次 ExperienceEngine 介入标记为 harmful。)
+```
 
-`ee inspect hygiene` 和 `ee inspect review` 仍然是 read-only。宿主侧可以读取 `experienceengine://review`、`experienceengine://governance`；`experienceengine://governance/approvals` 仅用于兼容旧 approval 记录。`ee maintenance governance drain` 只是 operator fallback，用于显式排障或补跑；可选 keeper 也只会唤醒同一条 scheduler/lease/validator/audit 路径，不会绕过 guarded 执行规则或 rollback snapshot。
+当需要显式的操作员控制时，使用 CLI 备用路径：
+
+```bash
+ee status
+ee doctor codex
+ee doctor claude-code
+ee doctor openclaw
+ee doctor antigravity
+ee inspect --last
+ee helped
+ee harmed
+```
+
+---
+
+## 准备就绪状态与价值状态
+
+ExperienceEngine 将安装就绪与实际产生的价值区分开来。
+
+Setup 状态：
+
+```text
+Installed (已安装)
+→ Initialized (已初始化)
+→ Ready (就绪)
+```
+
+价值状态（Value state）：
+
+```text
+Warming up (正在热身)
+→ First value reached (达到首次价值)
+```
+
+一个仓库可以处于完全 `Ready` 的状态，但仍处于 `Warming up`。
+
+`First value reached` 应该仅在真实任务显示出可见价值后才被声明，例如：
+
+* 重复的任务避开了先前已知的失败路径
+* 注入了一条精简且与仓库高度相关的提示（hint）
+* 宿主能够解释为什么该提示会命中
+* 任务结果更新了未来的交付策略
+* `ee inspect --last` 显示了最近的介入和节点状态
+
+泛化的 onboarding 欢迎消息或热身提示不算作达到首次价值。
+
+---
+
+## 第一次成功是什么样子
+
+在安装 and 初始化后，一次完美的首次成功表现如下：
+
+1. 你运行了一个与先前 失败-修复 路径相似的任务。
+2. ExperienceEngine 注入了一条精简且相关的 hint。
+3. 宿主 Agent 避开了旧的失败路径。
+4. 任务成功完成或产生了有用的证据。
+5. ExperienceEngine 更新了节点的 helped/harmed/uncertain 状态。
+6. `ee inspect --last` 能够解释刚才发生了什么。
+
+例如：
+
+```bash
+ee inspect --last --verbose
+```
+
+![`ee inspect --last --verbose` 示例输出](./docs/assets/readme/inspect-last-example.svg)
+
+---
+
+## 为什么不直接写在 AGENTS.md 里？
+
+`AGENTS.md` 适用于稳定、全局的项目级指令。
+
+ExperienceEngine 则适用于可能具有以下特征的指导信息：
+
+* 仅适用于本仓库/本地（repo-local）
+* 仅适用于特定工作流（workflow-local）
+* 针对特定任务族（task-family-specific）
+* 仍未经验证
+* 在原始上下文之外可能会产生负面影响
+* 尚不适合成为永久规则
+
+一条优秀的规则最终可以演变为文档或项目规范。
+而 ExperienceEngine 是在此之前的**受治理验证场**。
+
+---
+
+## 安全模型
+
+ExperienceEngine 尽力避免将旧的经验变成新的 prompt 噪声。
+
+关键安全保障：
+
+* 注入精简的介入提示，而不是倒灌冗长的记忆
+* 优先使用相同范围（same-scope）的经验
+* 跨范围（cross-scope）复用非常谨慎
+* 可以拦截对跨仓库有破坏性的 guidance 模式
+* 依赖项和主版本兼容性检查会用于计算可移植性评分
+* 有害的 guidance 可以降温、被隔离或退役
+* 不确定的节点保持 shadow-only 或 conservative-only
+* shadow-probe 机制允许被隔离的 guidance 受到谨慎的测试
+* 决策会被持久化，以便日后审计跳过的轮次
+
+产品的目标是**生产安全的复用**，而不是最大化召回。
+
+---
+
+## 检索
+
+ExperienceEngine 使用混合检索（hybrid retrieval）而不仅仅是语义相似度。
+
+检索路径可以包含：
+
+* 查询重写（query rewriting）
+* 词法检索（lexical retrieval）
+* 语义检索（semantic retrieval）
+* 排序融合（rank fusion）
+* 策略富集（policy enrichment）
+* 任务族匹配（task-family matching）
+* 范围匹配（scope matching）
+* 失败特征匹配（failure-signature matching）
+* 产物/技术栈匹配
+* 重排序（reranking）
+* 交付状态门控（delivery-state gating）
+
+语义相似度非常有用，但它不被视为唯一的权威。
+
+---
+
+## 跨范围可移植性
+
+ExperienceEngine 默认被限定在工作空间/仓库范围内。
+
+跨范围（cross-scope）的复用是非常谨慎的。
+
+可移植性检查会考量：
+
+* 相同范围 vs 跨范围匹配
+* 主要语言兼容性
+* 共享依赖项
+* 框架 / ORM / 运行时差异
+* 主版本冲突惩罚
+* 破坏性 guidance 模式
+* 历史伤害记录
+* 兼容指纹下的成功复用证据
+
+可移植性分级包括：
+
+```text
+validated_portable (已验证可移植)
+same_family (同族)
+weakly_related (弱相关)
+incompatible (不兼容)
+```
+
+跨范围的 guidance 应当通过复用证据赢得信任，而不是被盲目应用。
+
+---
+
+## 后台卫生治理
+
+ExperienceEngine 包含用于保证经验质量的后台卫生治理（background hygiene）。
+
+它可以自动协助处理：
+
+* 重复节点
+* 冲突的 guidance
+* 过时的 shadow-only 节点
+* 有害的活跃（live）guidance
+* 高风险的交付状态
+* 隔离后的保守恢复
+
+高影响的动作会受到保护门控（guarded）。
+大范围的改写、不安全的删除和高风险的自动变更都会被拒绝，或转化为更安全的折中操作。
+
+对于普通用户来说，这几乎完全停留在后台运行。
+
+检查命令：
+
+```bash
+ee inspect review
+ee inspect hygiene
+ee inspect repo
+```
+
+操作员应急后退路径：
+
+```bash
+ee maintenance governance drain
+```
+
+---
+
+## CLI 命令参考
+
+常用命令：
+
+```bash
+ee init
+ee status
+ee doctor <openclaw|claude-code|codex|antigravity>
+ee inspect --last
+ee inspect --trace <capsule-id>
+ee helped
+ee harmed
+```
+
+宿主设置与修复：
+
+```bash
+ee install codex
+ee install claude-code
+ee install antigravity
+ee repair codex
+ee repair antigravity
+```
+
+OpenClaw 使用宿主原生的插件安装：
+
+```bash
+openclaw plugins install @alan512/experienceengine
+openclaw gateway restart
+```
+
+备份与恢复：
+
+```bash
+ee backup
+ee export
+ee import <snapshot-path>
+ee rollback <backup-id>
+```
+
+高级 / 运维命令：
+
+```bash
+ee maintenance embedding-smoke
+ee maintenance governance drain
+ee maintenance redistill-rule-nodes
+ee maintenance merge-scope <sourceScopeId> <targetScopeId>
+```
+
+绝大多数用户在日常使用中不需要使用高级维护命令。
+
+---
+
+## 高级宿主说明
+
+### Codex
+
+Codex 集成使用了 Codex 原生 hooks 和共享的 ExperienceEngine MCP 服务。
+
+默认 hooks：
+
+```text
+UserPromptSubmit
+PostToolUse
+Stop
+```
+
+说明：
+
+* `UserPromptSubmit` 负责在构建提示词（prompt-time）时注入经验。
+* `PostToolUse` 和 `Stop` 默认排队并在后台异步处理。
+* `PreToolUse` 默认不注册。
+* 在 Windows Codex App 与 WSL Codex CLI 共用同一仓库的混合设置中，全局 hooks 可以共享，而 MCP 配置则归每个运行时的 Codex home 自行管理。
+* `ee repair codex` 可以刷新全局 hooks 并移除过期的项目级 MCP 配置。
+
+手动 MCP 备用配置：
+
+```bash
+codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y @alan512/experienceengine codex-mcp-server
+```
+
+### Claude Code
+
+Claude Code 支持内置的 marketplace/plugin 路径：
+
+```text
+/plugin marketplace add https://github.com/Alan-512/ExperienceEngine.git
+/plugin install experienceengine@experienceengine
+```
+
+备用安装：
+
+```bash
+ee install claude-code
+```
+
+安装后，请开启一个新的 Claude Code 会话。
+
+### OpenClaw
+
+OpenClaw 使用插件/运行时深度集成，而非通用的适配器（adapter）路径。
+
+```bash
+openclaw plugins install @alan512/experienceengine
+openclaw gateway restart
+```
+
+如果 OpenClaw 仅上报了全局工作空间，ExperienceEngine 将会隔离该会话，而不是错误地复用不相关的全局工作空间经验。
+
+### Google Antigravity
+
+Antigravity 支持包括：
+
+* Agent Desktop 用户级插件/MCP 配置
+* `agy` CLI 集成
+* 在有条件的情况下，已观察到的 IDE 全局 hook/MCP 表面
+
+安装：
+
+```bash
+ee install antigravity
+```
+
+CLI 运行：
+
+```bash
+ee agy exec -C <project-path> "<prompt>"
+```
+
+项目级本地备用路径：
+
+```bash
+ee antigravity activate-project -C <project-path>
+```
+
+Antigravity 行为可能因具体环境而异，可以使用：
+
+```bash
+ee doctor antigravity
+```
+
+来检查当前的安装状态以及检测到的表面。
+
+---
+
+## 适合谁用
+
+在以下情况下，推荐使用 ExperienceEngine：
+
+* 你在相似的仓库或工作流中重复使用 Coding Agent
+* 你亲眼见到 Agent 翻来覆去地重新踩坑、重新摸索出相同的修复方案
+* 你希望获得精简且专注的约束性指导，而不是杂乱的通用记忆召回
+* 你非常关心复用的提示词是否真的起到了好作用还是起到了反作用
+* 你希望陈旧或有害的 guidance 能够自动降温，编制隔离，而不是堆积如山
+
+在以下情况下，**不**推荐使用 ExperienceEngine：
+
+* 你只需要一个记录个人笔记的 Memory
+* 你需要通用的文档 RAG 检索
+* 你的工作流极少重复
+* 你希望默认记住所有经历的事情
+* 你期望对模型权重进行微调（fine-tuning）
+
+---
+
+## 项目状态
+
+稳定（Stable）：
+
+* 核心经验生命周期（experience lifecycle）
+* 提示边界介入流程（prompt-boundary intervention flow）
+* inspect / helped / harmed 反馈循环
+* 本地 SQLite 支持的产品状态存储
+* 宿主集成
+* CLI / 运维 fallback
+
+已支持的宿主：
+
+* Codex
+* Claude Code
+* OpenClaw
+* Google Antigravity
+
+持续演进中（Evolving）：
+
+* 检索策略调优
+* 提供商（provider）策略
+* 高级宿主 UX
+* 跨范围可移植性（cross-scope portability）调优
+* 更加丰富的轨迹归因
+* 后台卫生治理行为
+
+本项目目前处于早期阶段。非常欢迎高频使用 Coding Agent 的重度用户向我们提供反馈！
+
+---
+
+## 补充文档
+
+其他相关文档：
+
+* [经验节点模型概述](./docs/development/experience-model.md)
+* [ExperienceEngine 用户手册](./docs/user-guide.md)
+
+建议的未来文档：
+
+* `docs/hosts/codex.md`
+* `docs/hosts/claude-code.md`
+* `docs/hosts/openclaw.md`
+* `docs/hosts/antigravity.md`
+* `docs/governance.md`
+* `docs/troubleshooting.md`
+
+---
 
 ## 许可证
 
-本项目采用 MIT License。
-详见 [LICENSE](./LICENSE)。
+本项目采用 MIT 许可证。
+详细内容请参阅 [LICENSE](./LICENSE)。

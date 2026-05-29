@@ -2,423 +2,852 @@
 
 English | [简体中文](./README.zh-CN.md)
 
-ExperienceEngine is a governance layer for coding agents that reuses real execution experience without turning memory into noise. It injects short task-specific guidance only when relevant, then tracks whether that intervention helped or harmed.
+**A local experience-governance layer for coding agents.**
 
-**Memory does addition. ExperienceEngine does governance.**
+ExperienceEngine helps coding agents avoid repeating the same failed execution paths by turning prior task outcomes into short, governed prompt-boundary hints.
 
-Supported hosts today: `OpenClaw`, `Claude Code`, `Codex`, and validated Google Antigravity Agent Desktop support
+> Memory helps agents remember context.
+> ExperienceEngine governs whether prior execution experience should intervene.
+
+Supported hosts today: **Codex**, **Claude Code**, **OpenClaw**, and **Google Antigravity** through different hook / MCP / plugin paths.
+
+---
 
 ## 10-Second Example
 
 Without ExperienceEngine:
-- the agent repeats the same SQLite migration mistake in a similar repo
-- it opens the DB before running the migration, then wastes turns retrying the wrong path
+
+* A coding agent sees a SQLite startup failure.
+* It spends several turns debugging connection pool settings.
+* It eventually discovers the real issue: the DB connection was opened before the migration ran.
+* Days later, in a similar repo or task, it repeats the same failed path.
 
 With ExperienceEngine:
-- at task start, it injects one short constraint like: `Run the migration before opening the DB connection`
-- the host agent avoids the same failed path instead of rediscovering it from scratch
-- after the task, ExperienceEngine usually updates that guidance automatically from the real outcome
-- if the guidance later starts harming similar tasks, ExperienceEngine can cool, quarantine, or retire it
 
-Task flow: `task signals -> distilled experience -> retrieval -> short intervention -> feedback -> governance`
+* The prior failure/fix/success path is distilled into a reusable experience node.
+* When a similar task starts, ExperienceEngine may inject one compact hint:
 
-<details>
-<summary>Example host transcript</summary>
+```text
+Run the migration before opening the DB connection.
+```
 
-User: Fix the SQLite startup failure in this repo.
+* After the run, ExperienceEngine tracks whether that hint helped, harmed, or remained uncertain.
+* If the hint keeps helping, it can become more trusted.
+* If it starts harming similar tasks, it can cool down, be quarantined, or retire.
 
-Host agent: ExperienceEngine found a prior successful fix pattern in this repo: `Run the migration before opening the DB connection.` I’ll apply the migration first, then retry startup.
+Core loop:
 
-User: Why did that ExperienceEngine hint match?
+```text
+task signals
+→ distilled experience
+→ hybrid retrieval
+→ compact intervention
+→ helped/harmed feedback
+→ governance
+```
 
-Host agent: It matched a prior task in this repo with the same SQLite startup pattern and a successful migration-first fix.
+---
 
-User: So ExperienceEngine is trying to keep me off the same bad path?
+## Why It Exists
 
-Host agent: Yes. It reused a repo-local success pattern before the next tool call, and it will usually score the outcome automatically after this run.
+Coding agents are already strong. They can handle large codebases, call tools, follow multi-step tasks, and often recover from mistakes.
 
-</details>
+But one failure mode still appears often:
 
-![Example `ee inspect --last --verbose` output](./docs/assets/readme/inspect-last-example.svg)
+> The agent eventually solves a problem, but later repeats the same failed execution path in a similar task.
+
+This is not only a context-memory problem.
+It is an execution-governance problem.
+
+ExperienceEngine is designed to answer:
+
+> When should prior execution experience actively guide or constrain a future coding task?
+
+---
+
+## Memory vs ExperienceEngine
+
+| Layer            | Main job                                                                | Example                                           |
+| ---------------- | ----------------------------------------------------------------------- | ------------------------------------------------- |
+| Memory           | Remember facts, preferences, and context                                | “This repo uses pnpm.”                            |
+| RAG              | Retrieve documents or previous content                                  | “Here is the migration doc.”                      |
+| ExperienceEngine | Govern whether prior execution experience should affect future behavior | “Run migration before opening the DB connection.” |
+
+ExperienceEngine is **not** meant to replace memory or RAG.
+
+It is a separate layer focused on:
+
+* repeated failure paths
+* task outcomes
+* prompt-boundary interventions
+* helped/harmed feedback
+* lifecycle governance for guidance
+
+---
+
+## What ExperienceEngine Does
+
+ExperienceEngine can:
+
+* capture real task signals from coding-agent runs
+* distill repeated failure/fix/success paths into structured experience nodes
+* retrieve matching experience before a task begins
+* inject compact task-specific guidance instead of dumping long memory into the prompt
+* track whether the agent appeared to follow or violate the injected guidance
+* record helped/harmed/uncertain outcomes
+* reinforce, cool, quarantine, or retire guidance over time
+* keep repo/workspace experience scoped by default
+* support cautious cross-scope reuse instead of blindly applying one repo’s lesson to another
+
+---
+
+## Architecture
+
+```mermaid
+flowchart LR
+  A[User task] --> B[Host agent]
+  B --> C[Before prompt build]
+  C --> D[Retrieve matching experience]
+  D --> E[Compact intervention]
+  E --> F[Agent reasoning + tools]
+  F --> G[Tool results / failures / corrections]
+  G --> H[Task finalization]
+  H --> I[Trajectory-aware attribution]
+  I --> J[Helped / harmed / uncertain feedback]
+  J --> K[Governance: reinforce / cool / quarantine / retire]
+  K --> D
+```
+
+ExperienceEngine works at the **context and host-integration layer**.
+It does not modify the host model’s weights.
+
+---
+
+## Experience Node Model
+
+ExperienceEngine does not store generic memories such as:
+
+```text
+The SQLite issue was related to migrations.
+```
+
+It tries to distill execution experience into structured nodes:
+
+```text
+Trigger pattern:
+SQLite startup crash in this repo.
+
+Compact hint:
+Run the migration before opening the DB connection.
+
+Recommended steps:
+1. Run the migration.
+2. Start the app again.
+3. Only investigate the connection pool if startup still fails.
+
+Avoid steps:
+Do not start by tuning the connection pool.
+
+Success signal:
+Startup passes after the migration runs.
+
+Evidence summary:
+A previous task failed after connection-pool debugging, then succeeded after migration-first startup.
+```
+
+A node can include:
+
+* trigger pattern
+* compact hint
+* goal
+* recommended steps
+* avoid steps
+* fallback steps
+* success signal
+* stop / escalation conditions
+* evidence summary
+* origin records
+* helped / harmed records
+* lifecycle state
+* delivery state
+* portability evidence
+
+---
+
+## Lifecycle vs Delivery
+
+ExperienceEngine separates **storage state** from **delivery behavior**.
+
+Lifecycle state:
+
+```text
+candidate
+→ priority_candidate
+→ active
+→ cooling
+→ retired
+```
+
+Delivery state:
+
+```text
+shadow_only
+conservative_only
+eligible
+quarantined
+shadow_probe
+retired
+```
+
+This separation matters because a node can exist in the store without being allowed to directly affect the agent.
+
+Examples:
+
+* A new candidate can stay `shadow_only`.
+* A promising but unproven node can be `conservative_only`.
+* A validated same-scope node can become `eligible`.
+* Harmful guidance can become `quarantined`.
+* Quarantined guidance can be cautiously tested through `shadow_probe`.
+* Repeatedly harmful guidance can be retired.
+
+---
+
+## Helped / Harmed Feedback
+
+ExperienceEngine does not assume a hint is good just because it was retrieved.
+
+After a task, it can record whether an intervention:
+
+* helped
+* weakly helped
+* was neutral
+* stayed unknown
+* weakly harmed
+* strongly harmed
+
+Trajectory-aware attribution compares injected expectations against observed tool events when available.
+
+Examples of trajectory verdicts include:
+
+```text
+adoption_detected
+non_adoption_detected
+contra_adoption_detected
+guidance_prevented_failure
+guidance_caused_failure
+trajectory_unknown
+```
+
+When trace evidence is incomplete, ExperienceEngine uses conservative fallback attribution from outcome signals, failure signatures, and harm detection.
+
+Manual feedback is also available:
+
+```bash
+ee helped
+ee harmed
+```
+
+Manual feedback is mainly for correcting the automatic judgment, not for grading every run.
+
+---
+
+## Host Support Matrix
+
+| Host               | Install path                                                      | Routine interaction                    | Maturity                                                     |
+| ------------------ | ----------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------ |
+| Codex              | `ee install codex`                                                | hooks + MCP                            | supported                                                    |
+| Claude Code        | marketplace plugin, with `ee install claude-code` fallback        | MCP + plugin hooks                     | supported                                                    |
+| OpenClaw           | native plugin install                                             | host-native plugin/runtime integration | most complete host-native path today                         |
+| Google Antigravity | `ee install antigravity`, `ee agy exec -C <project>` for CLI runs | MCP + user-level plugin/hooks wiring   | supported through Agent Desktop / `agy` / observed IDE hooks |
+
+Different hosts expose different hook surfaces, so the integration path and maturity are not identical.
+
+---
 
 ## Quick Start
 
-Fastest host-specific install paths:
-
-If you plan to use `ee init`, `ee install ...`, or other operator commands, install the CLI first:
+### 1. Install the CLI
 
 ```bash
 npm install -g @alan512/experienceengine
 ```
 
-- `OpenClaw`
-  - `openclaw plugins install @alan512/experienceengine`
-  - `openclaw gateway restart`
-  - `ee init`
-- `Codex`
-  - `ee install codex`
-  - `ee init`
-- `Claude Code`
-  - `/plugin marketplace add https://github.com/Alan-512/ExperienceEngine.git`
-  - `/plugin install experienceengine@experienceengine`
-  - `ee init`
-- `Google Antigravity`
-  - `ee install antigravity`
-  - `ee init`
+Node.js `>=20` is required.
 
-`ee init` initializes shared ExperienceEngine state after the host-specific installation step.
+### 2. Choose your host
 
-Need detailed per-host setup instructions, fallback paths, readiness states, or operator workflows? Jump to [Full Setup and Operator Details](#full-setup-and-operator-details).
+#### Codex
 
-## Who It's For
+```bash
+ee install codex
+ee init
+```
 
-Use ExperienceEngine if:
-- you use coding agents repeatedly in similar repos or workflows
-- you want **small, intervention-focused guidance**, not general memory recall
-- you want to know whether reused experience actually **helped or harmed**
-- you want stale guidance to cool down or retire instead of accumulating forever
+Then open a fresh Codex session in your repo.
 
-Do not use ExperienceEngine if:
-- you only want a personal note-taking memory
-- you want generic document RAG
-- you rarely repeat workflows
-- you want the system to remember everything by default
+If Codex asks you to review hooks, open:
 
-## Host Support Matrix
+```text
+/hooks
+```
 
-| Host | Install path | Routine interaction | Maturity |
-|---|---|---|---|
-| `OpenClaw` | native plugin install | host-native | most complete today |
-| `Claude Code` | marketplace plugin, with `ee install claude-code` fallback | MCP + plugin hooks | supported |
-| `Codex` | `ee install codex`, with native MCP fallback | hooks + MCP | supported |
-| Google Antigravity Agent Desktop + `agy` CLI + IDE | `ee install antigravity`, `ee agy exec -C <project>` for CLI runs | MCP + validated native hooks | supported through user-level Antigravity plugin wiring, `ee agy exec`, and observed IDE global hooks |
+Approve the ExperienceEngine hooks:
 
-## Why It Exists
+```text
+UserPromptSubmit
+PostToolUse
+Stop
+```
 
-Coding agents often repeat the same mistakes because prior execution experience is not reused in a governed way.
+`PreToolUse` is not registered by default. It is only for synchronous gating experiments.
 
-ExperienceEngine is designed for intervention governance, not general memory accumulation.
+#### Claude Code
 
-## Why Not Memory / RAG
+Preferred marketplace path:
 
-| Question | Memory Systems | ExperienceEngine |
-|---|---|---|
-| Persist facts and preferences across sessions | Yes | Not the primary job |
-| Capture repeated failure → fix → success paths | Partial, usually manual | Yes, from real task signals |
-| Track whether a recalled item helped or harmed | Usually no | Yes, per intervention |
-| Retire stale or harmful guidance automatically | Usually no | Yes, cooling and retirement are built in |
-| Keep context small and intervention-focused | Not the main goal | Yes, it injects short task-specific guidance |
-| Generic document lookup | Common fit | Not the primary job |
+```text
+/plugin marketplace add https://github.com/Alan-512/ExperienceEngine.git
+/plugin install experienceengine@experienceengine
+```
 
-## Why It Is Not Just Another Memory Layer
-
-ExperienceEngine is not trying to remember more things than the host. Its core job is to govern whether learned guidance should keep affecting future tasks.
-
-- most learning work happens after the task, so the current task does not need to wait for the full experience pipeline
-- each learned node moves through a lifecycle such as `candidate`, `active`, `cooling`, and `retired`
-- delivery is governed separately from storage, so harmful guidance can be cooled, quarantined, or removed from normal live injection
-- posttask review can revise whether a hint actually helped, harmed, or stayed uncertain
-- delivery decisions are persisted even when no hint is shipped, so skipped turns can still be explained later
-- high-match same-repo experience can move out of conservative delivery after successful reuse, while cross-repo reuse stays cautious unless there is stronger evidence
-- calculated cross-repo portability scorecards and SemVer penalties prevent unsafe sharing across different scopes
-- post-task causal trajectory attributions ensure outcome feedback is only recorded when the agent actually adopted the injected guidance
-- quarantine leases and shadow probes provide a safe, monitored recovery path to conservative delivery without erasing historical lessons
-- the product goal is production-safe reuse, not maximum recall
-
-## Where It Sits In The Agent Loop
-
-At a high level, ExperienceEngine operates around the agent loop like this:
-
-- `User task`
-- `before_prompt_build`: retrieve and inject matching experience
-- `agent reasoning + tools`: capture failures, retries, corrections, and outcomes
-- `task finalization`: distill new candidates into reusable experience
-- `helped / harmed feedback`: promote, cool, or retire nodes
-
-ExperienceEngine works at the context layer. It does not modify the host model's weights.
-
-## Experience Lifecycle
-
-`task signals -> candidate -> active -> cooling -> retired`
-
-Each node moves through that lifecycle using real task outcomes, not just time-based cleanup. Helpful experience gets reinforced; harmful experience gets cooled or retired.
-
-## What You Can Do Today
-
-- reuse short guidance from similar coding work
-- review why a hint matched or why nothing injected
-- let ExperienceEngine automatically reinforce, cool, quarantine, or retire guidance from real task outcomes
-- let autonomous hygiene governance use the configured LLM to cluster conflicts, merge duplicates, retire stale shadow-only guidance, downgrade risky delivery, and apply guarded high-impact experience-node changes automatically
-- override the last intervention as helpful or harmful when the automatic judgment needs correction
-- inspect active, cooling, quarantined, retired, and trace-backed execution experience
-- run across `OpenClaw`, `Claude Code`, and `Codex`
-- capture host execution trace evidence for richer causal attribution while persisting distilled experience and bounded provenance by default
-
-### Under The Hood
-
-- MCP-native interaction surfaces plus CLI/operator fallback
-- semantic retrieval with API and local fallback (including `strict-offline` profiles, manifest health checks, and vector migration)
-- deterministic match scorecards with portability bands (`validated_portable`, `cautiously_portable`, `incompatible`) and SemVer mismatch penalties
-- post-task causal trajectory attributions (`adoption_detected`, `non_adoption_detected`, `unverifiable`)
-- quarantine shadow-probe lease cycles with no-harm counters and conservative restoration
-- host-agent driven inspection and feedback, with CLI fallback commands such as `ee inspect --last`, `ee inspect --trace <capsule-id>`, `ee helped`, and `ee harmed`
-
-### Interaction Surface Tiers
-
-- Routine: host-first review, `ee status`, `ee doctor <host>`, `ee inspect --last`, `ee inspect --trace <capsule-id>`, `ee helped`, and `ee harmed`
-- Operator: install, upgrade, repair, operator review, governance approvals, hygiene review, export drafts, and managed backup/export/import/rollback
-- Advanced / experimental: maintenance commands, raw evaluations, broker internals, and developer diagnostics
-
-Tier and risk are separate. For example, `ee inspect review` is an operator workflow but read-only, while install/upgrade/rollback are operator workflows with high-impact safeguards.
-
-### Autonomous Hygiene Governance
-
-ExperienceEngine now treats hygiene governance as a host-attached background capability, not a routine command users have to remember. Host startup, prompt lookup, posttask finalization, and stop paths perform cheap due checks against a persisted per-scope schedule. Frequent host open/close cycles only create cheap checks; the SQLite schedule, lease, backoff, finding hash, and action budget decide when governance actually runs.
-
-Validated experience-store actions are applied automatically. Low-risk actions can merge exact duplicates, retire stale shadow-only guidance, downgrade delivery, or quarantine harmed live guidance. High-impact experience-node actions use guarded execution: semantic/conflicted merges preserve evidence and cannot leave the canonical node directly eligible for live injection, promotion lands at conservative delivery, and deletion is a soft-retire with rollback snapshots. Broad rewrites, export writing, repo policy changes, and restore actions are rejected by automatic experience governance.
-
-Hygiene and operator review remain read-only inspection surfaces. Use `ee inspect review`, `experienceengine://review`, or `experienceengine://governance` to inspect status. `experienceengine://governance/approvals` remains available for legacy approval records. `ee maintenance governance drain` exists as an operator fallback for explicit troubleshooting, not as the normal way users keep EE healthy. An optional keeper can wake the same drain path for stricter wall-clock schedules; it does not bypass leases, budgets, validators, guarded execution rules, or rollback snapshots.
-
-For a more detailed explanation of what ExperienceEngine records and how an experience node is structured, see:
-
-- [Experience Model Overview](./docs/development/experience-model.md)
-
-## Current Status
-
-- Stable: core experience lifecycle, inspect/helped/harmed loop, host integrations, CLI/operator fallback
-- Recommended first path: use the host you already work in; `OpenClaw` currently has the deepest host-native integration
-- Evolving: retrieval tuning, provider strategy, advanced host UX
-- If you are starting from scratch and do not already have a preferred host, `OpenClaw` is the most complete native-plugin path.
-
-## What First Success Looks Like
-
-After installation and initialization, the first visible signs of value are:
-
-- a repeated task avoids a previously known bad path instead of rediscovering it
-- ExperienceEngine injects only a short repo-relevant constraint instead of bloating the prompt
-- the host can explain why that hint matched or why nothing was injected
-- the task outcome usually updates future delivery automatically
-- `ee inspect --last` shows the recent intervention and related node state
-
-## Prerequisites
-
-Before installing an adapter, make sure the host CLI already works on this machine:
-
-- `openclaw` for the OpenClaw plugin/runtime integration
-- `claude` for the Claude Code adapter
-- `codex` for the Codex adapter
-
-**ExperienceEngine does not install those host CLIs for you.** It wires itself into an already working host environment.
-
-OpenClaw notes:
-- requires a working OpenClaw installation with native plugin support
-- the documented OpenClaw path assumes `openclaw plugins install` and `openclaw gateway restart` are available
-- ExperienceEngine resolves the real project root from OpenClaw hook payloads or nearby repo markers; if OpenClaw only reports its global workspace, ExperienceEngine isolates that session instead of reusing unrelated global-workspace experience
-- OpenClaw uses the shared background learning loop by default
-- OpenClaw still keeps async hybrid posttask review disabled by default; `ee status` and `ee doctor openclaw` show that explicitly
-
-General package requirement:
-- Node.js `>=20` is required for the published package
-
-## Full Setup and Operator Details
-
-### Full Setup by Host
-
-ExperienceEngine no longer treats the `ee` CLI as the universal first-install entrypoint across all hosts.
-
-Install ExperienceEngine through the host setup flow for the host you want to use:
-
-- `OpenClaw`
-  - host-native plugin install:
-    - `openclaw plugins install @alan512/experienceengine`
-  - after installing, restart the OpenClaw gateway before the first real task:
-    - `openclaw gateway restart`
-- `Codex`
-  - EE-managed Codex setup:
-    - `ee install codex`
-  - native/manual fallback:
-    - see the advanced example below if you need direct MCP wiring
-  - after either path, start a new Codex session in the repo so project hooks, MCP wiring, and the `AGENTS.md` instruction block are picked up
-  - on first use after managed setup, open `/hooks` in Codex and approve the ExperienceEngine hooks: `UserPromptSubmit`, `PostToolUse`, and `Stop`
-  - in mixed Windows Codex App + WSL Codex CLI setups, the global `~/.codex/hooks.json` is shared by both runtimes, while MCP config is owned by each runtime's Codex home
-- `Claude Code`
-  - host-native marketplace install:
-    - add the bundled marketplace from GitHub:
-    - `/plugin marketplace add https://github.com/Alan-512/ExperienceEngine.git`
-  - install the bundled plugin:
-    - `/plugin install experienceengine@experienceengine`
-  - `ee install claude-code` remains the operator fallback when you need direct hooks + MCP wiring outside the marketplace flow
-  - after installation, start a new Claude Code session so the plugin hooks and bundled MCP config are loaded
-
-Across all three hosts, the intended flow is the same:
-
-1. install ExperienceEngine through the host-specific setup path
-2. initialize shared ExperienceEngine state with `ee init`
-3. restart or open a fresh host session until the repo is `Ready`
-4. keep routine inspection and feedback inside the host when supported
-5. use `ee` as the operator fallback for validation, repair, and deeper inspection
-
-### Shared Initialization
-
-`ee init` is shared-product initialization, not host-specific setup.
-
-- Run it once after your first host installation to configure:
-  - distillation provider/model/auth
-  - embedding mode/provider
-  - any shared provider secrets
-- Later host installations reuse the same ExperienceEngine home, settings, and shared secrets.
-
-After installation, ExperienceEngine should orient the user toward the next setup step:
-
-- if host wiring is in place, the product is at least `Installed`
-- after shared state is configured with `ee init`, the product is `Initialized`
-- once the host or repo has reloaded correctly for real work, the product is `Ready`
-
-Minimal shared initialization example:
-
-1. `ee init distillation --provider openai --model gpt-4.1-mini --auth-mode api_key`
-2. `ee init secret OPENAI_API_KEY <your-api-key>`
-3. `ee init embedding --mode api --api-provider openai --model text-embedding-3-small`
-4. `ee init show`
-
-If you prefer Gemini or Jina for embeddings, use the same `ee init embedding` flow with the matching provider and model.
-
-### Routine Use vs Operator Use
-
-For routine use, ask the host agent naturally for ExperienceEngine state first. Automatic outcome attribution is the default path; manual feedback is mainly there when you want to correct that judgment.
-
-Examples:
-
-- "What did ExperienceEngine just inject?"
-- "Why did that ExperienceEngine hint match?"
-- "Why didn't ExperienceEngine inject anything just now?"
-- "Mark the last ExperienceEngine intervention as helpful or harmful."
-
-In normal use, you should not need to manually score every intervention. ExperienceEngine is designed to learn from real task outcomes automatically, while still letting you override the result when the automatic judgment is wrong.
-
-OpenClaw also supports these additional readiness and recent-silence questions in-session:
-
-- "Is ExperienceEngine ready here?"
-- "Is ExperienceEngine still warming up in this repo?"
-- "Why didn't ExperienceEngine inject anything just now?"
-
-For `OpenClaw`, `Codex`, and `Claude Code`, the common review-and-feedback follow-ups should stay in the host session first.
-Use CLI fallback whenever the host-side path is unavailable or you need explicit operator control.
-
-Use the `ee` CLI when you need explicit operator validation or troubleshooting:
+Then run:
 
 ```bash
 ee init
-ee doctor <openclaw|claude-code|codex|antigravity>
-ee status
-ee maintenance embedding-smoke
 ```
 
-### Readiness and Value States
-
-ExperienceEngine treats onboarding and value as two separate layers:
-
-- `Setup state`
-  - `Installed`
-  - `Initialized`
-  - `Ready`
-- `Value state`
-  - `Warming up`
-  - `First value reached`
-
-These are not one linear ladder. A repo can already be `Ready` while still `Warming up`.
-
-`First value reached` should only be claimed after visible output from a real task run. A generic warm-up message or static onboarding text does not count as first value.
-
-## Installation Model
-
-ExperienceEngine separates:
-- host installation
-- shared initialization
-- operator workflows
-
-The host remains the primary interaction surface.
-`ee` remains the explicit operator surface for setup, validation, repair, status, and maintenance.
-For Codex, `ee status` and `ee doctor codex` also report whether the `ee` CLI fallback is available on `PATH`. Codex MCP wiring can still work when the CLI fallback is missing, but commands such as `ee inspect --last` need either a PATH-visible `ee` binary or an explicit package invocation.
-For mixed Windows Codex App + WSL Codex CLI use, `~/.codex/hooks.json` is the global user hook wiring, while MCP config is owned by each runtime's Codex home. `ee repair codex` refreshes global hooks and removes stale project-scoped ExperienceEngine MCP config so Windows App and WSL CLI do not fight over one config file.
-
-## Advanced Per-Host Commands (Operator / Development Only)
-
-Most users can ignore this section and use the host-specific setup flow above.
-
-If you need explicit per-host control as an operator or while developing the product, these commands still exist:
+Fallback path:
 
 ```bash
-ee install openclaw
 ee install claude-code
-ee install codex
-ee install antigravity
+ee init
 ```
 
-<details>
-<summary>Native/manual Codex MCP fallback example</summary>
+Start a fresh Claude Code session so plugin hooks and MCP config are loaded.
+
+#### OpenClaw
 
 ```bash
-codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y @alan512/experienceengine codex-mcp-server
+openclaw plugins install @alan512/experienceengine
+openclaw gateway restart
+ee init
 ```
 
-If you already have an ExperienceEngine home, replace `$HOME/.experienceengine` with that existing path. The managed `ee install codex` path preserves a previously registered host home instead of silently switching data roots.
+OpenClaw currently has the deepest host-native plugin integration.
 
-</details>
+#### Google Antigravity
 
-Notes:
-- `OpenClaw` uses plugin/runtime integration (not `src/adapters/`) and CLI fallback for management.
-- `Claude Code` installs both hooks and the shared ExperienceEngine MCP server.
-- `Codex` installs Codex-native hooks plus the shared ExperienceEngine MCP server. `ee codex exec` remains the deterministic non-interactive fallback.
-- Codex `UserPromptSubmit` stays synchronous because it owns prompt-time experience injection. `PostToolUse` and `Stop` are queued for background processing by default. `PreToolUse` is not registered by default; set `EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED=1` only for synchronous gating experiments.
-- Codex App and Codex CLI both load the global user hooks when they open a repo. If Codex says hooks need review, open `/hooks` and approve ExperienceEngine's global `UserPromptSubmit`, `PostToolUse`, and `Stop` hooks. If `EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED=1` was used, approve `PreToolUse` too.
-- `Google Antigravity` currently means Antigravity Agent Desktop, the standalone `agy` CLI, and Antigravity IDE for validated lifecycle automation. The IDE shell is tracked independently because it stores MCP tool cache under `~/.gemini/antigravity-ide`, but real-host validation showed it loads the shared global plugin hooks from `~/.gemini/config/plugins/experienceengine/hooks.json`. `ee doctor antigravity` reports whether the IDE command exists, whether IDE MCP tool cache files are observed, and whether IDE hooks are observed through the global plugin surface. EE data remains user-level under the configured ExperienceEngine home and project experience remains scope-isolated. `ee install antigravity` records user-level adapter capability and installs Antigravity user-level plugin/MCP wiring for Agent Desktop and `agy` CLI. `ee antigravity activate-project -C <project>` remains a project-local fallback. For CLI runs, prefer `ee agy exec -C <project> "<prompt>"`; it invokes `agy --add-dir <project> --print ...` because direct `agy` project auto-discovery can fail on Windows if symlink creation is not permitted. Antigravity supports both routine stdio MCP calls and an advanced artifact-assisted analyzer that automatically parses planning/verification markdown files (`task.md`, `walkthrough.md`, `implementation_plan.md`) for task outcomes, and reconciles them with runtime finalization telemetry.
-- `ee install ...` and `ee doctor ...` now warn if `npm` or `pnpm` uses a non-official registry, because managed model downloads are most reliable with `https://registry.npmjs.org`.
-- successful `ee install ...` also explains the cold-start expectation: capture starts immediately, but formal experience usually appears after a few similar tasks in the same repo.
+```bash
+ee install antigravity
+ee init
+```
 
-These commands are operator-oriented fallback controls. They are not the preferred public onboarding path.
+For CLI runs:
+
+```bash
+ee agy exec -C <project-path> "<prompt>"
+```
+
+Antigravity support covers Agent Desktop, the standalone `agy` CLI, and observed IDE hook/MCP surfaces where available.
+
+---
+
+## Shared Initialization
+
+`ee init` configures shared ExperienceEngine state.
+
+It can configure:
+
+* distillation provider
+* distillation model
+* provider authentication
+* embedding mode
+* embedding provider
+* shared secrets
+
+Example:
+
+```bash
+ee init distillation --provider openai --model gpt-4.1-mini --auth-mode api_key
+ee init secret OPENAI_API_KEY <your-api-key>
+ee init embedding --mode api --api-provider openai --model text-embedding-3-small
+ee init show
+```
+
+You can also configure Gemini or Jina for embeddings through the same `ee init embedding` flow.
+
+---
 
 ## Data Location
 
-By default, ExperienceEngine stores product data under:
+By default, ExperienceEngine stores product state under:
 
 ```text
 ~/.experienceengine
 ```
 
-That managed state includes:
-- SQLite database
-- product settings
-- per-adapter install state
-- optional local embedding model cache under `~/.experienceengine/models/embeddings`
-- managed backups and exports
+That managed state can include:
+
+* SQLite database
+* product settings
+* per-adapter install state
+* optional local embedding model cache
+* managed backups
+* exports
+* rollback snapshots
+
+Model and embedding providers depend on configuration.
+ExperienceEngine is local-first for product state, but not necessarily fully offline unless configured that way.
+
+---
 
 ## Embedding Defaults
 
 Current default behavior:
 
-- `embeddingProvider = "api"`
-- provider priority: OpenAI -> Gemini -> Jina
-- if no API provider is available, ExperienceEngine falls back to legacy hash-based retrieval
-- local semantic embeddings are an optional enhancement and are not installed by default
+* `embeddingProvider = "api"`
+* provider priority: OpenAI → Gemini → Jina
+* if no API provider is available, ExperienceEngine falls back to legacy hash-based retrieval
+* local semantic embeddings are optional and not installed by default
 
 Useful environment variables:
 
-- `EXPERIENCE_ENGINE_EMBEDDING_PROVIDER=local`
-  - force fully local embedding behavior after installing the optional local runtime:
-    `npm install -g @huggingface/transformers`
-- `EXPERIENCE_ENGINE_EMBEDDING_API_PROVIDER=openai|gemini|jina`
-  - force a specific API embedding provider
+```bash
+EXPERIENCE_ENGINE_EMBEDDING_PROVIDER=local
+EXPERIENCE_ENGINE_EMBEDDING_API_PROVIDER=openai|gemini|jina
+```
 
-## User Guide
+To force local embeddings after installing the optional local runtime:
 
-See the full user guide here:
+```bash
+npm install -g @huggingface/transformers
+```
 
-- [ExperienceEngine User Guide](./docs/user-guide.md)
+---
 
-The user guide covers installation, host-specific notes, first-run validation, troubleshooting, and maintenance operations.
+## Routine Use
+
+In normal use, stay inside your host agent first.
+
+Ask questions like:
+
+```text
+What did ExperienceEngine just inject?
+Why did that ExperienceEngine hint match?
+Why didn't ExperienceEngine inject anything just now?
+Mark the last ExperienceEngine intervention as helpful.
+Mark the last ExperienceEngine intervention as harmful.
+```
+
+Use CLI fallback when you need explicit operator control:
+
+```bash
+ee status
+ee doctor codex
+ee doctor claude-code
+ee doctor openclaw
+ee doctor antigravity
+ee inspect --last
+ee helped
+ee harmed
+```
+
+---
+
+## Readiness and Value States
+
+ExperienceEngine separates setup readiness from actual value.
+
+Setup state:
+
+```text
+Installed
+Initialized
+Ready
+```
+
+Value state:
+
+```text
+Warming up
+First value reached
+```
+
+A repo can be fully `Ready` while still `Warming up`.
+
+`First value reached` should only be claimed after a real task shows visible value, such as:
+
+* a repeated task avoids a previously known bad path
+* a compact repo-relevant hint is injected
+* the host can explain why the hint matched
+* the task outcome updates future delivery
+* `ee inspect --last` shows the recent intervention and node state
+
+A generic warm-up message does not count as first value.
+
+---
+
+## What First Success Looks Like
+
+After installation and initialization, a good first success looks like this:
+
+1. You run a task similar to a previous failure/fix path.
+2. ExperienceEngine injects a short relevant hint.
+3. The host agent avoids the old failed path.
+4. The task succeeds or produces useful evidence.
+5. ExperienceEngine updates the node’s helped/harmed/uncertain state.
+6. `ee inspect --last` explains what happened.
+
+Example:
+
+```bash
+ee inspect --last --verbose
+```
+
+![Example ee inspect --last --verbose output](./docs/assets/readme/inspect-last-example.svg)
+
+---
+
+## Why Not Just Put This In AGENTS.md?
+
+`AGENTS.md` is useful for stable, global project instructions.
+
+ExperienceEngine is for guidance that may be:
+
+* repo-local
+* workflow-local
+* task-family-specific
+* still unproven
+* possibly harmful outside its original context
+* not ready to become a permanent rule
+
+A good rule can eventually become documentation or a project convention.
+ExperienceEngine is the governed proving ground before that.
+
+---
+
+## Safety Model
+
+ExperienceEngine tries to avoid turning old experience into new prompt noise.
+
+Key safeguards:
+
+* compact interventions instead of long memory dumps
+* same-scope experience is preferred
+* cross-scope reuse is cautious
+* destructive cross-repo guidance can be blocked
+* dependency and major-version compatibility checks inform portability scoring
+* harmful guidance can cool down, be quarantined, or retire
+* uncertain nodes can stay shadow-only or conservative-only
+* shadow-probe recovery allows quarantined guidance to be tested cautiously
+* decisions are persisted so skipped turns can be inspected later
+
+The product goal is **production-safe reuse**, not maximum recall.
+
+---
+
+## Retrieval
+
+ExperienceEngine uses hybrid retrieval rather than semantic similarity alone.
+
+The retrieval path can include:
+
+* query rewriting
+* lexical retrieval
+* semantic retrieval
+* rank fusion
+* policy enrichment
+* task-family matching
+* scope matching
+* failure-signature matching
+* artifact / tech-stack matching
+* reranking
+* delivery-state gating
+
+Semantic similarity is useful, but it is not treated as the only authority.
+
+---
+
+## Cross-Scope Portability
+
+ExperienceEngine is workspace/repo-scoped by default.
+
+Cross-scope reuse is intentionally cautious.
+
+Portability checks can consider:
+
+* same-scope vs cross-scope match
+* primary language compatibility
+* shared dependencies
+* framework / ORM / runtime differences
+* major-version mismatch penalties
+* destructive guidance patterns
+* historical harm
+* successful reuse evidence under compatible fingerprints
+
+Portability bands include:
+
+```text
+validated_portable
+same_family
+weakly_related
+incompatible
+```
+
+Cross-scope guidance should earn trust through reuse evidence, not be blindly applied.
+
+---
+
+## Background Hygiene
+
+ExperienceEngine includes background hygiene for experience quality.
+
+It can help with:
+
+* duplicate nodes
+* conflicting guidance
+* stale shadow-only nodes
+* harmful live guidance
+* risky delivery states
+* conservative restoration after quarantine
+
+High-impact actions are guarded.
+Broad rewrites, unsafe deletes, and risky automatic changes are rejected or converted into safer operations.
+
+For normal users, this should mostly stay in the background.
+
+Inspection surfaces:
+
+```bash
+ee inspect review
+ee inspect hygiene
+ee inspect repo
+```
+
+Operator fallback:
+
+```bash
+ee maintenance governance drain
+```
+
+---
+
+## CLI Reference
+
+Common commands:
+
+```bash
+ee init
+ee status
+ee doctor <openclaw|claude-code|codex|antigravity>
+ee inspect --last
+ee inspect --trace <capsule-id>
+ee helped
+ee harmed
+```
+
+Host setup and repair:
+
+```bash
+ee install codex
+ee install claude-code
+ee install antigravity
+ee repair codex
+ee repair antigravity
+```
+
+OpenClaw uses host-native plugin installation:
+
+```bash
+openclaw plugins install @alan512/experienceengine
+openclaw gateway restart
+```
+
+Backup and recovery:
+
+```bash
+ee backup
+ee export
+ee import <snapshot-path>
+ee rollback <backup-id>
+```
+
+Advanced / operator commands:
+
+```bash
+ee maintenance embedding-smoke
+ee maintenance governance drain
+ee maintenance redistill-rule-nodes
+ee maintenance merge-scope <sourceScopeId> <targetScopeId>
+```
+
+Most users should not need advanced maintenance commands during normal use.
+
+---
+
+## Advanced Host Notes
+
+### Codex
+
+Codex integration uses Codex-native hooks plus the shared ExperienceEngine MCP server.
+
+Default hooks:
+
+```text
+UserPromptSubmit
+PostToolUse
+Stop
+```
+
+Notes:
+
+* `UserPromptSubmit` owns prompt-time experience injection.
+* `PostToolUse` and `Stop` are queued for background processing by default.
+* `PreToolUse` is not registered by default.
+* In mixed Windows Codex App + WSL Codex CLI setups, global hooks may be shared while MCP config is runtime-specific.
+* `ee repair codex` can refresh global hooks and remove stale project-scoped MCP config.
+
+Manual MCP fallback:
+
+```bash
+codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceengine -- npx -y @alan512/experienceengine codex-mcp-server
+```
+
+### Claude Code
+
+Claude Code supports the bundled marketplace/plugin path:
+
+```text
+/plugin marketplace add https://github.com/Alan-512/ExperienceEngine.git
+/plugin install experienceengine@experienceengine
+```
+
+Fallback:
+
+```bash
+ee install claude-code
+```
+
+Start a fresh Claude Code session after installation.
+
+### OpenClaw
+
+OpenClaw uses plugin/runtime integration rather than the generic adapter path.
+
+```bash
+openclaw plugins install @alan512/experienceengine
+openclaw gateway restart
+```
+
+If OpenClaw reports only a global workspace, ExperienceEngine isolates that session rather than reusing unrelated global-workspace experience.
+
+### Google Antigravity
+
+Antigravity support includes:
+
+* Agent Desktop user-level plugin/MCP wiring
+* `agy` CLI integration
+* observed IDE global hook/MCP surfaces where available
+
+Install:
+
+```bash
+ee install antigravity
+```
+
+CLI run:
+
+```bash
+ee agy exec -C <project-path> "<prompt>"
+```
+
+Project-local fallback:
+
+```bash
+ee antigravity activate-project -C <project-path>
+```
+
+Antigravity behavior can vary by environment, so use:
+
+```bash
+ee doctor antigravity
+```
+
+to inspect the current installation and observed surfaces.
+
+---
+
+## Who It Is For
+
+Use ExperienceEngine if:
+
+* you use coding agents repeatedly in similar repos or workflows
+* you see agents rediscovering the same fixes
+* you want compact guidance instead of broad memory recall
+* you care whether a reused hint actually helped or harmed
+* you want stale or harmful guidance to cool down instead of accumulating forever
+
+Do not use ExperienceEngine if:
+
+* you only want personal note-taking memory
+* you want generic document RAG
+* you rarely repeat workflows
+* you want everything remembered by default
+* you expect model-weight training or permanent fine-tuning
+
+---
+
+## Project Status
+
+Stable:
+
+* core experience lifecycle
+* prompt-boundary intervention flow
+* inspect / helped / harmed loop
+* local SQLite-backed product state
+* host integrations
+* CLI/operator fallback
+
+Supported hosts:
+
+* Codex
+* Claude Code
+* OpenClaw
+* Google Antigravity
+
+Evolving:
+
+* retrieval tuning
+* provider strategy
+* advanced host UX
+* cross-scope portability tuning
+* richer trajectory attribution
+* background hygiene behavior
+
+The project is early. Feedback from heavy coding-agent users is especially useful.
+
+---
+
+## Documentation
+
+Additional documentation:
+
+* [Experience Model Overview](./docs/development/experience-model.md)
+* [ExperienceEngine User Guide](./docs/user-guide.md)
+
+Suggested future docs:
+
+* `docs/hosts/codex.md`
+* `docs/hosts/claude-code.md`
+* `docs/hosts/openclaw.md`
+* `docs/hosts/antigravity.md`
+* `docs/governance.md`
+* `docs/troubleshooting.md`
+
+---
 
 ## License
 
-This project is licensed under the MIT License.
+MIT License.
+
 See [LICENSE](./LICENSE).
