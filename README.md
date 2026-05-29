@@ -240,7 +240,7 @@ Install ExperienceEngine through the host setup flow for the host you want to us
     - see the advanced example below if you need direct MCP wiring
   - after either path, start a new Codex session in the repo so project hooks, MCP wiring, and the `AGENTS.md` instruction block are picked up
   - on first use after managed setup, open `/hooks` in Codex and approve the ExperienceEngine hooks: `UserPromptSubmit`, `PostToolUse`, and `Stop`
-  - in mixed Windows Codex App + WSL Codex CLI setups, the project `.codex/hooks.json` can be shared by both runtimes, while MCP registration remains runtime/user-level in each Codex home
+  - in mixed Windows Codex App + WSL Codex CLI setups, the global `~/.codex/hooks.json` is shared by both runtimes, while MCP config is owned by each runtime's Codex home
 - `Claude Code`
   - host-native marketplace install:
     - add the bundled marketplace from GitHub:
@@ -340,7 +340,7 @@ ExperienceEngine separates:
 The host remains the primary interaction surface.
 `ee` remains the explicit operator surface for setup, validation, repair, status, and maintenance.
 For Codex, `ee status` and `ee doctor codex` also report whether the `ee` CLI fallback is available on `PATH`. Codex MCP wiring can still work when the CLI fallback is missing, but commands such as `ee inspect --last` need either a PATH-visible `ee` binary or an explicit package invocation.
-For mixed Windows Codex App + WSL Codex CLI use, treat `.codex/hooks.json` as repo-owned hook wiring and `~/.codex/config.toml` as per-runtime MCP wiring. `ee repair codex` refreshes the project hook launcher and removes stale project-scoped ExperienceEngine MCP config so Windows App and WSL CLI do not fight over one config file.
+For mixed Windows Codex App + WSL Codex CLI use, `~/.codex/hooks.json` is the global user hook wiring, while MCP config is owned by each runtime's Codex home. `ee repair codex` refreshes global hooks and removes stale project-scoped ExperienceEngine MCP config so Windows App and WSL CLI do not fight over one config file.
 
 ## Advanced Per-Host Commands (Operator / Development Only)
 
@@ -371,7 +371,7 @@ Notes:
 - `Claude Code` installs both hooks and the shared ExperienceEngine MCP server.
 - `Codex` installs Codex-native hooks plus the shared ExperienceEngine MCP server. `ee codex exec` remains the deterministic non-interactive fallback.
 - Codex `UserPromptSubmit` stays synchronous because it owns prompt-time experience injection. `PostToolUse` and `Stop` are queued for background processing by default. `PreToolUse` is not registered by default; set `EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED=1` only for synchronous gating experiments.
-- Codex App and Codex CLI both load repo-level project hooks when they open the same repo. If Codex says hooks need review, open `/hooks` and approve ExperienceEngine's `UserPromptSubmit`, `PostToolUse`, and `Stop` hooks. If `EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED=1` was used, approve `PreToolUse` too.
+- Codex App and Codex CLI both load the global user hooks when they open a repo. If Codex says hooks need review, open `/hooks` and approve ExperienceEngine's global `UserPromptSubmit`, `PostToolUse`, and `Stop` hooks. If `EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED=1` was used, approve `PreToolUse` too.
 - `Google Antigravity` currently means Antigravity Agent Desktop, the standalone `agy` CLI, and Antigravity IDE for validated lifecycle automation. The IDE shell is tracked independently because it stores MCP tool cache under `~/.gemini/antigravity-ide`, but real-host validation showed it loads the shared global plugin hooks from `~/.gemini/config/plugins/experienceengine/hooks.json`. `ee doctor antigravity` reports whether the IDE command exists, whether IDE MCP tool cache files are observed, and whether IDE hooks are observed through the global plugin surface. EE data remains user-level under the configured ExperienceEngine home and project experience remains scope-isolated. `ee install antigravity` records user-level adapter capability and installs Antigravity user-level plugin/MCP wiring for Agent Desktop and `agy` CLI. `ee antigravity activate-project -C <project>` remains a project-local fallback. For CLI runs, prefer `ee agy exec -C <project> "<prompt>"`; it invokes `agy --add-dir <project> --print ...` because direct `agy` project auto-discovery can fail on Windows if symlink creation is not permitted. Antigravity supports both routine stdio MCP calls and an advanced artifact-assisted analyzer that automatically parses planning/verification markdown files (`task.md`, `walkthrough.md`, `implementation_plan.md`) for task outcomes, and reconciles them with runtime finalization telemetry.
 - `ee install ...` and `ee doctor ...` now warn if `npm` or `pnpm` uses a non-official registry, because managed model downloads are most reliable with `https://registry.npmjs.org`.
 - successful `ee install ...` also explains the cold-start expectation: capture starts immediately, but formal experience usually appears after a few similar tasks in the same repo.

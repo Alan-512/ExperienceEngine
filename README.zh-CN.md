@@ -221,7 +221,7 @@ ExperienceEngine 现在不再把 `ee` CLI 当成适用于所有宿主的统一�
     - 如果你需要直接 MCP wiring，可参考后面的高级示例
   - 无论走哪条路径，首次接入后都建议在仓库里开启一个新的 Codex 会话，让项目 hooks、MCP 配置和 `AGENTS.md` 指令块生效
   - 托管安装后的首次使用，需要在 Codex 里打开 `/hooks`，批准 ExperienceEngine 的 `UserPromptSubmit`、`PostToolUse`、`Stop` hooks
-  - 如果同一个仓库同时用于 Windows Codex App 和 WSL Codex CLI，项目 `.codex/hooks.json` 可以共享；MCP 注册仍然属于每个运行时自己的 Codex home
+  - 如果同一个仓库同时用于 Windows Codex App 和 WSL Codex CLI，全局 `~/.codex/hooks.json` 会被两个运行时共享，而 MCP 配置则归每个运行时的 Codex home 自行管理
 - `Claude Code`
   - 宿主原生 marketplace 安装：
     - 先添加 GitHub marketplace：
@@ -330,7 +330,7 @@ ExperienceEngine 明确拆分：
 宿主仍然是主交互面。
 `ee` 仍然是显式的 operator 面，用于 setup、验证、修复、状态查看和维护。
 对于 Codex，`ee status` 和 `ee doctor codex` 还会显示 `ee` CLI fallback 是否在 `PATH` 上可用。Codex 的 MCP 接入在 CLI fallback 缺失时仍可能正常工作，但 `ee inspect --last` 这类命令需要 PATH 里有 `ee`，或者使用显式的包调用方式。
-如果同一个仓库同时用于 Windows Codex App 和 WSL Codex CLI，请把 `.codex/hooks.json` 当成仓库级 hook wiring，把 `~/.codex/config.toml` 当成每个运行时自己的 MCP wiring。`ee repair codex` 会刷新项目 hook launcher，并移除过期的项目级 ExperienceEngine MCP 配置，避免 Windows App 和 WSL CLI 争用同一个配置文件。
+如果同一个仓库同时用于 Windows Codex App 和 WSL Codex CLI，全局 `~/.codex/hooks.json` 是全局用户级 hook wiring，而 MCP 配置则归每个运行时的 Codex home 自行管理。`ee repair codex` 会刷新全局 hooks 并移除过期的项目级 ExperienceEngine MCP 配置，避免 Windows App 和 WSL CLI 争用同一个配置文件。
 
 ## 高级按宿主命令（仅限 Operator / 开发者）
 
@@ -362,7 +362,7 @@ codex mcp add experienceengine --env EXPERIENCE_ENGINE_HOME=$HOME/.experienceeng
 - `Claude Code` 会安装 hooks 和共享 ExperienceEngine MCP 服务
 - `Codex` 会安装 Codex 原生 hooks 和共享 ExperienceEngine MCP 服务。`ee codex exec` 仍是确定性的非交互 fallback。
 - Codex 的 `UserPromptSubmit` 保持同步，因为它负责 prompt-time experience injection。`PostToolUse` 和 `Stop` 默认排队后在后台处理。`PreToolUse` 默认不注册；只有同步 gating 实验需要时才设置 `EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED=1` 启用。
-- Codex App 和 Codex CLI 打开同一个仓库时都会读取仓库级 project hooks。如果 Codex 提示 hooks 需要 review，打开 `/hooks`，批准 ExperienceEngine 的 `UserPromptSubmit`、`PostToolUse`、`Stop`；如果启用了 `EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED=1`，再批准 `PreToolUse`。
+- Codex App 和 Codex CLI 在打开同一个仓库时都会加载全局用户级 hooks。如果 Codex 提示 hooks 需要 review，打开 `/hooks` 并批准 ExperienceEngine 的全局 `UserPromptSubmit`、`PostToolUse` 和 `Stop` hooks；如果启用了 `EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED=1`，再批准 `PreToolUse`。
 - `ee install ...` 与 `ee doctor ...` 会在 `npm` / `pnpm` 使用非官方 registry 时给出提示，因为受管模型下载在 `https://registry.npmjs.org` 下最稳定
 - 成功执行 `ee install ...` 后，也会提醒冷启动预期：capture 会立刻开始，但 formal experience 一般需要在同一仓库里出现几次相似任务后才会形成
 
