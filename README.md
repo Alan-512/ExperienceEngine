@@ -361,6 +361,7 @@ It can configure:
 * distillation provider
 * distillation model
 * provider authentication
+* optional LLM fallback chain
 * embedding mode
 * embedding provider
 * shared secrets
@@ -373,6 +374,25 @@ ee init secret OPENAI_API_KEY <your-api-key>
 ee init embedding --mode api --api-provider openai --model text-embedding-3-small
 ee init show
 ```
+
+For provider-level fallback, set an EE fallback chain:
+
+```bash
+ee init distillation --provider openrouter --model google/gemma-4-31b-it:free --fallback-chain "gemini:gemini-2.5-flash,openai:gpt-4o-mini"
+ee init secret OPENROUTER_API_KEY <your-openrouter-key>
+ee init secret GEMINI_API_KEY <your-gemini-key>
+ee init secret OPENAI_API_KEY <your-openai-key>
+```
+
+You can also manage fallback after initialization:
+
+```bash
+ee config set distillation.fallback_chain "gemini:gemini-2.5-flash,openai:gpt-4o-mini"
+ee config set distillation.fallback_codes "429,500,502,503,504"
+ee config unset distillation.fallback_chain
+```
+
+`distillation.fallback_chain` is an ExperienceEngine-level chain across providers. OpenRouter's `EXPERIENCE_ENGINE_FALLBACK_MODELS` secret is different: it sends a `models` list inside one OpenRouter request. Use the OpenRouter secret for same-provider model fallback, and use `distillation.fallback_chain` when you want ExperienceEngine to move to another configured provider after fallbackable HTTP statuses.
 
 You can also configure Gemini or Jina for embeddings through the same `ee init embedding` flow.
 

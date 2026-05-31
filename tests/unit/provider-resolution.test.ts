@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { configSchema } from "../../src/config/config-schema.js";
 import { loadConfig } from "../../src/config/load-config.js";
-import { resolveDistillationResolution } from "../../src/distillation/host-llm.js";
+import { resolveDistillationResolution, resolveDistillerEndpoints } from "../../src/distillation/host-llm.js";
 
 const tempDirs: string[] = [];
 
@@ -359,5 +359,88 @@ describe("provider resolution config surface", () => {
     });
 
     expect(parsed.success).toBe(false);
+  });
+
+  describe("resolveDistillerEndpoints", () => {
+    it("resolves only primary endpoint when fallback chain is empty", () => {
+      const endpoints = resolveDistillerEndpoints({
+        env: {
+          EXPERIENCE_ENGINE_DISTILLER_PROVIDER: "openai",
+          EXPERIENCE_ENGINE_DISTILLER_MODEL: "gpt-4o",
+          OPENAI_API_KEY: "test-key"
+        }
+      });
+      expect(endpoints).toHaveLength(1);
+      expect(endpoints[0].provider).toBe("openai");
+      expect(endpoints[0].model).toBe("gpt-4o");
+    });
+
+    it("resolves primary and fallback endpoints when fallback chain is configured", () => {
+      const endpoints = resolveDistillerEndpoints({
+        env: {
+          EXPERIENCE_ENGINE_DISTILLER_PROVIDER: "openai",
+          EXPERIENCE_ENGINE_DISTILLER_MODEL: "gpt-4o",
+          OPENAI_API_KEY: "test-key",
+          GEMINI_API_KEY: "test-gemini-key",
+          DEEPSEEK_API_KEY: "test-ds-key"
+        },
+        configFallbackChain: "gemini:gemini-1.5-flash,deepseek:deepseek-chat"
+      });
+      expect(endpoints).toHaveLength(3);
+      expect(endpoints[0].provider).toBe("openai");
+      expect(endpoints[0].model).toBe("gpt-4o");
+      expect(endpoints[1].provider).toBe("gemini");
+      expect(endpoints[1].model).toBe("gemini-1.5-flash");
+      expect(endpoints[2].provider).toBe("deepseek");
+      expect(endpoints[2].model).toBe("deepseek-chat");
+    });
+
+    it("prevents duplicate endpoints in the resolved candidate list", () => {
+      const endpoints = resolveDistillerEndpoints({
+        env: {
+          EXPERIENCE_ENGINE_DISTILLER_PROVIDER: "openai",
+          EXPERIENCE_ENGINE_DISTILLER_MODEL: "gpt-4o",
+          OPENAI_API_KEY: "test-key"
+        },
+        configFallbackChain: "openai:gpt-4o,openai:gpt-4o"
+      });
+      expect(endpoints).toHaveLength(1);
+      expect(endpoints[0].provider).toBe("openai");
+      expect(endpoints[0].model).toBe("gpt-4o");
+    });
+
+    it("applies configured auth mode while resolving fallback endpoints", () => {
+      const homeDir = mkdtempSync(join(tmpdir(), "experienceengine-fallback-adc-"));
+      tempDirs.push(homeDir);
+      const adcPath = join(homeDir, "application_default_credentials.json");
+      writeFileSync(
+        adcPath,
+        JSON.stringify({
+          type: "authorized_user",
+          client_id: "client-id",
+          client_secret: "client-secret",
+          refresh_token: "refresh-token"
+        }),
+        "utf8"
+      );
+
+      const endpoints = resolveDistillerEndpoints({
+        env: {
+          EXPERIENCE_ENGINE_DISTILLER_PROVIDER: "openai",
+          EXPERIENCE_ENGINE_DISTILLER_MODEL: "gpt-4o",
+          OPENAI_API_KEY: "test-key",
+          GOOGLE_APPLICATION_CREDENTIALS: adcPath
+        },
+        configAuthMode: "google_adc",
+        configFallbackChain: "gemini:gemini-2.5-flash"
+      });
+
+      expect(endpoints).toHaveLength(2);
+      expect(endpoints[1].provider).toBe("gemini");
+      expect(endpoints[1].kind).toBe("gemini");
+      if (endpoints[1].kind === "gemini") {
+        expect(endpoints[1].authMode).toBe("google_adc");
+      }
+    });
   });
 });

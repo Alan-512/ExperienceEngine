@@ -29,6 +29,8 @@ export const configSchema = z.object({
   distillationMode: z.enum(["auto", "llm", "rule", "disabled"]).default("auto"),
   distillerProfile: z.enum(["fast", "balanced", "high_quality"]).default("balanced"),
   distillationAllowPassthrough: z.boolean().default(false),
+  distillationFallbackChain: z.string().default(""),
+  distillationFallbackCodes: z.array(z.number()).default([429, 500, 502, 503, 504]),
   distillationMaxRetries: z.number().int().min(0).max(10).default(2),
   distillationBatchSize: z.number().int().min(1).max(20).default(5),
   distillationAutoDrain: z.boolean().default(true),
@@ -199,6 +201,15 @@ export const pluginConfigJsonSchema = {
     distillationAllowPassthrough: {
       type: "boolean",
       description: "Allow rule-based passthrough when no LLM distiller endpoint is available."
+    },
+    distillationFallbackChain: {
+      type: "string",
+      description: "Comma-separated list of fallback endpoints (e.g., 'gemini:gemini-1.5-flash,openai:gpt-4o-mini')."
+    },
+    distillationFallbackCodes: {
+      type: "array",
+      items: { type: "integer" },
+      description: "HTTP status codes that trigger a fallback retry."
     },
     distillationMaxRetries: {
       type: "integer",
@@ -427,6 +438,12 @@ export const pluginUiHints = {
   },
   distillationAllowPassthrough: {
     label: "Distillation Allow Passthrough"
+  },
+  distillationFallbackChain: {
+    label: "Distillation Fallback Chain"
+  },
+  distillationFallbackCodes: {
+    label: "Distillation Fallback Codes"
   },
   distillationMaxRetries: {
     label: "Distillation Max Retries"

@@ -202,6 +202,69 @@ describe("config command", () => {
     expect(config.distillerProvider).toBe("openrouter");
   });
 
+  it("manages distillation fallback chain and codes through config", async () => {
+    const home = makeTempDir();
+    const productHome = join(home, ".experienceengine");
+    process.env.EXPERIENCE_ENGINE_HOME = productHome;
+
+    await runConfigCommand("set", "distillation.fallback_chain", "gemini:gemini-2.5-flash,openai:gpt-4o-mini");
+    await runConfigCommand("set", "distillation.fallback_codes", "429,503");
+
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      "[ExperienceEngine] Distillation fallback chain set to gemini:gemini-2.5-flash,openai:gpt-4o-mini."
+    );
+    expect(consoleLogSpy).toHaveBeenCalledWith("[ExperienceEngine] Distillation fallback codes set to 429,503.");
+    expect(JSON.parse(readFileSync(join(productHome, "settings.json"), "utf8"))).toEqual({
+      distillation: {
+        fallback_chain: "gemini:gemini-2.5-flash,openai:gpt-4o-mini",
+        fallback_codes: [429, 503]
+      }
+    });
+
+    const config = loadConfig({}, { env: { EXPERIENCE_ENGINE_HOME: productHome } as NodeJS.ProcessEnv });
+    expect(config.distillationFallbackChain).toBe("gemini:gemini-2.5-flash,openai:gpt-4o-mini");
+    expect(config.distillationFallbackCodes).toEqual([429, 503]);
+
+    consoleLogSpy.mockClear();
+    await runConfigCommand("get", "distillation.fallback_chain");
+    await runConfigCommand("get", "distillation.fallback_codes");
+    expect(consoleLogSpy).toHaveBeenCalledWith("gemini:gemini-2.5-flash,openai:gpt-4o-mini");
+    expect(consoleLogSpy).toHaveBeenCalledWith("429,503");
+
+    consoleLogSpy.mockClear();
+    await runConfigCommand("unset", "distillation.fallback_chain");
+    await runConfigCommand("unset", "distillation.fallback_codes");
+    expect(consoleLogSpy).toHaveBeenCalledWith("[ExperienceEngine] Removed distillation fallback chain.");
+    expect(consoleLogSpy).toHaveBeenCalledWith("[ExperienceEngine] Removed distillation fallback codes.");
+    expect(JSON.parse(readFileSync(join(productHome, "settings.json"), "utf8"))).toEqual({
+      distillation: {}
+    });
+  });
+
+  it("rejects invalid distillation fallback codes", async () => {
+    await runConfigCommand("set", "distillation.fallback_codes", "abc,999");
+
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      "Usage: ee config set distillation.fallback_codes <http-code[,http-code...]>"
+    );
+  });
+
+  it("normalizes shell-split fallback lists", async () => {
+    const home = makeTempDir();
+    const productHome = join(home, ".experienceengine");
+    process.env.EXPERIENCE_ENGINE_HOME = productHome;
+
+    await runConfigCommand("set", "distillation.fallback_chain", "gemini:gemini-2.5-flash openai:gpt-4o-mini");
+    await runConfigCommand("set", "distillation.fallback_codes", "429 503");
+
+    expect(JSON.parse(readFileSync(join(productHome, "settings.json"), "utf8"))).toMatchObject({
+      distillation: {
+        fallback_chain: "gemini:gemini-2.5-flash,openai:gpt-4o-mini",
+        fallback_codes: [429, 503]
+      }
+    });
+  });
+
   it("persists shared secrets outside settings.json", async () => {
     const home = makeTempDir();
     const productHome = join(home, ".experienceengine");

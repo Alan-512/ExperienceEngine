@@ -11,9 +11,13 @@ import {
   setEmbeddingModel,
   setEmbeddingProvider,
   setDistillationAuthMode,
+  setDistillationFallbackChain,
+  setDistillationFallbackCodes,
   setDistillationModel,
   setDistillationProvider,
-  setInlineNoticesEnabled
+  setInlineNoticesEnabled,
+  unsetDistillationFallbackChain,
+  unsetDistillationFallbackCodes
 } from "../../config/settings-store.js";
 import { resolveModelCatalog, type ProviderModelCatalog } from "../../distillation/model-catalog.js";
 import type { DistillerProvider } from "../../distillation/providers/types.js";
@@ -22,6 +26,30 @@ import { ExperienceInteractionService } from "../../interaction/service.js";
 
 type ConfigCommandDeps = {
   resolveModelCatalog?: (provider: DistillerProvider) => Promise<ProviderModelCatalog>;
+};
+
+const CONFIG_USAGE =
+  "Usage: ee config <get|set|unset|restore> notices.inline|distillation.provider|distillation.auth_mode|distillation.model|distillation.fallback_chain|distillation.fallback_codes|embedding.provider|embedding.api_provider|embedding.model|embedding.dtype|secret.<ENV_KEY>|repo-policy [value]";
+
+const normalizeCommaList = (value: string | undefined): string | null => {
+  const entries = value
+    ?.split(/[,\s]+/)
+    .map((entry) => entry.trim())
+    .filter(Boolean);
+  return entries && entries.length > 0 ? entries.join(",") : null;
+};
+
+const parseFallbackCodes = (value: string | undefined): number[] | null => {
+  const normalized = normalizeCommaList(value);
+  if (!normalized) {
+    return null;
+  }
+
+  const codes = normalized
+    .split(/[,\s]+/)
+    .map((entry) => Number(entry.trim()))
+    .filter((entry) => Number.isInteger(entry) && entry >= 100 && entry <= 599);
+  return codes.length > 0 ? codes : null;
 };
 
 export const runConfigCommand = async (
@@ -71,6 +99,18 @@ export const runConfigCommand = async (
   if (action === "get" && key === "distillation.auth_mode") {
     const settings = readExperienceEngineSettings();
     console.log(String(settings.distillation?.auth_mode ?? "api_key"));
+    return;
+  }
+
+  if (action === "get" && key === "distillation.fallback_chain") {
+    const settings = readExperienceEngineSettings();
+    console.log(String(settings.distillation?.fallback_chain ?? ""));
+    return;
+  }
+
+  if (action === "get" && key === "distillation.fallback_codes") {
+    const settings = readExperienceEngineSettings();
+    console.log((settings.distillation?.fallback_codes ?? [429, 500, 502, 503, 504]).join(","));
     return;
   }
 
@@ -162,6 +202,30 @@ export const runConfigCommand = async (
     return;
   }
 
+  if (action === "set" && key === "distillation.fallback_chain") {
+    const chain = normalizeCommaList(value);
+    if (!chain) {
+      console.log("Usage: ee config set distillation.fallback_chain <provider:model[,provider:model...]>");
+      return;
+    }
+
+    setDistillationFallbackChain(chain);
+    console.log(`[ExperienceEngine] Distillation fallback chain set to ${chain}.`);
+    return;
+  }
+
+  if (action === "set" && key === "distillation.fallback_codes") {
+    const codes = parseFallbackCodes(value);
+    if (!codes) {
+      console.log("Usage: ee config set distillation.fallback_codes <http-code[,http-code...]>");
+      return;
+    }
+
+    setDistillationFallbackCodes(codes);
+    console.log(`[ExperienceEngine] Distillation fallback codes set to ${codes.join(",")}.`);
+    return;
+  }
+
   if (action === "set" && key === "embedding.provider") {
     if (value !== "api" && value !== "local" && value !== "legacy") {
       console.log("Usage: ee config set embedding.provider api|local|legacy");
@@ -230,7 +294,17 @@ export const runConfigCommand = async (
     return;
   }
 
-  console.log(
-    "Usage: ee config <get|set|unset|restore> notices.inline|distillation.provider|distillation.auth_mode|distillation.model|embedding.provider|embedding.api_provider|embedding.model|embedding.dtype|secret.<ENV_KEY>|repo-policy [value]"
-  );
+  if (action === "unset" && key === "distillation.fallback_chain") {
+    unsetDistillationFallbackChain();
+    console.log("[ExperienceEngine] Removed distillation fallback chain.");
+    return;
+  }
+
+  if (action === "unset" && key === "distillation.fallback_codes") {
+    unsetDistillationFallbackCodes();
+    console.log("[ExperienceEngine] Removed distillation fallback codes.");
+    return;
+  }
+
+  console.log(CONFIG_USAGE);
 };

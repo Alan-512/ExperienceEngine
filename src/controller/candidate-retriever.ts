@@ -240,6 +240,13 @@ type RetrieveOptions = {
     | "distillerModel"
     | "retrievalRerankerMode"
     | "retrievalRerankerModel"
+  > &
+  Partial<
+    Pick<
+      ExperienceEngineConfig,
+    | "distillationFallbackChain"
+    | "distillationFallbackCodes"
+    >
   >;
   env?: NodeJS.ProcessEnv;
   homeDir?: string;

@@ -73,6 +73,46 @@ describe("init command", () => {
     );
   });
 
+  it("persists distillation fallback chain in one command", async () => {
+    const home = makeTempDir();
+    const productHome = join(home, ".experienceengine");
+    process.env.EXPERIENCE_ENGINE_HOME = productHome;
+
+    await runInitCommand(
+      "distillation",
+      [
+        "--provider",
+        "openrouter",
+        "--model",
+        "openai/gpt-5.4-mini",
+        "--fallback-chain",
+        "gemini:gemini-2.5-flash",
+        "openai:gpt-4o-mini"
+      ],
+      {
+        resolveModelCatalog: async () => ({
+          provider: "openrouter",
+          source: "static",
+          models: [
+            {
+              id: "openai/gpt-5.4-mini",
+              name: "GPT-5.4 Mini"
+            }
+          ]
+        })
+      }
+    );
+
+    expect(JSON.parse(readFileSync(join(productHome, "settings.json"), "utf8"))).toMatchObject({
+      distillation: {
+        provider: "openrouter",
+        auth_mode: "api_key",
+        model: "openai/gpt-5.4-mini",
+        fallback_chain: "gemini:gemini-2.5-flash,openai:gpt-4o-mini"
+      }
+    });
+  });
+
   it("stores a shared secret without touching settings", async () => {
     const home = makeTempDir();
     const productHome = join(home, ".experienceengine");
@@ -152,7 +192,7 @@ describe("init command", () => {
     await runInitCommand("distillation", ["--provider", "gemini"]);
 
     expect(consoleLogSpy).toHaveBeenCalledWith(
-      "Usage: ee init distillation --provider <provider> --model <modelId> [--auth-mode api_key|google_adc]"
+      "Usage: ee init distillation --provider <provider> --model <modelId> [--auth-mode api_key|google_adc] [--fallback-chain <chain>]"
     );
   });
 
@@ -169,7 +209,7 @@ describe("init command", () => {
         ["Step 1. Choose the shared reasoning model ExperienceEngine should use."],
         ["- Current distillation provider: <unset>"],
         ["- Current distillation model: <unset>"],
-        ["- Next command: ee init distillation --provider <provider> --model <modelId> [--auth-mode api_key|google_adc]"],
+        ["- Next command: ee init distillation --provider <provider> --model <modelId> [--auth-mode api_key|google_adc] [--fallback-chain <chain>]"],
         ["Step 2. Choose how ExperienceEngine should build and search shared memory."],
         ["- Current embedding mode: api"],
         ["- Current embedding API provider: auto"],
@@ -197,7 +237,7 @@ describe("init command", () => {
       .mockResolvedValueOnce("api_key")
       .mockResolvedValueOnce("gemini-3.1-flash-lite-preview")
       .mockResolvedValueOnce("api:gemini");
-    const input = vi.fn().mockResolvedValueOnce("gemini-test-key");
+    const input = vi.fn().mockResolvedValueOnce("").mockResolvedValueOnce("gemini-test-key");
 
     await runInitCommand(undefined, [], {
       resolveModelCatalog: async () => ({
@@ -248,6 +288,7 @@ describe("init command", () => {
         ["Initialization complete."],
         ["- Distillation provider: gemini"],
         ["- Distillation model: gemini-3.1-flash-lite-preview"],
+        ["- Distillation fallback chain: <unset>"],
         ["- Embedding mode: api"],
         ["- Embedding API provider: gemini"],
         ["- Embedding model: Xenova/multilingual-e5-small"],
@@ -255,7 +296,7 @@ describe("init command", () => {
       ])
     );
     expect(choose).toHaveBeenCalledTimes(4);
-    expect(input).toHaveBeenCalledTimes(1);
+    expect(input).toHaveBeenCalledTimes(2);
     expect(choose.mock.calls[0]?.[0]).toMatchObject({ title: "Step 1: Distillation provider" });
     expect(choose.mock.calls[0]?.[0]?.options).toEqual(
       expect.arrayContaining([
@@ -270,8 +311,9 @@ describe("init command", () => {
     expect(choose.mock.calls[0]?.[0]?.options).toHaveLength(6);
     expect(choose.mock.calls[1]?.[0]).toMatchObject({ title: "Step 2: Distillation auth mode" });
     expect(choose.mock.calls[2]?.[0]).toMatchObject({ title: "Step 3: Distillation model" });
-    expect(choose.mock.calls[3]?.[0]).toMatchObject({ title: "Step 4: Embedding mode" });
-    expect(input.mock.calls[0]?.[0]).toMatchObject({ title: "- GEMINI_API_KEY" });
+    expect(choose.mock.calls[3]?.[0]).toMatchObject({ title: "Step 5: Embedding mode" });
+    expect(input.mock.calls[0]?.[0]).toMatchObject({ title: "Step 4: Distillation fallback chain" });
+    expect(input.mock.calls[1]?.[0]).toMatchObject({ title: "- GEMINI_API_KEY" });
   });
 
   it("expands to the full provider catalog only when the user asks for more providers", async () => {

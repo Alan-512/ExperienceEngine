@@ -11,6 +11,8 @@ export type ExperienceEngineSettings = {
     provider?: string;
     auth_mode?: string;
     model?: string;
+    fallback_chain?: string;
+    fallback_codes?: number[];
   };
   embedding?: {
     provider?: string;
@@ -135,6 +137,66 @@ export const setDistillationModel = (
       provider,
       model
     }
+  };
+
+  return writeExperienceEngineSettings(next, options);
+};
+
+export const setDistillationFallbackChain = (
+  chain: string,
+  options: SettingsOptions = {}
+): ExperienceEngineSettings => {
+  const current = readExperienceEngineSettings(options);
+  const next: ExperienceEngineSettings = {
+    ...current,
+    distillation: {
+      ...(current.distillation ?? {}),
+      fallback_chain: chain
+    }
+  };
+
+  return writeExperienceEngineSettings(next, options);
+};
+
+export const unsetDistillationFallbackChain = (
+  options: SettingsOptions = {}
+): ExperienceEngineSettings => {
+  const current = readExperienceEngineSettings(options);
+  const distillation = { ...(current.distillation ?? {}) };
+  delete distillation.fallback_chain;
+  const next: ExperienceEngineSettings = {
+    ...current,
+    distillation
+  };
+
+  return writeExperienceEngineSettings(next, options);
+};
+
+export const setDistillationFallbackCodes = (
+  codes: number[],
+  options: SettingsOptions = {}
+): ExperienceEngineSettings => {
+  const current = readExperienceEngineSettings(options);
+  const next: ExperienceEngineSettings = {
+    ...current,
+    distillation: {
+      ...(current.distillation ?? {}),
+      fallback_codes: codes
+    }
+  };
+
+  return writeExperienceEngineSettings(next, options);
+};
+
+export const unsetDistillationFallbackCodes = (
+  options: SettingsOptions = {}
+): ExperienceEngineSettings => {
+  const current = readExperienceEngineSettings(options);
+  const distillation = { ...(current.distillation ?? {}) };
+  delete distillation.fallback_codes;
+  const next: ExperienceEngineSettings = {
+    ...current,
+    distillation
   };
 
   return writeExperienceEngineSettings(next, options);

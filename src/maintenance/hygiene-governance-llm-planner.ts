@@ -1,5 +1,6 @@
-import { resolveDistillerEndpoint } from "../distillation/host-llm.js";
-import type { DistillerEndpoint } from "../distillation/providers/types.js";
+import { resolveDistillerEndpoints } from "../distillation/host-llm.js";
+import { LlmRequestDispatcher } from "../distillation/llm-request-dispatcher.js";
+
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
 import type {
   HygieneGovernanceInput,
@@ -9,22 +10,31 @@ import type {
 type LlmHygieneGovernancePlannerConfig = Pick<
   ExperienceEngineConfig,
   "distillerProvider" | "distillerModel" | "distillationAuthMode"
->;
+> &
+  Partial<Pick<ExperienceEngineConfig, "distillationFallbackChain" | "distillationFallbackCodes">>;
 
 export type LlmHygieneGovernancePlannerOptions = {
   config: LlmHygieneGovernancePlannerConfig;
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
   fetchImpl?: typeof fetch;
-  maxRetries?: number;
-  retryDelayMs?: number;
+  resolveEndpoints?: (options?: {
+    env?: NodeJS.ProcessEnv;
+    homeDir?: string;
+    configProvider?: ExperienceEngineConfig["distillerProvider"];
+    configAuthMode?: string;
+    configModel?: string;
+    configFallbackChain?: string;
+  }) => import("../distillation/providers/types.js").DistillerEndpoint[];
   resolveEndpoint?: (options?: {
     env?: NodeJS.ProcessEnv;
     homeDir?: string;
     configProvider?: ExperienceEngineConfig["distillerProvider"];
     configAuthMode?: string;
     configModel?: string;
-  }) => DistillerEndpoint | null;
+  }) => import("../distillation/providers/types.js").DistillerEndpoint | null;
+  maxRetries?: number;
+  retryDelayMs?: number;
 };
 
 const SYSTEM_PROMPT = [
@@ -79,129 +89,63 @@ const buildPrompt = (input: HygieneGovernanceInput): string =>
     2
   );
 
-const buildRequestUrl = (endpoint: DistillerEndpoint): string => {
-  if (endpoint.kind === "anthropic" || endpoint.kind === "gemini" || endpoint.kind === "bedrock") {
-    return endpoint.baseUrl;
-  }
-  if (/\/chat\/completions(?:\?.*)?$/.test(endpoint.baseUrl)) {
-    return endpoint.baseUrl;
-  }
-  if (/\/v1\/?$/.test(endpoint.baseUrl)) {
-    return `${endpoint.baseUrl.replace(/\/$/, "")}/chat/completions`;
-  }
-  return `${endpoint.baseUrl.replace(/\/$/, "")}/v1/chat/completions`;
-};
 
-const buildRequestBody = (endpoint: DistillerEndpoint, prompt: string): Record<string, unknown> => {
-  if (endpoint.kind === "anthropic") {
-    return {
-      model: endpoint.model,
-      max_tokens: 4096,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: "user", content: prompt }],
-      temperature: 0
-    };
-  }
-  if (endpoint.kind === "gemini") {
-    return {
-      system_instruction: { parts: [{ text: SYSTEM_PROMPT }] },
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0,
-        responseMimeType: "application/json"
-      }
-    };
-  }
-  if (endpoint.kind === "bedrock") {
-    return {
-      system: [{ text: SYSTEM_PROMPT }],
-      messages: [{ role: "user", content: [{ text: prompt }] }],
-      inferenceConfig: {
-        maxTokens: 4096,
-        temperature: 0
-      }
-    };
-  }
-  return {
-    model: endpoint.model,
-    response_format: { type: "json_object" },
-    temperature: 0,
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: prompt }
-    ]
-  };
-};
-
-const extractTextPayload = async (endpoint: DistillerEndpoint, response: Response): Promise<string> => {
-  if (endpoint.kind === "anthropic") {
-    const payload = (await response.json()) as { content?: Array<{ type?: string; text?: string }> };
-    return payload.content?.find((entry) => entry.type === "text" && typeof entry.text === "string")?.text ?? "";
-  }
-  if (endpoint.kind === "gemini") {
-    const payload = (await response.json()) as {
-      candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
-    };
-    return payload.candidates?.[0]?.content?.parts?.find((entry) => typeof entry.text === "string")?.text ?? "";
-  }
-  if (endpoint.kind === "bedrock") {
-    const payload = (await response.json()) as { output?: { message?: { content?: Array<{ text?: string }> } } };
-    return payload.output?.message?.content?.find((entry) => typeof entry.text === "string")?.text ?? "";
-  }
-  const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
-  return payload.choices?.[0]?.message?.content ?? "";
-};
-
-const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms));
-
-const shouldRetry = (status: number): boolean => status === 429 || status >= 500;
 
 export class LlmHygieneGovernancePlanner implements HygieneGovernancePlannerProvider {
   constructor(private readonly options: LlmHygieneGovernancePlannerOptions) {}
 
+  private resolveEndpoints(): import("../distillation/providers/types.js").DistillerEndpoint[] {
+    if (this.options.resolveEndpoints) {
+      return this.options.resolveEndpoints({
+        env: this.options.env,
+        homeDir: this.options.homeDir,
+        configProvider: this.options.config.distillerProvider,
+        configAuthMode: this.options.config.distillationAuthMode,
+        configModel: this.options.config.distillerModel,
+        configFallbackChain: this.options.config.distillationFallbackChain
+      });
+    } else if (this.options.resolveEndpoint) {
+      const single = this.options.resolveEndpoint({
+        env: this.options.env,
+        homeDir: this.options.homeDir,
+        configProvider: this.options.config.distillerProvider,
+        configAuthMode: this.options.config.distillationAuthMode,
+        configModel: this.options.config.distillerModel
+      });
+      return single ? [single] : [];
+    } else {
+      return resolveDistillerEndpoints({
+        env: this.options.env,
+        homeDir: this.options.homeDir,
+        configProvider: this.options.config.distillerProvider,
+        configAuthMode: this.options.config.distillationAuthMode,
+        configModel: this.options.config.distillerModel,
+        configFallbackChain: this.options.config.distillationFallbackChain
+      });
+    }
+  }
+
   hasEndpoint(): boolean {
-    return Boolean((this.options.resolveEndpoint ?? resolveDistillerEndpoint)({
-      env: this.options.env,
-      homeDir: this.options.homeDir,
-      configProvider: this.options.config.distillerProvider,
-      configAuthMode: this.options.config.distillationAuthMode,
-      configModel: this.options.config.distillerModel
-    }));
+    return this.resolveEndpoints().length > 0;
   }
 
   async plan(input: HygieneGovernanceInput): Promise<string> {
-    const endpoint = (this.options.resolveEndpoint ?? resolveDistillerEndpoint)({
-      env: this.options.env,
-      homeDir: this.options.homeDir,
-      configProvider: this.options.config.distillerProvider,
-      configAuthMode: this.options.config.distillationAuthMode,
-      configModel: this.options.config.distillerModel
-    });
-    if (!endpoint) {
+    const endpoints = this.resolveEndpoints();
+    if (endpoints.length === 0) {
       throw new Error("No configured ExperienceEngine distiller endpoint is available for hygiene governance planning.");
     }
 
-    const request = {
-      method: "POST",
-      headers: {
-        "content-type": "application/json",
-        ...endpoint.headers
-      },
-      body: JSON.stringify(buildRequestBody(endpoint, buildPrompt(input)))
-    };
-    const maxRetries = this.options.maxRetries ?? 2;
-    let response: Response | undefined;
-    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
-      response = await (this.options.fetchImpl ?? fetch)(buildRequestUrl(endpoint), request);
-      if (response.ok || !shouldRetry(response.status) || attempt === maxRetries) {
-        break;
-      }
-      await sleep((this.options.retryDelayMs ?? 500) * (attempt + 1));
-    }
-    if (!response?.ok) {
-      throw new Error(`Hygiene governance LLM planner failed with HTTP ${response?.status ?? "unknown"}.`);
-    }
-    const text = await extractTextPayload(endpoint, response);
+    const text = await LlmRequestDispatcher.execute(endpoints, {
+      systemPrompt: SYSTEM_PROMPT,
+      userPrompt: buildPrompt(input),
+      temperature: 0,
+      responseJson: true,
+      fetchImpl: this.options.fetchImpl,
+      env: this.options.env,
+      fallbackCodes: this.options.config.distillationFallbackCodes,
+      maxRetries: this.options.maxRetries,
+      retryDelayMs: this.options.retryDelayMs
+    });
     if (!text.trim()) {
       throw new Error("Hygiene governance LLM planner returned an empty response.");
     }

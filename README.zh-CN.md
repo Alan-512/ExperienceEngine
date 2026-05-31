@@ -374,6 +374,16 @@ ee init embedding --mode api --api-provider openai --model text-embedding-3-smal
 ee init show
 ```
 
+LLM fallback 配置分两层：
+
+```bash
+ee config set distillation.fallback_chain "gemini:gemini-2.5-flash,openai:gpt-4o-mini"
+ee config set distillation.fallback_codes "429,500,502,503,504"
+ee config set secret.EXPERIENCE_ENGINE_FALLBACK_MODELS "openai/gpt-4o-mini,deepseek/deepseek-chat"
+```
+
+`distillation.fallback_chain` 是 ExperienceEngine 跨 provider 的 fallback chain；`EXPERIENCE_ENGINE_FALLBACK_MODELS` 是 OpenRouter 单次请求里的 `models` 列表。前者用于主 provider 返回 fallbackable HTTP 状态后切换到另一个 provider，后者用于 OpenRouter 内部模型 fallback。
+
 你也可以通过相同的 `ee init embedding` 流程配置 Gemini 或 Jina 进行向量嵌入。
 
 ---

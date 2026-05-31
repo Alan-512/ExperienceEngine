@@ -4,6 +4,7 @@ afterEach(() => {
   vi.resetModules();
   vi.unmock("../../src/cli/commands/claude-hook.js");
   vi.unmock("../../src/cli/commands/codex.js");
+  vi.unmock("../../src/cli/commands/config.js");
 });
 
 describe("CLI dispatch", () => {
@@ -32,6 +33,31 @@ describe("CLI dispatch", () => {
 
     expect(runCodexCommand).toHaveBeenCalledTimes(1);
     expect(runCodexCommand).toHaveBeenCalledWith("exec", ["-C", "/repo", "Say ok"]);
+  });
+
+  it("rejoins comma-list config values split by the shell", async () => {
+    const runConfigCommand = vi.fn(async () => {});
+
+    vi.doMock("../../src/cli/commands/config.js", () => ({
+      runConfigCommand
+    }));
+
+    const { runCliCommand } = await import("../../src/cli/dispatch.js");
+    await runCliCommand("config", ["set", "distillation.fallback_codes", "429", "503"]);
+    await runCliCommand("config", [
+      "set",
+      "distillation.fallback_chain",
+      "gemini:gemini-2.5-flash",
+      "openai:gpt-4o-mini"
+    ]);
+
+    expect(runConfigCommand).toHaveBeenNthCalledWith(1, "set", "distillation.fallback_codes", "429,503");
+    expect(runConfigCommand).toHaveBeenNthCalledWith(
+      2,
+      "set",
+      "distillation.fallback_chain",
+      "gemini:gemini-2.5-flash,openai:gpt-4o-mini"
+    );
   });
 
   it("does not advertise the removed pack route in CLI usage", async () => {

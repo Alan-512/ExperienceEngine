@@ -167,6 +167,13 @@ ee status
 
 Use `ee init` once to initialize ExperienceEngine's shared distillation, embedding, and secret state. New host installations should reuse that same shared EE state instead of asking you to re-enter the same API key per host window.
 
+LLM fallback has two layers:
+
+- ExperienceEngine provider fallback: `ee config set distillation.fallback_chain "gemini:gemini-2.5-flash,openai:gpt-4o-mini"`
+- OpenRouter request fallback: `ee config set secret.EXPERIENCE_ENGINE_FALLBACK_MODELS "openai/gpt-4o-mini,deepseek/deepseek-chat"`
+
+Use the ExperienceEngine fallback chain when a request should move to another configured provider after fallbackable HTTP statuses such as `429`, `500`, `502`, `503`, or `504`. Use OpenRouter fallback models when the primary provider is OpenRouter and you want the `models` list sent inside a single OpenRouter request. The fallback trigger statuses can be changed with `ee config set distillation.fallback_codes "429,503"`.
+
 For Codex, `ee status` and `ee doctor codex` also show whether the `ee` CLI fallback is available on `PATH`. Codex MCP wiring can still be healthy without that fallback, but explicit operator commands such as `ee inspect --last` need either a PATH-visible `ee` binary or an explicit package invocation.
 
 In practical terms, the routine loop currently looks like this:

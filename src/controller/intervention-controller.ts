@@ -405,6 +405,13 @@ export const decideIntervention = (
     | "retrievalRerankerModel"
     | "syncSecondOpinionMode"
     | "syncSecondOpinionModel"
+  > &
+  Partial<
+    Pick<
+      ExperienceEngineConfig,
+    | "distillationFallbackChain"
+    | "distillationFallbackCodes"
+    >
   >,
   retrievalContext?: RetrievalContext,
   repoPolicy?: RepoPolicy
@@ -431,6 +438,13 @@ const decideInterventionInternal = async (
     | "retrievalRerankerModel"
     | "syncSecondOpinionMode"
     | "syncSecondOpinionModel"
+  > &
+  Partial<
+    Pick<
+      ExperienceEngineConfig,
+    | "distillationFallbackChain"
+    | "distillationFallbackCodes"
+    >
   >,
   retrievalContext?: RetrievalContext,
   repoPolicy?: RepoPolicy

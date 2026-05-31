@@ -6,6 +6,11 @@ import {
 } from "../install/public-install.js";
 import { SURFACE_TIER_DEFINITIONS } from "../interaction/surface-tiers.js";
 
+const CONFIG_COMMA_LIST_KEYS = new Set([
+  "distillation.fallback_chain",
+  "distillation.fallback_codes"
+]);
+
 const usageText =
   "Usage: ee <install openclaw|claude-code|codex|antigravity|upgrade openclaw|claude-code|codex|antigravity|repair [openclaw|codex|antigravity]|claude-hook|codex-hook|antigravity-hook|codex <exec ...>|agy <exec ...>|antigravity <activate-project ...>|codex-mcp-server|doctor [openclaw|claude-code|codex|antigravity]|status|stats|inspect|feedback|disable|enable|cool|retire>"
   + " | helped|harmed"
@@ -17,7 +22,7 @@ const usageText =
   + " | mcp-server"
   + " | init [distillation|embedding|secret|show]"
   + " | models list <provider> [query]"
-  + " | config <get|set|unset> notices.inline|distillation.provider|distillation.auth_mode|distillation.model|embedding.provider|embedding.api_provider|embedding.model|embedding.dtype|secret.<ENV_KEY> [value]";
+  + " | config <get|set|unset> notices.inline|distillation.provider|distillation.auth_mode|distillation.model|distillation.fallback_chain|distillation.fallback_codes|embedding.provider|embedding.api_provider|embedding.model|embedding.dtype|secret.<ENV_KEY> [value]";
 
 export const printCliUsage = (): void => {
   console.log("ExperienceEngine CLI");
@@ -105,7 +110,8 @@ export const runCliCommand = async (command: string | undefined, args: string[])
     }
     case "config": {
       const { runConfigCommand } = await import("./commands/config.js");
-      await runConfigCommand(args[0], args[1], args[2]);
+      const value = CONFIG_COMMA_LIST_KEYS.has(args[1] ?? "") ? args.slice(2).join(",") : args[2];
+      await runConfigCommand(args[0], args[1], value);
       break;
     }
     case "models": {

@@ -10,6 +10,7 @@ import {
   setEmbeddingDtype,
   setEmbeddingModel,
   setEmbeddingProvider,
+  setDistillationFallbackChain,
   setHybridSettings
 } from "../../config/settings-store.js";
 import { resolveModelCatalog, type ProviderModelCatalog } from "../../distillation/model-catalog.js";
@@ -35,7 +36,7 @@ type InitWizardUI = {
 };
 
 const DISTILLATION_USAGE =
-  "Usage: ee init distillation --provider <provider> --model <modelId> [--auth-mode api_key|google_adc]";
+  "Usage: ee init distillation --provider <provider> --model <modelId> [--auth-mode api_key|google_adc] [--fallback-chain <chain>]";
 const EMBEDDING_USAGE =
   "Usage: ee init embedding --mode <api|local|legacy> [--api-provider auto|openai|gemini|jina] [--model <modelId>] [--dtype q8|fp32]";
 const SECRET_USAGE = "Usage: ee init secret <ENV_KEY> <value>";
@@ -56,6 +57,31 @@ const parseFlag = (args: string[], flag: string): string | undefined => {
   }
 
   return args[index + 1];
+};
+
+const parseCommaListFlag = (args: string[], flag: string): string | undefined => {
+  const index = args.indexOf(flag);
+  if (index === -1) {
+    return undefined;
+  }
+
+  const values: string[] = [];
+  for (let cursor = index + 1; cursor < args.length; cursor += 1) {
+    const value = args[cursor];
+    if (!value || value.startsWith("--")) {
+      break;
+    }
+    values.push(value);
+  }
+
+  return values.length > 0
+    ? values
+        .join(",")
+        .split(/[,\s]+/)
+        .map((entry) => entry.trim())
+        .filter(Boolean)
+        .join(",")
+    : undefined;
 };
 
 export const runInitCommand = async (
@@ -82,6 +108,7 @@ export const runInitCommand = async (
     const provider = parseFlag(args, "--provider");
     const model = parseFlag(args, "--model");
     const authMode = parseFlag(args, "--auth-mode") ?? "api_key";
+    const fallbackChain = parseCommaListFlag(args, "--fallback-chain");
 
     if (!provider || !model || (authMode !== "api_key" && authMode !== "google_adc")) {
       console.log(DISTILLATION_USAGE);
@@ -100,8 +127,11 @@ export const runInitCommand = async (
     setDistillationProvider(provider);
     setDistillationAuthMode(authMode);
     setDistillationModel(provider, model);
+    if (fallbackChain) {
+      setDistillationFallbackChain(fallbackChain);
+    }
     applyDefaultHybridSettingsForNewInit();
-    console.log(`[ExperienceEngine] Distillation initialized: provider=${provider} auth_mode=${authMode} model=${model}.`);
+    console.log(`[ExperienceEngine] Distillation initialized: provider=${provider} auth_mode=${authMode} model=${model}${fallbackChain ? ` fallback_chain=${fallbackChain}` : ""}.`);
     return;
   }
 
@@ -157,6 +187,7 @@ export const runInitCommand = async (
     console.log(`- Distillation provider: ${settings.distillation?.provider ?? "<unset>"}`);
     console.log(`- Distillation auth mode: ${settings.distillation?.auth_mode ?? "api_key"}`);
     console.log(`- Distillation model: ${settings.distillation?.model ?? "<unset>"}`);
+    console.log(`- Distillation fallback chain: ${settings.distillation?.fallback_chain ?? "<unset>"}`);
     console.log(`- Embedding mode: ${settings.embedding?.provider ?? defaultConfig.embeddingProvider}`);
     console.log(`- Embedding API provider: ${settings.embedding?.api_provider ?? defaultConfig.embeddingApiProvider}`);
     console.log(`- Embedding model: ${settings.embedding?.model ?? defaultConfig.embeddingModel}`);
@@ -241,9 +272,10 @@ const runInitWizard = async (ui: InitWizardUI, deps: InitCommandDeps): Promise<v
   let authMode: "api_key" | "google_adc" = "api_key";
   const requiresAuthModeStep = provider === "gemini";
   const modelStepTitle = requiresAuthModeStep ? "Step 3: Distillation model" : "Step 2: Distillation model";
-  const embeddingStepTitle = requiresAuthModeStep ? "Step 4: Embedding mode" : "Step 3: Embedding mode";
-  const secretsStepTitle = requiresAuthModeStep ? "Step 5: Shared provider secrets" : "Step 4: Shared provider secrets";
-  const summaryStepTitle = requiresAuthModeStep ? "Step 6: Summary" : "Step 5: Summary";
+  const fallbackStepTitle = requiresAuthModeStep ? "Step 4: Distillation fallback chain" : "Step 3: Distillation fallback chain";
+  const embeddingStepTitle = requiresAuthModeStep ? "Step 5: Embedding mode" : "Step 4: Embedding mode";
+  const secretsStepTitle = requiresAuthModeStep ? "Step 6: Shared provider secrets" : "Step 5: Shared provider secrets";
+  const summaryStepTitle = requiresAuthModeStep ? "Step 7: Summary" : "Step 6: Summary";
   if (provider === "gemini") {
     const selectedAuthMode = await ui.choose({
       title: "Step 2: Distillation auth mode",
@@ -279,6 +311,15 @@ const runInitWizard = async (ui: InitWizardUI, deps: InitCommandDeps): Promise<v
   setDistillationProvider(provider);
   setDistillationAuthMode(authMode);
   setDistillationModel(provider, model);
+
+  const fallbackChain = await ui.input({
+    title: fallbackStepTitle,
+    message:
+      "Optional EE-level provider fallback chain, for example gemini:gemini-2.5-flash,openai:gpt-4o-mini. Press ENTER to skip."
+  });
+  if (fallbackChain?.trim()) {
+    setDistillationFallbackChain(fallbackChain.trim());
+  }
   applyDefaultHybridSettingsForNewInit();
 
   const embeddingSelection = await ui.choose({
@@ -342,6 +383,7 @@ const runInitWizard = async (ui: InitWizardUI, deps: InitCommandDeps): Promise<v
   ui.log("Initialization complete.");
   ui.log(`- Distillation provider: ${provider}`);
   ui.log(`- Distillation model: ${model}`);
+  ui.log(`- Distillation fallback chain: ${fallbackChain?.trim() ? fallbackChain.trim() : "<unset>"}`);
   ui.log(`- Embedding mode: ${embeddingMode}`);
   ui.log(`- Embedding API provider: ${embeddingMode === "api" ? embeddingApiProvider : "auto"}`);
   ui.log(`- Embedding model: ${defaultConfig.embeddingModel}`);

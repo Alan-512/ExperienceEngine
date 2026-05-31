@@ -28,6 +28,8 @@ export const defaultConfig: ExperienceEngineConfig = {
   distillationMode: "auto",
   distillerProfile: "balanced",
   distillationAllowPassthrough: true,
+  distillationFallbackChain: "",
+  distillationFallbackCodes: [429, 500, 502, 503, 504],
   distillationMaxRetries: 2,
   distillationBatchSize: 5,
   distillationAutoDrain: true,

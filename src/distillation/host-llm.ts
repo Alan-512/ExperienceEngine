@@ -9,6 +9,7 @@ type ResolveOptions = {
   configProvider?: DistillerProvider;
   configAuthMode?: string;
   configModel?: string;
+  configFallbackChain?: string;
 };
 
 type DistillationResolveOptions = ResolveOptions & {
@@ -141,6 +142,57 @@ export const resolveDistillerEndpoint = (options: ResolveOptions = {}): Distille
   });
 
   return resolution.distillationMode === "llm" ? resolution.endpoint : null;
+};
+
+export const resolveDistillerEndpoints = (options: ResolveOptions = {}): DistillerEndpoint[] => {
+  const baseEnv = resolveExperienceEngineRuntimeEnv({
+    env: options.env ?? process.env,
+    homeDir: options.homeDir
+  });
+
+  const endpoints: DistillerEndpoint[] = [];
+
+  const primary = resolveDistillerEndpoint(options);
+  if (primary) {
+    endpoints.push(primary);
+  }
+
+  const chainStr = baseEnv.EXPERIENCE_ENGINE_DISTILLER_FALLBACK_CHAIN ?? options.configFallbackChain ?? "";
+  if (chainStr.trim()) {
+    const segments = chainStr.split(",").map(s => s.trim()).filter(Boolean);
+    for (const segment of segments) {
+      const parts = segment.split(":");
+      const providerName = parts[0]?.trim();
+      const modelName = parts.slice(1).join(":")?.trim();
+      if (providerName && modelName) {
+        try {
+          const provider = providerName as DistillerProvider;
+          const adapter = getDistillerProviderAdapter(provider);
+          const scopedEnv: NodeJS.ProcessEnv = {
+            ...baseEnv,
+            EXPERIENCE_ENGINE_DISTILLER_PROVIDER: provider,
+            EXPERIENCE_ENGINE_DISTILLER_MODEL: modelName
+          };
+          if (!scopedEnv.EXPERIENCE_ENGINE_DISTILLER_AUTH_MODE && options.configAuthMode) {
+            scopedEnv.EXPERIENCE_ENGINE_DISTILLER_AUTH_MODE = options.configAuthMode;
+          }
+          const resolved = adapter.resolve(scopedEnv);
+          if (resolved.endpoint) {
+            const exists = endpoints.some(
+              e => e.provider === resolved.endpoint!.provider && e.model === resolved.endpoint!.model
+            );
+            if (!exists) {
+              endpoints.push(resolved.endpoint);
+            }
+          }
+        } catch {
+          // ignore malformed adapter resolves
+        }
+      }
+    }
+  }
+
+  return endpoints;
 };
 
 export type { DistillerEndpoint };

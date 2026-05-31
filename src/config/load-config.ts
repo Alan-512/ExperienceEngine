@@ -156,6 +156,16 @@ export const loadConfig = (
       env.EXPERIENCE_ENGINE_DISTILLATION_ALLOW_PASSTHROUGH !== undefined
         ? env.EXPERIENCE_ENGINE_DISTILLATION_ALLOW_PASSTHROUGH === "true"
         : overrides.distillationAllowPassthrough ?? defaultConfig.distillationAllowPassthrough,
+    distillationFallbackChain:
+      env.EXPERIENCE_ENGINE_DISTILLER_FALLBACK_CHAIN ??
+      overrides.distillationFallbackChain ??
+      settings.distillation?.fallback_chain ??
+      defaultConfig.distillationFallbackChain,
+    distillationFallbackCodes: env.EXPERIENCE_ENGINE_DISTILLATION_FALLBACK_CODES
+      ? env.EXPERIENCE_ENGINE_DISTILLATION_FALLBACK_CODES.split(",").map(Number).filter(n => !isNaN(n))
+      : overrides.distillationFallbackCodes ??
+        settings.distillation?.fallback_codes ??
+        defaultConfig.distillationFallbackCodes,
     distillationMaxRetries: env.EXPERIENCE_ENGINE_DISTILLATION_MAX_RETRIES
       ? Number(env.EXPERIENCE_ENGINE_DISTILLATION_MAX_RETRIES)
       : overrides.distillationMaxRetries ?? defaultConfig.distillationMaxRetries,
