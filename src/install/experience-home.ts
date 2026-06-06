@@ -22,12 +22,18 @@ export const extractEnvValue = (
     const prefix = `${key}=`;
     if (trimmed.startsWith(prefix)) {
       const value = trimmed.slice(prefix.length).trim();
-      return value.length ? value : undefined;
+      if (!value.length || isRedactedEnvValue(value)) {
+        return undefined;
+      }
+      return value;
     }
   }
 
   return undefined;
 };
+
+const isRedactedEnvValue = (value: string): boolean =>
+  /^[*]+$/.test(value) || /^[\uF02A]+$/.test(value);
 
 export const buildEnvWithRecordedExperienceHome = (
   env: NodeJS.ProcessEnv,

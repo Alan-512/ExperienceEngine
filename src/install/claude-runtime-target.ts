@@ -26,6 +26,7 @@ const escapeDoubleQuotedWindows = (value: string): string => value.replace(/"/g,
 const escapeSingleQuotedBash = (value: string): string => value.replace(/'/g, `'\"'\"'`);
 const quoteJsString = (value: string): string => JSON.stringify(value);
 const quoteWindowsCmdArgument = (value: string): string => `"${escapeDoubleQuotedWindows(value)}"`;
+const toWindowsJsPath = (value: string): string => toWindowsRuntimePath(value).replace(/\\/g, "/");
 
 const normalizeWindowsDrivePath = (value: string): string => {
   if (!isWindowsMountedPath(value)) {
@@ -190,9 +191,9 @@ export const buildCrossRuntimeClaudeHookCommand = (options: {
   packageRoot: string;
   productHome: string;
 }): string => {
-  const windowsHome = toWindowsRuntimePath(options.productHome);
+  const windowsHome = toWindowsJsPath(options.productHome);
   const posixHome = toPosixRuntimePath(options.productHome);
-  const windowsRoot = toWindowsRuntimePath(options.packageRoot);
+  const windowsRoot = toWindowsJsPath(options.packageRoot);
   const posixRoot = toPosixRuntimePath(options.packageRoot);
   const script = [
     "const cp=require('node:child_process')",

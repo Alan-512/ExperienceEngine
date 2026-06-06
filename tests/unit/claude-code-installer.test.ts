@@ -3,6 +3,7 @@ import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, describe, expect, it } from "vitest";
 import { installClaudeCodeAdapter } from "../../src/install/claude-code-installer.js";
+import { buildCrossRuntimeClaudeHookCommand } from "../../src/install/claude-runtime-target.js";
 
 const tempDirs: string[] = [];
 
@@ -301,6 +302,18 @@ To remove this server, run: claude mcp remove "experienceengine" -s user`;
       expect(hookLauncher).toContain("claude-hook");
       expect(hookLauncher).toContain("set \"EXPERIENCE_ENGINE_HOME=");
     }
+  });
+
+  it("writes slash-normalized windows paths inside the cross-runtime hook script", () => {
+    const command = buildCrossRuntimeClaudeHookCommand({
+      packageRoot: "D:\\project\\ExperienceEngine",
+      productHome: "D:\\ExperienceEngineData\\.experienceengine"
+    });
+
+    expect(command).toContain("D:/project/ExperienceEngine");
+    expect(command).toContain("D:/ExperienceEngineData/.experienceengine");
+    expect(command).not.toContain("D:\\\\project\\\\ExperienceEngine");
+    expect(command).not.toContain("D:\\\\ExperienceEngineData\\\\.experienceengine");
   });
 
   it("disables the marketplace plugin when installing project-local Claude hooks", () => {
