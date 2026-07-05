@@ -7,6 +7,7 @@ import {
   buildCodexAddCommand,
   createTemporaryCodexConfigWithoutServer,
   buildCodexMcpServerCommand,
+  defaultCodexCommandRunner,
   ensureCodexMcpServerStartupTimeout,
   parseCodexMcpServerInfo,
   resolveEffectiveCodexConfigPath,
@@ -37,6 +38,24 @@ afterEach(() => {
 });
 
 describe("Codex CLI wiring", () => {
+  it.runIf(process.platform === "win32")("runs Windows command shims through cmd.exe", () => {
+    const dir = makeTempDir();
+    writeFileSync(join(dir, "codex.cmd"), "@echo off\r\necho codex-test-ok\r\n", "utf8");
+
+    const output = defaultCodexCommandRunner({
+      bin: "codex",
+      args: [],
+      description: "Run the test Codex shim",
+      env: {
+        ...process.env,
+        PATH: dir
+      }
+    });
+
+    expect(output).toBeTypeOf("string");
+    expect((output as string).trim()).toBe("codex-test-ok");
+  });
+
   it("builds the documented add command for the ExperienceEngine MCP server", () => {
     const command = buildCodexAddCommand("/tmp/experienceengine", "/tmp/ee-home", undefined, [], "posix");
 

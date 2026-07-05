@@ -8,6 +8,7 @@ export type CodexHookEvent = (typeof CODEX_HOOK_EVENTS)[number];
 type CodexHookCommand = {
   type?: string;
   command?: string;
+  commandWindows?: string;
   timeout?: number;
   statusMessage?: string;
 };
@@ -169,12 +170,17 @@ export const ensureCodexHooksFeatureEnabled = (configPath: string): { updated: b
   return { updated: true, path: configPath };
 };
 
-const expectedHookGroup = (eventName: CodexHookEvent, command: string): CodexHookGroup => ({
+const expectedHookGroup = (
+  eventName: CodexHookEvent,
+  command: string,
+  commandWindows?: string
+): CodexHookGroup => ({
   ...(eventName === "PreToolUse" || eventName === "PostToolUse" ? { matcher: "*" } : {}),
   hooks: [
     {
       type: "command",
       command,
+      ...(commandWindows ? { commandWindows } : {}),
       timeout: eventName === "Stop" ? 120 : 30,
       statusMessage: `ExperienceEngine ${eventName}`
     }
@@ -189,6 +195,7 @@ const expectedCodexHookEvents = (includePreToolUse = false): CodexHookEvent[] =>
 const inspectParsedHooks = (
   parsed: CodexHooksFile | undefined,
   expectedCommand: string,
+  expectedWindowsCommand?: string,
   runtimeTarget?: "posix" | "windows",
   includePreToolUse = false
 ) => {
@@ -205,7 +212,8 @@ const inspectParsedHooks = (
       (group.hooks ?? []).some(
         (hook) =>
           hook.type === "command" &&
-          (hook.command === expectedCommandValue || isExperienceEngineCodexHookCommand(hook.command))
+          (hook.command === expectedCommandValue || isExperienceEngineCodexHookCommand(hook.command)) &&
+          (!expectedWindowsCommand || hook.commandWindows === expectedWindowsCommand)
       )
     );
     if (!hasExpected) {
@@ -220,15 +228,26 @@ const inspectParsedHooks = (
           unrelatedHookCount += 1;
           continue;
         }
-        if (hasAnyMarker(hook.command, EXPERIENCEENGINE_CLAUDE_HOOK_MARKERS)) {
-          claudeHookCommands.push(hook.command);
-        } else if (isExperienceEngineCodexHookCommand(hook.command)) {
-          codexHookCommands.push(hook.command);
+        if (
+          hasAnyMarker(hook.command, EXPERIENCEENGINE_CLAUDE_HOOK_MARKERS) ||
+          hasAnyMarker(hook.commandWindows, EXPERIENCEENGINE_CLAUDE_HOOK_MARKERS)
+        ) {
+          claudeHookCommands.push(hook.commandWindows ?? hook.command);
+        } else if (
+          isExperienceEngineCodexHookCommand(hook.command) ||
+          isExperienceEngineCodexHookCommand(hook.commandWindows)
+        ) {
+          codexHookCommands.push(hook.commandWindows ?? hook.command);
         } else {
           unrelatedHookCount += 1;
         }
-        if (runtimeTarget === "windows" && !isExperienceEngineCodexHookCommand(hook.command) && isWslPathCommand(hook.command)) {
-          wslPathCommands.push(hook.command);
+        if (
+          runtimeTarget === "windows" &&
+          !isExperienceEngineCodexHookCommand(hook.command) &&
+          !isExperienceEngineCodexHookCommand(hook.commandWindows) &&
+          (isWslPathCommand(hook.command) || isWslPathCommand(hook.commandWindows))
+        ) {
+          wslPathCommands.push(hook.commandWindows ?? hook.command);
         }
       }
     }
@@ -247,6 +266,7 @@ export const inspectCodexProjectHooks = (options: {
   cwd?: string;
   homeDir?: string;
   hookCommand: string;
+  hookCommandWindows?: string;
   runtimeTarget?: "posix" | "windows";
   includePreToolUse?: boolean;
 }): CodexHookInspection => {
@@ -284,6 +304,7 @@ export const inspectCodexProjectHooks = (options: {
   const inspected = inspectParsedHooks(
     hooksFile.parsed,
     options.hookCommand,
+    options.hookCommandWindows,
     options.runtimeTarget,
     options.includePreToolUse
   );
@@ -313,6 +334,7 @@ export const repairCodexProjectHooks = (options: {
   cwd?: string;
   homeDir?: string;
   hookCommand: string;
+  hookCommandWindows?: string;
   runtimeTarget?: "posix" | "windows";
   includePreToolUse?: boolean;
 }): CodexHookRepairResult => {
@@ -343,9 +365,14 @@ export const repairCodexProjectHooks = (options: {
     const keptGroups = groups
       .map((group) => {
         const keptHooks = (group.hooks ?? []).filter((hook) => {
-          if (hook.type === "command" && hasAnyMarker(hook.command, EXPERIENCEENGINE_CLAUDE_HOOK_MARKERS)) {
-            if (hook.command) {
-              removedClaudeHookCommands.push(hook.command);
+          if (
+            hook.type === "command" &&
+            (hasAnyMarker(hook.command, EXPERIENCEENGINE_CLAUDE_HOOK_MARKERS) ||
+              hasAnyMarker(hook.commandWindows, EXPERIENCEENGINE_CLAUDE_HOOK_MARKERS))
+          ) {
+            const removedCommand = hook.commandWindows ?? hook.command;
+            if (removedCommand) {
+              removedClaudeHookCommands.push(removedCommand);
             }
             hookFileChanged = true;
             return false;
@@ -364,7 +391,11 @@ export const repairCodexProjectHooks = (options: {
     const keptGroups = groups
       .map((group) => ({
         ...group,
-        hooks: (group.hooks ?? []).filter((hook) => !isExperienceEngineCodexHookCommand(hook.command))
+        hooks: (group.hooks ?? []).filter(
+          (hook) =>
+            !isExperienceEngineCodexHookCommand(hook.command) &&
+            !isExperienceEngineCodexHookCommand(hook.commandWindows)
+        )
       }))
       .filter((group) => (group.hooks ?? []).length > 0);
     if (keptGroups.length > 0) {
@@ -376,7 +407,10 @@ export const repairCodexProjectHooks = (options: {
 
   for (const eventName of expectedCodexHookEvents(options.includePreToolUse)) {
     const groups = next.hooks?.[eventName] ?? [];
-    next.hooks![eventName] = [...groups, expectedHookGroup(eventName, command)];
+    next.hooks![eventName] = [
+      ...groups,
+      expectedHookGroup(eventName, command, options.hookCommandWindows)
+    ];
     installedEvents.push(eventName);
     hookFileChanged = true;
   }

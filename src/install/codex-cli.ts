@@ -267,12 +267,23 @@ export const ensureCodexMcpServerStartupTimeout = (
   return configPath;
 };
 
-export const defaultCodexCommandRunner: CodexCommandRunner = (command) =>
-  execFileSync(command.bin, command.args, {
+export const defaultCodexCommandRunner: CodexCommandRunner = (command) => {
+  const env = command.env ? { ...process.env, ...command.env } : process.env;
+  const useWindowsCodexShim =
+    process.platform === "win32" && command.bin.toLowerCase() === "codex";
+  const executable = useWindowsCodexShim
+    ? env.ComSpec ?? env.COMSPEC ?? process.env.ComSpec ?? process.env.COMSPEC ?? "cmd.exe"
+    : command.bin;
+  const args = useWindowsCodexShim
+    ? ["/d", "/s", "/c", command.bin, ...command.args]
+    : command.args;
+
+  return execFileSync(executable, args, {
     stdio: "pipe",
     encoding: "utf8",
-    env: command.env ? { ...process.env, ...command.env } : process.env
+    env
   });
+};
 
 export const runCodexCommand = (
   command: CodexCommand,

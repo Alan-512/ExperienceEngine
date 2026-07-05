@@ -16,6 +16,7 @@ import {
   type CodexMcpServerInfo
 } from "./codex-cli.js";
 import {
+  buildCodexHookCommandForTarget,
   buildCodexProjectHookCommand,
   buildCrossRuntimeCodexHookCommand,
   ensureCodexLaunchers,
@@ -409,6 +410,10 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
     packageRoot,
     productHome: paths.productHome
   });
+  const hookCommandWindows =
+    runtimeTarget === "windows"
+      ? buildCodexHookCommandForTarget("windows", launchers)
+      : undefined;
   const includePreToolUse = env.EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED === "1";
   const defaultPaths = resolveExperienceEnginePaths({
     adapter: "codex",
@@ -438,6 +443,7 @@ export const installCodexAdapter = (options: InstallerOptions = {}): CodexInstal
     cwd: options.cwd,
     homeDir: options.homeDir,
     hookCommand,
+    hookCommandWindows,
     runtimeTarget,
     includePreToolUse
   });
@@ -526,10 +532,15 @@ export const inspectCodexInstall = (options: InstallerOptions = {}) => {
     packageRoot,
     productHome: paths.productHome
   });
+  const hookCommandWindows =
+    runtimeTarget === "windows"
+      ? buildCodexHookCommandForTarget("windows", launchers)
+      : undefined;
   const hooks: CodexHookInspection = inspectCodexProjectHooks({
     cwd: options.cwd,
     homeDir: options.homeDir,
     hookCommand,
+    hookCommandWindows,
     runtimeTarget,
     includePreToolUse: env.EXPERIENCE_ENGINE_CODEX_PRETOOL_HOOK_ENABLED === "1"
   });

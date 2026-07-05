@@ -589,10 +589,20 @@ codex_hooks = true
     expect(report.runtimeTarget).toBe("windows");
     expect(readFileSync(payload.launcherPaths?.mcpServer ?? "", "utf8")).toContain("codex-mcp-server");
     const hooks = JSON.parse(readFileSync(join(homeDir, ".codex", "hooks.json"), "utf8")) as {
-      hooks: Record<string, unknown>;
+      hooks: Record<
+        string,
+        Array<{
+          hooks: Array<{
+            command?: string;
+            commandWindows?: string;
+          }>;
+        }>
+      >;
     };
-    expect(JSON.stringify(hooks)).toContain("node -e");
-    expect(JSON.stringify(hooks)).toContain("codex-hook");
+    const userPromptHook = hooks.hooks.UserPromptSubmit?.[0]?.hooks[0];
+    expect(userPromptHook?.command).toContain("node -e");
+    expect(userPromptHook?.commandWindows).toContain("cmd.exe /c");
+    expect(userPromptHook?.commandWindows).toContain("experienceengine-codex-hook.cmd");
   });
 
   it("inspects the current runtime target instead of reusing a shared-home install target", () => {
