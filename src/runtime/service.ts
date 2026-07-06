@@ -13,7 +13,6 @@ import { nowIso } from "../utils/clock.js";
 import { createId, stableId } from "../utils/ids.js";
 import type {
   ExperienceInput,
-  ExperienceInputRecord,
   HybridReviewArtifact,
   InjectionEvent,
   AttributionRecord,
@@ -45,14 +44,6 @@ import { ScopeFingerprintRepository } from "../store/sqlite/repositories/scope-f
 import { RepoPolicyRepository } from "../store/sqlite/repositories/repo-policy-repo.js";
 import { HybridInvocationTraceRepository } from "../store/sqlite/repositories/hybrid-invocation-trace-repo.js";
 import { TraceRepository } from "../store/sqlite/repositories/trace-repo.js";
-import {
-  normalizeClaudeEvent,
-  normalizeCodexEvent,
-  normalizeAntigravityEvent,
-  normalizeOpenClawEvent
-} from "../adapters/host-normalizers.js";
-import { getHostTraceCapabilityProfile } from "../adapters/trace-capabilities.js";
-import type { HostTraceCapabilityProfile, TraceCapsule, TraceEvent, TraceProvenanceSummary } from "../types/domain.js";
 import { RuntimeCaptureWriter } from "../plugin/runtime-capture.js";
 import { normalizeToolResult } from "../plugin/hooks/tool-result-persist.js";
 import { extractToolResultsFromPayload } from "../plugin/runtime-helpers.js";
@@ -65,6 +56,7 @@ import { LlmHygieneGovernancePlanner } from "../maintenance/hygiene-governance-l
 import { LearningPipelineService } from "./learning-pipeline-service.js";
 import { mergeContext, TaskFinalizationService } from "./task-finalization-service.js";
 import { PromptDecisionPipeline } from "./prompt-decision-pipeline.js";
+import { TraceCaptureService, type TraceCaptureSessionState } from "./trace-capture-service.js";
 import type { LlmLearningGate } from "../analyzer/llm-learning-gate.js";
 import type { DistillationQueueWorker } from "../distillation/queue-worker.js";
 import type { DistillerEndpoint } from "../distillation/providers/types.js";
@@ -107,54 +99,18 @@ const loadHybridCapsuleBuilder = async (): Promise<typeof import("../hybrid/caps
 const loadHybridPostmortemProviderClient = async (): Promise<typeof import("../hybrid/postmortem-provider-client.js")> =>
   import("../hybrid/postmortem-provider-client.js");
 
-type SessionState = {
+type SessionState = TraceCaptureSessionState & {
   context?: HostPromptContext;
   episodeId?: string;
   toolEvents: ToolEvent[];
   toolEventKeys: Set<string>;
   injectedNodeIds: string[];
-  lastInjectionEvent?: InjectionEvent;
-  traceEvents?: TraceEvent[];
 };
 
 const resolveEpisodeId = (session: SessionState, sessionId: string, input: Pick<ExperienceInput, "scope_id" | "task_summary">): string => {
   session.episodeId ??= stableId("episode", `${sessionId}:${input.scope_id}:${input.task_summary}`);
   return session.episodeId;
 };
-
-const DIRECTIONAL_CORRECTION_CUE_PATTERN =
-  /\b(wrong (?:direction|layer|behavior|goal|abstraction|boundary)|not (?:the )?(?:right|requested)|not what (?:i|we) (?:want|asked)|instead of|rather than|focus on|problem is (?:still )?in|issue is (?:still )?in|belongs? in|priority is|quality bar|verification order|wrong scope|wrong abstraction)\b/i;
-
-const normalizeTraceHost = (host: string | undefined): TaskRun["host"] => {
-  const normalized = String(host || "").toLowerCase();
-  if (normalized.includes("claude")) {
-    return "claude-code";
-  }
-  if (normalized.includes("codex")) {
-    return "codex";
-  }
-  if (normalized.includes("antigravity")) {
-    return "antigravity";
-  }
-  return "openclaw";
-};
-
-const includesTraceScope = (patterns: string[], scopeId: string, cwd?: string): boolean =>
-  patterns.length === 0 ||
-  patterns.some((pattern) => pattern === scopeId || (cwd ? cwd.includes(pattern) : false));
-
-function normalizeHostEvent(host: string | undefined, raw: any): TraceEvent {
-  const normalizedHost = normalizeTraceHost(host);
-  if (normalizedHost === "claude-code") {
-    return normalizeClaudeEvent(raw);
-  } else if (normalizedHost === "codex") {
-    return normalizeCodexEvent(raw);
-  } else if (normalizedHost === "openclaw") {
-    return normalizeOpenClawEvent(raw);
-  } else {
-    return normalizeAntigravityEvent(raw);
-  }
-}
 
 const buildToolEventKey = (toolEvent: ToolEvent, toolCallId?: string): string =>
   toolCallId ??
@@ -223,6 +179,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly learningPipeline;
   private readonly taskFinalization;
   private readonly promptDecisionPipeline;
+  private readonly traceCapture;
   private readonly runtimeOptions: ExperienceRuntimeServiceOptions;
   private readonly backgroundLearningEnabled: boolean;
   private readonly hybridPosttaskEnabled: boolean;
@@ -310,6 +267,13 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
         });
       }
     });
+    this.traceCapture = new TraceCaptureService({
+      config: this.config,
+      db: this.db,
+      traceRepo: this.traceRepo,
+      inputRepo: this.inputRepo,
+      taskRunRepo: this.taskRunRepo
+    });
     this.captureWriter = new RuntimeCaptureWriter(config, this.logger);
   }
 
@@ -343,219 +307,6 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
 
     session.toolEventKeys.add(key);
     session.toolEvents.push(toolEvent);
-  }
-
-  private isTraceCaptureEnabledFor(context: HostPromptContext, scopeId?: string): boolean {
-    if (!this.config.traceCaptureEnabled) {
-      return false;
-    }
-
-    const host = normalizeTraceHost(context.host);
-    if (this.config.traceCaptureHosts.length > 0 && !this.config.traceCaptureHosts.includes(host)) {
-      return false;
-    }
-
-    return scopeId ? includesTraceScope(this.config.traceCaptureScopes, scopeId, context.cwd) : true;
-  }
-
-  private shouldPersistDiagnosticTraceSnapshot(context: HostPromptContext, scopeId: string): boolean {
-    if (!this.config.tracePersistDiagnosticSnapshots || !this.isTraceCaptureEnabledFor(context, scopeId)) {
-      return false;
-    }
-
-    const host = normalizeTraceHost(context.host);
-    return (
-      this.config.traceDiagnosticSnapshotHosts.includes(host) ||
-      this.config.traceDiagnosticSnapshotScopes.some((pattern) => pattern === scopeId || (context.cwd ? context.cwd.includes(pattern) : false))
-    );
-  }
-
-  private captureTraceEvent(sessionId: string, context: HostPromptContext, raw: any): void {
-    if (!this.isTraceCaptureEnabledFor(context)) {
-      return;
-    }
-
-    const session = this.getSession(sessionId);
-    session.traceEvents ??= [];
-    session.traceEvents.push(normalizeHostEvent(context.host, raw));
-  }
-
-  private buildTraceHostProfile(host: TaskRun["host"]): HostTraceCapabilityProfile {
-    return getHostTraceCapabilityProfile(host, this.db);
-  }
-
-  private buildTraceProvenanceSummary(input: {
-    hostProfile: HostTraceCapabilityProfile;
-    events: TraceEvent[];
-    completenessScore: number;
-    droppedEventsCount: number;
-    redactionApplied: boolean;
-    diagnosticSnapshotId?: string;
-  }): TraceProvenanceSummary {
-    const evidenceCategoryCounts: Record<string, number> = {};
-    for (const event of input.events) {
-      evidenceCategoryCounts[event.event_type] = (evidenceCategoryCounts[event.event_type] ?? 0) + 1;
-    }
-
-    const capabilityStates = new Set(Object.values(input.hostProfile.capabilities).map((capability) => capability.state));
-    const capabilityState = capabilityStates.size === 1
-      ? [...capabilityStates][0] ?? "unavailable"
-      : capabilityStates.size > 1
-        ? "mixed"
-        : "unavailable";
-
-    return {
-      completeness_score: input.completenessScore,
-      host: input.hostProfile.host,
-      capability_state: capabilityState,
-      evidence_category_counts: evidenceCategoryCounts,
-      dropped_events_count: input.droppedEventsCount,
-      redaction_applied: input.redactionApplied,
-      source_provenance: "runtime_trace",
-      learning_use_reason: input.completenessScore >= 0.6 ? "trace evidence available for distillation" : "trace evidence available but incomplete",
-      diagnostic_snapshot_id: input.diagnosticSnapshotId
-    };
-  }
-
-  private persistTraceCapsuleForFinalizedRun(input: {
-    context: HostPromptContext;
-    session: SessionState;
-    sessionId: string;
-    experienceInput: ExperienceInput;
-    record: ExperienceInputRecord;
-    taskRun: TaskRun;
-    episodeId: string;
-  }): { experienceInput: ExperienceInput; taskRun: TaskRun; record: ExperienceInputRecord } {
-    const scopeId = input.experienceInput.scope_id;
-    if (!this.isTraceCaptureEnabledFor(input.context, scopeId)) {
-      return {
-        experienceInput: input.experienceInput,
-        taskRun: input.taskRun,
-        record: input.record
-      };
-    }
-
-    const host = normalizeTraceHost(input.context.host);
-    const rawStopEvent: any = {
-      timestamp: nowIso(),
-      reason: input.context.outcomeSignal || input.experienceInput.outcome_signal || "completed"
-    };
-    if (host === "claude-code") {
-      rawStopEvent.eventName = "stop";
-    } else if (host === "codex") {
-      rawStopEvent.type = "stop";
-    } else if (host === "openclaw") {
-      rawStopEvent.event = "stop";
-    } else {
-      rawStopEvent.name = "stop";
-    }
-    this.captureTraceEvent(input.sessionId, input.context, rawStopEvent);
-
-    const observedEvents = input.session.traceEvents ?? [];
-    const diagnosticSnapshotPersistence = this.shouldPersistDiagnosticTraceSnapshot(input.context, scopeId);
-    const maxEvents = this.config.traceMaxEvents;
-    const persistedEvents = diagnosticSnapshotPersistence ? observedEvents.slice(-maxEvents) : [];
-    const droppedEventsCount = diagnosticSnapshotPersistence
-      ? Math.max(0, observedEvents.length - persistedEvents.length)
-      : observedEvents.length;
-    const hasPrompt = observedEvents.some((event) => event.event_type === "prompt" || event.event_type === "correction");
-    const hasStop = observedEvents.some((event) => event.event_type === "stop" || event.event_type === "task_completion");
-    const expectedToolEvidence = input.experienceInput.tool_events.length === 0
-      || observedEvents.some((event) =>
-        event.event_type === "tool_call" ||
-        event.event_type === "tool_result" ||
-        event.event_type === "tool_failure" ||
-        event.event_type === "verification" ||
-        event.event_type === "file_change"
-      );
-    const completenessScore = Number(
-      (
-        0.25 +
-        (hasPrompt ? 0.25 : 0) +
-        (expectedToolEvidence ? 0.25 : 0) +
-        (hasStop ? 0.25 : 0)
-      ).toFixed(2)
-    );
-    const capsuleId = `trace_cap_${createId("trace")}`;
-    const now = nowIso();
-    const traceCompleteness = Math.min(1, completenessScore);
-    const hostProfile = this.buildTraceHostProfile(host);
-    const traceProvenance = this.buildTraceProvenanceSummary({
-      hostProfile,
-      events: observedEvents,
-      completenessScore: traceCompleteness,
-      droppedEventsCount,
-      redactionApplied: observedEvents.length > 0,
-      diagnosticSnapshotId: diagnosticSnapshotPersistence ? capsuleId : undefined
-    });
-    const tracedInput: ExperienceInput = {
-      ...input.experienceInput,
-      trace_capsule_id: diagnosticSnapshotPersistence ? capsuleId : undefined,
-      trace_completeness: traceCompleteness,
-      trace_provenance: traceProvenance
-    };
-    const tracedRecord: ExperienceInputRecord = {
-      ...input.record,
-      trace_capsule_id: diagnosticSnapshotPersistence ? capsuleId : undefined,
-      trace_completeness: traceCompleteness,
-      trace_provenance: traceProvenance
-    };
-    const tracedTaskRun: TaskRun = {
-      ...input.taskRun,
-      trace_capsule_id: diagnosticSnapshotPersistence ? capsuleId : undefined,
-      trace_completeness: traceCompleteness,
-      trace_provenance: traceProvenance,
-      updated_at: now
-    };
-
-    if (diagnosticSnapshotPersistence) {
-      const capsule: TraceCapsule = {
-        id: capsuleId,
-        scope_id: scopeId,
-        episode_id: input.episodeId,
-        task_run_id: input.taskRun.id,
-        session_id: input.sessionId,
-        task: {
-          goal: input.experienceInput.task_summary || input.context.taskSummary || input.context.userMessage || "",
-          user_constraints: [],
-          injected_expectations: input.session.lastInjectionEvent?.scorecard?.recommendation
-            ? [input.session.lastInjectionEvent.scorecard.recommendation]
-            : [],
-          delivered_node_ids: input.experienceInput.injected_node_ids
-        },
-        events: persistedEvents,
-        evidence_refs: [],
-        outcome: {
-          outcome_signal: input.experienceInput.outcome_signal,
-          confidence: hasStop ? "medium" : "low",
-          summary: input.context.contextSummary ?? input.experienceInput.context_summary ?? input.experienceInput.task_summary,
-          failure_signature: input.experienceInput.tool_events.find((event) => event.status === "failure")?.error_signature
-        },
-        capture_metadata: {
-          is_complete: traceCompleteness >= 0.75,
-          completeness_score: traceCompleteness,
-          metadata_only: false,
-          dropped_events_count: droppedEventsCount,
-          redaction_applied: observedEvents.length > 0,
-          size_bytes: JSON.stringify(persistedEvents).length
-        },
-        host_profile: hostProfile,
-        created_at: now,
-        updated_at: now
-      };
-
-      this.traceRepo.upsert(capsule);
-      this.traceRepo.cleanupOldTraces(this.config.traceRetentionDays);
-      this.traceRepo.cleanupCapsuleLimits(capsuleId, this.config.traceMaxEvents, this.config.traceMaxEvidenceRefs);
-    }
-    this.inputRepo.upsert(tracedRecord);
-    this.taskRunRepo.upsert(tracedTaskRun);
-
-    return {
-      experienceInput: tracedInput,
-      taskRun: tracedTaskRun,
-      record: tracedRecord
-    };
   }
 
   recoverToolEvents(sessionId: string, payload: unknown): void {
@@ -660,28 +411,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     session.context = mergeContext(session.context, context);
 
     if ((trigger === "prompt_lookup" || trigger === "host_startup") && context.userMessage.trim()) {
-      const isCorrection = DIRECTIONAL_CORRECTION_CUE_PATTERN.test(context.userMessage);
-      const eventName = isCorrection ? "correction" : "prompt";
-      const host = normalizeTraceHost(context.host);
-      const rawPromptEvent: any = {
-        timestamp: nowIso()
-      };
-
-      if (host === "claude-code") {
-        rawPromptEvent.eventName = eventName;
-        rawPromptEvent.promptText = context.userMessage;
-      } else if (host === "codex") {
-        rawPromptEvent.type = eventName;
-        rawPromptEvent.prompt = context.userMessage;
-      } else if (host === "openclaw") {
-        rawPromptEvent.event = eventName === "correction" ? "correction" : "message";
-        rawPromptEvent.message = context.userMessage;
-      } else {
-        rawPromptEvent.name = eventName;
-        rawPromptEvent.prompt = context.userMessage;
-      }
-
-      this.captureTraceEvent(sessionId, context, rawPromptEvent);
+      this.traceCapture.capturePromptEvent(session, context, context.userMessage);
     }
 
     return this.queueAutonomousHygieneGovernance(context, trigger);
@@ -1400,30 +1130,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     const session = this.getSession(sessionId);
     session.context = mergeContext(session.context, context);
 
-    if (this.isTraceCaptureEnabledFor(context)) {
-      const isCorrection = DIRECTIONAL_CORRECTION_CUE_PATTERN.test(context.userMessage || "");
-      const eventName = isCorrection ? "correction" : "prompt";
-      const rawPromptEvent: any = {
-        timestamp: nowIso()
-      };
-      
-      const host = normalizeTraceHost(context.host);
-      if (host === "claude-code") {
-        rawPromptEvent.eventName = eventName;
-        rawPromptEvent.promptText = context.userMessage || "";
-      } else if (host === "codex") {
-        rawPromptEvent.type = eventName;
-        rawPromptEvent.prompt = context.userMessage || "";
-      } else if (host === "openclaw") {
-        rawPromptEvent.event = eventName === "correction" ? "correction" : "message";
-        rawPromptEvent.message = context.userMessage || "";
-      } else {
-        rawPromptEvent.name = eventName;
-        rawPromptEvent.prompt = context.userMessage || "";
-      }
-
-      this.captureTraceEvent(sessionId, context, rawPromptEvent);
-    }
+    this.traceCapture.capturePromptEvent(session, context, context.userMessage || "");
     this.maybeQueueAutonomousHygieneGovernance(session.context, "prompt_lookup");
     return this.promptDecisionPipeline.beforePromptBuild(context, sessionId, session);
   }
@@ -1439,56 +1146,12 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       userMessage: ""
     };
 
-    if (this.isTraceCaptureEnabledFor(traceContext)) {
-      const host = normalizeTraceHost(traceContext.host);
-      const rawToolCallEvent: any = {
-        timestamp: result.startedAt || nowIso(),
-        id: `${result.toolCallId || stableId("tracecall", `${sessionId}:${result.toolName}:${result.inputSummary ?? ""}`)}:call`,
-        toolName: result.toolName,
-        toolInputSummary: result.inputSummary || "",
-        arguments: result.inputSummary || "",
-        toolCallId: result.toolCallId || "call_unknown"
-      };
-      
-      if (host === "claude-code") {
-        rawToolCallEvent.eventName = "beforetooluse";
-      } else if (host === "codex") {
-        rawToolCallEvent.type = "tool_call";
-      } else if (host === "openclaw") {
-        rawToolCallEvent.event = "tool_call";
-      } else {
-        rawToolCallEvent.name = "tool_call";
-      }
-
-      this.captureTraceEvent(sessionId, traceContext, rawToolCallEvent);
-
-      const rawToolResultEvent: any = {
-        timestamp: result.endedAt || nowIso(),
-        id: `${result.toolCallId || stableId("tracecall", `${sessionId}:${result.toolName}:${result.inputSummary ?? ""}`)}:result`,
-        toolName: result.toolName,
-        toolInputSummary: result.inputSummary || "",
-        arguments: result.inputSummary || "",
-        toolOutputSummary: result.outputSummary || result.errorSignature || "",
-        result: result.outputSummary || "",
-        error: result.errorSignature || "",
-        status: result.status || "success",
-        exitCode: result.exitCode,
-        exit_code: result.exitCode,
-        toolCallId: result.toolCallId || "call_unknown"
-      };
-
-      if (host === "claude-code") {
-        rawToolResultEvent.eventName = result.status === "failure" ? "posttoolusefailure" : "posttoolusesuccess";
-      } else if (host === "codex") {
-        rawToolResultEvent.type = "tool_result";
-      } else if (host === "openclaw") {
-        rawToolResultEvent.event = "tool_result";
-      } else {
-        rawToolResultEvent.name = "tool_result";
-      }
-
-      this.captureTraceEvent(sessionId, traceContext, rawToolResultEvent);
-    }
+    this.traceCapture.captureToolResultEvents({
+      sessionId,
+      session,
+      context: traceContext,
+      result
+    });
 
     if (sessionId !== "global") {
       this.appendToolEvent(sessionId, normalizedToolEvent, result.toolCallId);
@@ -1531,7 +1194,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
         context,
         cwd: context.cwd
       });
-      const traced = this.persistTraceCapsuleForFinalizedRun({
+      const traced = this.traceCapture.persistForFinalizedRun({
         context,
         session,
         sessionId,

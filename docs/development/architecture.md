@@ -208,7 +208,9 @@ flowchart TD
   Node --> Vector
 ```
 
-Prompt-time decision ownership is shared through `src/runtime/prompt-decision-pipeline.ts`. The lightweight `ExperiencePromptRuntimeService` used by shared MCP paths such as Codex / Antigravity and the full `ExperienceRuntimeService` used by Claude Code / OpenClaw both delegate to this pipeline. The pipeline owns project fingerprint persistence, exact-scope and conservative cross-scope candidate loading, diagnostic and `shadow_probe` candidate loading, repo policy evaluation, delivery-mode suppression, scorecard creation, and `InjectionEvent` persistence. Host-specific runtimes still own host trace capture, tool-result handling, lifecycle finalization, and background governance wakeups.
+Prompt-time decision ownership is shared through `src/runtime/prompt-decision-pipeline.ts`. The lightweight `ExperiencePromptRuntimeService` used by shared MCP paths such as Codex / Antigravity and the full `ExperienceRuntimeService` used by Claude Code / OpenClaw both delegate to this pipeline. The pipeline owns project fingerprint persistence, exact-scope and conservative cross-scope candidate loading, diagnostic and `shadow_probe` candidate loading, repo policy evaluation, delivery-mode suppression, scorecard creation, and `InjectionEvent` persistence.
+
+Runtime trace capture is shared through `src/runtime/trace-capture-service.ts`. The full runtime delegates trace capture, host trace normalization, trace provenance summary creation, and opt-in diagnostic trace capsule persistence to this service. Normal mode still persists narrow trace provenance on input/task records and does not write full trace capsules/events unless diagnostic snapshot persistence is explicitly enabled and allowed by host/scope filters. Host-specific runtimes still own tool-result handling, lifecycle finalization, and background governance wakeups.
 
 ---
 
