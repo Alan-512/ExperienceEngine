@@ -13,9 +13,9 @@
 | 字段 | 当前值 |
 | --- | --- |
 | 最近同步日期 | 2026-07-06 |
-| 最近同步范围 | `v0.4.7` 当前架构：host trace capsule、trace 持久化边界、OpenClaw runtime closure、Codex lifecycle 安装修复、Claude/Codex 用户级 wiring、Antigravity 用户级 wiring、runtime worker factory、runtime session store、finalize task coordinator、tool result runtime 与 host lifecycle runtime 边界 |
+| 最近同步范围 | `v0.4.8` 当前架构：host trace capsule、trace 持久化边界、OpenClaw runtime closure、Codex lifecycle 安装修复、Claude/Codex 用户级 wiring、Antigravity 用户级 wiring、runtime worker factory、runtime session store、finalize task coordinator、tool result runtime 与 host lifecycle runtime 边界 |
 | 当前宿主基线 | OpenClaw、Claude Code、Codex、Antigravity |
-| 发布基线 | 当前仓库版本为 `v0.4.7`，最近发布说明记录 Codex Windows lifecycle install / doctor / hook 修复；历史 `v0.4.2` ClawHub 状态不再作为当前架构基线 |
+| 发布基线 | 当前仓库版本为 `v0.4.8`，最近发布说明记录 ExperienceRuntimeService boundary extraction、status UX、runtime path isolation 与 settings/doctor JSON read hardening；历史 `v0.4.2` ClawHub 状态不再作为当前架构基线 |
 | Antigravity 状态 | 已记录用户级全局插件/MCP wiring、Agent Desktop、`agy` CLI、IDE hooks 观测、项目级 fallback 与 `ee agy exec -C <project>` 包装器 |
 | TraceCapsule 状态 | 已落地为 runtime trace 输入模型和诊断快照模型；normal mode 只持久化 `trace_provenance_json` / `trace_completeness` 摘要，不写 full trace capsule/events；诊断快照需显式开启并命中 host/scope allowlist |
 | 更新原则 | 记录当前真实架构；进行中的实现只在代码落地并验证后同步到正文架构图 |
