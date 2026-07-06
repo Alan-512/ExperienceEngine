@@ -37,10 +37,7 @@ import { LearningPipelineService } from "./learning-pipeline-service.js";
 import { mergeContext, TaskFinalizationService } from "./task-finalization-service.js";
 import { PromptDecisionPipeline } from "./prompt-decision-pipeline.js";
 import { TraceCaptureService, type TraceCaptureSessionState } from "./trace-capture-service.js";
-import type { LlmLearningGate } from "../analyzer/llm-learning-gate.js";
-import type { DistillationQueueWorker } from "../distillation/queue-worker.js";
-import type { DistillerEndpoint } from "../distillation/providers/types.js";
-import type { HybridWorkerClient, HybridWorkerClientOptions } from "../hybrid/worker-client.js";
+import type { HybridWorkerClientOptions } from "../hybrid/worker-client.js";
 import { HybridPostmortemService } from "./hybrid-postmortem-service.js";
 import { AttributionWritebackService } from "./attribution-writeback-service.js";
 import { InjectionOutcomeService } from "./injection-outcome-service.js";
@@ -48,6 +45,7 @@ import { PosttaskRouteService, type PosttaskLearningContext } from "./posttask-r
 import { BackgroundLearningRuntime } from "./background-learning-runtime.js";
 import { HygieneGovernanceRuntime, type HygieneGovernanceQueueResult } from "./hygiene-governance-runtime.js";
 import { ToolEventRecoveryRuntime, type ToolEventSessionState } from "./tool-event-recovery-runtime.js";
+import { RuntimeWorkerFactory } from "./runtime-worker-factory.js";
 export { decidePosttaskHybridRoute } from "./posttask-route-service.js";
 
 type LearningRuntimeOptions = {
@@ -64,15 +62,6 @@ type ExperienceRuntimeServiceOptions = LearningRuntimeOptions & {
     enabled?: boolean;
   };
 };
-
-const loadLlmLearningGate = async (): Promise<typeof import("../analyzer/llm-learning-gate.js")> =>
-  import("../analyzer/llm-learning-gate.js");
-
-const loadDistillationQueueWorker = async (): Promise<typeof import("../distillation/queue-worker.js")> =>
-  import("../distillation/queue-worker.js");
-
-const loadHybridWorkerClientModule = async (): Promise<typeof import("../hybrid/worker-client.js")> =>
-  import("../hybrid/worker-client.js");
 
 type SessionState = TraceCaptureSessionState & ToolEventSessionState & {
   context?: HostPromptContext;
@@ -116,12 +105,10 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly posttaskRoute;
   private readonly backgroundLearning;
   private readonly hygieneGovernance;
+  private readonly workerFactory;
   private readonly runtimeOptions: ExperienceRuntimeServiceOptions;
   private readonly backgroundLearningEnabled: boolean;
   private readonly hybridPosttaskEnabled: boolean;
-  private distillationWorkerPromise: Promise<DistillationQueueWorker> | undefined;
-  private learningGatePromise: Promise<LlmLearningGate> | undefined;
-  private hybridWorkerClientPromise: Promise<HybridWorkerClient> | undefined;
   readonly captureWriter;
 
   constructor(
@@ -151,6 +138,15 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     this.hybridReviewArtifactRepo = new HybridReviewArtifactRepository(this.db);
     this.hybridTraceRepo = new HybridInvocationTraceRepository(this.db);
     this.traceRepo = new TraceRepository(this.db);
+    this.workerFactory = new RuntimeWorkerFactory({
+      config: this.config,
+      runtimeOptions: this.runtimeOptions,
+      backgroundLearningEnabled: this.backgroundLearningEnabled,
+      hybridPosttaskEnabled: this.hybridPosttaskEnabled,
+      candidateRepo: this.candidateRepo,
+      jobRepo: this.jobRepo,
+      nodeRepo: this.nodeRepo
+    });
     this.learningPipeline = new LearningPipelineService({
       config: this.config,
       db: this.db,
@@ -314,50 +310,16 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     return this.queueAutonomousHygieneGovernance(context, trigger);
   }
 
-  private async getLearningGate(): Promise<LlmLearningGate | undefined> {
-    if (!this.backgroundLearningEnabled) {
-      return undefined;
-    }
-    this.learningGatePromise ??= loadLlmLearningGate().then(
-      ({ LlmLearningGate: LoadedLlmLearningGate }) => new LoadedLlmLearningGate(this.config, this.runtimeOptions)
-    );
-    return this.learningGatePromise;
+  private async getLearningGate() {
+    return this.workerFactory.getLearningGate();
   }
 
-  private async getDistillationWorker(): Promise<DistillationQueueWorker | undefined> {
-    if (!this.backgroundLearningEnabled) {
-      return undefined;
-    }
-    this.distillationWorkerPromise ??= loadDistillationQueueWorker().then(
-      ({ DistillationQueueWorker: LoadedDistillationQueueWorker }) =>
-        new LoadedDistillationQueueWorker(
-          this.config,
-          this.candidateRepo,
-          this.jobRepo,
-          this.nodeRepo,
-          this.runtimeOptions
-        )
-    );
-    return this.distillationWorkerPromise;
+  private async getDistillationWorker() {
+    return this.workerFactory.getDistillationWorker();
   }
 
-  private async getHybridWorkerClient(): Promise<HybridWorkerClient | undefined> {
-    if (!this.hybridPosttaskEnabled) {
-      return undefined;
-    }
-    this.hybridWorkerClientPromise ??= loadHybridWorkerClientModule().then(
-      ({ HybridWorkerClient: LoadedHybridWorkerClient }) =>
-        new LoadedHybridWorkerClient({
-          explainDecisionEnabled: this.config.hybridEnabled && this.config.hybridSyncExplainEnabled,
-          postmortemReviewEnabled: this.config.hybridEnabled && this.config.hybridAsyncPostmortemEnabled,
-          postmortemReviewLlmEnabled:
-            this.config.hybridEnabled
-            && this.config.hybridAsyncPostmortemEnabled
-            && this.config.hybridAsyncPostmortemLlmEnabled,
-          ...this.runtimeOptions.hybridWorkerClientOptions
-        })
-    );
-    return this.hybridWorkerClientPromise;
+  private async getHybridWorkerClient() {
+    return this.workerFactory.getHybridWorkerClient();
   }
 
   private updateInjectedNodes(

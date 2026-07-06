@@ -226,6 +226,8 @@ Hygiene governance ownership is shared through `src/runtime/hygiene-governance-r
 
 Tool-event recovery ownership is shared through `src/runtime/tool-event-recovery-runtime.ts`. The full runtime delegates tool event deduplication, tool-call-id keyed orphan result caching, and finalize-payload tool result recovery to this service. `ExperienceRuntimeService` still owns host-facing `persistToolResult()` and trace capture around persisted tool results.
 
+Runtime worker ownership is shared through `src/runtime/runtime-worker-factory.ts`. The full runtime delegates lazy construction and memoization of the LLM learning gate, distillation queue worker, and hybrid worker client to this factory. `ExperienceRuntimeService` still owns the callbacks passed into learning and hybrid services, but no longer owns dynamic worker imports or worker promise state.
+
 ---
 
 ## 4. Host Adapter Layer
