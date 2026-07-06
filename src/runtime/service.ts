@@ -1,22 +1,15 @@
-import { dirname } from "node:path";
 import { buildCandidateSignals } from "../analyzer/candidate-signals.js";
 import { classifyFailureAttributionReason } from "../feedback/automatic-attribution.js";
 import { applyFeedback } from "../feedback/feedback-manager.js";
 import { detectHarm } from "../feedback/harm-detector.js";
-import {
-  applyGovernedNodeFeedback,
-  deriveNodeOriginProfileForNode
-} from "../experience-management/node-lifecycle-governance.js";
+import { deriveNodeOriginProfileForNode } from "../experience-management/node-lifecycle-governance.js";
 import { resolveHybridRolloutState } from "../hybrid/rollout.js";
 import { selectHybridRoute, type HybridRouteDecision, type HybridRouteSignals } from "../hybrid/router.js";
 import { nowIso } from "../utils/clock.js";
 import { createId, stableId } from "../utils/ids.js";
 import type {
   ExperienceInput,
-  HybridReviewArtifact,
   InjectionEvent,
-  AttributionRecord,
-  AttributionVerdict,
   ExperienceNode,
   TaskRun,
   ToolEvent
@@ -60,14 +53,9 @@ import { TraceCaptureService, type TraceCaptureSessionState } from "./trace-capt
 import type { LlmLearningGate } from "../analyzer/llm-learning-gate.js";
 import type { DistillationQueueWorker } from "../distillation/queue-worker.js";
 import type { DistillerEndpoint } from "../distillation/providers/types.js";
-import type { PostmortemReviewCapsule } from "../hybrid/types.js";
-import type {
-  HybridPostmortemResult,
-  HybridWorkerClient,
-  HybridWorkerClientOptions
-} from "../hybrid/worker-client.js";
-import { TrajectoryCompiler } from "../compiler/trajectory-compiler.js";
-import { TrajectoryMatcher } from "../compiler/trajectory-matcher.js";
+import type { HybridWorkerClient, HybridWorkerClientOptions } from "../hybrid/worker-client.js";
+import { HybridPostmortemService } from "./hybrid-postmortem-service.js";
+import { AttributionWritebackService } from "./attribution-writeback-service.js";
 
 type LearningRuntimeOptions = {
   env?: NodeJS.ProcessEnv;
@@ -92,12 +80,6 @@ const loadDistillationQueueWorker = async (): Promise<typeof import("../distilla
 
 const loadHybridWorkerClientModule = async (): Promise<typeof import("../hybrid/worker-client.js")> =>
   import("../hybrid/worker-client.js");
-
-const loadHybridCapsuleBuilder = async (): Promise<typeof import("../hybrid/capsule-builder.js")> =>
-  import("../hybrid/capsule-builder.js");
-
-const loadHybridPostmortemProviderClient = async (): Promise<typeof import("../hybrid/postmortem-provider-client.js")> =>
-  import("../hybrid/postmortem-provider-client.js");
 
 type SessionState = TraceCaptureSessionState & {
   context?: HostPromptContext;
@@ -180,6 +162,8 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly taskFinalization;
   private readonly promptDecisionPipeline;
   private readonly traceCapture;
+  private readonly hybridPostmortem;
+  private readonly attributionWriteback;
   private readonly runtimeOptions: ExperienceRuntimeServiceOptions;
   private readonly backgroundLearningEnabled: boolean;
   private readonly hybridPosttaskEnabled: boolean;
@@ -273,6 +257,22 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       traceRepo: this.traceRepo,
       inputRepo: this.inputRepo,
       taskRunRepo: this.taskRunRepo
+    });
+    this.hybridPostmortem = new HybridPostmortemService({
+      config: this.config,
+      enabled: this.hybridPosttaskEnabled,
+      inputRepo: this.inputRepo,
+      nodeRepo: this.nodeRepo,
+      reviewEventRepo: this.reviewEventRepo,
+      hybridReviewArtifactRepo: this.hybridReviewArtifactRepo,
+      hybridTraceRepo: this.hybridTraceRepo,
+      logger: this.logger,
+      getHybridWorkerClient: () => this.getHybridWorkerClient()
+    });
+    this.attributionWriteback = new AttributionWritebackService({
+      nodeRepo: this.nodeRepo,
+      attributionRecordRepo: this.attributionRecordRepo,
+      reviewEventRepo: this.reviewEventRepo
     });
     this.captureWriter = new RuntimeCaptureWriter(config, this.logger);
   }
@@ -463,267 +463,6 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     return this.hybridWorkerClientPromise;
   }
 
-  private buildPostmortemArtifact(input: {
-    taskRun: TaskRun;
-    result: Extract<HybridPostmortemResult, { status: "accepted" }>;
-    routeDecision: HybridRouteDecision;
-  }): HybridReviewArtifact {
-    const timestamp = nowIso();
-    return {
-      id: createId("hybridreview"),
-      task_run_id: input.taskRun.id,
-      scope_id: input.taskRun.scope_id,
-      worker_task: "postmortem_review",
-      approval_class:
-        input.result.approvalClass === "policy_gated" ? "policy_gated" : "review_artifact",
-      schema_version: this.config.hybridCapsuleSchemaVersion,
-      route_policy_version: input.routeDecision.policyVersion,
-      worker_profile_version: this.config.hybridPostmortemReviewProfileVersion,
-      recommendation: input.result.value.candidate_recommendation,
-      summary: input.result.value.review_artifact?.summary ?? input.result.value.reason,
-      payload: input.result.value as unknown as Record<string, unknown>,
-      created_at: timestamp,
-      updated_at: timestamp
-    };
-  }
-
-  private applyPostmortemDeliveryRecommendation(
-    node: ExperienceNode,
-    recommendation: "keep" | "conservative_only" | "quarantine" | "review"
-  ): ExperienceNode {
-    if (recommendation === "keep" || recommendation === "review") {
-      return node;
-    }
-
-    if (recommendation === "quarantine") {
-      return {
-        ...node,
-        delivery_state: "quarantined",
-        quarantined_at: node.quarantined_at ?? nowIso(),
-        quarantine_reason: node.quarantine_reason ?? "postmortem_review"
-      };
-    }
-
-    if (node.delivery_state === "quarantined") {
-      return node;
-    }
-
-    return {
-      ...node,
-      delivery_state: node.delivery_state === "shadow_only" ? "shadow_only" : "conservative_only"
-    };
-  }
-
-  private applyAcceptedPostmortemNodeReviews(input: {
-    taskRun: TaskRun;
-    experienceInput: ExperienceInput;
-    result: Extract<HybridPostmortemResult, { status: "accepted" }>;
-  }): boolean {
-    const reviews = input.result.value.injected_node_reviews ?? [];
-    if (!reviews.length || input.taskRun.final_status === "cancelled") {
-      return false;
-    }
-
-    const allowedIds = new Set(input.experienceInput.injected_node_ids);
-    const existingEvents = this.reviewEventRepo.listByTaskRunId(input.taskRun.id);
-    let applied = false;
-
-    for (const review of reviews) {
-      if (!allowedIds.has(review.node_id) || review.confidence === "low") {
-        continue;
-      }
-
-      const current = this.nodeRepo.getById(review.node_id);
-      if (!current) {
-        continue;
-      }
-
-      const existingNodeEvents = existingEvents.filter(
-        (event) => event.node_id === review.node_id && event.source === "automatic"
-      );
-      const alreadyMarkedHelped = existingNodeEvents.some((event) => event.event_type === "mark_helped");
-      const alreadyMarkedHarmed = existingNodeEvents.some((event) => event.event_type === "mark_harmed");
-
-      let nextNode = current;
-      let feedbackEventType: "mark_helped" | "mark_harmed" | undefined;
-
-      if (review.feedback_verdict === "helped" && !alreadyMarkedHelped) {
-        nextNode = applyGovernedNodeFeedback(
-          nextNode,
-          "helped",
-          deriveNodeOriginProfileForNode(this.inputRepo, nextNode)
-        );
-        feedbackEventType = "mark_helped";
-      } else if (review.feedback_verdict === "harmed" && !alreadyMarkedHarmed) {
-        nextNode = applyGovernedNodeFeedback(
-          nextNode,
-          "harmed",
-          deriveNodeOriginProfileForNode(this.inputRepo, nextNode)
-        );
-        feedbackEventType = "mark_harmed";
-      }
-
-      const nodeAfterDelivery = this.applyPostmortemDeliveryRecommendation(
-        nextNode,
-        review.delivery_recommendation
-      );
-
-      if (
-        feedbackEventType
-        || nodeAfterDelivery.delivery_state !== current.delivery_state
-        || nodeAfterDelivery.state !== current.state
-        || nodeAfterDelivery.helped_count !== current.helped_count
-        || nodeAfterDelivery.harmed_count !== current.harmed_count
-        || nodeAfterDelivery.last_feedback_verdict !== current.last_feedback_verdict
-      ) {
-        this.nodeRepo.upsert(nodeAfterDelivery);
-        applied = true;
-      }
-
-      if (feedbackEventType) {
-        this.reviewEventRepo.upsert({
-          id: createId("review"),
-          episode_id: input.taskRun.episode_id,
-          node_id: review.node_id,
-          task_run_id: input.taskRun.id,
-          event_type: feedbackEventType,
-          source: "automatic",
-          created_at: nowIso()
-        });
-      }
-      if (current.delivery_state !== "quarantined" && nodeAfterDelivery.delivery_state === "quarantined") {
-        this.reviewEventRepo.upsert({
-          id: createId("review"),
-          episode_id: input.taskRun.episode_id,
-          node_id: review.node_id,
-          task_run_id: input.taskRun.id,
-          event_type: "quarantine",
-          source: "automatic",
-          created_at: nowIso()
-        });
-      }
-    }
-
-    return applied;
-  }
-
-  private async persistHybridPostmortemArtifactAsync(input: {
-    taskRun: TaskRun;
-    experienceInput: ExperienceInput;
-    routeDecision: HybridRouteDecision;
-    toolEvents: ToolEvent[];
-    rolloutMode: string;
-    rolloutReason: string;
-  }): Promise<void> {
-    if (!this.hybridPosttaskEnabled) {
-      return;
-    }
-    if (this.hybridReviewArtifactRepo.getByTaskRunId(input.taskRun.id)) {
-      return;
-    }
-
-    const hybridWorkerClient = await this.getHybridWorkerClient();
-    if (!hybridWorkerClient) {
-      return;
-    }
-
-    const candidateSignals = buildCandidateSignals(input.experienceInput);
-    const [{ buildPostmortemReviewCapsule }, { resolveHybridPostmortemProviderEndpoint }] = await Promise.all([
-      loadHybridCapsuleBuilder(),
-      loadHybridPostmortemProviderClient()
-    ]);
-    const capsule: PostmortemReviewCapsule = buildPostmortemReviewCapsule({
-      schemaVersion: this.config.hybridCapsuleSchemaVersion,
-      routeDecision: input.routeDecision,
-      taskRun: input.taskRun,
-      outcomeSignal: input.experienceInput.outcome_signal,
-      triggers: {
-        directionalCorrectionPresent:
-          candidateSignals.directional_correction?.detected === true
-          || candidateSignals.evidence_driven_reversal?.detected === true,
-        injectedNodeInteractionPresent: input.experienceInput.injected_node_ids.length > 0,
-        retryOrInvalidationSignaturePresent:
-          candidateSignals.retry_count > 0 || candidateSignals.evidence_driven_reversal?.invalidating_evidence === true,
-        meaningfulFailureSignaturePresent: Boolean(candidateSignals.failure_signature),
-        conservativeTransitionReviewWorthy:
-          input.experienceInput.outcome_signal === "success" && input.experienceInput.injected_node_ids.length > 0
-      },
-      injectedNodes: input.experienceInput.injected_node_ids
-        .map((id) => this.nodeRepo.getById(id))
-        .filter((node): node is ExperienceNode => Boolean(node)),
-      toolEvents: input.toolEvents
-    });
-
-    const providerResolution = this.config.hybridAsyncPostmortemLlmEnabled
-      ? resolveHybridPostmortemProviderEndpoint(this.config, { homeDir: dirname(this.config.dataDir) })
-      : { status: "disabled" as const, reason: "Phase 3 provider-backed postmortem review is disabled." };
-    const result =
-      this.config.hybridAsyncPostmortemLlmEnabled && providerResolution.status === "unavailable"
-        ? ({
-            status: "fallback",
-            reason: "provider_unavailable"
-          } as const)
-        : await hybridWorkerClient.runPostmortemReview(
-            capsule,
-            providerResolution.status === "configured"
-              ? {
-                  mode: "provider",
-                  endpoint: providerResolution.endpoint
-                }
-              : undefined
-          );
-    const timestamp = nowIso();
-    const persistAcceptedArtifact =
-      result.status === "accepted"
-      && input.rolloutMode !== "shadow"
-      && (result.approvalClass === "review_artifact" || result.approvalClass === "policy_gated");
-    const appliedNodeWriteback =
-      result.status === "accepted" && input.rolloutMode !== "shadow"
-        ? this.applyAcceptedPostmortemNodeReviews({
-            taskRun: input.taskRun,
-            experienceInput: input.experienceInput,
-            result
-          })
-        : false;
-    this.hybridTraceRepo.upsert({
-      id: createId("hybridtrace"),
-      surface: "runtime",
-      session_id: input.taskRun.session_id,
-      scope_id: input.taskRun.scope_id,
-      worker_task: "postmortem_review",
-      route: input.routeDecision.route,
-      route_policy_version: input.routeDecision.policyVersion,
-      capsule_schema_version: this.config.hybridCapsuleSchemaVersion,
-      worker_profile_version: this.config.hybridAsyncPostmortemLlmEnabled
-        ? this.config.hybridPostmortemModelProfileVersion
-        : this.config.hybridPostmortemReviewProfileVersion,
-      rollout_mode: input.rolloutMode,
-      rollout_reason: input.rolloutReason,
-      worker_ran: result.status !== "fallback" || result.reason !== "provider_unavailable",
-      validation_status: result.status === "accepted" ? "accepted" : "fallback",
-      output_action: persistAcceptedArtifact || appliedNodeWriteback ? "stored" : "rejected",
-      fallback_reason: result.status === "accepted" ? undefined : result.reason,
-      created_at: timestamp
-    });
-    if (result.status !== "accepted") {
-      this.logger.debug?.("experienceengine.hybrid_postmortem_skipped", {
-        taskRunId: input.taskRun.id,
-        reason: result.reason
-      });
-      return;
-    }
-
-    if (persistAcceptedArtifact) {
-      this.hybridReviewArtifactRepo.upsert(
-        this.buildPostmortemArtifact({
-          taskRun: input.taskRun,
-          result,
-          routeDecision: input.routeDecision
-        })
-      );
-    }
-  }
-
   private async persistCandidatesAsync(
     input: ExperienceInput,
     originRecordId: string,
@@ -880,251 +619,6 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     }
   }
 
-  private deriveAttributionVerdict(
-    input: ExperienceInput,
-    node: ExperienceNode,
-    delivered: boolean,
-    matchResult?: any
-  ): {
-    verdict: AttributionVerdict;
-    confidence: AttributionRecord["confidence"];
-  } {
-    if (!delivered) {
-      return { verdict: "unknown", confidence: "low" };
-    }
-
-    if (input.trace_capsule_id) {
-      const isLowCompleteness = typeof input.trace_completeness === "number" && input.trace_completeness < 0.6;
-      const isUnstable = input.trace_is_unstable === true;
-
-      if ((isLowCompleteness || isUnstable) && (!matchResult || matchResult.verdict === "trajectory_unknown")) {
-        return { verdict: "unknown", confidence: "low" };
-      }
-
-      if (matchResult) {
-        if (matchResult.verdict === "guidance_prevented_failure") {
-          return { verdict: "strong_helped", confidence: "high" };
-        }
-        if (matchResult.verdict === "guidance_caused_failure") {
-          return { verdict: "strong_harmed", confidence: "high" };
-        }
-        if (matchResult.verdict === "adoption_detected") {
-          return { verdict: "weak_helped", confidence: "medium" };
-        }
-        if (matchResult.verdict === "contra_adoption_detected") {
-          return { verdict: "weak_harmed", confidence: "medium" };
-        }
-        if (matchResult.verdict === "non_adoption_detected") {
-          return { verdict: "neutral", confidence: "low" };
-        }
-      }
-    }
-
-    if (input.outcome_signal === "success") {
-      return { verdict: "weak_helped", confidence: "medium" };
-    }
-
-    if (input.outcome_signal === "failure") {
-      if (detectHarm(input, node)) {
-        return { verdict: "strong_harmed", confidence: "high" };
-      }
-
-      const reason = classifyFailureAttributionReason(input, node);
-      if (reason === "relevant_failure") {
-        return { verdict: "weak_harmed", confidence: "medium" };
-      }
-
-      return { verdict: "neutral", confidence: "low" };
-    }
-
-    return { verdict: "unknown", confidence: "low" };
-  }
-
-  private writeAttributionRecords(input: {
-    experienceInput: ExperienceInput;
-    inputRecordId: string;
-    taskRunId: string;
-    episodeId?: string;
-    resolvedInjectionEvent: InjectionEvent;
-  }): void {
-    const event = input.resolvedInjectionEvent;
-    const evidenceRefs = [input.inputRecordId, input.taskRunId, event.injection_id];
-    if (input.experienceInput.trace_capsule_id) {
-      evidenceRefs.push(input.experienceInput.trace_capsule_id);
-    } else if (input.experienceInput.trace_provenance) {
-      evidenceRefs.push(`trace_provenance:${input.taskRunId}`);
-    }
-    const selectedNodeIds = new Set(event.injected_node_ids);
-
-    for (const nodeId of selectedNodeIds) {
-      const node = this.nodeRepo.getById(nodeId);
-      if (!node) {
-        continue;
-      }
-
-      const compiledExps = TrajectoryCompiler.compileNodeExpectations(
-        node.recommended_steps,
-        node.avoid_steps,
-        node.success_signal,
-        node.stop_condition,
-        node.escalation_condition
-      );
-
-      const matchResult = TrajectoryMatcher.match(
-        compiledExps,
-        input.experienceInput.tool_events,
-        input.experienceInput.outcome_signal
-      );
-
-      const attribution = this.deriveAttributionVerdict(input.experienceInput, node, event.delivered, matchResult);
-      this.attributionRecordRepo.insert({
-        id: stableId("attr", `${event.injection_id}:${nodeId}:automatic`),
-        injection_id: event.injection_id,
-        node_id: nodeId,
-        episode_id: input.episodeId,
-        intervention_strength: event.scorecard?.interventionStrength,
-        injection_mode: event.mode,
-        delivery_mode: event.delivery_mode,
-        delivered: event.delivered,
-        outcome: input.experienceInput.outcome_signal,
-        attribution_verdict: attribution.verdict,
-        confidence: attribution.confidence,
-        evidence_refs: evidenceRefs,
-        source: "automatic",
-        attribution_reason: event.attribution_reason,
-        trajectory_verdict: matchResult.verdict,
-        trajectory_confidence: matchResult.confidence,
-        trajectory_matched_expectations: matchResult.matchedExpectationIds,
-        trajectory_violated_expectations: matchResult.violatedExpectationIds,
-        trajectory_evidence_refs: matchResult.evidenceRefs,
-        created_at: nowIso(),
-        resolved_at: event.resolved_at
-      });
-    }
-
-    const diagnosticNodeIds = event.scorecard?.recordOnlyDiagnosticCandidateIds ?? [];
-    for (const nodeId of diagnosticNodeIds) {
-      if (selectedNodeIds.has(nodeId)) {
-        continue;
-      }
-
-      const node = this.nodeRepo.getById(nodeId);
-      let trajectoryFields = {};
-      if (node) {
-        const compiledExps = TrajectoryCompiler.compileNodeExpectations(
-          node.recommended_steps,
-          node.avoid_steps,
-          node.success_signal,
-          node.stop_condition,
-          node.escalation_condition
-        );
-        const matchResult = TrajectoryMatcher.match(
-          compiledExps,
-          input.experienceInput.tool_events,
-          input.experienceInput.outcome_signal
-        );
-        trajectoryFields = {
-          trajectory_verdict: matchResult.verdict,
-          trajectory_confidence: matchResult.confidence,
-          trajectory_matched_expectations: matchResult.matchedExpectationIds,
-          trajectory_violated_expectations: matchResult.violatedExpectationIds,
-          trajectory_evidence_refs: matchResult.evidenceRefs,
-        };
-
-        if (node.delivery_state === "shadow_probe") {
-          const hasHarm = detectHarm(input.experienceInput, node) || matchResult.verdict === "guidance_caused_failure";
-          const isSuccess = input.experienceInput.outcome_signal === "success";
-
-          if (isSuccess && !hasHarm) {
-            const nextPassCount = (node.quarantine_no_harm_pass_count ?? 0) + 1;
-            const updatedNode: ExperienceNode = {
-              ...node,
-              quarantine_no_harm_pass_count: nextPassCount,
-              updated_at: nowIso()
-            };
-
-            if (nextPassCount >= 3) {
-              updatedNode.delivery_state = "conservative_only";
-              updatedNode.quarantine_release_reason = "passed_shadow_probe";
-
-              this.reviewEventRepo.upsert({
-                id: stableId("rev", `${input.taskRunId}:${nodeId}:restore_conservative`),
-                episode_id: input.episodeId,
-                node_id: nodeId,
-                task_run_id: input.taskRunId,
-                event_type: "restore_conservative",
-                source: "automatic",
-                created_at: nowIso()
-              });
-            }
-            this.nodeRepo.upsert(updatedNode);
-          } else {
-            const nextAttemptCount = node.quarantine_release_attempt_count ?? 0;
-            if (nextAttemptCount >= 3) {
-              const updatedNode: ExperienceNode = {
-                ...node,
-                delivery_state: "retired",
-                state: "retired",
-                quarantine_no_harm_pass_count: 0,
-                updated_at: nowIso()
-              };
-              this.nodeRepo.upsert(updatedNode);
-
-              this.reviewEventRepo.upsert({
-                id: stableId("rev", `${input.taskRunId}:${nodeId}:retire`),
-                episode_id: input.episodeId,
-                node_id: nodeId,
-                task_run_id: input.taskRunId,
-                event_type: "retire",
-                source: "automatic",
-                created_at: nowIso()
-              });
-            } else {
-              const updatedNode: ExperienceNode = {
-                ...node,
-                delivery_state: "quarantined",
-                quarantine_lease_expires_at: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000).toISOString(),
-                quarantine_no_harm_pass_count: 0,
-                updated_at: nowIso()
-              };
-              this.nodeRepo.upsert(updatedNode);
-
-              this.reviewEventRepo.upsert({
-                id: stableId("rev", `${input.taskRunId}:${nodeId}:quarantine`),
-                episode_id: input.episodeId,
-                node_id: nodeId,
-                task_run_id: input.taskRunId,
-                event_type: "quarantine",
-                source: "automatic",
-                created_at: nowIso()
-              });
-            }
-          }
-        }
-      }
-
-      this.attributionRecordRepo.insert({
-        id: stableId("attr", `${event.injection_id}:${nodeId}:diagnostic_record`),
-        injection_id: event.injection_id,
-        node_id: nodeId,
-        episode_id: input.episodeId,
-        intervention_strength: "diagnostic_hint",
-        injection_mode: event.mode,
-        delivery_mode: event.delivery_mode,
-        delivered: false,
-        outcome: input.experienceInput.outcome_signal,
-        attribution_verdict: "unknown",
-        confidence: "low",
-        evidence_refs: evidenceRefs,
-        source: "diagnostic_record",
-        attribution_reason: "diagnostic_record",
-        ...trajectoryFields,
-        created_at: nowIso(),
-        resolved_at: event.resolved_at
-      });
-    }
-  }
-
   async beforePromptBuild(context: HostPromptContext) {
     const sessionId = context.sessionId ?? "global";
     const session = this.getSession(sessionId);
@@ -1228,7 +722,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
           resolved_at: nowIso()
         };
         this.injectionRepo.upsert(resolvedInjectionEvent);
-        this.writeAttributionRecords({
+        this.attributionWriteback.writeAttributionRecords({
           experienceInput: traced.experienceInput,
           inputRecordId: traced.record.record_id,
           taskRunId: traced.taskRun.id,
@@ -1299,7 +793,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
           }
 
           const refreshedTaskRun = this.taskRunRepo.getById(learningTaskContext.taskRun.id) ?? learningTaskContext.taskRun;
-          await this.persistHybridPostmortemArtifactAsync({
+          await this.hybridPostmortem.persistAsync({
             taskRun: refreshedTaskRun,
             experienceInput: learningTaskContext.input,
             routeDecision: hybridPosttaskRoute,

@@ -212,6 +212,10 @@ Prompt-time decision ownership is shared through `src/runtime/prompt-decision-pi
 
 Runtime trace capture is shared through `src/runtime/trace-capture-service.ts`. The full runtime delegates trace capture, host trace normalization, trace provenance summary creation, and opt-in diagnostic trace capsule persistence to this service. Normal mode still persists narrow trace provenance on input/task records and does not write full trace capsules/events unless diagnostic snapshot persistence is explicitly enabled and allowed by host/scope filters. Host-specific runtimes still own tool-result handling, lifecycle finalization, and background governance wakeups.
 
+Hybrid posttask review ownership is shared through `src/runtime/hybrid-postmortem-service.ts`. The full runtime delegates postmortem review capsule construction, hybrid worker invocation, provider-backed review fallback handling, hybrid invocation trace rows, accepted artifact persistence, and high-confidence injected-node review writeback to this service. `ExperienceRuntimeService` still decides when the posttask route escalates to async postmortem and remains the lifecycle coordinator around learning, finalize, and background task tracking.
+
+Attribution writeback ownership is shared through `src/runtime/attribution-writeback-service.ts`. The full runtime delegates automatic attribution record persistence, trajectory expectation matching, trace evidence reference selection, record-only diagnostic attribution rows, and shadow-probe quarantine release/retire writeback to this service. `ExperienceRuntimeService` still resolves the injection event during finalize and remains responsible for earlier injected-node lifecycle feedback updates.
+
 ---
 
 ## 4. Host Adapter Layer
