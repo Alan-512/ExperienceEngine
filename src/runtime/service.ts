@@ -1,6 +1,3 @@
-import { buildCandidateSignals } from "../analyzer/candidate-signals.js";
-import { resolveHybridRolloutState } from "../hybrid/rollout.js";
-import { selectHybridRoute, type HybridRouteDecision, type HybridRouteSignals } from "../hybrid/router.js";
 import { nowIso } from "../utils/clock.js";
 import { stableId } from "../utils/ids.js";
 import type {
@@ -52,6 +49,8 @@ import type { HybridWorkerClient, HybridWorkerClientOptions } from "../hybrid/wo
 import { HybridPostmortemService } from "./hybrid-postmortem-service.js";
 import { AttributionWritebackService } from "./attribution-writeback-service.js";
 import { InjectionOutcomeService } from "./injection-outcome-service.js";
+import { PosttaskRouteService, type PosttaskLearningContext } from "./posttask-route-service.js";
+export { decidePosttaskHybridRoute } from "./posttask-route-service.js";
 
 type LearningRuntimeOptions = {
   env?: NodeJS.ProcessEnv;
@@ -101,38 +100,6 @@ const buildToolEventKey = (toolEvent: ToolEvent, toolCallId?: string): string =>
     toolEvent.ended_at ?? ""
   ].join(":");
 
-const HYBRID_LIGHTWEIGHT_PATTERN = /\b(wording-only|wording only|copy-only|copy only|copy pass|inline notice wording|expression-layer refinement)\b/i;
-
-const isLightweightHybridExcludedTask = (input: Pick<ExperienceInput, "task_summary" | "context_summary">): boolean =>
-  HYBRID_LIGHTWEIGHT_PATTERN.test(`${input.task_summary} ${input.context_summary ?? ""}`);
-
-export const decidePosttaskHybridRoute = (
-  config: Pick<
-    ExperienceEngineConfig,
-    "hybridEnabled" | "hybridAsyncPostmortemEnabled" | "hybridRoutePolicyVersion" | "hybridRolloutMode" | "hybridCanaryRate" | "hybridKillSwitch"
-  >,
-  input: Pick<ExperienceInput, "task_summary" | "context_summary">,
-  signals: Omit<HybridRouteSignals, "explicitExplanationRequest" | "existingConservativePathRequired" | "rolloutAllowsAsyncPostmortem">,
-  rolloutKey: string = input.task_summary
-): HybridRouteDecision => {
-  const rollout = resolveHybridRolloutState(config, rolloutKey);
-  return selectHybridRoute(
-    {
-      ...signals,
-      explicitExplanationRequest: false,
-      existingConservativePathRequired: false,
-      lightweightOrExcludedTask: signals.lightweightOrExcludedTask || isLightweightHybridExcludedTask(input),
-      rolloutAllowsAsyncPostmortem: config.hybridAsyncPostmortemEnabled && rollout.hybridActive
-    },
-    {
-      enabled: config.hybridEnabled && rollout.hybridActive,
-      syncExplainEnabled: false,
-      asyncPostmortemEnabled: config.hybridAsyncPostmortemEnabled && rollout.hybridActive,
-      policyVersion: config.hybridRoutePolicyVersion
-    }
-  );
-};
-
 export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly db;
   private readonly logger: OpenClawLogger;
@@ -161,6 +128,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly hybridPostmortem;
   private readonly attributionWriteback;
   private readonly injectionOutcome;
+  private readonly posttaskRoute;
   private readonly runtimeOptions: ExperienceRuntimeServiceOptions;
   private readonly backgroundLearningEnabled: boolean;
   private readonly hybridPosttaskEnabled: boolean;
@@ -278,6 +246,10 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       scopeFingerprintRepo: this.scopeFingerprintRepo,
       injectionRepo: this.injectionRepo,
       attributionWriteback: this.attributionWriteback
+    });
+    this.posttaskRoute = new PosttaskRouteService({
+      config: this.config,
+      hybridReviewArtifactRepo: this.hybridReviewArtifactRepo
     });
     this.captureWriter = new RuntimeCaptureWriter(config, this.logger);
   }
@@ -542,16 +514,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     const session = this.getSession(sessionId);
     const input = this.taskFinalization.buildFinalizedInput(context, session);
     let finalizedInput = input;
-    let learningTaskContext:
-      | {
-          input: ExperienceInput;
-          originRecordId: string;
-          taskRunId: string;
-          sessionId: string;
-          taskRun: TaskRun;
-          toolEvents: ToolEvent[];
-        }
-      | undefined;
+    let learningTaskContext: PosttaskLearningContext | undefined;
     withTransaction(this.db, () => {
       const episodeId = resolveEpisodeId(session, sessionId, input);
       const { record, taskRun } = this.taskFinalization.persistFinalizedRun({
@@ -591,41 +554,11 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     });
     this.sessions.delete(sessionId);
 
-    const rollout = resolveHybridRolloutState(this.config, `${sessionId}:${finalizedInput.task_summary}`);
-    const hybridPosttaskRoute = decidePosttaskHybridRoute(
-      this.config,
+    const { route: hybridPosttaskRoute, rollout } = this.posttaskRoute.resolve({
+      sessionId,
       finalizedInput,
-      {
-        taskStage: "posttask",
-        completedRun: true,
-        terminalOutcomeRecorded: true,
-        boundedPosttaskCapsuleAvailable: Boolean(finalizedInput.task_summary),
-        postmortemAlreadyRecorded: learningTaskContext
-          ? Boolean(this.hybridReviewArtifactRepo.getByTaskRunId(learningTaskContext.taskRun.id))
-          : false,
-        lightweightOrExcludedTask: false,
-        directionalCorrectionPresent: Boolean(
-          learningTaskContext
-            ? buildCandidateSignals(learningTaskContext.input).directional_correction?.detected
-              || buildCandidateSignals(learningTaskContext.input).evidence_driven_reversal?.detected
-            : false
-        ),
-        injectedNodeInteractionPresent: finalizedInput.injected_node_ids.length > 0,
-        retryOrInvalidationSignaturePresent: Boolean(
-          learningTaskContext
-            ? buildCandidateSignals(learningTaskContext.input).retry_count > 0
-              || buildCandidateSignals(learningTaskContext.input).evidence_driven_reversal?.invalidating_evidence
-            : false
-        ),
-        meaningfulFailureSignaturePresent: Boolean(
-          learningTaskContext
-            ? buildCandidateSignals(learningTaskContext.input).failure_signature
-            : finalizedInput.outcome_signal === "failure"
-        ),
-        conservativeTransitionReviewWorthy: false
-      },
-      `${sessionId}:${finalizedInput.task_summary}`
-    );
+      learningTaskContext
+    });
 
     if (learningTaskContext && this.backgroundLearningEnabled) {
       this.trackLearningTask(

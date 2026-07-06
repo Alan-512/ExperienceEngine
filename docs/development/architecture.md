@@ -218,6 +218,8 @@ Attribution writeback ownership is shared through `src/runtime/attribution-write
 
 Injection outcome ownership is shared through `src/runtime/injection-outcome-service.ts`. The full runtime delegates injected-node automatic feedback updates, same-scope high-match promotion, cross-scope portable validation evidence, injection event resolution, harm observation, and downstream attribution writeback orchestration to this service. `ExperienceRuntimeService` still owns the transaction boundary and task lifecycle ordering.
 
+Posttask route ownership is shared through `src/runtime/posttask-route-service.ts`. The full runtime delegates hybrid rollout resolution, posttask route signal construction, candidate-signal derivation, postmortem-already-recorded checks, and `decidePosttaskHybridRoute` evaluation to this service. `ExperienceRuntimeService` still owns background learning task scheduling and the decision to invoke async postmortem after candidate persistence.
+
 ---
 
 ## 4. Host Adapter Layer
