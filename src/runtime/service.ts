@@ -38,12 +38,13 @@ import { AttributionWritebackService } from "./attribution-writeback-service.js"
 import { InjectionOutcomeService } from "./injection-outcome-service.js";
 import { PosttaskRouteService } from "./posttask-route-service.js";
 import { BackgroundLearningRuntime } from "./background-learning-runtime.js";
-import { HygieneGovernanceRuntime, type HygieneGovernanceQueueResult } from "./hygiene-governance-runtime.js";
+import { HygieneGovernanceRuntime } from "./hygiene-governance-runtime.js";
 import { ToolEventRecoveryRuntime } from "./tool-event-recovery-runtime.js";
 import { RuntimeWorkerFactory } from "./runtime-worker-factory.js";
 import { RuntimeSessionStore, type RuntimeSessionState } from "./session-runtime.js";
 import { FinalizeTaskCoordinator } from "./finalize-task-coordinator.js";
 import { ToolResultRuntime } from "./tool-result-runtime.js";
+import { HostLifecycleRuntime } from "./host-lifecycle-runtime.js";
 export { decidePosttaskHybridRoute } from "./posttask-route-service.js";
 
 type LearningRuntimeOptions = {
@@ -94,6 +95,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly backgroundLearning;
   private readonly finalizeTaskCoordinator;
   private readonly hygieneGovernance;
+  private readonly hostLifecycleRuntime;
   private readonly workerFactory;
   private readonly runtimeOptions: ExperienceRuntimeServiceOptions;
   private readonly backgroundLearningEnabled: boolean;
@@ -238,7 +240,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       logger: this.logger,
       resetSession: (sessionId) => this.sessions.reset(sessionId),
       queuePosttaskGovernance: (context) => {
-        this.maybeQueueAutonomousHygieneGovernance(context, "posttask");
+        this.hygieneGovernance.queue(context, "posttask");
       }
     });
     this.hygieneGovernance = new HygieneGovernanceRuntime({
@@ -246,6 +248,12 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       db: this.db,
       logger: this.logger,
       runtimeOptions: this.runtimeOptions
+    });
+    this.hostLifecycleRuntime = new HostLifecycleRuntime({
+      sessions: this.sessions,
+      traceCapture: this.traceCapture,
+      promptDecisionPipeline: this.promptDecisionPipeline,
+      hygieneGovernance: this.hygieneGovernance
     });
     this.toolEventRecovery = new ToolEventRecoveryRuntime({
       getSession: (sessionId) => this.getSession(sessionId)
@@ -267,10 +275,6 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     this.sessions.reset(sessionId);
   }
 
-  private mergeSessionContext(sessionId: string, context: HostPromptContext): RuntimeSessionState {
-    return this.sessions.mergeContext(sessionId, context);
-  }
-
   recoverToolEvents(sessionId: string, payload: unknown): void {
     this.toolEventRecovery.recover(sessionId, payload);
   }
@@ -282,27 +286,12 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     ]);
   }
 
-  private queueAutonomousHygieneGovernance(context: HostPromptContext, trigger: string): HygieneGovernanceQueueResult {
-    return this.hygieneGovernance.queue(context, trigger);
-  }
-
-  private maybeQueueAutonomousHygieneGovernance(context: HostPromptContext, trigger: string): void {
-    this.queueAutonomousHygieneGovernance(context, trigger);
-  }
-
   async signalHostEvent(context: HostPromptContext, trigger: string): Promise<{
     status: "disabled" | "queued" | "skipped";
     reason?: "not_due" | "backoff";
     scopeId?: string;
   }> {
-    const sessionId = context.sessionId ?? "global";
-    const session = this.mergeSessionContext(sessionId, context);
-
-    if ((trigger === "prompt_lookup" || trigger === "host_startup") && context.userMessage.trim()) {
-      this.traceCapture.capturePromptEvent(session, context, context.userMessage);
-    }
-
-    return this.queueAutonomousHygieneGovernance(context, trigger);
+    return this.hostLifecycleRuntime.signalHostEvent(context, trigger);
   }
 
   private async getLearningGate() {
@@ -334,13 +323,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   }
 
   async beforePromptBuild(context: HostPromptContext) {
-    const sessionId = context.sessionId ?? "global";
-    const session = this.mergeSessionContext(sessionId, context);
-    const mergedContext = session.context ?? context;
-
-    this.traceCapture.capturePromptEvent(session, context, context.userMessage || "");
-    this.maybeQueueAutonomousHygieneGovernance(mergedContext, "prompt_lookup");
-    return this.promptDecisionPipeline.beforePromptBuild(context, sessionId, session);
+    return this.hostLifecycleRuntime.beforePromptBuild(context);
   }
 
   async persistToolResult(result: HostToolResult) {
