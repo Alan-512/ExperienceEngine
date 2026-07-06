@@ -224,6 +224,8 @@ Background learning ownership is shared through `src/runtime/background-learning
 
 Hygiene governance ownership is shared through `src/runtime/hygiene-governance-runtime.ts`. The full runtime delegates autonomous hygiene governance scheduler creation, optional LLM planner resolution, enqueue/drain task tracking, and governance failure logging to this service. `ExperienceRuntimeService` still captures host-event trace context and exposes the host-facing `signalHostEvent()` and finalization wakeup points.
 
+Tool-event recovery ownership is shared through `src/runtime/tool-event-recovery-runtime.ts`. The full runtime delegates tool event deduplication, tool-call-id keyed orphan result caching, and finalize-payload tool result recovery to this service. `ExperienceRuntimeService` still owns host-facing `persistToolResult()` and trace capture around persisted tool results.
+
 ---
 
 ## 4. Host Adapter Layer

@@ -31,7 +31,6 @@ import { HybridInvocationTraceRepository } from "../store/sqlite/repositories/hy
 import { TraceRepository } from "../store/sqlite/repositories/trace-repo.js";
 import { RuntimeCaptureWriter } from "../plugin/runtime-capture.js";
 import { normalizeToolResult } from "../plugin/hooks/tool-result-persist.js";
-import { extractToolResultsFromPayload } from "../plugin/runtime-helpers.js";
 import { HybridReviewArtifactRepository } from "../store/sqlite/repositories/hybrid-review-artifact-repo.js";
 import type { SchedulerOptions as HygieneGovernanceSchedulerOptions } from "../maintenance/hygiene-governance-scheduler.js";
 import { LearningPipelineService } from "./learning-pipeline-service.js";
@@ -48,6 +47,7 @@ import { InjectionOutcomeService } from "./injection-outcome-service.js";
 import { PosttaskRouteService, type PosttaskLearningContext } from "./posttask-route-service.js";
 import { BackgroundLearningRuntime } from "./background-learning-runtime.js";
 import { HygieneGovernanceRuntime, type HygieneGovernanceQueueResult } from "./hygiene-governance-runtime.js";
+import { ToolEventRecoveryRuntime, type ToolEventSessionState } from "./tool-event-recovery-runtime.js";
 export { decidePosttaskHybridRoute } from "./posttask-route-service.js";
 
 type LearningRuntimeOptions = {
@@ -74,11 +74,9 @@ const loadDistillationQueueWorker = async (): Promise<typeof import("../distilla
 const loadHybridWorkerClientModule = async (): Promise<typeof import("../hybrid/worker-client.js")> =>
   import("../hybrid/worker-client.js");
 
-type SessionState = TraceCaptureSessionState & {
+type SessionState = TraceCaptureSessionState & ToolEventSessionState & {
   context?: HostPromptContext;
   episodeId?: string;
-  toolEvents: ToolEvent[];
-  toolEventKeys: Set<string>;
   injectedNodeIds: string[];
 };
 
@@ -87,22 +85,11 @@ const resolveEpisodeId = (session: SessionState, sessionId: string, input: Pick<
   return session.episodeId;
 };
 
-const buildToolEventKey = (toolEvent: ToolEvent, toolCallId?: string): string =>
-  toolCallId ??
-  [
-    toolEvent.tool_name,
-    toolEvent.status,
-    toolEvent.exit_code ?? "",
-    toolEvent.error_signature ?? "",
-    toolEvent.output_summary ?? "",
-    toolEvent.ended_at ?? ""
-  ].join(":");
-
 export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly db;
   private readonly logger: OpenClawLogger;
   private readonly sessions = new Map<string, SessionState>();
-  private readonly orphanToolEvents = new Map<string, ToolEvent>();
+  private readonly toolEventRecovery;
   private readonly scopeRepo;
   private readonly inputRepo;
   private readonly nodeRepo;
@@ -262,6 +249,9 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       logger: this.logger,
       runtimeOptions: this.runtimeOptions
     });
+    this.toolEventRecovery = new ToolEventRecoveryRuntime({
+      getSession: (sessionId) => this.getSession(sessionId)
+    });
     this.captureWriter = new RuntimeCaptureWriter(config, this.logger);
   }
 
@@ -286,29 +276,11 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   }
 
   private appendToolEvent(sessionId: string, toolEvent: ToolEvent, toolCallId?: string): void {
-    const session = this.getSession(sessionId);
-    const key = buildToolEventKey(toolEvent, toolCallId);
-
-    if (session.toolEventKeys.has(key)) {
-      return;
-    }
-
-    session.toolEventKeys.add(key);
-    session.toolEvents.push(toolEvent);
+    this.toolEventRecovery.append(sessionId, toolEvent, toolCallId);
   }
 
   recoverToolEvents(sessionId: string, payload: unknown): void {
-    for (const toolResult of extractToolResultsFromPayload(payload)) {
-      const recoveredEvent = toolResult.toolCallId
-        ? this.orphanToolEvents.get(toolResult.toolCallId)
-        : undefined;
-      const nextEvent = recoveredEvent ?? normalizeToolResult(toolResult);
-      this.appendToolEvent(sessionId, nextEvent, toolResult.toolCallId);
-
-      if (toolResult.toolCallId) {
-        this.orphanToolEvents.delete(toolResult.toolCallId);
-      }
-    }
+    this.toolEventRecovery.recover(sessionId, payload);
   }
 
   async waitForBackgroundLearning(): Promise<void> {
@@ -432,11 +404,11 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       result
     });
 
-    if (sessionId !== "global") {
-      this.appendToolEvent(sessionId, normalizedToolEvent, result.toolCallId);
-    } else if (result.toolCallId) {
-      this.orphanToolEvents.set(result.toolCallId, normalizedToolEvent);
-    }
+    this.toolEventRecovery.recordPersistedToolResult({
+      sessionId,
+      result,
+      normalizedToolEvent
+    });
 
     this.logger.debug?.("experienceengine.tool_result_persist", {
       sessionId,
