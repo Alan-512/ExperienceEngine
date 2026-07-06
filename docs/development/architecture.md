@@ -222,6 +222,8 @@ Posttask route ownership is shared through `src/runtime/posttask-route-service.t
 
 Background learning ownership is shared through `src/runtime/background-learning-runtime.ts`. The full runtime delegates pending background learning task tracking, candidate persistence scheduling, and async postmortem invocation after candidate persistence to this service. `ExperienceRuntimeService` still owns lazy worker construction and exposes `waitForBackgroundLearning()` as the host-facing compatibility entrypoint.
 
+Hygiene governance ownership is shared through `src/runtime/hygiene-governance-runtime.ts`. The full runtime delegates autonomous hygiene governance scheduler creation, optional LLM planner resolution, enqueue/drain task tracking, and governance failure logging to this service. `ExperienceRuntimeService` still captures host-event trace context and exposes the host-facing `signalHostEvent()` and finalization wakeup points.
+
 ---
 
 ## 4. Host Adapter Layer

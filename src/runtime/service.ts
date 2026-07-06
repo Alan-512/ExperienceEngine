@@ -33,11 +33,7 @@ import { RuntimeCaptureWriter } from "../plugin/runtime-capture.js";
 import { normalizeToolResult } from "../plugin/hooks/tool-result-persist.js";
 import { extractToolResultsFromPayload } from "../plugin/runtime-helpers.js";
 import { HybridReviewArtifactRepository } from "../store/sqlite/repositories/hybrid-review-artifact-repo.js";
-import {
-  HygieneGovernanceScheduler,
-  type SchedulerOptions as HygieneGovernanceSchedulerOptions
-} from "../maintenance/hygiene-governance-scheduler.js";
-import { LlmHygieneGovernancePlanner } from "../maintenance/hygiene-governance-llm-planner.js";
+import type { SchedulerOptions as HygieneGovernanceSchedulerOptions } from "../maintenance/hygiene-governance-scheduler.js";
 import { LearningPipelineService } from "./learning-pipeline-service.js";
 import { mergeContext, TaskFinalizationService } from "./task-finalization-service.js";
 import { PromptDecisionPipeline } from "./prompt-decision-pipeline.js";
@@ -51,6 +47,7 @@ import { AttributionWritebackService } from "./attribution-writeback-service.js"
 import { InjectionOutcomeService } from "./injection-outcome-service.js";
 import { PosttaskRouteService, type PosttaskLearningContext } from "./posttask-route-service.js";
 import { BackgroundLearningRuntime } from "./background-learning-runtime.js";
+import { HygieneGovernanceRuntime, type HygieneGovernanceQueueResult } from "./hygiene-governance-runtime.js";
 export { decidePosttaskHybridRoute } from "./posttask-route-service.js";
 
 type LearningRuntimeOptions = {
@@ -131,13 +128,13 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly injectionOutcome;
   private readonly posttaskRoute;
   private readonly backgroundLearning;
+  private readonly hygieneGovernance;
   private readonly runtimeOptions: ExperienceRuntimeServiceOptions;
   private readonly backgroundLearningEnabled: boolean;
   private readonly hybridPosttaskEnabled: boolean;
   private distillationWorkerPromise: Promise<DistillationQueueWorker> | undefined;
   private learningGatePromise: Promise<LlmLearningGate> | undefined;
   private hybridWorkerClientPromise: Promise<HybridWorkerClient> | undefined;
-  private readonly pendingHygieneGovernanceTasks = new Set<Promise<void>>();
   readonly captureWriter;
 
   constructor(
@@ -259,6 +256,12 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       hybridPostmortem: this.hybridPostmortem,
       logger: this.logger
     });
+    this.hygieneGovernance = new HygieneGovernanceRuntime({
+      config: this.config,
+      db: this.db,
+      logger: this.logger,
+      runtimeOptions: this.runtimeOptions
+    });
     this.captureWriter = new RuntimeCaptureWriter(config, this.logger);
   }
 
@@ -308,65 +311,15 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     }
   }
 
-  private trackHygieneGovernanceTask(task: Promise<void>): void {
-    const tracked = task
-      .catch((error) => {
-        this.logger.error?.("experienceengine.hygiene_governance_failed", {
-          error: error instanceof Error ? error.message : String(error)
-        });
-      })
-      .finally(() => {
-        this.pendingHygieneGovernanceTasks.delete(tracked);
-      });
-    this.pendingHygieneGovernanceTasks.add(tracked);
-  }
-
   async waitForBackgroundLearning(): Promise<void> {
     await Promise.allSettled([
       this.backgroundLearning.wait(),
-      ...this.pendingHygieneGovernanceTasks
+      this.hygieneGovernance.wait()
     ]);
   }
 
-  private queueAutonomousHygieneGovernance(context: HostPromptContext, trigger: string): {
-    status: "disabled" | "queued" | "skipped";
-    reason?: "not_due" | "backoff";
-    scopeId?: string;
-  } {
-    const options = this.runtimeOptions.autonomousHygieneGovernance;
-    if (!options?.enabled) {
-      return { status: "disabled" };
-    }
-
-    const { enabled: _enabled, ...schedulerOptions } = options;
-    if (!schedulerOptions.planner) {
-      const planner = new LlmHygieneGovernancePlanner({
-        config: this.config,
-        env: this.runtimeOptions.env,
-        homeDir: this.runtimeOptions.homeDir,
-        fetchImpl: this.runtimeOptions.fetchImpl
-      });
-      if (planner.hasEndpoint()) {
-        schedulerOptions.planner = planner;
-      }
-    }
-    const scheduler = new HygieneGovernanceScheduler(this.db, schedulerOptions);
-    const queued = scheduler.maybeEnqueue({
-      cwd: context.cwd,
-      trigger
-    });
-    if (!queued.enqueued) {
-      return {
-        status: "skipped",
-        reason: queued.reason === "due" ? undefined : queued.reason,
-        scopeId: queued.scopeId
-      };
-    }
-
-    this.trackHygieneGovernanceTask(
-      scheduler.drainDueScope(queued.scopeId).then(() => undefined)
-    );
-    return { status: "queued", scopeId: queued.scopeId };
+  private queueAutonomousHygieneGovernance(context: HostPromptContext, trigger: string): HygieneGovernanceQueueResult {
+    return this.hygieneGovernance.queue(context, trigger);
   }
 
   private maybeQueueAutonomousHygieneGovernance(context: HostPromptContext, trigger: string): void {
