@@ -4,6 +4,7 @@ import { buildExperienceInput } from "../input/input-adapter.js";
 import { resolveScope } from "../input/scope-resolver.js";
 import { nowIso } from "../utils/clock.js";
 import { createId, stableId } from "../utils/ids.js";
+import { mergeContext } from "./session-runtime.js";
 import type { InputRecordRepository } from "../store/sqlite/repositories/input-record-repo.js";
 import type { OutcomeRecordRepository } from "../store/sqlite/repositories/outcome-record-repo.js";
 import type { ScopeRepository } from "../store/sqlite/repositories/scope-repo.js";
@@ -31,16 +32,6 @@ export type TaskFinalizationServiceOptions = {
   outcomeRepo: OutcomeRecordRepository;
   statsRepo: StatsRepository;
 };
-
-export const mergeContext = (existing: HostPromptContext | undefined, incoming: HostPromptContext): HostPromptContext => ({
-  host: incoming.host ?? existing?.host,
-  sessionId: incoming.sessionId ?? existing?.sessionId,
-  cwd: incoming.cwd ?? existing?.cwd,
-  userMessage: incoming.userMessage || existing?.userMessage || "",
-  taskSummary: incoming.taskSummary ?? existing?.taskSummary,
-  contextSummary: incoming.contextSummary ?? existing?.contextSummary,
-  injectedNodeIds: incoming.injectedNodeIds ?? existing?.injectedNodeIds
-});
 
 const toEvidence = (input: ExperienceInput): string[] =>
   input.tool_events.map((event) =>

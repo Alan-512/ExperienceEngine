@@ -24,8 +24,8 @@ import type {
 } from "../types/domain.js";
 import type { HostPromptContext } from "../types/plugin.js";
 import { nowIso } from "../utils/clock.js";
-import { createId, stableId } from "../utils/ids.js";
-import { mergeContext } from "./task-finalization-service.js";
+import { createId } from "../utils/ids.js";
+import { mergeContext, resolveSessionEpisodeId } from "./session-runtime.js";
 
 export type PromptDecisionSessionState = {
   context?: HostPromptContext;
@@ -101,15 +101,6 @@ const resolveDeliveryMode = (
   };
 };
 
-const resolvePromptEpisodeId = (
-  session: PromptDecisionSessionState,
-  sessionId: string,
-  input: Pick<ExperienceInput, "scope_id" | "task_summary">
-): string => {
-  session.episodeId ??= stableId("episode", `${sessionId}:${input.scope_id}:${input.task_summary}`);
-  return session.episodeId;
-};
-
 export class PromptDecisionPipeline {
   constructor(private readonly options: PromptDecisionPipelineOptions) {}
 
@@ -144,7 +135,7 @@ export class PromptDecisionPipeline {
       const scorecard = buildSkipScorecard(disabledInput, sessionId, undefined, true);
       const injectionEvent: InjectionEvent = {
         injection_id: createId("decision"),
-        episode_id: resolvePromptEpisodeId(session, sessionId, disabledInput),
+        episode_id: resolveSessionEpisodeId(session, sessionId, disabledInput),
         session_id: sessionId,
         scope_id: disabledInput.scope_id,
         task_type: disabledInput.task_type === "unknown" ? "general" : disabledInput.task_type,
@@ -208,7 +199,7 @@ export class PromptDecisionPipeline {
       retrievalContext,
       repoPolicyEvaluation.policy
     );
-    const episodeId = resolvePromptEpisodeId(session, sessionId, input);
+    const episodeId = resolveSessionEpisodeId(session, sessionId, input);
 
     const selectedNodeIds = decision.selected.map((node) => node.id);
     const delivery = resolveDeliveryMode(

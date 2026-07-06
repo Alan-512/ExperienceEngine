@@ -12,8 +12,8 @@
 
 | 字段 | 当前值 |
 | --- | --- |
-| 最近同步日期 | 2026-07-05 |
-| 最近同步范围 | `v0.4.7` 当前架构：host trace capsule、trace 持久化边界、OpenClaw runtime closure、Codex lifecycle 安装修复、Claude/Codex 用户级 wiring、Antigravity 用户级 wiring 与真实宿主验证状态 |
+| 最近同步日期 | 2026-07-06 |
+| 最近同步范围 | `v0.4.7` 当前架构：host trace capsule、trace 持久化边界、OpenClaw runtime closure、Codex lifecycle 安装修复、Claude/Codex 用户级 wiring、Antigravity 用户级 wiring、runtime worker factory 与 runtime session store 边界 |
 | 当前宿主基线 | OpenClaw、Claude Code、Codex、Antigravity |
 | 发布基线 | 当前仓库版本为 `v0.4.7`，最近发布说明记录 Codex Windows lifecycle install / doctor / hook 修复；历史 `v0.4.2` ClawHub 状态不再作为当前架构基线 |
 | Antigravity 状态 | 已记录用户级全局插件/MCP wiring、Agent Desktop、`agy` CLI、IDE hooks 观测、项目级 fallback 与 `ee agy exec -C <project>` 包装器 |
@@ -227,6 +227,8 @@ Hygiene governance ownership is shared through `src/runtime/hygiene-governance-r
 Tool-event recovery ownership is shared through `src/runtime/tool-event-recovery-runtime.ts`. The full runtime delegates tool event deduplication, tool-call-id keyed orphan result caching, and finalize-payload tool result recovery to this service. `ExperienceRuntimeService` still owns host-facing `persistToolResult()` and trace capture around persisted tool results.
 
 Runtime worker ownership is shared through `src/runtime/runtime-worker-factory.ts`. The full runtime delegates lazy construction and memoization of the LLM learning gate, distillation queue worker, and hybrid worker client to this factory. `ExperienceRuntimeService` still owns the callbacks passed into learning and hybrid services, but no longer owns dynamic worker imports or worker promise state.
+
+Runtime session ownership is shared through `src/runtime/session-runtime.ts`. The full runtime delegates runtime session map ownership, session creation/reset, host context merge semantics, and stable episode id resolution to `RuntimeSessionStore` / `resolveSessionEpisodeId`. `ExperienceRuntimeService` still decides where host lifecycle events call into session state, but no longer owns the session map or session initialization shape directly.
 
 ---
 
@@ -474,31 +476,23 @@ waitForBackgroundLearning()
 当前职责覆盖：
 
 ```text
-1. 维护 runtime session state
-2. 工具事件去重与追加
-3. 从 host payload 中恢复工具结果
-4. 构造 finalized ExperienceInput
-5. 写入 ExperienceInputRecord
-6. 写入 TaskRun
-7. 写入 OutcomeRecord
-8. 更新 ScopeTaskStats
-9. 加载 LlmLearningGate
-10. 加载 DistillationQueueWorker
-11. 创建 ExperienceCandidate
-12. 创建 DistillationJob
-13. 处理 background learning task
-14. 处理 hybrid postmortem artifact
-15. 应用 postmortem node review
-16. 写入 ReviewEvent
-17. 更新 ExperienceNode
-18. 维护 RuntimeCaptureWriter
-19. 维护 runtime trace event buffer
-20. 构造 trace capability profile 与 trace provenance summary
-21. 在 normal mode 下只把 trace 摘要写入 task/input records
-22. 在诊断快照模式下写入 bounded TraceCapsule / TraceEvent / EvidenceRef
+1. 协调 host lifecycle entrypoints 与各 runtime 子服务
+2. 委托 RuntimeSessionStore 维护 runtime session state
+3. 委托 ToolEventRecoveryRuntime 处理工具事件去重、追加和 finalize payload 恢复
+4. 委托 TaskFinalizationService 构造 finalized ExperienceInput 并写入 task/input/outcome/stats
+5. 委托 TraceCaptureService 维护 runtime trace event buffer、trace provenance summary 和诊断快照持久化
+6. 委托 InjectionOutcomeService 处理注入结果、反馈更新和归因写回
+7. 委托 PosttaskRouteService 决定 posttask hybrid route
+8. 委托 BackgroundLearningRuntime 调度 background learning task
+9. 委托 HybridPostmortemService 处理 hybrid postmortem artifact 和 node review writeback
+10. 委托 HygieneGovernanceRuntime 处理 autonomous hygiene governance wakeups
+11. 委托 RuntimeWorkerFactory 懒加载 LlmLearningGate / DistillationQueueWorker / HybridWorkerClient
+12. 维护 RuntimeCaptureWriter
 ```
 
 ### 5.4 Runtime session state
+
+Runtime session state 由 `src/runtime/session-runtime.ts` 中的 `RuntimeSessionStore` 创建、缓存和 reset。`ExperienceRuntimeService` 只在 host lifecycle 入口处获取或合并 session context，并把 session 对象传给 trace、prompt decision、tool recovery、finalization 等子服务。
 
 当前 runtime session state 包括：
 
@@ -514,7 +508,7 @@ traceEvents?: TraceEvent[]
 
 ### 5.5 Host trace boundary
 
-`ExperienceRuntimeService` 现在同时处理 runtime trace capture 和 trace persistence boundary。
+Runtime trace capture 和 trace persistence boundary 由 `src/runtime/trace-capture-service.ts` 处理。`ExperienceRuntimeService` 只在 prompt/tool/finalize 等 host lifecycle 入口处调用该服务。
 
 核心规则：
 

@@ -1,10 +1,7 @@
-import { nowIso } from "../utils/clock.js";
-import { stableId } from "../utils/ids.js";
 import type {
   ExperienceInput,
   InjectionEvent,
-  TaskRun,
-  ToolEvent
+  TaskRun
 } from "../types/domain.js";
 import type {
   ExperiencePlugin,
@@ -34,9 +31,9 @@ import { normalizeToolResult } from "../plugin/hooks/tool-result-persist.js";
 import { HybridReviewArtifactRepository } from "../store/sqlite/repositories/hybrid-review-artifact-repo.js";
 import type { SchedulerOptions as HygieneGovernanceSchedulerOptions } from "../maintenance/hygiene-governance-scheduler.js";
 import { LearningPipelineService } from "./learning-pipeline-service.js";
-import { mergeContext, TaskFinalizationService } from "./task-finalization-service.js";
+import { TaskFinalizationService } from "./task-finalization-service.js";
 import { PromptDecisionPipeline } from "./prompt-decision-pipeline.js";
-import { TraceCaptureService, type TraceCaptureSessionState } from "./trace-capture-service.js";
+import { TraceCaptureService } from "./trace-capture-service.js";
 import type { HybridWorkerClientOptions } from "../hybrid/worker-client.js";
 import { HybridPostmortemService } from "./hybrid-postmortem-service.js";
 import { AttributionWritebackService } from "./attribution-writeback-service.js";
@@ -44,8 +41,9 @@ import { InjectionOutcomeService } from "./injection-outcome-service.js";
 import { PosttaskRouteService, type PosttaskLearningContext } from "./posttask-route-service.js";
 import { BackgroundLearningRuntime } from "./background-learning-runtime.js";
 import { HygieneGovernanceRuntime, type HygieneGovernanceQueueResult } from "./hygiene-governance-runtime.js";
-import { ToolEventRecoveryRuntime, type ToolEventSessionState } from "./tool-event-recovery-runtime.js";
+import { ToolEventRecoveryRuntime } from "./tool-event-recovery-runtime.js";
 import { RuntimeWorkerFactory } from "./runtime-worker-factory.js";
+import { RuntimeSessionStore, type RuntimeSessionState, resolveSessionEpisodeId } from "./session-runtime.js";
 export { decidePosttaskHybridRoute } from "./posttask-route-service.js";
 
 type LearningRuntimeOptions = {
@@ -63,21 +61,10 @@ type ExperienceRuntimeServiceOptions = LearningRuntimeOptions & {
   };
 };
 
-type SessionState = TraceCaptureSessionState & ToolEventSessionState & {
-  context?: HostPromptContext;
-  episodeId?: string;
-  injectedNodeIds: string[];
-};
-
-const resolveEpisodeId = (session: SessionState, sessionId: string, input: Pick<ExperienceInput, "scope_id" | "task_summary">): string => {
-  session.episodeId ??= stableId("episode", `${sessionId}:${input.scope_id}:${input.task_summary}`);
-  return session.episodeId;
-};
-
 export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly db;
   private readonly logger: OpenClawLogger;
-  private readonly sessions = new Map<string, SessionState>();
+  private readonly sessions = new RuntimeSessionStore();
   private readonly toolEventRecovery;
   private readonly scopeRepo;
   private readonly inputRepo;
@@ -251,28 +238,16 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     this.captureWriter = new RuntimeCaptureWriter(config, this.logger);
   }
 
-  private getSession(sessionId: string): SessionState {
-    const existing = this.sessions.get(sessionId);
-    if (existing) {
-      return existing;
-    }
-
-    const next: SessionState = {
-      toolEvents: [],
-      toolEventKeys: new Set<string>(),
-      injectedNodeIds: [],
-      traceEvents: []
-    };
-    this.sessions.set(sessionId, next);
-    return next;
+  private getSession(sessionId: string): RuntimeSessionState {
+    return this.sessions.get(sessionId);
   }
 
   resetSession(sessionId: string): void {
-    this.sessions.delete(sessionId);
+    this.sessions.reset(sessionId);
   }
 
-  private appendToolEvent(sessionId: string, toolEvent: ToolEvent, toolCallId?: string): void {
-    this.toolEventRecovery.append(sessionId, toolEvent, toolCallId);
+  private mergeSessionContext(sessionId: string, context: HostPromptContext): RuntimeSessionState {
+    return this.sessions.mergeContext(sessionId, context);
   }
 
   recoverToolEvents(sessionId: string, payload: unknown): void {
@@ -300,8 +275,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     scopeId?: string;
   }> {
     const sessionId = context.sessionId ?? "global";
-    const session = this.getSession(sessionId);
-    session.context = mergeContext(session.context, context);
+    const session = this.mergeSessionContext(sessionId, context);
 
     if ((trigger === "prompt_lookup" || trigger === "host_startup") && context.userMessage.trim()) {
       this.traceCapture.capturePromptEvent(session, context, context.userMessage);
@@ -340,11 +314,11 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
 
   async beforePromptBuild(context: HostPromptContext) {
     const sessionId = context.sessionId ?? "global";
-    const session = this.getSession(sessionId);
-    session.context = mergeContext(session.context, context);
+    const session = this.mergeSessionContext(sessionId, context);
+    const mergedContext = session.context ?? context;
 
     this.traceCapture.capturePromptEvent(session, context, context.userMessage || "");
-    this.maybeQueueAutonomousHygieneGovernance(session.context, "prompt_lookup");
+    this.maybeQueueAutonomousHygieneGovernance(mergedContext, "prompt_lookup");
     return this.promptDecisionPipeline.beforePromptBuild(context, sessionId, session);
   }
 
@@ -389,7 +363,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     let finalizedInput = input;
     let learningTaskContext: PosttaskLearningContext | undefined;
     withTransaction(this.db, () => {
-      const episodeId = resolveEpisodeId(session, sessionId, input);
+      const episodeId = resolveSessionEpisodeId(session, sessionId, input);
       const { record, taskRun } = this.taskFinalization.persistFinalizedRun({
         experienceInput: input,
         sessionId,
@@ -425,7 +399,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       };
       finalizedInput = traced.experienceInput;
     });
-    this.sessions.delete(sessionId);
+    this.sessions.reset(sessionId);
 
     const routeResolution = this.posttaskRoute.resolve({
       sessionId,
