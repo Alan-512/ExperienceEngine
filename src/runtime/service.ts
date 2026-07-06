@@ -1,7 +1,6 @@
 import type {
   ExperienceInput,
-  InjectionEvent,
-  TaskRun
+  InjectionEvent
 } from "../types/domain.js";
 import type {
   ExperiencePlugin,
@@ -10,7 +9,7 @@ import type {
   OpenClawLogger
 } from "../types/plugin.js";
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
-import { bootstrapDatabase, openDatabase, withTransaction } from "../store/sqlite/db.js";
+import { bootstrapDatabase, openDatabase } from "../store/sqlite/db.js";
 import { CandidateRepository } from "../store/sqlite/repositories/candidate-repo.js";
 import { DistillationJobRepository } from "../store/sqlite/repositories/distillation-job-repo.js";
 import { InputRecordRepository } from "../store/sqlite/repositories/input-record-repo.js";
@@ -38,12 +37,13 @@ import type { HybridWorkerClientOptions } from "../hybrid/worker-client.js";
 import { HybridPostmortemService } from "./hybrid-postmortem-service.js";
 import { AttributionWritebackService } from "./attribution-writeback-service.js";
 import { InjectionOutcomeService } from "./injection-outcome-service.js";
-import { PosttaskRouteService, type PosttaskLearningContext } from "./posttask-route-service.js";
+import { PosttaskRouteService } from "./posttask-route-service.js";
 import { BackgroundLearningRuntime } from "./background-learning-runtime.js";
 import { HygieneGovernanceRuntime, type HygieneGovernanceQueueResult } from "./hygiene-governance-runtime.js";
 import { ToolEventRecoveryRuntime } from "./tool-event-recovery-runtime.js";
 import { RuntimeWorkerFactory } from "./runtime-worker-factory.js";
-import { RuntimeSessionStore, type RuntimeSessionState, resolveSessionEpisodeId } from "./session-runtime.js";
+import { RuntimeSessionStore, type RuntimeSessionState } from "./session-runtime.js";
+import { FinalizeTaskCoordinator } from "./finalize-task-coordinator.js";
 export { decidePosttaskHybridRoute } from "./posttask-route-service.js";
 
 type LearningRuntimeOptions = {
@@ -91,6 +91,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly injectionOutcome;
   private readonly posttaskRoute;
   private readonly backgroundLearning;
+  private readonly finalizeTaskCoordinator;
   private readonly hygieneGovernance;
   private readonly workerFactory;
   private readonly runtimeOptions: ExperienceRuntimeServiceOptions;
@@ -226,6 +227,19 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       hybridPostmortem: this.hybridPostmortem,
       logger: this.logger
     });
+    this.finalizeTaskCoordinator = new FinalizeTaskCoordinator({
+      db: this.db,
+      taskFinalization: this.taskFinalization,
+      traceCapture: this.traceCapture,
+      injectionOutcome: this.injectionOutcome,
+      posttaskRoute: this.posttaskRoute,
+      backgroundLearning: this.backgroundLearning,
+      logger: this.logger,
+      resetSession: (sessionId) => this.sessions.reset(sessionId),
+      queuePosttaskGovernance: (context) => {
+        this.maybeQueueAutonomousHygieneGovernance(context, "posttask");
+      }
+    });
     this.hygieneGovernance = new HygieneGovernanceRuntime({
       config: this.config,
       db: this.db,
@@ -359,74 +373,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   async finalizeTask(context: HostPromptContext) {
     const sessionId = context.sessionId ?? "global";
     const session = this.getSession(sessionId);
-    const input = this.taskFinalization.buildFinalizedInput(context, session);
-    let finalizedInput = input;
-    let learningTaskContext: PosttaskLearningContext | undefined;
-    withTransaction(this.db, () => {
-      const episodeId = resolveSessionEpisodeId(session, sessionId, input);
-      const { record, taskRun } = this.taskFinalization.persistFinalizedRun({
-        experienceInput: input,
-        sessionId,
-        session,
-        episodeId,
-        context,
-        cwd: context.cwd
-      });
-      const traced = this.traceCapture.persistForFinalizedRun({
-        context,
-        session,
-        sessionId,
-        experienceInput: input,
-        record,
-        taskRun,
-        episodeId
-      });
-      this.injectionOutcome.finalizeInjectionOutcome({
-        sessionId,
-        sessionLastInjectionEvent: session.lastInjectionEvent,
-        experienceInput: traced.experienceInput,
-        inputRecordId: traced.record.record_id,
-        taskRunId: traced.taskRun.id,
-        episodeId
-      });
-      learningTaskContext = {
-        input: traced.experienceInput,
-        originRecordId: traced.record.record_id,
-        taskRunId: traced.taskRun.id,
-        sessionId,
-        taskRun: traced.taskRun,
-        toolEvents: [...session.toolEvents]
-      };
-      finalizedInput = traced.experienceInput;
-    });
-    this.sessions.reset(sessionId);
-
-    const routeResolution = this.posttaskRoute.resolve({
-      sessionId,
-      finalizedInput,
-      learningTaskContext
-    });
-    const { route: hybridPosttaskRoute, rollout } = routeResolution;
-
-    this.backgroundLearning.schedulePosttaskLearning({
-      learningTaskContext,
-      routeResolution
-    });
-
-    this.logger.info?.("experienceengine.finalize", {
-      sessionId,
-      taskType: finalizedInput.task_type,
-      outcome: finalizedInput.outcome_signal,
-      hybridPosttaskRoute: hybridPosttaskRoute.route,
-      hybridPosttaskRouteReason: hybridPosttaskRoute.reasonCode,
-      hybridRoutePolicyVersion: hybridPosttaskRoute.policyVersion,
-      hybridRolloutMode: rollout.effectiveMode,
-      hybridRolloutReason: rollout.reason
-    });
-
-    this.maybeQueueAutonomousHygieneGovernance(context, "posttask");
-
-    return finalizedInput;
+    return this.finalizeTaskCoordinator.finalizeTask({ context, sessionId, session });
   }
 
   async drainDistillationQueue(limit?: number): Promise<number> {

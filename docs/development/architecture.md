@@ -13,7 +13,7 @@
 | 字段 | 当前值 |
 | --- | --- |
 | 最近同步日期 | 2026-07-06 |
-| 最近同步范围 | `v0.4.7` 当前架构：host trace capsule、trace 持久化边界、OpenClaw runtime closure、Codex lifecycle 安装修复、Claude/Codex 用户级 wiring、Antigravity 用户级 wiring、runtime worker factory 与 runtime session store 边界 |
+| 最近同步范围 | `v0.4.7` 当前架构：host trace capsule、trace 持久化边界、OpenClaw runtime closure、Codex lifecycle 安装修复、Claude/Codex 用户级 wiring、Antigravity 用户级 wiring、runtime worker factory、runtime session store 与 finalize task coordinator 边界 |
 | 当前宿主基线 | OpenClaw、Claude Code、Codex、Antigravity |
 | 发布基线 | 当前仓库版本为 `v0.4.7`，最近发布说明记录 Codex Windows lifecycle install / doctor / hook 修复；历史 `v0.4.2` ClawHub 状态不再作为当前架构基线 |
 | Antigravity 状态 | 已记录用户级全局插件/MCP wiring、Agent Desktop、`agy` CLI、IDE hooks 观测、项目级 fallback 与 `ee agy exec -C <project>` 包装器 |
@@ -216,9 +216,9 @@ Hybrid posttask review ownership is shared through `src/runtime/hybrid-postmorte
 
 Attribution writeback ownership is shared through `src/runtime/attribution-writeback-service.ts`. The full runtime delegates automatic attribution record persistence, trajectory expectation matching, trace evidence reference selection, record-only diagnostic attribution rows, and shadow-probe quarantine release/retire writeback to this service. `ExperienceRuntimeService` still resolves the injection event during finalize and remains responsible for earlier injected-node lifecycle feedback updates.
 
-Injection outcome ownership is shared through `src/runtime/injection-outcome-service.ts`. The full runtime delegates injected-node automatic feedback updates, same-scope high-match promotion, cross-scope portable validation evidence, injection event resolution, harm observation, and downstream attribution writeback orchestration to this service. `ExperienceRuntimeService` still owns the transaction boundary and task lifecycle ordering.
+Injection outcome ownership is shared through `src/runtime/injection-outcome-service.ts`. The full runtime delegates injected-node automatic feedback updates, same-scope high-match promotion, cross-scope portable validation evidence, injection event resolution, harm observation, and downstream attribution writeback orchestration to this service. Finalize-time invocation order and transaction placement are coordinated by `FinalizeTaskCoordinator`.
 
-Posttask route ownership is shared through `src/runtime/posttask-route-service.ts`. The full runtime delegates hybrid rollout resolution, posttask route signal construction, candidate-signal derivation, postmortem-already-recorded checks, and `decidePosttaskHybridRoute` evaluation to this service. `ExperienceRuntimeService` still owns background learning task scheduling and the decision to invoke async postmortem after candidate persistence.
+Posttask route ownership is shared through `src/runtime/posttask-route-service.ts`. The full runtime delegates hybrid rollout resolution, posttask route signal construction, candidate-signal derivation, postmortem-already-recorded checks, and `decidePosttaskHybridRoute` evaluation to this service. `FinalizeTaskCoordinator` invokes posttask route resolution after the finalized run transaction and passes the result to background learning scheduling.
 
 Background learning ownership is shared through `src/runtime/background-learning-runtime.ts`. The full runtime delegates pending background learning task tracking, candidate persistence scheduling, and async postmortem invocation after candidate persistence to this service. `ExperienceRuntimeService` still owns lazy worker construction and exposes `waitForBackgroundLearning()` as the host-facing compatibility entrypoint.
 
@@ -229,6 +229,8 @@ Tool-event recovery ownership is shared through `src/runtime/tool-event-recovery
 Runtime worker ownership is shared through `src/runtime/runtime-worker-factory.ts`. The full runtime delegates lazy construction and memoization of the LLM learning gate, distillation queue worker, and hybrid worker client to this factory. `ExperienceRuntimeService` still owns the callbacks passed into learning and hybrid services, but no longer owns dynamic worker imports or worker promise state.
 
 Runtime session ownership is shared through `src/runtime/session-runtime.ts`. The full runtime delegates runtime session map ownership, session creation/reset, host context merge semantics, and stable episode id resolution to `RuntimeSessionStore` / `resolveSessionEpisodeId`. `ExperienceRuntimeService` still decides where host lifecycle events call into session state, but no longer owns the session map or session initialization shape directly.
+
+Finalize task coordination is shared through `src/runtime/finalize-task-coordinator.ts`. The full runtime delegates finalized input construction, transaction-scoped task/input/outcome/stat persistence, trace persistence, injection outcome writeback, learning task context assembly, session reset, posttask route resolution, background learning scheduling, finalize logging, and posttask governance wakeup to this coordinator. `ExperienceRuntimeService` remains the host-facing entrypoint that resolves the session and delegates finalization.
 
 ---
 
@@ -479,15 +481,16 @@ waitForBackgroundLearning()
 1. 协调 host lifecycle entrypoints 与各 runtime 子服务
 2. 委托 RuntimeSessionStore 维护 runtime session state
 3. 委托 ToolEventRecoveryRuntime 处理工具事件去重、追加和 finalize payload 恢复
-4. 委托 TaskFinalizationService 构造 finalized ExperienceInput 并写入 task/input/outcome/stats
-5. 委托 TraceCaptureService 维护 runtime trace event buffer、trace provenance summary 和诊断快照持久化
-6. 委托 InjectionOutcomeService 处理注入结果、反馈更新和归因写回
-7. 委托 PosttaskRouteService 决定 posttask hybrid route
-8. 委托 BackgroundLearningRuntime 调度 background learning task
-9. 委托 HybridPostmortemService 处理 hybrid postmortem artifact 和 node review writeback
-10. 委托 HygieneGovernanceRuntime 处理 autonomous hygiene governance wakeups
-11. 委托 RuntimeWorkerFactory 懒加载 LlmLearningGate / DistillationQueueWorker / HybridWorkerClient
-12. 维护 RuntimeCaptureWriter
+4. 委托 FinalizeTaskCoordinator 协调 finalizeTask 的 transaction、trace、injection outcome、posttask route、background learning 和 governance wakeup
+5. 委托 TaskFinalizationService 构造 finalized ExperienceInput 并写入 task/input/outcome/stats
+6. 委托 TraceCaptureService 维护 runtime trace event buffer、trace provenance summary 和诊断快照持久化
+7. 委托 InjectionOutcomeService 处理注入结果、反馈更新和归因写回
+8. 委托 PosttaskRouteService 决定 posttask hybrid route
+9. 委托 BackgroundLearningRuntime 调度 background learning task
+10. 委托 HybridPostmortemService 处理 hybrid postmortem artifact 和 node review writeback
+11. 委托 HygieneGovernanceRuntime 处理 autonomous hygiene governance wakeups
+12. 委托 RuntimeWorkerFactory 懒加载 LlmLearningGate / DistillationQueueWorker / HybridWorkerClient
+13. 维护 RuntimeCaptureWriter
 ```
 
 ### 5.4 Runtime session state
@@ -524,6 +527,26 @@ tracePersistDiagnosticSnapshots=true + host/scope allowlist 命中
 ```
 
 这条边界确保 EE 不是 raw agent trace recorder。完整 trace 是诊断资产；经验库的主数据仍然是 distilled experience 和治理元数据。
+
+### 5.6 Finalize task coordination
+
+`src/runtime/finalize-task-coordinator.ts` 负责维护 finalizeTask 的执行顺序：
+
+```text
+build finalized input
+  -> transaction:
+       persist input/task/outcome/stats
+       persist trace summary / optional diagnostic snapshot
+       finalize injection outcome and attribution writeback
+       assemble PosttaskLearningContext
+  -> reset RuntimeSessionStore session
+  -> resolve posttask hybrid route
+  -> schedule BackgroundLearningRuntime
+  -> log finalize telemetry
+  -> wake autonomous hygiene governance for posttask
+```
+
+该 coordinator 不直接做 candidate persistence、distillation 或 postmortem 写入；这些仍由 `BackgroundLearningRuntime`、`LearningPipelineService` 和 `HybridPostmortemService` 负责。
 
 ---
 
