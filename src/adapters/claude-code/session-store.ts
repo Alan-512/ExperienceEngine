@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { resolveExperienceEnginePaths, resolveProductStateDir } from "../../config/path-resolver.js";
+import { isolatePathEnvForHomeDir, resolveExperienceEnginePaths, resolveProductStateDir } from "../../config/path-resolver.js";
 import type { HostPromptContext, HostToolResult } from "../../types/plugin.js";
 
 export type ClaudeStoredSession = {
@@ -20,7 +20,7 @@ const sanitizeSessionId = (sessionId: string): string =>
 const resolveSessionDir = (options: SessionStoreOptions = {}): string => {
   const paths = resolveExperienceEnginePaths({
     adapter: "claude-code",
-    env: options.env ?? process.env,
+    env: options.env ?? (options.homeDir ? isolatePathEnvForHomeDir(process.env) : process.env),
     homeDir: options.homeDir
   });
   return join(resolveProductStateDir(paths), "sessions");

@@ -399,7 +399,7 @@ Reason for deferral:
 ## Recommended Delivery Order
 
 1. keep the completed onboarding / first-value / routine-interaction work stable
-2. handle `OpenClaw` routine-interaction alignment as its own later pass
+2. protect the completed `OpenClaw` routine-interaction alignment with regression coverage rather than reopening it as a later implementation pass
 3. only pull deferred heavier surfaces forward if the lighter product path stops being sufficient
 
 ## Acceptance Bar For This Improvement Track
@@ -423,5 +423,5 @@ The biggest completed win in this phase was reducing friction in:
 The remaining near-term UX work should stay narrow:
 
 - protect the current lightweight path from regressing
-- finish the dedicated `OpenClaw` routine-interaction follow-up when that phase starts
+- protect the completed `OpenClaw` routine-interaction follow-up with targeted regression checks
 - avoid pulling heavier new surfaces forward before they are needed

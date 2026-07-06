@@ -1,6 +1,6 @@
 import { appendFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
-import { resolveExperienceEnginePaths, resolveProductStateDir } from "../../config/path-resolver.js";
+import { isolatePathEnvForHomeDir, resolveExperienceEnginePaths, resolveProductStateDir } from "../../config/path-resolver.js";
 import type { ClaudeNormalizedEvent } from "./hook-normalizer.js";
 
 type PersistOptions = {
@@ -14,7 +14,7 @@ export const persistClaudeNormalizedEvent = (
 ): string => {
   const paths = resolveExperienceEnginePaths({
     adapter: "claude-code",
-    env: options.env ?? process.env,
+    env: options.env ?? (options.homeDir ? isolatePathEnvForHomeDir(process.env) : process.env),
     homeDir: options.homeDir
   });
   const stateDir = resolveProductStateDir(paths);

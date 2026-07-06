@@ -1,26 +1,17 @@
 import { dirname } from "node:path";
 import { buildCandidateSignals } from "../analyzer/candidate-signals.js";
-import { buildInjectionScorecard } from "../controller/injection-scorecard.js";
 import { classifyFailureAttributionReason } from "../feedback/automatic-attribution.js";
 import { applyFeedback } from "../feedback/feedback-manager.js";
 import { detectHarm } from "../feedback/harm-detector.js";
-import { buildExperienceInput } from "../input/input-adapter.js";
-import { buildRetrievalContext } from "../controller/retrieval-context.js";
-import { resolveScope } from "../input/scope-resolver.js";
-import { decideIntervention } from "../controller/intervention-controller.js";
-import { renderInlineNotice } from "../controller/inline-notice.js";
-import { buildSkipScorecard } from "../controller/skip-scorecard.js";
 import {
   applyGovernedNodeFeedback,
   deriveNodeOriginProfileForNode
 } from "../experience-management/node-lifecycle-governance.js";
-import { evaluateRepoPolicy } from "../experience-management/repo-policy.js";
 import { resolveHybridRolloutState } from "../hybrid/rollout.js";
 import { selectHybridRoute, type HybridRouteDecision, type HybridRouteSignals } from "../hybrid/router.js";
 import { nowIso } from "../utils/clock.js";
 import { createId, stableId } from "../utils/ids.js";
 import type {
-  EvaluationMode,
   ExperienceInput,
   ExperienceInputRecord,
   HybridReviewArtifact,
@@ -73,6 +64,7 @@ import {
 import { LlmHygieneGovernancePlanner } from "../maintenance/hygiene-governance-llm-planner.js";
 import { LearningPipelineService } from "./learning-pipeline-service.js";
 import { mergeContext, TaskFinalizationService } from "./task-finalization-service.js";
+import { PromptDecisionPipeline } from "./prompt-decision-pipeline.js";
 import type { LlmLearningGate } from "../analyzer/llm-learning-gate.js";
 import type { DistillationQueueWorker } from "../distillation/queue-worker.js";
 import type { DistillerEndpoint } from "../distillation/providers/types.js";
@@ -175,52 +167,6 @@ const buildToolEventKey = (toolEvent: ToolEvent, toolCallId?: string): string =>
     toolEvent.ended_at ?? ""
   ].join(":");
 
-const computeHoldoutBucket = (sessionId: string, taskSummary: string): number => {
-  const value = `${sessionId}:${taskSummary}`;
-  let hash = 0;
-  for (let index = 0; index < value.length; index += 1) {
-    hash = (hash * 31 + value.charCodeAt(index)) >>> 0;
-  }
-  return (hash % 10_000) / 10_000;
-};
-
-const resolveDeliveryMode = (
-  evaluationMode: ExperienceEngineConfig["evaluationMode"],
-  holdoutRate: number,
-  sessionId: string,
-  taskSummary: string,
-  hasInjection: boolean
-): {
-  deliveryMode: EvaluationMode;
-  delivered: boolean;
-} => {
-  if (!hasInjection) {
-    return {
-      deliveryMode: evaluationMode,
-      delivered: false
-    };
-  }
-
-  if (evaluationMode === "shadow") {
-    return {
-      deliveryMode: "shadow",
-      delivered: false
-    };
-  }
-
-  if (evaluationMode === "holdout") {
-    return {
-      deliveryMode: "holdout",
-      delivered: computeHoldoutBucket(sessionId, taskSummary) >= holdoutRate
-    };
-  }
-
-  return {
-    deliveryMode: "live",
-    delivered: true
-  };
-};
-
 const HYBRID_LIGHTWEIGHT_PATTERN = /\b(wording-only|wording only|copy-only|copy only|copy pass|inline notice wording|expression-layer refinement)\b/i;
 
 const isLightweightHybridExcludedTask = (input: Pick<ExperienceInput, "task_summary" | "context_summary">): boolean =>
@@ -276,6 +222,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly traceRepo;
   private readonly learningPipeline;
   private readonly taskFinalization;
+  private readonly promptDecisionPipeline;
   private readonly runtimeOptions: ExperienceRuntimeServiceOptions;
   private readonly backgroundLearningEnabled: boolean;
   private readonly hybridPosttaskEnabled: boolean;
@@ -329,6 +276,39 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       taskRunRepo: this.taskRunRepo,
       outcomeRepo: this.outcomeRepo,
       statsRepo: this.statsRepo
+    });
+    this.promptDecisionPipeline = new PromptDecisionPipeline({
+      config: this.config,
+      db: this.db,
+      scopeRepo: this.scopeRepo,
+      nodeRepo: this.nodeRepo,
+      statsRepo: this.statsRepo,
+      injectionRepo: this.injectionRepo,
+      attributionRecordRepo: this.attributionRecordRepo,
+      repoPolicyRepo: this.repoPolicyRepo,
+      onScopeDisabled: ({ sessionId, scopeId }) => {
+        this.logger.info?.("experienceengine.scope_disabled", {
+          sessionId,
+          scopeId
+        });
+      },
+      onRepoPolicyChanged: ({ policy }) => {
+        this.logger.warn?.("experienceengine.repo_policy_circuit_tripped", {
+          scopeId: policy.scope_id,
+          configuredMode: policy.configured_mode,
+          effectiveMode: policy.effective_mode,
+          reason: policy.circuit_reason
+        });
+      },
+      onDecision: ({ sessionId, mode, injectedCount, evaluationMode, delivered }) => {
+        this.logger.debug?.("experienceengine.before_prompt_build", {
+          sessionId,
+          mode,
+          injectedCount,
+          evaluationMode,
+          delivered
+        });
+      }
     });
     this.captureWriter = new RuntimeCaptureWriter(config, this.logger);
   }
@@ -576,23 +556,6 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       taskRun: tracedTaskRun,
       record: tracedRecord
     };
-  }
-
-  // The shipped runtime path stays exact-scope-only in this rollout.
-  private resolveExactScopeInjectableNodes(scopeId: string): ExperienceNode[] {
-    return this.nodeRepo.listLiveInjectableByExactScope(scopeId);
-  }
-
-  private resolveConservativeCrossScopeCandidates(scopeId: string): ExperienceNode[] {
-    return this.nodeRepo.listConservativeCrossScopeCandidates(scopeId);
-  }
-
-  private resolveDiagnosticCandidates(scopeId: string): ExperienceNode[] {
-    return this.nodeRepo.listDiagnosticCandidatesByExactScope(scopeId);
-  }
-
-  private resolveShadowProbeCandidates(scopeId: string): ExperienceNode[] {
-    return this.nodeRepo.listShadowProbeByExactScope(scopeId);
   }
 
   recoverToolEvents(sessionId: string, payload: unknown): void {
@@ -1462,172 +1425,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       this.captureTraceEvent(sessionId, context, rawPromptEvent);
     }
     this.maybeQueueAutonomousHygieneGovernance(session.context, "prompt_lookup");
-    const input = buildExperienceInput(session.context, session.toolEvents);
-    const retrievalContext = buildRetrievalContext(input, session.context);
-    retrievalContext.db = this.db;
-    const resolvedScope = resolveScope(session.context.cwd);
-    const existingScope = this.scopeRepo.getById(resolvedScope.scope_id);
-
-    if (existingScope?.is_disabled) {
-      session.injectedNodeIds = [];
-      session.context = {
-        ...session.context,
-        injectedNodeIds: []
-      };
-      const disabledInput = {
-        ...input,
-        scope_id: existingScope.scope_id,
-        injected_node_ids: []
-      };
-      const scorecard = buildSkipScorecard(disabledInput, sessionId, undefined, true);
-      const injectionEvent: InjectionEvent = {
-        injection_id: createId("decision"),
-        episode_id: resolveEpisodeId(session, sessionId, disabledInput),
-        session_id: sessionId,
-        scope_id: disabledInput.scope_id,
-        task_type: disabledInput.task_type === "unknown" ? "general" : disabledInput.task_type,
-        task_summary: disabledInput.task_summary,
-        mode: "skip",
-        delivery_mode: "live",
-        delivered: false,
-        injected_node_ids: [],
-        injection_count: 0,
-        scorecard,
-        was_successful: null,
-        harm_observed: null,
-        created_at: nowIso()
-      };
-      this.injectionRepo.upsert(injectionEvent);
-      session.lastInjectionEvent = injectionEvent;
-
-      this.logger.info?.("experienceengine.scope_disabled", {
-        sessionId,
-        scopeId: existingScope.scope_id
-      });
-
-      return {
-        mode: "skip" as const,
-        text: undefined,
-        notice: undefined,
-        scorecard,
-        retrievalContext,
-        input: disabledInput
-      };
-    }
-
-    const stats =
-      input.task_type !== "unknown" ? this.statsRepo.get(input.scope_id, input.task_type) : undefined;
-    const nodes = input.task_type !== "unknown"
-      ? [
-          ...this.resolveExactScopeInjectableNodes(input.scope_id),
-          ...this.resolveConservativeCrossScopeCandidates(input.scope_id),
-          ...this.resolveDiagnosticCandidates(input.scope_id),
-          ...this.resolveShadowProbeCandidates(input.scope_id)
-        ]
-      : [];
-    const existingRepoPolicy = this.repoPolicyRepo.getOrCreate(input.scope_id, this.config.repoExperienceMode);
-    const repoPolicyEvaluation = evaluateRepoPolicy(
-      existingRepoPolicy,
-      this.attributionRecordRepo.listRecentEligibleByScope(input.scope_id),
-      this.injectionRepo.listRecentResolvedByScope(input.scope_id)
-    );
-    if (repoPolicyEvaluation.changed) {
-      this.repoPolicyRepo.upsert(repoPolicyEvaluation.policy);
-      this.logger.warn?.("experienceengine.repo_policy_circuit_tripped", {
-        scopeId: input.scope_id,
-        configuredMode: repoPolicyEvaluation.policy.configured_mode,
-        effectiveMode: repoPolicyEvaluation.policy.effective_mode,
-        reason: repoPolicyEvaluation.policy.circuit_reason
-      });
-    }
-    const decision = await decideIntervention(
-      input,
-      nodes,
-      stats,
-      this.config.triggerThreshold,
-      this.config.maxHints,
-      this.config,
-      retrievalContext,
-      repoPolicyEvaluation.policy
-    );
-    const episodeId = resolveEpisodeId(session, sessionId, input);
-
-    const selectedNodeIds = decision.selected.map((node) => node.id);
-    const delivery = resolveDeliveryMode(
-      this.config.evaluationMode,
-      this.config.holdoutRate,
-      sessionId,
-      input.task_summary,
-      decision.mode !== "skip" && selectedNodeIds.length > 0
-    );
-    session.injectedNodeIds = delivery.delivered ? selectedNodeIds : [];
-    session.context = {
-      ...session.context,
-      injectedNodeIds: session.injectedNodeIds
-    };
-
-    const scorecard =
-      decision.mode !== "skip"
-        ? buildInjectionScorecard(
-        input,
-        decision.mode,
-        decision.selected,
-        sessionId,
-        decision.diagnostics
-      )
-        : buildSkipScorecard(input, sessionId, decision.diagnostics);
-    if (scorecard && decision.mode !== "skip" && !delivery.delivered) {
-      if (delivery.deliveryMode === "holdout") {
-        scorecard.skipReasonCode = "holdout_suppressed";
-        scorecard.skipReasonExplanation = "ExperienceEngine found a usable match but withheld it for holdout evaluation.";
-      } else {
-        scorecard.skipReasonCode = "shadow_suppressed";
-        scorecard.skipReasonExplanation = "ExperienceEngine found a usable match but shadow mode suppressed prompt delivery.";
-      }
-    }
-    const injectionEvent: InjectionEvent = {
-      injection_id: createId(decision.mode === "skip" ? "decision" : "inject"),
-      episode_id: episodeId,
-      session_id: sessionId,
-      scope_id: input.scope_id,
-      task_type: input.task_type === "unknown" ? "general" : input.task_type,
-      task_summary: input.task_summary,
-      mode: decision.mode,
-      delivery_mode: delivery.deliveryMode,
-      delivered: delivery.delivered,
-      injected_node_ids: selectedNodeIds,
-      injection_count: selectedNodeIds.length,
-      scorecard,
-      was_successful: null,
-      harm_observed: null,
-      created_at: nowIso()
-    };
-    this.injectionRepo.upsert(injectionEvent);
-    session.lastInjectionEvent = injectionEvent;
-
-    this.logger.debug?.("experienceengine.before_prompt_build", {
-      sessionId,
-      mode: decision.mode,
-      injectedCount: session.injectedNodeIds.length,
-      evaluationMode: this.config.evaluationMode,
-      delivered: delivery.delivered
-    });
-
-    const deliveredMode = decision.mode !== "skip" && !delivery.delivered ? "skip" : decision.mode;
-    return {
-      mode: deliveredMode,
-      text: deliveredMode === "skip" ? undefined : decision.text,
-      notice:
-        deliveredMode !== "skip" && this.config.noticesInline ? renderInlineNotice(decision.selected) : undefined,
-      scorecard: session.lastInjectionEvent?.scorecard,
-      deliveryMode: decision.mode !== "skip" ? delivery.deliveryMode : undefined,
-      delivered: decision.mode !== "skip" ? delivery.delivered : undefined,
-      retrievalContext,
-      input: {
-        ...input,
-        injected_node_ids: session.injectedNodeIds
-      }
-    };
+    return this.promptDecisionPipeline.beforePromptBuild(context, sessionId, session);
   }
 
   async persistToolResult(result: HostToolResult) {

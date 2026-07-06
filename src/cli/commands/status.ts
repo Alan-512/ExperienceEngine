@@ -2,6 +2,7 @@ import { ExperienceInteractionService } from "../../interaction/service.js";
 import { inspectClaudeCodeInstall } from "../../install/claude-code-doctor.js";
 import { inspectCodexInstall } from "../../install/codex-installer.js";
 import { inspectOpenClawInstall } from "../../install/openclaw-installer.js";
+import { inspectAntigravityInstall } from "../../install/antigravity.js";
 import { loadConfig } from "../../config/load-config.js";
 import { detectAvailableHosts } from "../../install/host-detection.js";
 import type {
@@ -72,7 +73,11 @@ const logLearningQualityHealth = (health: ExperienceLearningQualityHealth): void
     `- Feedback closure: helped ${health.feedbackClosure.helped}, harmed ${health.feedbackClosure.harmed}, unresolved ${health.feedbackClosure.unresolved} of ${health.feedbackClosure.recentResolvedInterventions} resolved interventions`
   );
 };
-export const runStatusCommand = (): void => {
+export type StatusCommandOptions = {
+  verbose?: boolean;
+};
+
+export const runStatusCommand = (options: StatusCommandOptions = {}): void => {
   const config = loadConfig();
   const interaction = new ExperienceInteractionService(config);
   const decisionHealth = interaction.inspectDecisionHealth();
@@ -83,38 +88,57 @@ export const runStatusCommand = (): void => {
   const codex = inspectCodexInstall();
   const claude = inspectClaudeCodeInstall();
   const openclaw = inspectOpenClawInstall();
+  const antigravity = inspectAntigravityInstall();
   const installedHosts = [
     codex.installed ? "codex" : null,
     claude.installed ? "claude-code" : null,
-    openclaw.installed ? "openclaw" : null
+    openclaw.installed ? "openclaw" : null,
+    antigravity.installed ? "antigravity" : null
   ].filter(Boolean) as string[];
   const interactionReady = Boolean(
     codex.hostWiring?.enabled ||
       claude.interactionReady ||
       (claude.hostWiring?.wired && claude.hooksPresent?.userPromptSubmit && claude.hooksPresent?.sessionEnd) ||
-      openclaw.hostState?.enabled
+      openclaw.hostState?.enabled ||
+      antigravity.hostWiring.enabled
   );
+  const setupState = deriveSetupState({
+    sharedInitialized: sharedSetup.initialized,
+    installed: installedHosts.length > 0,
+    interactionReady
+  });
+  const valueState = deriveValueState(firstValueReadiness);
 
   console.log("ExperienceEngine status:");
   console.log(`- Available host CLIs: ${availableHosts.join(", ") || "none"}`);
   console.log(
     `- Installed hosts: ${installedHosts.join(", ") || "none"}`
   );
+  console.log(`- Setup state: ${setupState}`);
+  console.log(`- Value state: ${valueState}`);
+  console.log(`- Next step: ${firstValueReadiness.nextStep}`);
+
+  if (!options.verbose) {
+    console.log(
+      `- Recent decisions: ${decisionHealth.recentDecisions} total; ${decisionHealth.recentInjects} standard hints, ${decisionHealth.recentConservativeInjects} cautious hints, ${decisionHealth.recentSkips} no-hint decisions`
+    );
+    console.log(
+      `- Learning: captured ${learningQuality.capturedRuns}, rejected ${learningQuality.rejectedRuns}, not applicable ${learningQuality.notApplicableRuns}`
+    );
+    const retrievalPattern = summarizeRetrievalPattern(decisionHealth);
+    if (retrievalPattern) {
+      console.log(`- Retrieval pattern: ${retrievalPattern}`);
+    }
+    console.log("- More detail: run `ee status --verbose`.");
+    return;
+  }
+
   console.log(`- Distillation provider: ${config.distillerProvider}`);
   console.log(`- Distillation model: ${config.distillerModel}`);
   console.log(`- Sync second-opinion mode: ${config.syncSecondOpinionMode}`);
   console.log(`- Sync second-opinion model: ${config.syncSecondOpinionModel || config.distillerModel || "shared distiller default"}`);
   console.log(`- Embedding provider mode: ${config.embeddingProvider}`);
   console.log(`- Embedding API provider override: ${config.embeddingApiProvider}`);
-  console.log(
-    `- Setup state: ${deriveSetupState({
-      sharedInitialized: sharedSetup.initialized,
-      installed: installedHosts.length > 0,
-      interactionReady
-    })}`
-  );
-  console.log(`- Value state: ${deriveValueState(firstValueReadiness)}`);
-  console.log(`- Next step: ${firstValueReadiness.nextStep}`);
   if (codex.learningLoop) {
     console.log(`- Codex learning loop: ${codex.learningLoop.state}`);
     console.log(`- Codex instruction block: ${codex.learningLoop.instructionState}`);
@@ -163,6 +187,15 @@ export const runStatusCommand = (): void => {
     console.log(`- OpenClaw workspace scope mode: ${openclaw.workspace.isolationBehavior}`);
     if (openclaw.workspace.globalWorkspace) {
       console.log("- OpenClaw workspace note: global workspace turns are session-isolated until a project root is available");
+    }
+  }
+  if (antigravity.installed || antigravity.hostWiring.wired || antigravity.agyCliAvailable || antigravity.ideCliAvailable) {
+    console.log(`- Antigravity MCP wiring: ${antigravity.hostWiring.wired ? "wired" : "not wired"}`);
+    console.log(`- Antigravity hooks: ${antigravity.hooksRegistered ? "registered" : "not registered"}`);
+    console.log(`- Antigravity lifecycle mode: ${antigravity.lifecycleMode}`);
+    console.log(`- Antigravity agy CLI: ${antigravity.agyCliAvailable ? "available" : "not found"}`);
+    if (antigravity.recommendedNextStep) {
+      console.log(`- Antigravity next step: ${antigravity.recommendedNextStep}`);
     }
   }
   console.log(`- Recent retrieval decisions in current repo: ${decisionHealth.recentDecisions}`);

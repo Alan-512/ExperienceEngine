@@ -258,7 +258,7 @@ ExperienceEngine surfaces are grouped by workflow tier:
 
 Workflow tier is separate from mutation risk. Operator review, hygiene, and export drafts are operator-tier but read-only. Install, upgrade, import, and rollback are operator-tier and high-impact.
 
-`ee status` and `ee doctor` now also summarize recent retrieval health in product language. They still show the raw counters, but they additionally explain whether ExperienceEngine is mostly injecting, mostly staying conservative, or still skipping too many close-match tasks in the current repo.
+`ee status` and `ee doctor` now also summarize recent retrieval health in product language. `ee status` defaults to a concise daily progress view; use `ee status --verbose` when you need host wiring details, model configuration, raw retrieval counters, second-opinion counters, and full learning-quality diagnostics.
 
 Their roles are intentionally different:
 

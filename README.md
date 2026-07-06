@@ -463,6 +463,7 @@ Use CLI fallback when you need explicit operator control:
 
 ```bash
 ee status
+ee status --verbose
 ee doctor codex
 ee doctor claude-code
 ee doctor openclaw
@@ -471,6 +472,8 @@ ee inspect --last
 ee helped
 ee harmed
 ```
+
+`ee status` is the concise daily progress view. Use `ee status --verbose` for host wiring details, model configuration, raw retrieval counters, second-opinion counters, and learning-quality diagnostics.
 
 ---
 

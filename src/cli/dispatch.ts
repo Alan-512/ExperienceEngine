@@ -131,7 +131,7 @@ export const runCliCommand = async (command: string | undefined, args: string[])
     }
     case "status": {
       const { runStatusCommand } = await import("./commands/status.js");
-      runStatusCommand();
+      runStatusCommand({ verbose: args.includes("--verbose") || args.includes("-v") });
       break;
     }
     case "export": {

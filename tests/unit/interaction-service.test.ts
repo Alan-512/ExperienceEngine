@@ -344,6 +344,40 @@ describe("ExperienceInteractionService", () => {
     });
   });
 
+  it("personalizes first-value next step from recent rejection reasons", () => {
+    const homeDir = makeTempDir();
+    const cwd = "/repo";
+    const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const scope = resolveScope(cwd);
+    const taskRunRepo = new TaskRunRepository(db);
+    const timestamp = nowIso();
+
+    for (const id of ["run_expression_a", "run_expression_b"]) {
+      taskRunRepo.upsert({
+        id,
+        host: "codex",
+        scope_id: scope.scope_id,
+        session_id: id,
+        task_type: "general",
+        task_summary: id,
+        started_at: timestamp,
+        ended_at: timestamp,
+        final_status: "success",
+        learning_status: "rejected",
+        learning_reason: "expression-layer refinement without substantive execution evidence",
+        created_at: timestamp,
+        updated_at: timestamp
+      });
+    }
+
+    const service = new ExperienceInteractionService(config);
+    expect(service.inspectFirstValueReadiness(cwd).nextStep).toBe(
+      "Next, use ExperienceEngine on a real implementation or debugging task rather than wording-only edits, so it can capture transferable execution evidence."
+    );
+  });
+
   it("excludes heartbeat no-op records from learning and decision health windows", () => {
     const homeDir = makeTempDir();
     const cwd = "/repo";

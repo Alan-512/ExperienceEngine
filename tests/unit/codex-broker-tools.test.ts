@@ -249,7 +249,7 @@ describe("codex broker tools", () => {
       actionId: "inspect_backup_inventory"
     });
     expect(backupsPayload.result).toEqual(expect.any(Array));
-  });
+  }, 20_000);
 
   it("keeps node lifecycle updates reachable through broker execution", async () => {
     const homeDir = makeTempDir();

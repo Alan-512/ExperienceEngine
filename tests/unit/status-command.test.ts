@@ -113,6 +113,20 @@ let mockOpenClawStatus: {
   }
 };
 
+let mockAntigravityStatus = {
+  installed: true,
+  lifecycleMode: "validated_hooks",
+  mcpRegistered: true,
+  hooksRegistered: true,
+  agyCliAvailable: true,
+  ideCliAvailable: false,
+  recommendedNextStep: "Start Agent Desktop in any project, or use `ee agy exec -C <project> \"<prompt>\"` for headless CLI runs.",
+  hostWiring: {
+    wired: true,
+    enabled: true
+  }
+};
+
 let mockDecisionHealth = {
   scopeId: "scope_repo",
   recentDecisions: 3,
@@ -255,6 +269,19 @@ afterEach(() => {
       isolationBehavior: "session_isolated"
     }
   };
+  mockAntigravityStatus = {
+    installed: true,
+    lifecycleMode: "validated_hooks",
+    mcpRegistered: true,
+    hooksRegistered: true,
+    agyCliAvailable: true,
+    ideCliAvailable: false,
+    recommendedNextStep: "Start Agent Desktop in any project, or use `ee agy exec -C <project> \"<prompt>\"` for headless CLI runs.",
+    hostWiring: {
+      wired: true,
+      enabled: true
+    }
+  };
   mockDecisionHealth = {
     scopeId: "scope_repo",
     recentDecisions: 3,
@@ -330,6 +357,10 @@ vi.mock("../../src/install/openclaw-installer.js", () => ({
   inspectOpenClawInstall: () => mockOpenClawStatus
 }));
 
+vi.mock("../../src/install/antigravity.js", () => ({
+  inspectAntigravityInstall: () => mockAntigravityStatus
+}));
+
 vi.mock("../../src/config/load-config.js", () => ({
   loadConfig: () => ({
     distillerProvider: "gemini",
@@ -358,18 +389,18 @@ vi.mock("../../src/interaction/service.js", () => ({
 }));
 
 describe("status command", () => {
-  it("prints a compact product-facing summary", () => {
+  it("prints a verbose product-facing summary", () => {
     const home = makeTempDir();
     process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
     writeSharedSettings(process.env.EXPERIENCE_ENGINE_HOME);
 
-    runStatusCommand();
+    runStatusCommand({ verbose: true });
 
     expect(consoleLogSpy.mock.calls).toEqual(
       expect.arrayContaining([
         ["ExperienceEngine status:"],
         ["- Available host CLIs: codex, openclaw"],
-        ["- Installed hosts: codex, claude-code, openclaw"],
+        ["- Installed hosts: codex, claude-code, openclaw, antigravity"],
         ["- Distillation provider: gemini"],
         ["- Distillation model: gemini-3.1-flash-lite-preview"],
         ["- Embedding provider mode: api"],
@@ -392,6 +423,11 @@ describe("status command", () => {
         ["- OpenClaw async posttask default: disabled"],
         ["- OpenClaw workspace scope mode: session_isolated"],
         ["- OpenClaw workspace note: global workspace turns are session-isolated until a project root is available"],
+        ["- Antigravity MCP wiring: wired"],
+        ["- Antigravity hooks: registered"],
+        ["- Antigravity lifecycle mode: validated_hooks"],
+        ["- Antigravity agy CLI: available"],
+        ["- Antigravity next step: Start Agent Desktop in any project, or use `ee agy exec -C <project> \"<prompt>\"` for headless CLI runs."],
         ["- Recent retrieval decisions in current repo: 3"],
         ["- Recent standard hints (inject): 1"],
         ["- Recent cautious hints (inject_conservative): 1"],
@@ -420,6 +456,24 @@ describe("status command", () => {
     );
   });
 
+  it("keeps the default status output concise", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    writeSharedSettings(process.env.EXPERIENCE_ENGINE_HOME);
+
+    runStatusCommand();
+
+    expect(consoleLogSpy).toHaveBeenCalledWith("ExperienceEngine status:");
+    expect(consoleLogSpy).toHaveBeenCalledWith("- Setup state: Ready");
+    expect(consoleLogSpy).toHaveBeenCalledWith("- Value state: First value reached");
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      "- Recent decisions: 3 total; 1 standard hints, 1 cautious hints, 1 no-hint decisions"
+    );
+    expect(consoleLogSpy).toHaveBeenCalledWith("- Learning: captured 1, rejected 3, not applicable 1");
+    expect(consoleLogSpy).toHaveBeenCalledWith("- More detail: run `ee status --verbose`.");
+    expect(consoleLogSpy).not.toHaveBeenCalledWith("- Codex hooks: healthy");
+  });
+
   it("prints when Codex MCP is ready but the ee CLI fallback is not on PATH", () => {
     const home = makeTempDir();
     process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
@@ -431,7 +485,7 @@ describe("status command", () => {
         "Codex MCP can still run ExperienceEngine, but CLI fallback commands like `ee inspect --last` need the `ee` binary on PATH or an explicit npx invocation."
     };
 
-    runStatusCommand();
+    runStatusCommand({ verbose: true });
 
     expect(consoleLogSpy).toHaveBeenCalledWith("- Codex CLI fallback available: no");
     expect(consoleLogSpy).toHaveBeenCalledWith(
@@ -453,7 +507,7 @@ describe("status command", () => {
         "Install or use the Linux Codex CLI earlier on PATH, or invoke the Linux binary directly before running EE host validation."
     };
 
-    runStatusCommand();
+    runStatusCommand({ verbose: true });
 
     expect(consoleLogSpy).toHaveBeenCalledWith(
       "- Codex CLI PATH warning: WSL PATH resolves `codex` to the WindowsApps shim, which can fail with permission errors inside Linux."
@@ -488,6 +542,7 @@ describe("status command", () => {
     mockClaudeStatus.interactionReady = false;
     mockClaudeStatus.hostWiring.wired = false;
     mockOpenClawStatus.hostState.enabled = false;
+    mockAntigravityStatus.hostWiring.enabled = false;
     mockFirstValueReadiness = {
       rawRecords: 0,
       taskRuns: 0,
@@ -510,6 +565,7 @@ describe("status command", () => {
     mockClaudeStatus.interactionReady = false;
     mockClaudeStatus.hostWiring.wired = false;
     mockOpenClawStatus.hostState.enabled = false;
+    mockAntigravityStatus.hostWiring.enabled = false;
     mockFirstValueReadiness = {
       rawRecords: 0,
       taskRuns: 0,

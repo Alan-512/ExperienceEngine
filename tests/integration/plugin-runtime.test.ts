@@ -601,10 +601,12 @@ describe("OpenClaw plugin runtime", () => {
     const homeDir = makeTempDir();
     const originalHome = process.env.HOME;
     const originalUserProfile = process.env.USERPROFILE;
+    const originalExperienceEngineHomeForTest = process.env.EXPERIENCE_ENGINE_HOME;
     const handlers = new Map<string, Handler>();
 
     process.env.HOME = homeDir;
     process.env.USERPROFILE = homeDir;
+    process.env.EXPERIENCE_ENGINE_HOME = join(homeDir, ".experienceengine");
     const installReport = installOpenClawAdapter({
       homeDir,
       packageSourceBuilder() {
@@ -644,6 +646,11 @@ describe("OpenClaw plugin runtime", () => {
         delete process.env.USERPROFILE;
       } else {
         process.env.USERPROFILE = originalUserProfile;
+      }
+      if (originalExperienceEngineHomeForTest === undefined) {
+        delete process.env.EXPERIENCE_ENGINE_HOME;
+      } else {
+        process.env.EXPERIENCE_ENGINE_HOME = originalExperienceEngineHomeForTest;
       }
     }
   }, 10_000);

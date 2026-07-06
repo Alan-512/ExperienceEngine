@@ -12,10 +12,10 @@
 
 | 字段 | 当前值 |
 | --- | --- |
-| 最近同步日期 | 2026-05-25 |
-| 最近同步范围 | `v0.4.2` 发布后架构：host trace capsule、trace 持久化边界、OpenClaw runtime closure 修复、Antigravity 用户级 wiring、npm/GitHub/ClawHub 发布状态 |
+| 最近同步日期 | 2026-07-05 |
+| 最近同步范围 | `v0.4.7` 当前架构：host trace capsule、trace 持久化边界、OpenClaw runtime closure、Codex lifecycle 安装修复、Claude/Codex 用户级 wiring、Antigravity 用户级 wiring 与真实宿主验证状态 |
 | 当前宿主基线 | OpenClaw、Claude Code、Codex、Antigravity |
-| 发布基线 | `v0.4.2` 已发布到 npm、GitHub Release 和 ClawHub；ClawHub package latest 指向 `0.4.2`，后台 scan 可能仍异步显示 `pending` |
+| 发布基线 | 当前仓库版本为 `v0.4.7`，最近发布说明记录 Codex Windows lifecycle install / doctor / hook 修复；历史 `v0.4.2` ClawHub 状态不再作为当前架构基线 |
 | Antigravity 状态 | 已记录用户级全局插件/MCP wiring、Agent Desktop、`agy` CLI、IDE hooks 观测、项目级 fallback 与 `ee agy exec -C <project>` 包装器 |
 | TraceCapsule 状态 | 已落地为 runtime trace 输入模型和诊断快照模型；normal mode 只持久化 `trace_provenance_json` / `trace_completeness` 摘要，不写 full trace capsule/events；诊断快照需显式开启并命中 host/scope allowlist |
 | 更新原则 | 记录当前真实架构；进行中的实现只在代码落地并验证后同步到正文架构图 |
@@ -151,10 +151,11 @@ flowchart TD
   Host --> Adapter[Host Adapter Layer]
   Adapter --> Trace[Trace Normalization<br/>capability profile / provenance]
   Adapter --> RuntimePrompt[Prompt Runtime<br/>beforePromptBuild / lookup hints]
+  RuntimePrompt --> PromptDecision[PromptDecisionPipeline<br/>fingerprint / candidates / policy / delivery]
   Adapter --> RuntimeTask[Task Runtime<br/>tool result / finalize task]
   Adapter --> Interaction[Interaction Surface<br/>inspect / feedback / status]
 
-  RuntimePrompt --> InputAdapter[Input Adapter<br/>buildExperienceInput]
+  PromptDecision --> InputAdapter[Input Adapter<br/>buildExperienceInput]
   RuntimeTask --> InputAdapter
   Trace --> RuntimeTask
 
@@ -206,6 +207,8 @@ flowchart TD
   Review --> SQLite
   Node --> Vector
 ```
+
+Prompt-time decision ownership is shared through `src/runtime/prompt-decision-pipeline.ts`. The lightweight `ExperiencePromptRuntimeService` used by shared MCP paths such as Codex / Antigravity and the full `ExperienceRuntimeService` used by Claude Code / OpenClaw both delegate to this pipeline. The pipeline owns project fingerprint persistence, exact-scope and conservative cross-scope candidate loading, diagnostic and `shadow_probe` candidate loading, repo policy evaluation, delivery-mode suppression, scorecard creation, and `InjectionEvent` persistence. Host-specific runtimes still own host trace capture, tool-result handling, lifecycle finalization, and background governance wakeups.
 
 ---
 

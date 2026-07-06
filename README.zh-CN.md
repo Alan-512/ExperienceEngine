@@ -453,6 +453,7 @@ Mark the last ExperienceEngine intervention as harmful. (把刚才那次 Experie
 
 ```bash
 ee status
+ee status --verbose
 ee doctor codex
 ee doctor claude-code
 ee doctor openclaw
@@ -461,6 +462,8 @@ ee inspect --last
 ee helped
 ee harmed
 ```
+
+`ee status` 是简洁的日常进度视图。需要宿主 wiring 细节、模型配置、原始检索计数、second-opinion 计数和 learning-quality 诊断时，再使用 `ee status --verbose`。
 
 ---
 

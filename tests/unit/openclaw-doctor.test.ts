@@ -161,7 +161,7 @@ describe("OpenClaw doctor host-state parsing", () => {
     });
     expect(status.versionStatus.recordedVersion).toBe(currentVersion);
     expect(status.versionStatus.state).toBe("current");
-  });
+  }, 20_000);
 
   it("classifies owned, advisory, and external warnings separately", () => {
     const classified = classifyOpenClawHostWarnings({

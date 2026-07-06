@@ -1567,6 +1567,7 @@ export class ExperienceInteractionService {
     const taskRuns = summary.runtime.taskRuns;
     const candidates = summary.candidates.pending;
     const nodes = summary.nodes.candidate + summary.nodes.active + summary.nodes.cooling + summary.nodes.retired;
+    const learningQuality = this.inspectLearningQualityHealth(cwd, 20);
 
     let nextStep = "Keep working in the same repo so ExperienceEngine can compare similar tasks and promote durable hints.";
     if (nodes > 0) {
@@ -1576,6 +1577,21 @@ export class ExperienceInteractionService {
         "Keep working in the same repo on a few similar tasks. ExperienceEngine will promote formal hints once it sees enough repeated evidence.";
     } else if (rawRecords === 0 && taskRuns === 0) {
       nextStep = "Run a few real coding tasks in this repo so ExperienceEngine can start capturing task signals.";
+    }
+
+    const topRejectionBucket = (Object.entries(learningQuality.rejectionReasons) as Array<[LearningRejectionBucket, number]>)
+      .filter(([, count]) => count > 0)
+      .sort((left, right) => right[1] - left[1] || left[0].localeCompare(right[0]))[0]?.[0];
+    if (nodes === 0 && learningQuality.rejectedRuns > 0 && topRejectionBucket) {
+      if (topRejectionBucket === "expression_only") {
+        nextStep = "Next, use ExperienceEngine on a real implementation or debugging task rather than wording-only edits, so it can capture transferable execution evidence.";
+      } else if (topRejectionBucket === "generic_advice" || topRejectionBucket === "no_transferable_value") {
+        nextStep = "Next, pick a concrete repeated coding task with commands, errors, or verification output; recent runs were too generic to promote into reusable guidance.";
+      } else if (topRejectionBucket === "insufficient_evidence" || topRejectionBucket === "gate_failure") {
+        nextStep = "Next, run a few similar tasks in this repo and include observable tool results, so ExperienceEngine has enough evidence to promote a durable hint.";
+      } else if (topRejectionBucket === "ordinary_success") {
+        nextStep = "Next, try a task with a concrete failure, decision point, or repeated workflow; ordinary one-off successes usually stay as history instead of reusable guidance.";
+      }
     }
 
     return {

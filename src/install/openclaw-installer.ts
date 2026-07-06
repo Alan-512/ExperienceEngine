@@ -17,7 +17,12 @@ import { basename, dirname, join, posix, resolve } from "node:path";
 import { loadConfig } from "../config/load-config.js";
 import { defaultConfig } from "../config/default-config.js";
 import type { ExperienceEngineConfig } from "../config/config-schema.js";
-import { resolveExperienceEnginePaths, resolveProductStateDir, type ResolvedPathInfo } from "../config/path-resolver.js";
+import {
+  isolatePathEnvForHomeDir,
+  resolveExperienceEnginePaths,
+  resolveProductStateDir,
+  type ResolvedPathInfo
+} from "../config/path-resolver.js";
 import {
   buildOpenClawInstallCommands,
   buildOpenClawAllowSetCommand,
@@ -637,11 +642,11 @@ const readOpenClawPluginEntryConfig = (runner?: OpenClawCommandRunner) => {
 };
 
 export const installOpenClawAdapter = (options: InstallerOptions = {}): OpenClawInstallReport => {
-  const env = options.env ?? process.env;
+  const env = options.env ?? (options.homeDir ? isolatePathEnvForHomeDir(process.env) : process.env);
   const resolvedConfig = loadConfig({}, { env, homeDir: options.homeDir });
   const paths = resolveExperienceEnginePaths({
     adapter: "openclaw",
-    env: options.env ?? process.env,
+    env,
     homeDir: options.homeDir
   });
   const packageRoot = resolveExperienceEnginePackageRoot();

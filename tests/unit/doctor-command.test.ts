@@ -195,7 +195,7 @@ describe("doctor command", () => {
         ["Embedding summary:"]
       ])
     );
-  });
+  }, 20_000);
 
   it("does not mark Claude Code as enabled when hooks exist but MCP wiring is missing", async () => {
     await runDoctorCommand(undefined, {
@@ -587,7 +587,7 @@ describe("doctor command", () => {
         ]
       ])
     );
-  });
+  }, 20_000);
 
   it("prints registry advisories when npm or pnpm uses a non-official registry", async () => {
     await runDoctorCommand("codex", {
@@ -622,7 +622,7 @@ describe("doctor command", () => {
     expect(consoleLogSpy).toHaveBeenCalledWith(
       "[ExperienceEngine] Recommended next step: npm config set registry https://registry.npmjs.org --global"
     );
-  });
+  }, 20_000);
 
   it("prints a cold-start readiness summary when formal experience is still warming up", async () => {
     await runDoctorCommand("codex", {

@@ -1,4 +1,4 @@
-import { mkdtempSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { DatabaseSync } from "node:sqlite";
@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { loadConfig } from "../../src/config/load-config.js";
 import { resolveScope } from "../../src/input/scope-resolver.js";
 import { ExperienceRuntimeService } from "../../src/runtime/service.js";
+import { ExperiencePromptRuntimeService } from "../../src/runtime/prompt-service.js";
 import { decidePosttaskHybridRoute } from "../../src/runtime/service.js";
 import { bootstrapDatabase, openDatabase } from "../../src/store/sqlite/db.js";
 import type { GovernanceDrainWorker } from "../../src/maintenance/hygiene-governance-scheduler.js";
@@ -973,6 +974,67 @@ describe("ExperienceRuntimeService finalize transaction", () => {
         attribution_reason: "diagnostic_record"
       })
     ]);
+  });
+
+  it("keeps full and lightweight prompt runtimes equivalent for shadow-probe diagnostics", async () => {
+    const runtimeDir = makeTempDir();
+    const repoDir = join(runtimeDir, "repo");
+    mkdirSync(repoDir, { recursive: true });
+    writeFileSync(join(repoDir, "package.json"), JSON.stringify({ name: "prompt-equivalence-fixture" }), "utf8");
+    const sqlitePath = join(runtimeDir, "data", "sqlite", "experienceengine.db");
+    seedStrategyNode(sqlitePath, repoDir, "node_shadow_probe_diagnostic", {
+      state: "cooling",
+      delivery_state: "shadow_probe",
+      compact_hint: "Run the failing vitest auth test before editing and verify after the fix.",
+      retrieval_text: "Fix the failing vitest auth test\nRun the failing vitest auth test before editing and verify after the fix."
+    });
+    const config = loadConfig({
+      dataDir: join(runtimeDir, "data"),
+      sqlitePath,
+      captureDir: join(runtimeDir, "captures"),
+      distillationAutoDrain: false,
+      distillationAllowPassthrough: true
+    }, { homeDir: runtimeDir });
+    const fullRuntime = new ExperienceRuntimeService(config, undefined, { homeDir: runtimeDir, env: {} });
+    const lightweightRuntime = new ExperiencePromptRuntimeService(config);
+
+    const fullPrompt = await fullRuntime.beforePromptBuild({
+      host: "claude-code",
+      sessionId: "full-shadow-probe-session",
+      cwd: repoDir,
+      userMessage: "Fix the failing vitest auth test",
+      taskSummary: "Fix the failing vitest auth test"
+    });
+    const lightweightPrompt = await lightweightRuntime.beforePromptBuild({
+      host: "codex",
+      sessionId: "lightweight-shadow-probe-session",
+      cwd: repoDir,
+      userMessage: "Fix the failing vitest auth test",
+      taskSummary: "Fix the failing vitest auth test"
+    });
+
+    expect(lightweightPrompt.mode).toBe(fullPrompt.mode);
+    expect(lightweightPrompt.mode).toBe("skip");
+    expect(lightweightPrompt.input.injected_node_ids).toEqual([]);
+    expect(fullPrompt.input.injected_node_ids).toEqual([]);
+    expect(lightweightPrompt.scorecard).toMatchObject({
+      mode: "skip",
+      interventionStrength: "diagnostic_hint",
+      skipReasonCode: "record_only_diagnostic_candidate",
+      recordOnlyDiagnosticCandidateIds: ["node_shadow_probe_diagnostic"]
+    });
+    expect(fullPrompt.scorecard).toMatchObject({
+      mode: "skip",
+      interventionStrength: "diagnostic_hint",
+      skipReasonCode: "record_only_diagnostic_candidate",
+      recordOnlyDiagnosticCandidateIds: ["node_shadow_probe_diagnostic"]
+    });
+
+    const db = new DatabaseSync(sqlitePath);
+    const fingerprintRow = db
+      .prepare("SELECT scope_id FROM scope_fingerprints WHERE scope_id = ? LIMIT 1")
+      .get(resolveScope(repoDir).scope_id) as { scope_id: string } | undefined;
+    expect(fingerprintRow?.scope_id).toBe(resolveScope(repoDir).scope_id);
   });
 
   it("lets a delivered harmful diagnostic hint enter governance writeback", async () => {

@@ -24,6 +24,16 @@ type ResolvePathOptions = {
   overrides?: Partial<ExperienceEngineConfig>;
 };
 
+export const isolatePathEnvForHomeDir = (env: NodeJS.ProcessEnv): NodeJS.ProcessEnv => {
+  const {
+    EXPERIENCE_ENGINE_HOME,
+    EXPERIENCE_ENGINE_DATA_DIR,
+    EXPERIENCE_ENGINE_CAPTURE_DIR,
+    ...rest
+  } = env;
+  return rest;
+};
+
 const resolveHome = (options?: ResolvePathOptions): string =>
   options?.homeDir ? resolve(options.homeDir) : resolve(homedir());
 
@@ -42,7 +52,7 @@ const hasExplicitPaths = (
 
 export const resolveExperienceEnginePaths = (options: ResolvePathOptions = {}): ResolvedPathInfo => {
   const adapter = options.adapter ?? "openclaw";
-  const env = options.env ?? process.env;
+  const env = options.env ?? (options.homeDir ? isolatePathEnvForHomeDir(process.env) : process.env);
   const overrides = options.overrides ?? {};
   const home = resolveHome(options);
 

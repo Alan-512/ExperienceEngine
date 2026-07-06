@@ -12,7 +12,7 @@ import {
 } from "../../adapters/claude-code/session-store.js";
 import { toClaudePromptContext, toClaudeToolResult } from "../../adapters/claude-code/runtime-projection.js";
 import { loadConfig } from "../../config/load-config.js";
-import { resolveExperienceEnginePaths } from "../../config/path-resolver.js";
+import { isolatePathEnvForHomeDir, resolveExperienceEnginePaths } from "../../config/path-resolver.js";
 
 type ClaudeHookPayload = {
   session_id?: string;
@@ -48,7 +48,7 @@ const sanitizeSegment = (value: string | undefined, fallback: string): string =>
 const createClaudeRuntime = async (options: ClaudeHookOptions = {}) => {
   const paths = resolveExperienceEnginePaths({
     adapter: "claude-code",
-    env: options.env ?? process.env,
+    env: options.env ?? (options.homeDir ? isolatePathEnvForHomeDir(process.env) : process.env),
     homeDir: options.homeDir
   });
   const { ExperienceRuntimeService } = await import("../../runtime/service.js");
@@ -61,7 +61,7 @@ const createClaudeRuntime = async (options: ClaudeHookOptions = {}) => {
         captureDir: paths.captureDir
       },
       {
-        env: options.env ?? process.env,
+        env: options.env ?? (options.homeDir ? isolatePathEnvForHomeDir(process.env) : process.env),
         homeDir: options.homeDir
       }
     ),
@@ -77,7 +77,7 @@ const createClaudeRuntime = async (options: ClaudeHookOptions = {}) => {
 const queueDir = (options: ClaudeHookOptions = {}): string => {
   const paths = resolveExperienceEnginePaths({
     adapter: "claude-code",
-    env: options.env ?? process.env,
+    env: options.env ?? (options.homeDir ? isolatePathEnvForHomeDir(process.env) : process.env),
     homeDir: options.homeDir
   });
   const dir = join(paths.dataDir, "hook-queue");
@@ -209,7 +209,7 @@ export const persistClaudeHookCapture = (
 
   const paths = resolveExperienceEnginePaths({
     adapter: "claude-code",
-    env: options.env ?? process.env,
+    env: options.env ?? (options.homeDir ? isolatePathEnvForHomeDir(process.env) : process.env),
     homeDir: options.homeDir
   });
 

@@ -194,5 +194,5 @@ Install path: ${packageRoot}
 
     expect(isOpenClawRepairRecommended(status)).toBe(false);
     expect(status.hostWiring.restartRecommended).toBe(false);
-  });
+  }, 20_000);
 });

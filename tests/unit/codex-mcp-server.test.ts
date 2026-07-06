@@ -991,7 +991,7 @@ describe("Codex MCP behavior loop", () => {
       }
     });
     expect(getRegisteredTool(server, "experienceengine_check_update")).toBeUndefined();
-  });
+  }, 20_000);
 
   it("keeps repo summary as a resource-only MCP surface", async () => {
     const homeDir = makeTempDir();

@@ -1,7 +1,7 @@
 import { join } from "node:path";
 import { defaultConfig } from "./default-config.js";
 import { configSchema, type ExperienceEngineConfig } from "./config-schema.js";
-import { resolveExperienceEnginePaths } from "./path-resolver.js";
+import { isolatePathEnvForHomeDir, resolveExperienceEnginePaths } from "./path-resolver.js";
 import { resolveExperienceEngineRuntimeEnv } from "./runtime-env.js";
 import { readExperienceEngineSettings } from "./settings-store.js";
 
@@ -20,8 +20,9 @@ export const loadConfig = (
   overrides: Partial<ExperienceEngineConfig> = {},
   options: LoadConfigOptions = {}
 ): ExperienceEngineConfig => {
+  const baseEnv = options.env ?? (options.homeDir ? isolatePathEnvForHomeDir(process.env) : process.env);
   const env = resolveExperienceEngineRuntimeEnv({
-    env: options.env ?? process.env,
+    env: baseEnv,
     homeDir: options.homeDir,
     overrides
   });
