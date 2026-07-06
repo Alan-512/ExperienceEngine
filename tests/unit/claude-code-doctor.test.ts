@@ -148,6 +148,27 @@ To remove this server, run: claude mcp remove "experienceengine" -s project`;
     expect(inspection.hooksPresent.userPromptSubmit).toBe(true);
   });
 
+  it("keeps doctor usable when install state exists but is not parseable", () => {
+    const homeDir = makeTempDir();
+    const projectDir = makeTempDir();
+    const installStateDir = join(homeDir, ".experienceengine", "adapters", "claude-code");
+    mkdirSync(installStateDir, { recursive: true });
+    writeFileSync(join(installStateDir, "install.json"), "");
+
+    const inspection = inspectClaudeCodeInstall({
+      homeDir,
+      projectDir,
+      env: {},
+      runner() {
+        return "";
+      }
+    });
+
+    expect(inspection.installed).toBe(true);
+    expect(inspection.versionStatus.state).toBe("unknown");
+    expect(inspection.runtimeTarget).toBeTruthy();
+  });
+
   it("treats marketplace-managed Claude wiring as installed even without local install state", () => {
     const homeDir = makeTempDir();
     const projectDir = makeTempDir();

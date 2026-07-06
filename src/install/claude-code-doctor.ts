@@ -71,6 +71,18 @@ type ClaudeInstallState = {
 type ClaudeHookSource = "project-local" | "marketplace" | "missing";
 const CLAUDE_MARKETPLACE_HOOK_SOURCE = "EXPERIENCE_ENGINE_CLAUDE_HOOK_SOURCE=marketplace";
 
+const readClaudeInstallState = (installStatePath: string): ClaudeInstallState | null => {
+  try {
+    const raw = readFileSync(installStatePath, "utf8").trim();
+    if (!raw) {
+      return null;
+    }
+    return JSON.parse(raw) as ClaudeInstallState;
+  } catch {
+    return null;
+  }
+};
+
 const hasHookCommand = (
   settings: ClaudeSettings | null,
   eventName: string,
@@ -160,9 +172,7 @@ export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
       // Ignored
     }
   }
-  const installState = paths.usedInstallState
-    ? (JSON.parse(readFileSync(paths.installStatePath, "utf8")) as ClaudeInstallState)
-    : null;
+  const installState = paths.usedInstallState ? readClaudeInstallState(paths.installStatePath) : null;
   const runtimeTarget = installState?.runtimeTarget ?? resolveClaudeRuntimeTarget({ env });
   const launcherPaths = ensureClaudeLaunchers({
     productHome: paths.productHome,
