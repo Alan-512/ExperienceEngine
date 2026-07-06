@@ -216,6 +216,8 @@ Hybrid posttask review ownership is shared through `src/runtime/hybrid-postmorte
 
 Attribution writeback ownership is shared through `src/runtime/attribution-writeback-service.ts`. The full runtime delegates automatic attribution record persistence, trajectory expectation matching, trace evidence reference selection, record-only diagnostic attribution rows, and shadow-probe quarantine release/retire writeback to this service. `ExperienceRuntimeService` still resolves the injection event during finalize and remains responsible for earlier injected-node lifecycle feedback updates.
 
+Injection outcome ownership is shared through `src/runtime/injection-outcome-service.ts`. The full runtime delegates injected-node automatic feedback updates, same-scope high-match promotion, cross-scope portable validation evidence, injection event resolution, harm observation, and downstream attribution writeback orchestration to this service. `ExperienceRuntimeService` still owns the transaction boundary and task lifecycle ordering.
+
 ---
 
 ## 4. Host Adapter Layer

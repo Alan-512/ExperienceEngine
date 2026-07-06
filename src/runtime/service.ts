@@ -1,16 +1,11 @@
 import { buildCandidateSignals } from "../analyzer/candidate-signals.js";
-import { classifyFailureAttributionReason } from "../feedback/automatic-attribution.js";
-import { applyFeedback } from "../feedback/feedback-manager.js";
-import { detectHarm } from "../feedback/harm-detector.js";
-import { deriveNodeOriginProfileForNode } from "../experience-management/node-lifecycle-governance.js";
 import { resolveHybridRolloutState } from "../hybrid/rollout.js";
 import { selectHybridRoute, type HybridRouteDecision, type HybridRouteSignals } from "../hybrid/router.js";
 import { nowIso } from "../utils/clock.js";
-import { createId, stableId } from "../utils/ids.js";
+import { stableId } from "../utils/ids.js";
 import type {
   ExperienceInput,
   InjectionEvent,
-  ExperienceNode,
   TaskRun,
   ToolEvent
 } from "../types/domain.js";
@@ -56,6 +51,7 @@ import type { DistillerEndpoint } from "../distillation/providers/types.js";
 import type { HybridWorkerClient, HybridWorkerClientOptions } from "../hybrid/worker-client.js";
 import { HybridPostmortemService } from "./hybrid-postmortem-service.js";
 import { AttributionWritebackService } from "./attribution-writeback-service.js";
+import { InjectionOutcomeService } from "./injection-outcome-service.js";
 
 type LearningRuntimeOptions = {
   env?: NodeJS.ProcessEnv;
@@ -164,6 +160,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly traceCapture;
   private readonly hybridPostmortem;
   private readonly attributionWriteback;
+  private readonly injectionOutcome;
   private readonly runtimeOptions: ExperienceRuntimeServiceOptions;
   private readonly backgroundLearningEnabled: boolean;
   private readonly hybridPosttaskEnabled: boolean;
@@ -273,6 +270,14 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       nodeRepo: this.nodeRepo,
       attributionRecordRepo: this.attributionRecordRepo,
       reviewEventRepo: this.reviewEventRepo
+    });
+    this.injectionOutcome = new InjectionOutcomeService({
+      inputRepo: this.inputRepo,
+      nodeRepo: this.nodeRepo,
+      reviewEventRepo: this.reviewEventRepo,
+      scopeFingerprintRepo: this.scopeFingerprintRepo,
+      injectionRepo: this.injectionRepo,
+      attributionWriteback: this.attributionWriteback
     });
     this.captureWriter = new RuntimeCaptureWriter(config, this.logger);
   }
@@ -479,144 +484,13 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     injectionEvent?: InjectionEvent,
     episodeId?: string
   ): void {
-    if (!input.injected_node_ids.length) {
-      return;
-    }
-
-    if (injectionEvent?.scorecard?.interventionStrength === "diagnostic_hint" && !injectionEvent.delivered) {
-      return;
-    }
-
-    const touched = input.injected_node_ids
-      .map((id) => this.nodeRepo.getById(id))
-      .filter((node): node is ExperienceNode => Boolean(node));
-
-    const automaticEvents = touched
-      .map((node) => {
-        if (input.outcome_signal === "success") {
-          return {
-            nodeId: node.id,
-            eventType: "mark_uncertain" as const
-          };
-        }
-
-        if (detectHarm(input, node)) {
-          return {
-            nodeId: node.id,
-            eventType: "mark_harmed" as const
-          };
-        }
-
-        return undefined;
-      })
-      .filter(
-        (
-          value
-        ): value is {
-          nodeId: string;
-          eventType: "mark_uncertain" | "mark_harmed";
-        } => Boolean(value)
-      );
-
-    const originProfilesByNodeId = Object.fromEntries(
-      touched.map((node) => {
-        return [node.id, deriveNodeOriginProfileForNode(this.inputRepo, node)];
-      })
+    this.injectionOutcome.updateInjectedNodes(
+      input,
+      attributionRecordId,
+      taskRunId,
+      injectionEvent,
+      episodeId
     );
-
-    const isDiagnosticHint = injectionEvent?.scorecard?.interventionStrength === "diagnostic_hint";
-    const highMatchPromotionIds = new Set(
-      isDiagnosticHint
-        ? []
-        : injectionEvent?.scorecard?.topCandidates
-        ?.filter((candidate) =>
-          candidate.matchScorecard?.scopeMatch === "same" &&
-          candidate.matchScorecard.overallMatchBand === "high" &&
-          candidate.matchScorecard.negativeEvidence.length === 0
-        )
-        .map((candidate) => candidate.id) ?? []
-    );
-    const promotedNodeIds: string[] = [];
-    const fpRecord = this.scopeFingerprintRepo.getById(input.scope_id);
-    const hostHash = fpRecord?.fingerprint_hash;
-
-    for (const node of applyFeedback(input, touched, attributionRecordId, { originProfilesByNodeId })) {
-      const shouldPromoteSameScopeHighMatch =
-        input.outcome_signal === "success" &&
-        input.scope_id === node.scope_id &&
-        highMatchPromotionIds.has(node.id) &&
-        node.state === "priority_candidate" &&
-        node.delivery_state === "conservative_only" &&
-        node.harmed_count === 0;
-      let nextNode = shouldPromoteSameScopeHighMatch
-        ? {
-            ...node,
-            state: "active" as const,
-            delivery_state: "eligible" as const,
-            validation_state: node.validation_state ?? "validated_by_reuse",
-            promotion_reason: node.promotion_reason ?? "same_scope_high_match_success"
-          }
-        : node;
-
-      if (hostHash && nextNode.scope_id !== input.scope_id) {
-        const harmed = detectHarm(input, nextNode);
-        const verdict =
-          input.outcome_signal === "success"
-            ? "success"
-            : harmed
-              ? "harmed"
-              : "none";
-
-        if (verdict === "success" || verdict === "harmed") {
-          const evidence = nextNode.portable_validation_evidence ?? { compatibilityClasses: {} };
-          const classes = evidence.compatibilityClasses ?? {};
-          const prev = classes[hostHash] ?? { successReuseCount: 0, harmCount: 0, lastUsedAt: 0 };
-
-          classes[hostHash] = {
-            successReuseCount: verdict === "success" ? prev.successReuseCount + 1 : prev.successReuseCount,
-            harmCount: verdict === "harmed" ? prev.harmCount + 1 : prev.harmCount,
-            lastUsedAt: Date.now()
-          };
-
-          nextNode = {
-            ...nextNode,
-            portable_validation_evidence: {
-              ...evidence,
-              compatibilityClasses: classes
-            }
-          };
-        }
-      }
-
-      if (shouldPromoteSameScopeHighMatch) {
-        promotedNodeIds.push(node.id);
-      }
-      this.nodeRepo.upsert(nextNode);
-    }
-
-    for (const event of automaticEvents) {
-      this.reviewEventRepo.upsert({
-        id: createId("review"),
-        episode_id: episodeId,
-        node_id: event.nodeId,
-        task_run_id: taskRunId,
-        event_type: event.eventType,
-        source: "automatic",
-        created_at: nowIso()
-      });
-    }
-
-    for (const nodeId of promotedNodeIds) {
-      this.reviewEventRepo.upsert({
-        id: createId("review"),
-        episode_id: episodeId,
-        node_id: nodeId,
-        task_run_id: taskRunId,
-        event_type: "promote_eligible",
-        source: "automatic",
-        created_at: nowIso()
-      });
-    }
   }
 
   async beforePromptBuild(context: HostPromptContext) {
@@ -697,39 +571,14 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
         taskRun,
         episodeId
       });
-      const injectionEvent = session.lastInjectionEvent ?? this.injectionRepo.getLatestBySessionId(sessionId);
-      this.updateInjectedNodes(traced.experienceInput, traced.record.record_id, traced.taskRun.id, injectionEvent, episodeId);
-      if (injectionEvent) {
-        const touchedNodes = injectionEvent.injected_node_ids
-          .map((id) => this.nodeRepo.getById(id))
-          .filter((node): node is ExperienceNode => Boolean(node));
-        const harmObserved = touchedNodes.some((node) => detectHarm(traced.experienceInput, node));
-        const attributionReason = !injectionEvent.delivered
-          ? "suppressed_delivery"
-          : traced.experienceInput.outcome_signal === "success"
-            ? "success_outcome"
-            : traced.experienceInput.outcome_signal === "failure"
-              ? touchedNodes
-                  .map((node) => classifyFailureAttributionReason(traced.experienceInput, node))
-                  .find((reason) => reason === "relevant_failure")
-                  ?? classifyFailureAttributionReason(traced.experienceInput)
-                : "unknown_outcome";
-        const resolvedInjectionEvent: InjectionEvent = {
-          ...injectionEvent,
-          was_successful: traced.experienceInput.outcome_signal === "success",
-          harm_observed: harmObserved,
-          attribution_reason: attributionReason,
-          resolved_at: nowIso()
-        };
-        this.injectionRepo.upsert(resolvedInjectionEvent);
-        this.attributionWriteback.writeAttributionRecords({
-          experienceInput: traced.experienceInput,
-          inputRecordId: traced.record.record_id,
-          taskRunId: traced.taskRun.id,
-          episodeId,
-          resolvedInjectionEvent
-        });
-      }
+      this.injectionOutcome.finalizeInjectionOutcome({
+        sessionId,
+        sessionLastInjectionEvent: session.lastInjectionEvent,
+        experienceInput: traced.experienceInput,
+        inputRecordId: traced.record.record_id,
+        taskRunId: traced.taskRun.id,
+        episodeId
+      });
       learningTaskContext = {
         input: traced.experienceInput,
         originRecordId: traced.record.record_id,
