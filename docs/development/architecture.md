@@ -220,6 +220,8 @@ Injection outcome ownership is shared through `src/runtime/injection-outcome-ser
 
 Posttask route ownership is shared through `src/runtime/posttask-route-service.ts`. The full runtime delegates hybrid rollout resolution, posttask route signal construction, candidate-signal derivation, postmortem-already-recorded checks, and `decidePosttaskHybridRoute` evaluation to this service. `ExperienceRuntimeService` still owns background learning task scheduling and the decision to invoke async postmortem after candidate persistence.
 
+Background learning ownership is shared through `src/runtime/background-learning-runtime.ts`. The full runtime delegates pending background learning task tracking, candidate persistence scheduling, and async postmortem invocation after candidate persistence to this service. `ExperienceRuntimeService` still owns lazy worker construction and exposes `waitForBackgroundLearning()` as the host-facing compatibility entrypoint.
+
 ---
 
 ## 4. Host Adapter Layer

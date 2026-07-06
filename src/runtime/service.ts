@@ -50,6 +50,7 @@ import { HybridPostmortemService } from "./hybrid-postmortem-service.js";
 import { AttributionWritebackService } from "./attribution-writeback-service.js";
 import { InjectionOutcomeService } from "./injection-outcome-service.js";
 import { PosttaskRouteService, type PosttaskLearningContext } from "./posttask-route-service.js";
+import { BackgroundLearningRuntime } from "./background-learning-runtime.js";
 export { decidePosttaskHybridRoute } from "./posttask-route-service.js";
 
 type LearningRuntimeOptions = {
@@ -129,13 +130,13 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly attributionWriteback;
   private readonly injectionOutcome;
   private readonly posttaskRoute;
+  private readonly backgroundLearning;
   private readonly runtimeOptions: ExperienceRuntimeServiceOptions;
   private readonly backgroundLearningEnabled: boolean;
   private readonly hybridPosttaskEnabled: boolean;
   private distillationWorkerPromise: Promise<DistillationQueueWorker> | undefined;
   private learningGatePromise: Promise<LlmLearningGate> | undefined;
   private hybridWorkerClientPromise: Promise<HybridWorkerClient> | undefined;
-  private readonly pendingLearningTasks = new Set<Promise<void>>();
   private readonly pendingHygieneGovernanceTasks = new Set<Promise<void>>();
   readonly captureWriter;
 
@@ -251,6 +252,13 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
       config: this.config,
       hybridReviewArtifactRepo: this.hybridReviewArtifactRepo
     });
+    this.backgroundLearning = new BackgroundLearningRuntime({
+      enabled: this.backgroundLearningEnabled,
+      learningPipeline: this.learningPipeline,
+      taskRunRepo: this.taskRunRepo,
+      hybridPostmortem: this.hybridPostmortem,
+      logger: this.logger
+    });
     this.captureWriter = new RuntimeCaptureWriter(config, this.logger);
   }
 
@@ -300,19 +308,6 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     }
   }
 
-  private trackLearningTask(task: Promise<void>): void {
-    const tracked = task
-      .catch((error) => {
-        this.logger.error?.("experienceengine.learning_failed", {
-          error: error instanceof Error ? error.message : String(error)
-        });
-      })
-      .finally(() => {
-        this.pendingLearningTasks.delete(tracked);
-      });
-    this.pendingLearningTasks.add(tracked);
-  }
-
   private trackHygieneGovernanceTask(task: Promise<void>): void {
     const tracked = task
       .catch((error) => {
@@ -328,7 +323,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
 
   async waitForBackgroundLearning(): Promise<void> {
     await Promise.allSettled([
-      ...this.pendingLearningTasks,
+      this.backgroundLearning.wait(),
       ...this.pendingHygieneGovernanceTasks
     ]);
   }
@@ -440,15 +435,6 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     return this.hybridWorkerClientPromise;
   }
 
-  private async persistCandidatesAsync(
-    input: ExperienceInput,
-    originRecordId: string,
-    taskRunId?: string,
-    sessionId?: string
-  ): Promise<void> {
-    await this.learningPipeline.persistCandidatesAsync(input, originRecordId, taskRunId, sessionId);
-  }
-
   private updateInjectedNodes(
     input: ExperienceInput,
     attributionRecordId: string,
@@ -554,38 +540,17 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     });
     this.sessions.delete(sessionId);
 
-    const { route: hybridPosttaskRoute, rollout } = this.posttaskRoute.resolve({
+    const routeResolution = this.posttaskRoute.resolve({
       sessionId,
       finalizedInput,
       learningTaskContext
     });
+    const { route: hybridPosttaskRoute, rollout } = routeResolution;
 
-    if (learningTaskContext && this.backgroundLearningEnabled) {
-      this.trackLearningTask(
-        (async () => {
-          await this.persistCandidatesAsync(
-            learningTaskContext.input,
-            learningTaskContext.originRecordId,
-            learningTaskContext.taskRunId,
-            learningTaskContext.sessionId
-          );
-
-          if (hybridPosttaskRoute.route !== "ESCALATE_ASYNC_POSTMORTEM") {
-            return;
-          }
-
-          const refreshedTaskRun = this.taskRunRepo.getById(learningTaskContext.taskRun.id) ?? learningTaskContext.taskRun;
-          await this.hybridPostmortem.persistAsync({
-            taskRun: refreshedTaskRun,
-            experienceInput: learningTaskContext.input,
-            routeDecision: hybridPosttaskRoute,
-            toolEvents: learningTaskContext.toolEvents,
-            rolloutMode: rollout.effectiveMode,
-            rolloutReason: rollout.reason
-          });
-        })()
-      );
-    }
+    this.backgroundLearning.schedulePosttaskLearning({
+      learningTaskContext,
+      routeResolution
+    });
 
     this.logger.info?.("experienceengine.finalize", {
       sessionId,
