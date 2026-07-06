@@ -63,7 +63,15 @@ export const readExperienceEngineSettings = (options: SettingsOptions = {}): Exp
     return {};
   }
 
-  return JSON.parse(readFileSync(settingsPath, "utf8")) as ExperienceEngineSettings;
+  try {
+    const raw = readFileSync(settingsPath, "utf8").trim();
+    if (!raw) {
+      return {};
+    }
+    return JSON.parse(raw) as ExperienceEngineSettings;
+  } catch {
+    return {};
+  }
 };
 
 export const writeExperienceEngineSettings = (
