@@ -13,7 +13,7 @@
 | 字段 | 当前值 |
 | --- | --- |
 | 最近同步日期 | 2026-07-06 |
-| 最近同步范围 | `v0.4.7` 当前架构：host trace capsule、trace 持久化边界、OpenClaw runtime closure、Codex lifecycle 安装修复、Claude/Codex 用户级 wiring、Antigravity 用户级 wiring、runtime worker factory、runtime session store 与 finalize task coordinator 边界 |
+| 最近同步范围 | `v0.4.7` 当前架构：host trace capsule、trace 持久化边界、OpenClaw runtime closure、Codex lifecycle 安装修复、Claude/Codex 用户级 wiring、Antigravity 用户级 wiring、runtime worker factory、runtime session store、finalize task coordinator 与 tool result runtime 边界 |
 | 当前宿主基线 | OpenClaw、Claude Code、Codex、Antigravity |
 | 发布基线 | 当前仓库版本为 `v0.4.7`，最近发布说明记录 Codex Windows lifecycle install / doctor / hook 修复；历史 `v0.4.2` ClawHub 状态不再作为当前架构基线 |
 | Antigravity 状态 | 已记录用户级全局插件/MCP wiring、Agent Desktop、`agy` CLI、IDE hooks 观测、项目级 fallback 与 `ee agy exec -C <project>` 包装器 |
@@ -210,7 +210,7 @@ flowchart TD
 
 Prompt-time decision ownership is shared through `src/runtime/prompt-decision-pipeline.ts`. The lightweight `ExperiencePromptRuntimeService` used by shared MCP paths such as Codex / Antigravity and the full `ExperienceRuntimeService` used by Claude Code / OpenClaw both delegate to this pipeline. The pipeline owns project fingerprint persistence, exact-scope and conservative cross-scope candidate loading, diagnostic and `shadow_probe` candidate loading, repo policy evaluation, delivery-mode suppression, scorecard creation, and `InjectionEvent` persistence.
 
-Runtime trace capture is shared through `src/runtime/trace-capture-service.ts`. The full runtime delegates trace capture, host trace normalization, trace provenance summary creation, and opt-in diagnostic trace capsule persistence to this service. Normal mode still persists narrow trace provenance on input/task records and does not write full trace capsules/events unless diagnostic snapshot persistence is explicitly enabled and allowed by host/scope filters. Host-specific runtimes still own tool-result handling, lifecycle finalization, and background governance wakeups.
+Runtime trace capture is shared through `src/runtime/trace-capture-service.ts`. The full runtime delegates trace capture, host trace normalization, trace provenance summary creation, and opt-in diagnostic trace capsule persistence to this service. Normal mode still persists narrow trace provenance on input/task records and does not write full trace capsules/events unless diagnostic snapshot persistence is explicitly enabled and allowed by host/scope filters. Host-specific runtimes still decide when to call trace capture during prompt/tool/finalize lifecycle events.
 
 Hybrid posttask review ownership is shared through `src/runtime/hybrid-postmortem-service.ts`. The full runtime delegates postmortem review capsule construction, hybrid worker invocation, provider-backed review fallback handling, hybrid invocation trace rows, accepted artifact persistence, and high-confidence injected-node review writeback to this service. `ExperienceRuntimeService` still decides when the posttask route escalates to async postmortem and remains the lifecycle coordinator around learning, finalize, and background task tracking.
 
@@ -224,7 +224,9 @@ Background learning ownership is shared through `src/runtime/background-learning
 
 Hygiene governance ownership is shared through `src/runtime/hygiene-governance-runtime.ts`. The full runtime delegates autonomous hygiene governance scheduler creation, optional LLM planner resolution, enqueue/drain task tracking, and governance failure logging to this service. `ExperienceRuntimeService` still captures host-event trace context and exposes the host-facing `signalHostEvent()` and finalization wakeup points.
 
-Tool-event recovery ownership is shared through `src/runtime/tool-event-recovery-runtime.ts`. The full runtime delegates tool event deduplication, tool-call-id keyed orphan result caching, and finalize-payload tool result recovery to this service. `ExperienceRuntimeService` still owns host-facing `persistToolResult()` and trace capture around persisted tool results.
+Tool-event recovery ownership is shared through `src/runtime/tool-event-recovery-runtime.ts`. The full runtime delegates tool event deduplication, tool-call-id keyed orphan result caching, and finalize-payload tool result recovery to this service. Host-facing persisted tool result handling is coordinated by `ToolResultRuntime`.
+
+Tool result runtime ownership is shared through `src/runtime/tool-result-runtime.ts`. The full runtime delegates host tool result normalization, trace capture for persisted tool results, persisted result recovery writeback, and tool-result telemetry logging to this service. `ExperienceRuntimeService.persistToolResult()` remains the host-facing compatibility entrypoint but no longer owns the internal tool-result pipeline.
 
 Runtime worker ownership is shared through `src/runtime/runtime-worker-factory.ts`. The full runtime delegates lazy construction and memoization of the LLM learning gate, distillation queue worker, and hybrid worker client to this factory. `ExperienceRuntimeService` still owns the callbacks passed into learning and hybrid services, but no longer owns dynamic worker imports or worker promise state.
 
@@ -481,16 +483,17 @@ waitForBackgroundLearning()
 1. 协调 host lifecycle entrypoints 与各 runtime 子服务
 2. 委托 RuntimeSessionStore 维护 runtime session state
 3. 委托 ToolEventRecoveryRuntime 处理工具事件去重、追加和 finalize payload 恢复
-4. 委托 FinalizeTaskCoordinator 协调 finalizeTask 的 transaction、trace、injection outcome、posttask route、background learning 和 governance wakeup
-5. 委托 TaskFinalizationService 构造 finalized ExperienceInput 并写入 task/input/outcome/stats
-6. 委托 TraceCaptureService 维护 runtime trace event buffer、trace provenance summary 和诊断快照持久化
-7. 委托 InjectionOutcomeService 处理注入结果、反馈更新和归因写回
-8. 委托 PosttaskRouteService 决定 posttask hybrid route
-9. 委托 BackgroundLearningRuntime 调度 background learning task
-10. 委托 HybridPostmortemService 处理 hybrid postmortem artifact 和 node review writeback
-11. 委托 HygieneGovernanceRuntime 处理 autonomous hygiene governance wakeups
-12. 委托 RuntimeWorkerFactory 懒加载 LlmLearningGate / DistillationQueueWorker / HybridWorkerClient
-13. 维护 RuntimeCaptureWriter
+4. 委托 ToolResultRuntime 协调 persistToolResult 的 normalize、trace capture、tool recovery 和 telemetry
+5. 委托 FinalizeTaskCoordinator 协调 finalizeTask 的 transaction、trace、injection outcome、posttask route、background learning 和 governance wakeup
+6. 委托 TaskFinalizationService 构造 finalized ExperienceInput 并写入 task/input/outcome/stats
+7. 委托 TraceCaptureService 维护 runtime trace event buffer、trace provenance summary 和诊断快照持久化
+8. 委托 InjectionOutcomeService 处理注入结果、反馈更新和归因写回
+9. 委托 PosttaskRouteService 决定 posttask hybrid route
+10. 委托 BackgroundLearningRuntime 调度 background learning task
+11. 委托 HybridPostmortemService 处理 hybrid postmortem artifact 和 node review writeback
+12. 委托 HygieneGovernanceRuntime 处理 autonomous hygiene governance wakeups
+13. 委托 RuntimeWorkerFactory 懒加载 LlmLearningGate / DistillationQueueWorker / HybridWorkerClient
+14. 维护 RuntimeCaptureWriter
 ```
 
 ### 5.4 Runtime session state
@@ -547,6 +550,21 @@ build finalized input
 ```
 
 该 coordinator 不直接做 candidate persistence、distillation 或 postmortem 写入；这些仍由 `BackgroundLearningRuntime`、`LearningPipelineService` 和 `HybridPostmortemService` 负责。
+
+### 5.7 Tool result runtime
+
+`src/runtime/tool-result-runtime.ts` 负责维护 persisted tool result 的执行顺序：
+
+```text
+normalize HostToolResult
+  -> resolve RuntimeSessionState
+  -> capture trace tool call/result events
+  -> append or cache tool event recovery state
+  -> write debug telemetry
+  -> return normalized ToolEvent
+```
+
+全局或 orphan tool result 如果没有 prompt session context，会使用最小安全 trace context：`sessionId=global`、空 `userMessage`、未知 host。这样 trace capture 和 orphan recovery 都能继续工作，但不会伪造宿主上下文。
 
 ---
 

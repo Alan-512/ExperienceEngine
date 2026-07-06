@@ -26,7 +26,6 @@ import { RepoPolicyRepository } from "../store/sqlite/repositories/repo-policy-r
 import { HybridInvocationTraceRepository } from "../store/sqlite/repositories/hybrid-invocation-trace-repo.js";
 import { TraceRepository } from "../store/sqlite/repositories/trace-repo.js";
 import { RuntimeCaptureWriter } from "../plugin/runtime-capture.js";
-import { normalizeToolResult } from "../plugin/hooks/tool-result-persist.js";
 import { HybridReviewArtifactRepository } from "../store/sqlite/repositories/hybrid-review-artifact-repo.js";
 import type { SchedulerOptions as HygieneGovernanceSchedulerOptions } from "../maintenance/hygiene-governance-scheduler.js";
 import { LearningPipelineService } from "./learning-pipeline-service.js";
@@ -44,6 +43,7 @@ import { ToolEventRecoveryRuntime } from "./tool-event-recovery-runtime.js";
 import { RuntimeWorkerFactory } from "./runtime-worker-factory.js";
 import { RuntimeSessionStore, type RuntimeSessionState } from "./session-runtime.js";
 import { FinalizeTaskCoordinator } from "./finalize-task-coordinator.js";
+import { ToolResultRuntime } from "./tool-result-runtime.js";
 export { decidePosttaskHybridRoute } from "./posttask-route-service.js";
 
 type LearningRuntimeOptions = {
@@ -84,6 +84,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   private readonly traceRepo;
   private readonly learningPipeline;
   private readonly taskFinalization;
+  private readonly toolResultRuntime;
   private readonly promptDecisionPipeline;
   private readonly traceCapture;
   private readonly hybridPostmortem;
@@ -249,6 +250,12 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
     this.toolEventRecovery = new ToolEventRecoveryRuntime({
       getSession: (sessionId) => this.getSession(sessionId)
     });
+    this.toolResultRuntime = new ToolResultRuntime({
+      getSession: (sessionId) => this.getSession(sessionId),
+      traceCapture: this.traceCapture,
+      toolEventRecovery: this.toolEventRecovery,
+      logger: this.logger
+    });
     this.captureWriter = new RuntimeCaptureWriter(config, this.logger);
   }
 
@@ -337,37 +344,7 @@ export class ExperienceRuntimeService implements ExperiencePlugin {
   }
 
   async persistToolResult(result: HostToolResult) {
-    const normalizedToolEvent = normalizeToolResult(result);
-    const sessionId = result.sessionId ?? "global";
-
-    const session = this.getSession(sessionId);
-    const traceContext = session.context ?? {
-      host: undefined,
-      sessionId,
-      userMessage: ""
-    };
-
-    this.traceCapture.captureToolResultEvents({
-      sessionId,
-      session,
-      context: traceContext,
-      result
-    });
-
-    this.toolEventRecovery.recordPersistedToolResult({
-      sessionId,
-      result,
-      normalizedToolEvent
-    });
-
-    this.logger.debug?.("experienceengine.tool_result_persist", {
-      sessionId,
-      toolName: normalizedToolEvent.tool_name,
-      status: normalizedToolEvent.status,
-      toolCallId: result.toolCallId
-    });
-
-    return normalizedToolEvent;
+    return this.toolResultRuntime.persist(result);
   }
 
   async finalizeTask(context: HostPromptContext) {
