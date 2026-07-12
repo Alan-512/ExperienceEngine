@@ -4,6 +4,11 @@
 
 This document tracks the highest-impact product and UX improvements for the current ExperienceEngine repository.
 
+Current follow-up design:
+
+- [Adoption, Quality, Evidence, And Distribution Design](./adoption-quality-evidence-design-2026-07-10.md)
+- Status: revised after architecture review; begin with the distribution/runtime reality baseline, not runtime implementation.
+
 It is intentionally execution-oriented:
 
 - already completed work is called out explicitly

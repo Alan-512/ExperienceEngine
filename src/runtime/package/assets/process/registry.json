@@ -1,0 +1,32 @@
+{
+  "process_authority_registry_schema_version": "runtime-process-authority-registry-v1",
+  "process_authority_stage": "process_authority_foundation_s3",
+  "supervisor_protocol_version": "runtime-supervisor-v1",
+  "worker_protocol_version": "runtime-worker-v1",
+  "package_activation_timing_policy": {
+    "policy_version": "package-activation-v1",
+    "activation_deadline_ms": 600000,
+    "launch_authorization_ttl_ms": 60000,
+    "launch_attempt_timeout_ms": 30000,
+    "preactivation_handshake_ttl_ms": 60000,
+    "production_handshake_ttl_ms": 60000
+  },
+  "supervisor_runtime_policy": {
+    "policy_version": "supervisor-runtime-v1",
+    "heartbeat_interval_ms": 5000,
+    "lease_duration_ms": 20000,
+    "max_supervisor_launches_per_window": 3,
+    "max_worker_restarts_per_window": 3,
+    "restart_window_ms": 600000,
+    "restart_backoff_ms": [1000, 5000, 30000],
+    "graceful_drain_timeout_ms": 30000,
+    "orphan_exit_timeout_ms": 20000
+  },
+  "package_authorization_issuer": "blocked_until_s6_package_authority",
+  "worker_acquisition_authority": "blocked_until_s6_worker_authority",
+  "production_write_authority": "blocked_until_s6_production_activation",
+  "queue_claiming_enabled": false,
+  "semantic_writes_enabled": false,
+  "production_learning_ready": false,
+  "learning_runtime_active": false
+}

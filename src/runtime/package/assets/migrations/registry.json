@@ -1,0 +1,22 @@
+{
+  "migration_registry_schema_version": "runtime-migration-registry-v1",
+  "migration_authority_state": "foundation_ready_runtime_acquisition_blocked_until_s3",
+  "schema_contract_version": "runtime-schema-contract-v1",
+  "sqlite_runtime_policy": {
+    "sqlite_runtime_policy_version": "sqlite-runtime-v1",
+    "journal_mode": "WAL",
+    "synchronous": "FULL",
+    "foreign_keys": "ON",
+    "busy_timeout_ms": 5000
+  },
+  "schema_version_order": [
+    "legacy-learning-v0",
+    "runtime-schema-v1"
+  ],
+  "sqlite_user_version_by_schema": {
+    "legacy-learning-v0": 0,
+    "runtime-schema-v1": 1
+  },
+  "runtime_acquisition_requires": "fresh_supervisor_authority",
+  "migrations": []
+}
