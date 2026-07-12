@@ -954,7 +954,7 @@ describe("DistillationQueueWorker", () => {
     expect(jobRepo.getById("job_distill_auth")?.distillation_source).toBe("rule");
   });
 
-  it("discards candidates after retry exhaustion", async () => {
+  it("blocks provider-route failures without consuming candidate content retry", async () => {
     const { db, config } = makeDb();
     const candidateRepo = new CandidateRepository(db);
     const jobRepo = new DistillationJobRepository(db);
@@ -982,8 +982,21 @@ describe("DistillationQueueWorker", () => {
 
     await worker.drain();
 
-    expect(candidateRepo.getById("candidate_distill_auth")?.lifecycle_state).toBe("discarded");
-    expect(jobRepo.getById("job_distill_auth")?.status).toBe("discarded");
+    expect(candidateRepo.getById("candidate_distill_auth")).toMatchObject({
+      lifecycle_state: "blocked",
+      retry_count: 0,
+      content_retry_count: 0,
+      failure_class: "system_route",
+      failure_scope: "provider_route"
+    });
+    expect(jobRepo.getById("job_distill_auth")).toMatchObject({
+      status: "blocked",
+      retry_count: 0,
+      content_retry_count: 0,
+      system_attempt_count: 1,
+      failure_class: "system_route",
+      failure_scope: "provider_route"
+    });
     expect(nodeRepo.listAll()).toHaveLength(0);
   });
 
@@ -1049,8 +1062,15 @@ describe("DistillationQueueWorker", () => {
 
     await worker.drain();
 
-    expect(jobRepo.getById("job_mediated_invalid")?.status).toBe("failed");
-    expect(jobRepo.getById("job_mediated_invalid")?.failure_bucket).toBe("distillation_failed");
+    expect(jobRepo.getById("job_mediated_invalid")?.status).toBe("blocked");
+    expect(jobRepo.getById("job_mediated_invalid")?.failure_bucket).toBe(
+      "provider_configuration_invalid"
+    );
+    expect(jobRepo.getById("job_mediated_invalid")).toMatchObject({
+      failure_code: "EE_PROVIDER_CONFIGURATION_INVALID",
+      failure_class: "system_route",
+      content_retry_count: 0
+    });
   });
 
   it("requeues stale processing jobs instead of leaving them stuck forever", async () => {
@@ -1085,9 +1105,12 @@ describe("DistillationQueueWorker", () => {
 
     expect(drained).toBe(1);
     expect(candidateRepo.getById("candidate_distill_auth")?.lifecycle_state).toBe("distilled");
-    expect(candidateRepo.getById("candidate_distill_auth")?.retry_count).toBe(1);
+    expect(candidateRepo.getById("candidate_distill_auth")?.retry_count).toBe(0);
+    expect(candidateRepo.getById("candidate_distill_auth")?.content_retry_count).toBe(0);
     expect(jobRepo.getById("job_distill_auth")?.status).toBe("succeeded");
-    expect(jobRepo.getById("job_distill_auth")?.retry_count).toBe(1);
+    expect(jobRepo.getById("job_distill_auth")?.retry_count).toBe(0);
+    expect(jobRepo.getById("job_distill_auth")?.content_retry_count).toBe(0);
+    expect(jobRepo.getById("job_distill_auth")?.interruption_count).toBe(1);
     expect(nodeRepo.listByState("candidate")).toHaveLength(1);
   });
 

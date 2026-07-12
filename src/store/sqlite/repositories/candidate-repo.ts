@@ -37,6 +37,14 @@ type CandidateRow = {
   source_signal_json: string;
   lifecycle_state: ExperienceCandidate["lifecycle_state"];
   retry_count: number;
+  state_revision: number;
+  content_retry_count: number;
+  failure_code: string | null;
+  failure_class: ExperienceCandidate["failure_class"] | null;
+  failure_scope: string | null;
+  blocked_at: string | null;
+  terminal_reason_code: string | null;
+  semantic_origin_provenance_key: string | null;
   distilled_node_id: string | null;
   last_error: string | null;
   promotion_signal: ExperienceCandidate["promotion_signal"] | null;
@@ -88,6 +96,15 @@ export class CandidateRepository {
       source_signal: JSON.parse(row.source_signal_json) as ExperienceCandidate["source_signal"],
       lifecycle_state: row.lifecycle_state,
       retry_count: row.retry_count,
+      state_revision: row.state_revision,
+      content_retry_count: row.content_retry_count,
+      failure_code: row.failure_code ?? undefined,
+      failure_class: row.failure_class ?? undefined,
+      failure_scope: row.failure_scope ?? undefined,
+      blocked_at: row.blocked_at ?? undefined,
+      terminal_reason_code: row.terminal_reason_code ?? undefined,
+      semantic_origin_provenance_key:
+        row.semantic_origin_provenance_key ?? undefined,
       distilled_node_id: row.distilled_node_id ?? undefined,
       last_error: row.last_error ?? undefined,
       promotion_signal: row.promotion_signal ?? undefined,
@@ -101,6 +118,32 @@ export class CandidateRepository {
   }
 
   upsert(candidate: ExperienceCandidate): ExperienceCandidate {
+    const has = (field: keyof ExperienceCandidate): boolean =>
+      Object.prototype.hasOwnProperty.call(candidate, field);
+    const existing = this.db.prepare(
+      `SELECT state_revision, content_retry_count, failure_code, failure_class,
+              failure_scope, blocked_at, terminal_reason_code,
+              semantic_origin_provenance_key
+       FROM experience_candidates WHERE id = ? LIMIT 1`
+    ).get(candidate.id) as {
+      state_revision: number;
+      content_retry_count: number;
+      failure_code: string | null;
+      failure_class: ExperienceCandidate["failure_class"] | null;
+      failure_scope: string | null;
+      blocked_at: string | null;
+      terminal_reason_code: string | null;
+      semantic_origin_provenance_key: string | null;
+    } | undefined;
+    if (
+      existing?.semantic_origin_provenance_key &&
+      candidate.semantic_origin_provenance_key &&
+      existing.semantic_origin_provenance_key !== candidate.semantic_origin_provenance_key
+    ) {
+      throw new Error(
+        `Candidate ${candidate.id} semantic-origin provenance is immutable.`
+      );
+    }
     const payload = {
       id: candidate.id,
       task_run_id: candidate.task_run_id ?? null,
@@ -137,6 +180,28 @@ export class CandidateRepository {
       source_signal_json: JSON.stringify(candidate.source_signal),
       lifecycle_state: candidate.lifecycle_state,
       retry_count: candidate.retry_count,
+      state_revision: candidate.state_revision ?? existing?.state_revision ?? 1,
+      content_retry_count:
+        candidate.content_retry_count ?? existing?.content_retry_count ?? candidate.retry_count,
+      failure_code: has("failure_code")
+        ? candidate.failure_code ?? null
+        : existing?.failure_code ?? null,
+      failure_class: has("failure_class")
+        ? candidate.failure_class ?? null
+        : existing?.failure_class ?? null,
+      failure_scope: has("failure_scope")
+        ? candidate.failure_scope ?? null
+        : existing?.failure_scope ?? null,
+      blocked_at: has("blocked_at")
+        ? candidate.blocked_at ?? null
+        : existing?.blocked_at ?? null,
+      terminal_reason_code: has("terminal_reason_code")
+        ? candidate.terminal_reason_code ?? null
+        : existing?.terminal_reason_code ?? null,
+      semantic_origin_provenance_key:
+        candidate.semantic_origin_provenance_key ??
+        existing?.semantic_origin_provenance_key ??
+        null,
       distilled_node_id: candidate.distilled_node_id ?? null,
       last_error: candidate.last_error ?? null,
       promotion_signal: candidate.promotion_signal ?? null,
@@ -154,13 +219,17 @@ export class CandidateRepository {
           (id, task_run_id, candidate_kind, source_record_id, scope_id, task_type, node_type, experience_kind, confidence_signal, validation_state, correction_scope, correction_category, deviation_pattern, corrected_constraint, trigger_pattern, applicability_notes, env_signature,
            compact_hint, goal, recommended_steps_json, avoid_steps_json, fallback_steps_json, success_signal, stop_condition,
            escalation_condition, evidence_summary, retrieval_text, source_kind, source_context_summary, source_outcome_signal, raw_summary, failure_signature,
-           source_signal_json, lifecycle_state, retry_count, distilled_node_id, last_error, promotion_signal, promotion_reason, created_at, updated_at, distilled_at,
+           source_signal_json, lifecycle_state, retry_count, state_revision, content_retry_count,
+           failure_code, failure_class, failure_scope, blocked_at, terminal_reason_code,
+           semantic_origin_provenance_key, distilled_node_id, last_error, promotion_signal, promotion_reason, created_at, updated_at, distilled_at,
            discarded_at, last_failed_at)
          VALUES
           (@id, @task_run_id, @candidate_kind, @source_record_id, @scope_id, @task_type, @node_type, @experience_kind, @confidence_signal, @validation_state, @correction_scope, @correction_category, @deviation_pattern, @corrected_constraint, @trigger_pattern, @applicability_notes, @env_signature,
            @compact_hint, @goal, @recommended_steps_json, @avoid_steps_json, @fallback_steps_json, @success_signal, @stop_condition,
            @escalation_condition, @evidence_summary, @retrieval_text, @source_kind, @source_context_summary, @source_outcome_signal, @raw_summary, @failure_signature,
-           @source_signal_json, @lifecycle_state, @retry_count, @distilled_node_id, @last_error, @promotion_signal, @promotion_reason, @created_at, @updated_at, @distilled_at,
+           @source_signal_json, @lifecycle_state, @retry_count, @state_revision, @content_retry_count,
+           @failure_code, @failure_class, @failure_scope, @blocked_at, @terminal_reason_code,
+           @semantic_origin_provenance_key, @distilled_node_id, @last_error, @promotion_signal, @promotion_reason, @created_at, @updated_at, @distilled_at,
            @discarded_at, @last_failed_at)
          ON CONFLICT(id) DO UPDATE SET
           task_run_id = excluded.task_run_id,
@@ -194,6 +263,17 @@ export class CandidateRepository {
            source_signal_json = excluded.source_signal_json,
            lifecycle_state = excluded.lifecycle_state,
            retry_count = excluded.retry_count,
+           state_revision = excluded.state_revision,
+           content_retry_count = excluded.content_retry_count,
+           failure_code = excluded.failure_code,
+           failure_class = excluded.failure_class,
+           failure_scope = excluded.failure_scope,
+           blocked_at = excluded.blocked_at,
+           terminal_reason_code = excluded.terminal_reason_code,
+           semantic_origin_provenance_key = COALESCE(
+             experience_candidates.semantic_origin_provenance_key,
+             excluded.semantic_origin_provenance_key
+           ),
            distilled_node_id = excluded.distilled_node_id,
            last_error = excluded.last_error,
            promotion_signal = excluded.promotion_signal,

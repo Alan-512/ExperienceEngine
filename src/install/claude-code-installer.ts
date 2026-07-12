@@ -3,6 +3,7 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { loadConfig } from "../config/load-config.js";
 import {
+  isolatePathEnvForHomeDir,
   resolveExperienceEnginePaths,
   resolveProductStateDir,
   type ResolvedPathInfo
@@ -220,7 +221,9 @@ const extractClaudeHostHome = (hostInfo: ReturnType<typeof inspectClaudeHost>): 
 
 export const installClaudeCodeAdapter = (options: InstallerOptions = {}): ClaudeCodeInstallReport => {
   const runner = options.runner ?? ((command) => runClaudeCommand(command)) as ClaudeCommandRunner;
-  const baseEnv = options.env ?? process.env;
+  const baseEnv = options.env ?? (
+    options.homeDir ? isolatePathEnvForHomeDir(process.env) : process.env
+  );
   const existingHost = inspectClaudeHost(runner, options.cliEnv);
   const hostHome = extractClaudeHostHome(existingHost);
   const env = buildEnvWithRecordedExperienceHome(baseEnv, hostHome);

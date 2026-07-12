@@ -35,8 +35,8 @@ describe("repo summary", () => {
         createdAt: "2026-03-20T00:00:00.000Z"
       },
       learning: {
-        candidates: { pending: 0, distilled: 0, failed: 0, discarded: 0 },
-        jobs: { pending: 0, processing: 0, succeeded: 0, failed: 0, discarded: 0 },
+        candidates: { pending: 0, blocked: 0, distilled: 0, failed: 0, discarded: 0 },
+        jobs: { pending: 0, processing: 0, blocked: 0, succeeded: 0, failed: 0, discarded: 0 },
         nodes: { candidate: 0, priority_candidate: 0, active: 1, cooling: 0, retired: 0 },
         nodeSources: {
           explicit_provider: 0,
@@ -98,8 +98,8 @@ describe("repo summary", () => {
         summary: "No experience nodes are available for this scope yet."
       },
       learning: {
-        candidates: { pending: 0, distilled: 0, failed: 0, discarded: 0 },
-        jobs: { pending: 0, processing: 0, succeeded: 0, failed: 0, discarded: 0 },
+        candidates: { pending: 0, blocked: 0, distilled: 0, failed: 0, discarded: 0 },
+        jobs: { pending: 0, processing: 0, blocked: 0, succeeded: 0, failed: 0, discarded: 0 },
         nodes: { candidate: 0, priority_candidate: 0, active: 0, cooling: 0, retired: 0 },
         nodeSources: {
           explicit_provider: 0,

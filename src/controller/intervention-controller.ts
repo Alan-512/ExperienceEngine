@@ -16,6 +16,11 @@ import type {
   ValidationState
 } from "../types/domain.js";
 import {
+  isCustomOriginRecordOnlyNode,
+  isNodeLiveDeliveryAllowed,
+  resolveEffectiveNodeDeliveryState
+} from "../runtime/learning-queue/delivery-policy.js";
+import {
   retrieveCandidateBundle,
   retrieveCandidates,
   retrieveScoredCandidates,
@@ -33,21 +38,8 @@ export type InterventionDecision = {
   diagnostics?: InterventionDecisionDiagnostics;
 };
 
-const DEFAULT_DELIVERY_STATE_BY_LIFECYCLE: Record<ExperienceNode["state"], NonNullable<ExperienceNode["delivery_state"]>> = {
-  candidate: "shadow_only",
-  priority_candidate: "conservative_only",
-  active: "eligible",
-  cooling: "conservative_only",
-  retired: "quarantined"
-};
-
-const resolveDeliveryState = (
-  node: Pick<ExperienceNode, "state" | "delivery_state">
-): NonNullable<ExperienceNode["delivery_state"]> => node.delivery_state ?? DEFAULT_DELIVERY_STATE_BY_LIFECYCLE[node.state];
-
 const isLiveInjectableNode = (node: ExperienceNode): boolean => {
-  const deliveryState = resolveDeliveryState(node);
-  return deliveryState === "eligible" || deliveryState === "conservative_only";
+  return isNodeLiveDeliveryAllowed(node);
 };
 
 const isTrustedSameFamilyCluster = (
@@ -251,8 +243,11 @@ const isDestructiveOrIrreversibleGuidance = (node: ExperienceNode): boolean => {
 };
 
 const isDiagnosticCandidate = (candidate: RetrievedCandidate): boolean =>
-  (candidate.node.state === "candidate" && resolveDeliveryState(candidate.node) === "shadow_only") ||
-  resolveDeliveryState(candidate.node) === "shadow_probe";
+  (
+    candidate.node.state === "candidate" &&
+    resolveEffectiveNodeDeliveryState(candidate.node) === "shadow_only"
+  ) ||
+  resolveEffectiveNodeDeliveryState(candidate.node) === "shadow_probe";
 
 const DIAGNOSTIC_GATE_THRESHOLDS: Record<RepoPolicy["effective_mode"], { totalScore: number; scoreMargin: number }> = {
   safe: { totalScore: 0.6, scoreMargin: 0.05 },
@@ -261,7 +256,10 @@ const DIAGNOSTIC_GATE_THRESHOLDS: Record<RepoPolicy["effective_mode"], { totalSc
 };
 
 const passesDiagnosticLiveGate = (candidate: RetrievedCandidate, repoPolicy?: RepoPolicy): boolean => {
-  if (resolveDeliveryState(candidate.node) === "shadow_probe") {
+  if (
+    resolveEffectiveNodeDeliveryState(candidate.node) === "shadow_probe" ||
+    isCustomOriginRecordOnlyNode(candidate.node)
+  ) {
     return false;
   }
   const mode = repoPolicy?.effective_mode ?? "safe";
@@ -358,7 +356,7 @@ const resolveTriggerThreshold = (selected: ExperienceNode | undefined, threshold
 
 const isMatureReusableNode = (node: ExperienceNode): boolean =>
   node.state === "active" &&
-  resolveDeliveryState(node) === "eligible" &&
+  resolveEffectiveNodeDeliveryState(node) === "eligible" &&
   (node.helped_count >= 2 || node.validation_state === "validated_by_reuse") &&
   node.helped_count >= node.harmed_count;
 
@@ -568,7 +566,8 @@ const decideInterventionInternal = async (
   let mode: InjectionMode = "inject";
   if (topCandidate) {
     const isCrossRepo = topCandidateInBundle ? !topCandidateInBundle.scopeMatch : false;
-    const isConservativeOnly = resolveDeliveryState(topCandidate) === "conservative_only";
+    const isConservativeOnly =
+      resolveEffectiveNodeDeliveryState(topCandidate) === "conservative_only";
     const portabilityBand = topCandidateInBundle?.portabilityScorecard?.portabilityBand;
 
     if (isConservativeOnly || (isCrossRepo && portabilityBand === "same_family")) {

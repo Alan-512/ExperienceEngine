@@ -179,6 +179,12 @@ CREATE TABLE IF NOT EXISTS experience_nodes (
   quarantine_last_release_attempt_at TEXT,
   quarantine_release_reason TEXT,
   quarantine_no_harm_pass_count INTEGER,
+  contains_unbenchmarked_origin INTEGER NOT NULL DEFAULT 0,
+  contains_revoked_profile_origin INTEGER NOT NULL DEFAULT 0,
+  semantic_origin_count INTEGER NOT NULL DEFAULT 0,
+  exact_provenance_key_count INTEGER NOT NULL DEFAULT 0,
+  compacted_provenance_origin_count INTEGER NOT NULL DEFAULT 0,
+  effective_generation_assurance_floor TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );
@@ -219,6 +225,14 @@ CREATE TABLE IF NOT EXISTS experience_candidates (
   source_signal_json TEXT NOT NULL,
   lifecycle_state TEXT NOT NULL,
   retry_count INTEGER NOT NULL DEFAULT 0,
+  state_revision INTEGER NOT NULL DEFAULT 1,
+  content_retry_count INTEGER NOT NULL DEFAULT 0,
+  failure_code TEXT,
+  failure_class TEXT,
+  failure_scope TEXT,
+  blocked_at TEXT,
+  terminal_reason_code TEXT,
+  semantic_origin_provenance_key TEXT,
   distilled_node_id TEXT,
   last_error TEXT,
   promotion_signal TEXT,
@@ -238,12 +252,113 @@ CREATE TABLE IF NOT EXISTS distillation_jobs (
   distillation_source TEXT,
   failure_bucket TEXT,
   retry_count INTEGER NOT NULL DEFAULT 0,
+  home_id TEXT,
+  state_revision INTEGER NOT NULL DEFAULT 1,
+  claim_id TEXT,
+  claim_owner_id TEXT,
+  claim_fencing_token INTEGER,
+  claimed_supervisor_owner_id TEXT,
+  claimed_supervisor_lease_epoch INTEGER,
+  claimed_package_generation_id TEXT,
+  claimed_activation_revision INTEGER,
+  claimed_production_activation_handshake_id TEXT,
+  claimed_configuration_generation_id TEXT,
+  claimed_effective_route_set_id TEXT,
+  claimed_effective_route_revision INTEGER,
+  claimed_capability TEXT,
+  claimed_route_fingerprint TEXT,
+  claimed_schema_version TEXT,
+  claimed_job_schema_version TEXT,
+  claimed_candidate_schema_version TEXT,
+  claimed_node_schema_version TEXT,
+  claimed_at TEXT,
+  claim_heartbeat_at TEXT,
+  claim_expires_at TEXT,
+  failure_code TEXT,
+  failure_class TEXT,
+  failure_scope TEXT,
+  system_attempt_count INTEGER NOT NULL DEFAULT 0,
+  interruption_count INTEGER NOT NULL DEFAULT 0,
+  content_retry_count INTEGER NOT NULL DEFAULT 0,
+  next_attempt_at TEXT NOT NULL DEFAULT '1970-01-01T00:00:00.000Z',
+  blocked_at TEXT,
+  route_fingerprint TEXT NOT NULL DEFAULT '',
+  terminal_reason_code TEXT,
   last_error TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL,
   started_at TEXT,
   finished_at TEXT,
   discarded_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS candidate_semantic_origin_provenance (
+  candidate_id TEXT PRIMARY KEY,
+  provenance_key TEXT NOT NULL,
+  provenance_schema_version TEXT NOT NULL,
+  configuration_generation_id TEXT NOT NULL,
+  package_generation_id TEXT NOT NULL,
+  generation_profile_id TEXT NOT NULL,
+  generation_profile_version TEXT NOT NULL,
+  generation_profile_status TEXT NOT NULL,
+  quality_profile TEXT NOT NULL,
+  stage_routes_json TEXT NOT NULL,
+  assurance_floor TEXT NOT NULL,
+  origin_record_count INTEGER NOT NULL,
+  first_origin_at TEXT NOT NULL,
+  last_origin_at TEXT NOT NULL,
+  FOREIGN KEY(candidate_id) REFERENCES experience_candidates(id) ON DELETE CASCADE,
+  CHECK (origin_record_count >= 1),
+  CHECK (assurance_floor IN ('unbenchmarked', 'supported', 'recommended')),
+  CHECK (generation_profile_status IN ('active', 'deprecated', 'revoked')),
+  CHECK (quality_profile IN ('evaluated_recommended', 'custom'))
+);
+
+CREATE TABLE IF NOT EXISTS node_semantic_origin_provenance (
+  node_id TEXT NOT NULL,
+  provenance_key TEXT NOT NULL,
+  provenance_schema_version TEXT NOT NULL,
+  configuration_generation_id TEXT NOT NULL,
+  package_generation_id TEXT NOT NULL,
+  generation_profile_id TEXT NOT NULL,
+  generation_profile_version TEXT NOT NULL,
+  generation_profile_status TEXT NOT NULL,
+  quality_profile TEXT NOT NULL,
+  stage_routes_json TEXT NOT NULL,
+  assurance_floor TEXT NOT NULL,
+  origin_record_count INTEGER NOT NULL,
+  first_origin_at TEXT NOT NULL,
+  last_origin_at TEXT NOT NULL,
+  PRIMARY KEY(node_id, provenance_key),
+  FOREIGN KEY(node_id) REFERENCES experience_nodes(id) ON DELETE CASCADE,
+  CHECK (origin_record_count >= 1),
+  CHECK (assurance_floor IN ('unbenchmarked', 'supported', 'recommended')),
+  CHECK (generation_profile_status IN ('active', 'deprecated', 'revoked')),
+  CHECK (quality_profile IN ('evaluated_recommended', 'custom'))
+);
+
+CREATE TABLE IF NOT EXISTS node_semantic_origin_buckets (
+  node_id TEXT NOT NULL,
+  bucket_key TEXT NOT NULL,
+  compaction_schema_version TEXT NOT NULL,
+  generation_profile_id TEXT NOT NULL,
+  generation_profile_version TEXT NOT NULL,
+  assurance_floor TEXT NOT NULL,
+  contract_versions_json TEXT NOT NULL,
+  origin_record_count INTEGER NOT NULL,
+  first_origin_at TEXT NOT NULL,
+  last_origin_at TEXT NOT NULL,
+  worst_assurance TEXT NOT NULL,
+  rolling_digest TEXT NOT NULL,
+  contains_unbenchmarked_origin INTEGER NOT NULL DEFAULT 0,
+  contains_revoked_profile_origin INTEGER NOT NULL DEFAULT 0,
+  PRIMARY KEY(node_id, bucket_key),
+  FOREIGN KEY(node_id) REFERENCES experience_nodes(id) ON DELETE CASCADE,
+  CHECK (origin_record_count >= 1),
+  CHECK (assurance_floor IN ('unbenchmarked', 'supported', 'recommended')),
+  CHECK (worst_assurance IN ('unbenchmarked', 'supported', 'recommended')),
+  CHECK (contains_unbenchmarked_origin IN (0, 1)),
+  CHECK (contains_revoked_profile_origin IN (0, 1))
 );
 
 CREATE TABLE IF NOT EXISTS injection_events (
@@ -470,3 +585,151 @@ CREATE TABLE IF NOT EXISTS host_capability_probes (
   updated_at TEXT NOT NULL,
   PRIMARY KEY (host, capability)
 );
+
+CREATE TRIGGER IF NOT EXISTS trg_distillation_jobs_contract_insert
+BEFORE INSERT ON distillation_jobs
+BEGIN
+  SELECT CASE
+    WHEN NEW.status NOT IN ('pending', 'processing', 'blocked', 'failed', 'succeeded', 'discarded')
+      THEN RAISE(ABORT, 'invalid learning job state')
+    WHEN NEW.state_revision < 1 OR
+         NEW.system_attempt_count < 0 OR
+         NEW.interruption_count < 0 OR
+         NEW.content_retry_count < 0
+      THEN RAISE(ABORT, 'invalid learning job revision or counter')
+    WHEN NEW.status = 'processing' AND NEW.home_id IS NOT NULL AND (
+      NEW.claim_id IS NULL OR
+      NEW.claim_owner_id IS NULL OR
+      NEW.claim_fencing_token IS NULL OR
+      NEW.claimed_supervisor_owner_id IS NULL OR
+      NEW.claimed_supervisor_lease_epoch IS NULL OR
+      NEW.claimed_package_generation_id IS NULL OR
+      NEW.claimed_activation_revision IS NULL OR
+      NEW.claimed_production_activation_handshake_id IS NULL OR
+      NEW.claimed_configuration_generation_id IS NULL OR
+      NEW.claimed_effective_route_set_id IS NULL OR
+      NEW.claimed_effective_route_revision IS NULL OR
+      NEW.claimed_capability IS NULL OR
+      NEW.claimed_route_fingerprint IS NULL OR
+      NEW.claimed_schema_version IS NULL OR
+      NEW.claimed_job_schema_version IS NULL OR
+      NEW.claimed_candidate_schema_version IS NULL OR
+      NEW.claimed_node_schema_version IS NULL OR
+      NEW.claimed_at IS NULL OR
+      NEW.claim_heartbeat_at IS NULL OR
+      NEW.claim_expires_at IS NULL
+    ) THEN RAISE(ABORT, 'processing job requires complete claim identity')
+    WHEN NEW.status = 'processing' AND NEW.home_id IS NULL AND (
+      NEW.claim_id IS NOT NULL OR
+      NEW.claim_owner_id IS NOT NULL OR
+      NEW.claim_fencing_token IS NOT NULL
+    ) THEN RAISE(ABORT, 'legacy processing job cannot persist fenced claim identity')
+    WHEN NEW.status <> 'processing' AND (
+      NEW.claim_id IS NOT NULL OR
+      NEW.claim_owner_id IS NOT NULL OR
+      NEW.claim_fencing_token IS NOT NULL OR
+      NEW.claimed_supervisor_owner_id IS NOT NULL OR
+      NEW.claimed_supervisor_lease_epoch IS NOT NULL OR
+      NEW.claimed_package_generation_id IS NOT NULL OR
+      NEW.claimed_activation_revision IS NOT NULL OR
+      NEW.claimed_production_activation_handshake_id IS NOT NULL OR
+      NEW.claimed_configuration_generation_id IS NOT NULL OR
+      NEW.claimed_effective_route_set_id IS NOT NULL OR
+      NEW.claimed_effective_route_revision IS NOT NULL OR
+      NEW.claimed_capability IS NOT NULL OR
+      NEW.claimed_route_fingerprint IS NOT NULL OR
+      NEW.claimed_schema_version IS NOT NULL OR
+      NEW.claimed_job_schema_version IS NOT NULL OR
+      NEW.claimed_candidate_schema_version IS NOT NULL OR
+      NEW.claimed_node_schema_version IS NOT NULL OR
+      NEW.claimed_at IS NOT NULL OR
+      NEW.claim_heartbeat_at IS NOT NULL OR
+      NEW.claim_expires_at IS NOT NULL
+    ) THEN RAISE(ABORT, 'non-processing job cannot retain claim identity')
+  END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_distillation_jobs_contract_update
+BEFORE UPDATE ON distillation_jobs
+BEGIN
+  SELECT CASE
+    WHEN NEW.status NOT IN ('pending', 'processing', 'blocked', 'failed', 'succeeded', 'discarded')
+      THEN RAISE(ABORT, 'invalid learning job state')
+    WHEN NEW.state_revision < 1 OR
+         NEW.system_attempt_count < 0 OR
+         NEW.interruption_count < 0 OR
+         NEW.content_retry_count < 0
+      THEN RAISE(ABORT, 'invalid learning job revision or counter')
+    WHEN NEW.status = 'processing' AND NEW.home_id IS NOT NULL AND (
+      NEW.claim_id IS NULL OR
+      NEW.claim_owner_id IS NULL OR
+      NEW.claim_fencing_token IS NULL OR
+      NEW.claimed_supervisor_owner_id IS NULL OR
+      NEW.claimed_supervisor_lease_epoch IS NULL OR
+      NEW.claimed_package_generation_id IS NULL OR
+      NEW.claimed_activation_revision IS NULL OR
+      NEW.claimed_production_activation_handshake_id IS NULL OR
+      NEW.claimed_configuration_generation_id IS NULL OR
+      NEW.claimed_effective_route_set_id IS NULL OR
+      NEW.claimed_effective_route_revision IS NULL OR
+      NEW.claimed_capability IS NULL OR
+      NEW.claimed_route_fingerprint IS NULL OR
+      NEW.claimed_schema_version IS NULL OR
+      NEW.claimed_job_schema_version IS NULL OR
+      NEW.claimed_candidate_schema_version IS NULL OR
+      NEW.claimed_node_schema_version IS NULL OR
+      NEW.claimed_at IS NULL OR
+      NEW.claim_heartbeat_at IS NULL OR
+      NEW.claim_expires_at IS NULL
+    ) THEN RAISE(ABORT, 'processing job requires complete claim identity')
+    WHEN NEW.status = 'processing' AND NEW.home_id IS NULL AND (
+      NEW.claim_id IS NOT NULL OR
+      NEW.claim_owner_id IS NOT NULL OR
+      NEW.claim_fencing_token IS NOT NULL
+    ) THEN RAISE(ABORT, 'legacy processing job cannot persist fenced claim identity')
+    WHEN NEW.status <> 'processing' AND (
+      NEW.claim_id IS NOT NULL OR
+      NEW.claim_owner_id IS NOT NULL OR
+      NEW.claim_fencing_token IS NOT NULL OR
+      NEW.claimed_supervisor_owner_id IS NOT NULL OR
+      NEW.claimed_supervisor_lease_epoch IS NOT NULL OR
+      NEW.claimed_package_generation_id IS NOT NULL OR
+      NEW.claimed_activation_revision IS NOT NULL OR
+      NEW.claimed_production_activation_handshake_id IS NOT NULL OR
+      NEW.claimed_configuration_generation_id IS NOT NULL OR
+      NEW.claimed_effective_route_set_id IS NOT NULL OR
+      NEW.claimed_effective_route_revision IS NOT NULL OR
+      NEW.claimed_capability IS NOT NULL OR
+      NEW.claimed_route_fingerprint IS NOT NULL OR
+      NEW.claimed_schema_version IS NOT NULL OR
+      NEW.claimed_job_schema_version IS NOT NULL OR
+      NEW.claimed_candidate_schema_version IS NOT NULL OR
+      NEW.claimed_node_schema_version IS NOT NULL OR
+      NEW.claimed_at IS NOT NULL OR
+      NEW.claim_heartbeat_at IS NOT NULL OR
+      NEW.claim_expires_at IS NOT NULL
+    ) THEN RAISE(ABORT, 'non-processing job cannot retain claim identity')
+  END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_experience_candidates_s5_contract_insert
+BEFORE INSERT ON experience_candidates
+BEGIN
+  SELECT CASE
+    WHEN NEW.lifecycle_state NOT IN ('pending', 'blocked', 'failed', 'distilled', 'discarded')
+      THEN RAISE(ABORT, 'invalid learning candidate state')
+    WHEN NEW.state_revision < 1 OR NEW.content_retry_count < 0
+      THEN RAISE(ABORT, 'invalid learning candidate revision or counter')
+  END;
+END;
+
+CREATE TRIGGER IF NOT EXISTS trg_experience_candidates_s5_contract_update
+BEFORE UPDATE ON experience_candidates
+BEGIN
+  SELECT CASE
+    WHEN NEW.lifecycle_state NOT IN ('pending', 'blocked', 'failed', 'distilled', 'discarded')
+      THEN RAISE(ABORT, 'invalid learning candidate state')
+    WHEN NEW.state_revision < 1 OR NEW.content_retry_count < 0
+      THEN RAISE(ABORT, 'invalid learning candidate revision or counter')
+  END;
+END;

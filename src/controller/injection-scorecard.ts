@@ -9,6 +9,9 @@ import type {
   InjectionScorecardNode
 } from "../types/domain.js";
 import { nowIso } from "../utils/clock.js";
+import {
+  resolveEffectiveNodeDeliveryState
+} from "../runtime/learning-queue/delivery-policy.js";
 
 const riskOrder: Record<InjectionRiskLevel, number> = {
   low: 0,
@@ -28,20 +31,8 @@ const hasActiveExactFamilyCoverage = (nodes: ExperienceNode[], candidate: Experi
       node.task_type === candidate.task_type
   );
 
-const DEFAULT_DELIVERY_STATE_BY_LIFECYCLE: Record<ExperienceNode["state"], NonNullable<ExperienceNode["delivery_state"]>> = {
-  candidate: "shadow_only",
-  priority_candidate: "conservative_only",
-  active: "eligible",
-  cooling: "conservative_only",
-  retired: "quarantined"
-};
-
-const resolveDeliveryState = (
-  node: Pick<ExperienceNode, "state" | "delivery_state">
-): NonNullable<ExperienceNode["delivery_state"]> => node.delivery_state ?? DEFAULT_DELIVERY_STATE_BY_LIFECYCLE[node.state];
-
 const deriveNodeRiskLevel = (node: ExperienceNode, nodes: ExperienceNode[]): InjectionRiskLevel => {
-  const deliveryState = resolveDeliveryState(node);
+  const deliveryState = resolveEffectiveNodeDeliveryState(node);
 
   if (deliveryState === "quarantined" || deliveryState === "shadow_only") {
     return "high";
@@ -94,11 +85,11 @@ const buildNodeReasons = (input: ExperienceInput, node: ExperienceNode): string[
     reasons.push("This node is active and has cleared the current evidence threshold.");
   }
 
-  if (resolveDeliveryState(node) === "conservative_only") {
+  if (resolveEffectiveNodeDeliveryState(node) === "conservative_only") {
     reasons.push("This node is limited to conservative delivery in live tasks.");
-  } else if (resolveDeliveryState(node) === "shadow_only") {
+  } else if (resolveEffectiveNodeDeliveryState(node) === "shadow_only") {
     reasons.push("This node is restricted to shadow evaluation and should not inject live.");
-  } else if (resolveDeliveryState(node) === "quarantined") {
+  } else if (resolveEffectiveNodeDeliveryState(node) === "quarantined") {
     reasons.push("This node is quarantined from live delivery until reviewed.");
   }
 

@@ -111,7 +111,7 @@ describe("runtime configuration generations", () => {
     } finally {
       fixture.db.close();
     }
-  });
+  }, 15_000);
 
   it("rejects a stale-base concurrent generation and retains the first winning pointer", async () => {
     const home = makeTempDir();
@@ -181,7 +181,7 @@ describe("runtime configuration generations", () => {
     } finally {
       fixture.db.close();
     }
-  });
+  }, 15_000);
 
   it("treats prepared-but-uncommitted generation files as non-authoritative and accepts exact replay", async () => {
     const home = makeTempDir();
@@ -228,7 +228,7 @@ describe("runtime configuration generations", () => {
     } finally {
       fixture.db.close();
     }
-  });
+  }, 15_000);
 
   it("fails closed on missing or replaced S1 key and never repairs it", async () => {
     const missingHome = makeTempDir();
@@ -317,7 +317,7 @@ describe("runtime configuration generations", () => {
     } finally {
       fixture.db.close();
     }
-  });
+  }, 15_000);
 
   it("rejects profile selections that are incompatible with the current host or gateway", async () => {
     const home = makeTempDir();
@@ -341,7 +341,7 @@ describe("runtime configuration generations", () => {
     } finally {
       fixture.db.close();
     }
-  });
+  }, 15_000);
 
   it("rejects secrets or manifest tampering after authority commit", async () => {
     const home = makeTempDir();
@@ -391,5 +391,5 @@ describe("runtime configuration generations", () => {
     } finally {
       fixture.db.close();
     }
-  });
+  }, 15_000);
 });

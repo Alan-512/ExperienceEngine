@@ -1,7 +1,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
-import { resolveExperienceEnginePaths } from "../config/path-resolver.js";
+import {
+  isolatePathEnvForHomeDir,
+  resolveExperienceEnginePaths
+} from "../config/path-resolver.js";
 import { resolveExperienceEnginePackageRoot } from "./openclaw-cli.js";
 import { buildVersionStatus } from "../version/package-version.js";
 import { loadConfig } from "../config/load-config.js";
@@ -139,7 +142,9 @@ const isMarketplaceManagedClaudeHost = (hostInfo: ClaudeMcpServerInfo | null): b
 
 export const inspectClaudeCodeInstall = (options: InstallerOptions = {}) => {
   const runner = options.runner ?? ((command) => runClaudeCommand(command)) as ClaudeCommandRunner;
-  const baseEnv = options.env ?? process.env;
+  const baseEnv = options.env ?? (
+    options.homeDir ? isolatePathEnvForHomeDir(process.env) : process.env
+  );
   const hostInfo = inspectClaudeHost(runner, options.cliEnv);
   const marketplaceHome = extractClaudeHostEnvValue(hostInfo?.env, "EXPERIENCE_ENGINE_HOME");
   const env = buildEnvWithRecordedExperienceHome(baseEnv, marketplaceHome);

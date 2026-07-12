@@ -1,17 +1,9 @@
 import type { DatabaseSync } from "node:sqlite";
+import {
+  DEFAULT_NODE_DELIVERY_STATE_BY_LIFECYCLE,
+  resolveEffectiveNodeDeliveryState
+} from "../../../runtime/learning-queue/delivery-policy.js";
 import type { ExperienceNode } from "../../../types/domain.js";
-
-const DEFAULT_DELIVERY_STATE_BY_LIFECYCLE: Record<ExperienceNode["state"], NonNullable<ExperienceNode["delivery_state"]>> = {
-  candidate: "shadow_only",
-  priority_candidate: "conservative_only",
-  active: "eligible",
-  cooling: "conservative_only",
-  retired: "quarantined"
-};
-
-const resolveDeliveryState = (
-  node: Pick<ExperienceNode, "state" | "delivery_state">
-): NonNullable<ExperienceNode["delivery_state"]> => node.delivery_state ?? DEFAULT_DELIVERY_STATE_BY_LIFECYCLE[node.state];
 
 export class NodeRepository {
   constructor(private readonly db: DatabaseSync) {}
@@ -83,6 +75,13 @@ export class NodeRepository {
     quarantine_last_release_attempt_at: string | null;
     quarantine_release_reason: string | null;
     quarantine_no_harm_pass_count: number | null;
+    contains_unbenchmarked_origin: number;
+    contains_revoked_profile_origin: number;
+    semantic_origin_count: number;
+    exact_provenance_key_count: number;
+    compacted_provenance_origin_count: number;
+    effective_generation_assurance_floor:
+      ExperienceNode["effective_generation_assurance_floor"] | null;
     created_at: string;
     updated_at: string;
   }): ExperienceNode {
@@ -129,7 +128,12 @@ export class NodeRepository {
       helped_record_ids: JSON.parse(row.helped_record_ids_json) as string[],
       harmed_record_ids: JSON.parse(row.harmed_record_ids_json) as string[],
       state: row.state,
-      delivery_state: row.delivery_state ?? DEFAULT_DELIVERY_STATE_BY_LIFECYCLE[row.state],
+      delivery_state: resolveEffectiveNodeDeliveryState({
+        state: row.state,
+        delivery_state: row.delivery_state ?? undefined,
+        contains_unbenchmarked_origin: Boolean(row.contains_unbenchmarked_origin),
+        contains_revoked_profile_origin: Boolean(row.contains_revoked_profile_origin)
+      }),
       usage_count: row.usage_count,
       helped_count: row.helped_count,
       harmed_count: row.harmed_count,
@@ -153,6 +157,13 @@ export class NodeRepository {
       quarantine_last_release_attempt_at: row.quarantine_last_release_attempt_at ?? undefined,
       quarantine_release_reason: row.quarantine_release_reason ?? undefined,
       quarantine_no_harm_pass_count: row.quarantine_no_harm_pass_count ?? undefined,
+      contains_unbenchmarked_origin: Boolean(row.contains_unbenchmarked_origin),
+      contains_revoked_profile_origin: Boolean(row.contains_revoked_profile_origin),
+      semantic_origin_count: row.semantic_origin_count,
+      exact_provenance_key_count: row.exact_provenance_key_count,
+      compacted_provenance_origin_count: row.compacted_provenance_origin_count,
+      effective_generation_assurance_floor:
+        row.effective_generation_assurance_floor ?? undefined,
       created_at: row.created_at,
       updated_at: row.updated_at
     };
@@ -202,7 +213,7 @@ export class NodeRepository {
       helped_record_ids_json: JSON.stringify(node.helped_record_ids ?? []),
       harmed_record_ids_json: JSON.stringify(node.harmed_record_ids ?? []),
       state: node.state,
-      delivery_state: resolveDeliveryState(node),
+      delivery_state: resolveEffectiveNodeDeliveryState(node),
       usage_count: node.usage_count,
       helped_count: node.helped_count,
       harmed_count: node.harmed_count,
@@ -226,6 +237,16 @@ export class NodeRepository {
       quarantine_last_release_attempt_at: node.quarantine_last_release_attempt_at ?? null,
       quarantine_release_reason: node.quarantine_release_reason ?? null,
       quarantine_no_harm_pass_count: node.quarantine_no_harm_pass_count ?? null,
+      contains_unbenchmarked_origin: node.contains_unbenchmarked_origin ? 1 : 0,
+      contains_revoked_profile_origin: node.contains_revoked_profile_origin ? 1 : 0,
+      semantic_origin_count: node.semantic_origin_count ?? 0,
+      exact_provenance_key_count: node.exact_provenance_key_count ?? 0,
+      compacted_provenance_origin_count:
+        node.compacted_provenance_origin_count ?? 0,
+      effective_generation_assurance_floor:
+        node.contains_unbenchmarked_origin
+          ? "unbenchmarked"
+          : node.effective_generation_assurance_floor ?? null,
       created_at: node.created_at,
       updated_at: node.updated_at
     };
@@ -236,12 +257,16 @@ export class NodeRepository {
           (id, node_type, scope_id, task_type, experience_kind, confidence_signal, validation_state, correction_scope, correction_category, deviation_pattern, corrected_constraint, trigger_pattern, applicability_notes, env_signature, compact_hint, goal, recommended_steps_json,
            avoid_steps_json, fallback_steps_json, success_signal, stop_condition, escalation_condition, evidence_summary, retrieval_text, embedding_json, embedding_provider, embedding_model, embedding_version, embedding_dimensions, distillation_mode_used, distillation_source, redistilled_from, promotion_signal, promotion_reason, merge_decision, merge_reason, priority_promotion_applied, source_kind,
            origin_record_ids_json, helped_record_ids_json, harmed_record_ids_json, state, delivery_state,
-            usage_count, helped_count, harmed_count, consecutive_harmed_count, last_feedback_verdict, support_count, last_used_at, last_helped_at, last_harmed_at, quarantined_at, quarantine_reason, embedding_manifest_id, migration_status, migration_last_error, migration_updated_at, source_fingerprint_hash, portable_validation_evidence_json, quarantine_lease_expires_at, quarantine_original_delivery_state, quarantine_release_attempt_count, quarantine_last_release_attempt_at, quarantine_release_reason, quarantine_no_harm_pass_count, created_at, updated_at)
+            usage_count, helped_count, harmed_count, consecutive_harmed_count, last_feedback_verdict, support_count, last_used_at, last_helped_at, last_harmed_at, quarantined_at, quarantine_reason, embedding_manifest_id, migration_status, migration_last_error, migration_updated_at, source_fingerprint_hash, portable_validation_evidence_json, quarantine_lease_expires_at, quarantine_original_delivery_state, quarantine_release_attempt_count, quarantine_last_release_attempt_at, quarantine_release_reason, quarantine_no_harm_pass_count,
+            contains_unbenchmarked_origin, contains_revoked_profile_origin, semantic_origin_count, exact_provenance_key_count, compacted_provenance_origin_count, effective_generation_assurance_floor,
+            created_at, updated_at)
          VALUES
          (@id, @node_type, @scope_id, @task_type, @experience_kind, @confidence_signal, @validation_state, @correction_scope, @correction_category, @deviation_pattern, @corrected_constraint, @trigger_pattern, @applicability_notes, @env_signature, @compact_hint, @goal, @recommended_steps_json,
            @avoid_steps_json, @fallback_steps_json, @success_signal, @stop_condition, @escalation_condition, @evidence_summary, @retrieval_text, @embedding_json, @embedding_provider, @embedding_model, @embedding_version, @embedding_dimensions, @distillation_mode_used, @distillation_source, @redistilled_from, @promotion_signal, @promotion_reason, @merge_decision, @merge_reason, @priority_promotion_applied, @source_kind,
            @origin_record_ids_json, @helped_record_ids_json, @harmed_record_ids_json, @state, @delivery_state,
-           @usage_count, @helped_count, @harmed_count, @consecutive_harmed_count, @last_feedback_verdict, @support_count, @last_used_at, @last_helped_at, @last_harmed_at, @quarantined_at, @quarantine_reason, @embedding_manifest_id, @migration_status, @migration_last_error, @migration_updated_at, @source_fingerprint_hash, @portable_validation_evidence_json, @quarantine_lease_expires_at, @quarantine_original_delivery_state, @quarantine_release_attempt_count, @quarantine_last_release_attempt_at, @quarantine_release_reason, @quarantine_no_harm_pass_count, @created_at, @updated_at)
+           @usage_count, @helped_count, @harmed_count, @consecutive_harmed_count, @last_feedback_verdict, @support_count, @last_used_at, @last_helped_at, @last_harmed_at, @quarantined_at, @quarantine_reason, @embedding_manifest_id, @migration_status, @migration_last_error, @migration_updated_at, @source_fingerprint_hash, @portable_validation_evidence_json, @quarantine_lease_expires_at, @quarantine_original_delivery_state, @quarantine_release_attempt_count, @quarantine_last_release_attempt_at, @quarantine_release_reason, @quarantine_no_harm_pass_count,
+           @contains_unbenchmarked_origin, @contains_revoked_profile_origin, @semantic_origin_count, @exact_provenance_key_count, @compacted_provenance_origin_count, @effective_generation_assurance_floor,
+           @created_at, @updated_at)
          ON CONFLICT(id) DO UPDATE SET
           experience_kind = excluded.experience_kind,
           confidence_signal = excluded.confidence_signal,
@@ -281,7 +306,6 @@ export class NodeRepository {
           helped_record_ids_json = excluded.helped_record_ids_json,
           harmed_record_ids_json = excluded.harmed_record_ids_json,
           state = excluded.state,
-          delivery_state = excluded.delivery_state,
           usage_count = excluded.usage_count,
           helped_count = excluded.helped_count,
           harmed_count = excluded.harmed_count,
@@ -305,6 +329,49 @@ export class NodeRepository {
           quarantine_last_release_attempt_at = excluded.quarantine_last_release_attempt_at,
           quarantine_release_reason = excluded.quarantine_release_reason,
           quarantine_no_harm_pass_count = excluded.quarantine_no_harm_pass_count,
+          contains_unbenchmarked_origin = MAX(
+            experience_nodes.contains_unbenchmarked_origin,
+            excluded.contains_unbenchmarked_origin
+          ),
+          contains_revoked_profile_origin = MAX(
+            experience_nodes.contains_revoked_profile_origin,
+            excluded.contains_revoked_profile_origin
+          ),
+          semantic_origin_count = MAX(
+            experience_nodes.semantic_origin_count,
+            excluded.semantic_origin_count
+          ),
+          exact_provenance_key_count = MAX(
+            experience_nodes.exact_provenance_key_count,
+            excluded.exact_provenance_key_count
+          ),
+          compacted_provenance_origin_count = MAX(
+            experience_nodes.compacted_provenance_origin_count,
+            excluded.compacted_provenance_origin_count
+          ),
+          effective_generation_assurance_floor = CASE
+            WHEN experience_nodes.contains_unbenchmarked_origin = 1
+              OR excluded.contains_unbenchmarked_origin = 1
+              OR experience_nodes.effective_generation_assurance_floor = 'unbenchmarked'
+              OR excluded.effective_generation_assurance_floor = 'unbenchmarked'
+              THEN 'unbenchmarked'
+            WHEN experience_nodes.effective_generation_assurance_floor = 'supported'
+              OR excluded.effective_generation_assurance_floor = 'supported'
+              THEN 'supported'
+            ELSE COALESCE(
+              experience_nodes.effective_generation_assurance_floor,
+              excluded.effective_generation_assurance_floor
+            )
+          END,
+          delivery_state = CASE
+            WHEN experience_nodes.contains_revoked_profile_origin = 1
+              OR excluded.contains_revoked_profile_origin = 1
+              THEN 'quarantined'
+            WHEN experience_nodes.contains_unbenchmarked_origin = 1
+              OR excluded.contains_unbenchmarked_origin = 1
+              THEN 'shadow_only'
+            ELSE excluded.delivery_state
+          END,
           updated_at = excluded.updated_at`
       )
       .run(payload);
@@ -363,6 +430,8 @@ export class NodeRepository {
       .prepare(
         `SELECT * FROM experience_nodes
          WHERE scope_id = ?
+           AND contains_unbenchmarked_origin = 0
+           AND contains_revoked_profile_origin = 0
            AND delivery_state IN ('eligible', 'conservative_only')
          ORDER BY updated_at DESC`
       )
@@ -375,6 +444,8 @@ export class NodeRepository {
       .prepare(
         `SELECT * FROM experience_nodes
          WHERE scope_id != ?
+           AND contains_unbenchmarked_origin = 0
+           AND contains_revoked_profile_origin = 0
            AND delivery_state IN ('eligible', 'conservative_only')
          ORDER BY updated_at DESC`
       )
@@ -443,7 +514,11 @@ export class NodeRepository {
     return this.upsert({
       ...node,
       state,
-      delivery_state: DEFAULT_DELIVERY_STATE_BY_LIFECYCLE[state],
+      delivery_state: resolveEffectiveNodeDeliveryState({
+        ...node,
+        state,
+        delivery_state: DEFAULT_NODE_DELIVERY_STATE_BY_LIFECYCLE[state]
+      }),
       updated_at: new Date().toISOString()
     });
   }

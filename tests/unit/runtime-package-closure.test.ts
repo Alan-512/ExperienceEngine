@@ -173,6 +173,18 @@ describe("runtime package closure", () => {
       expect.objectContaining({
         role: "runtime_route_authority",
         path: "dist/runtime/configuration/route-authority.js"
+      }),
+      expect.objectContaining({
+        role: "fenced_learning_queue_authority",
+        path: "dist/runtime/learning-queue/authority.js"
+      }),
+      expect.objectContaining({
+        role: "fenced_learning_queue_repository",
+        path: "dist/runtime/learning-queue/repository.js"
+      }),
+      expect.objectContaining({
+        role: "semantic_origin_provenance",
+        path: "dist/runtime/learning-queue/provenance.js"
       })
     ]));
     expect(first.required_runtime_files).toContainEqual(expect.objectContaining({
@@ -289,17 +301,25 @@ describe("runtime package closure", () => {
     });
     expect(PACKAGE_LOCAL_SUPERVISOR_ENTRYPOINT).toEqual({
       role: "package_local_supervisor",
-      stage: "process_authority_foundation_s3",
+      stage: "fenced_learning_queue_s5",
+      processAuthorityStage: "process_authority_foundation_s3",
       processAuthorityImplemented: true,
       migrationAuthorityProviderImplemented: true,
+      fencedQueueMaintenanceConsumerImplemented: true,
+      productionWriteAuthorityProviderConnected: false,
       packageAuthorizationIssuerConnected: false,
       productionActivationImplemented: false
     });
     expect(PACKAGE_LOCAL_WORKER_ENTRYPOINT).toEqual({
       role: "package_local_worker",
-      stage: "process_authority_foundation_s3",
+      stage: "fenced_learning_queue_s5",
+      processAuthorityStage: "process_authority_foundation_s3",
       workerLeaseImplemented: true,
       workerAcquisitionAuthorityConnected: false,
+      fencedQueueSemanticsImplemented: true,
+      separateRetryCountersImplemented: true,
+      semanticOriginProvenanceImplemented: true,
+      productionWriteAuthorityConnected: false,
       productionQueueImplemented: false,
       semanticWritesImplemented: false
     });

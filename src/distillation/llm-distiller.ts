@@ -19,7 +19,13 @@ import {
   type DistillerEndpoint
 } from "./host-llm.js";
 import { DEFAULT_DISTILLER_SYSTEM_PROMPT, buildCandidatePayload } from "./prompt-contract.js";
-import { LlmRequestDispatcher } from "./llm-request-dispatcher.js";
+import {
+  LlmRequestDispatcher,
+  LlmRequestExecutionError
+} from "./llm-request-dispatcher.js";
+import {
+  DistillationExecutionError
+} from "./errors.js";
 
 type DistillerRuntimeOptions = {
   env?: NodeJS.ProcessEnv;
@@ -214,17 +220,103 @@ const resolveTemperature = (profile: ExperienceEngineConfig["distillerProfile"])
 
 
 
-const isTransientProviderFailure = (error: unknown): boolean => {
-  const name = error instanceof Error ? error.name : "";
-  const message = error instanceof Error ? error.message : String(error);
-  return (
-    name === "AbortError" ||
-    name === "TimeoutError" ||
-    /timed out/i.test(message) ||
-    /aborted/i.test(message) ||
-    /failed with (?:HTTP\s+)?429\b/i.test(message) ||
-    /failed with (?:HTTP\s+)?5\d{2}\b/i.test(message) ||
-    /did not include a/i.test(message)
+const isTransientProviderFailure = (error: unknown): boolean =>
+  error instanceof LlmRequestExecutionError &&
+  (
+    error.kind === "timeout" ||
+    error.kind === "network" ||
+    error.kind === "response_contract" ||
+    (
+      error.kind === "http" &&
+      error.status !== undefined &&
+      (error.status === 429 || error.status >= 500)
+    )
+  );
+
+const toDistillationExecutionError = (
+  error: unknown
+): DistillationExecutionError => {
+  if (error instanceof DistillationExecutionError) {
+    return error;
+  }
+  if (!(error instanceof LlmRequestExecutionError)) {
+    return new DistillationExecutionError(
+      "provider_contract_invalid",
+      error instanceof Error ? error.message : String(error),
+      "EE_PROVIDER_CONTRACT_INVALID",
+      "provider_execution",
+      error instanceof Error ? { cause: error } : undefined
+    );
+  }
+  if (error.kind === "configuration") {
+    return new DistillationExecutionError(
+      "provider_configuration_invalid",
+      error.message,
+      "EE_PROVIDER_CONFIGURATION_INVALID",
+      "setup",
+      { cause: error }
+    );
+  }
+  if (error.kind === "timeout" || error.kind === "network") {
+    return new DistillationExecutionError(
+      "provider_transient",
+      error.message,
+      "EE_PROVIDER_TRANSIENT",
+      "provider_execution",
+      { cause: error }
+    );
+  }
+  if (error.kind === "response_contract") {
+    return new DistillationExecutionError(
+      "provider_contract_invalid",
+      error.message,
+      "EE_PROVIDER_CONTRACT_INVALID",
+      "provider_execution",
+      { cause: error }
+    );
+  }
+  if (error.status === 401 || error.status === 403) {
+    return new DistillationExecutionError(
+      "provider_auth_invalid",
+      error.message,
+      "EE_PROVIDER_AUTH_INVALID",
+      "provider_execution",
+      { cause: error }
+    );
+  }
+  if (error.status === 404) {
+    return new DistillationExecutionError(
+      "provider_model_invalid",
+      error.message,
+      "EE_PROVIDER_MODEL_INVALID",
+      "provider_execution",
+      { cause: error }
+    );
+  }
+  if (error.status === 429) {
+    return new DistillationExecutionError(
+      "provider_rate_limited",
+      error.message,
+      "EE_PROVIDER_RATE_LIMITED",
+      "provider_execution",
+      { cause: error }
+    );
+  }
+  if (error.status !== undefined && error.status >= 500) {
+    return new DistillationExecutionError(
+      "provider_transient",
+      error.message,
+      "EE_PROVIDER_TRANSIENT",
+      "provider_execution",
+      { cause: error }
+    );
+  }
+  return new DistillationExecutionError(
+    "provider_contract_invalid",
+    error.message,
+    "EE_PROVIDER_CONTRACT_INVALID",
+    "provider_execution",
+    { cause: error }
   );
 };
 
@@ -259,9 +351,19 @@ export class LlmDistiller {
     const resolution = this.resolveDistillation();
     if (resolution.distillationMode === "disabled") {
       if (this.config.distillationMode === "llm" || !this.config.distillationAllowPassthrough) {
-        throw new Error("Distillation requires a configured LLM endpoint");
+        throw new DistillationExecutionError(
+          "provider_configuration_invalid",
+          "Distillation requires a configured LLM endpoint",
+          "EE_PROVIDER_CONFIGURATION_INVALID",
+          "setup"
+        );
       }
-      throw new Error(resolution.reason);
+      throw new DistillationExecutionError(
+        "provider_configuration_invalid",
+        resolution.reason,
+        "EE_PROVIDER_CONFIGURATION_INVALID",
+        "setup"
+      );
     }
 
     if (resolution.distillationMode === "rule") {
@@ -277,11 +379,17 @@ export class LlmDistiller {
     });
 
     if (endpoints.length === 0) {
-      throw new Error("Distillation resolution did not provide a reusable endpoint.");
+      throw new DistillationExecutionError(
+        "provider_configuration_invalid",
+        "Distillation resolution did not provide a reusable endpoint.",
+        "EE_PROVIDER_CONFIGURATION_INVALID",
+        "setup"
+      );
     }
 
+    let content: string;
     try {
-      const content = await LlmRequestDispatcher.execute(endpoints, {
+      content = await LlmRequestDispatcher.execute(endpoints, {
         systemPrompt: DEFAULT_DISTILLER_SYSTEM_PROMPT,
         userPrompt: buildCandidatePayload(candidate),
         temperature: resolveTemperature(this.config.distillerProfile),
@@ -292,7 +400,14 @@ export class LlmDistiller {
         maxTokens: 1024,
         maxRetries: this.config.distillationMaxRetries
       });
+    } catch (error) {
+      if (this.config.distillationAllowPassthrough && isTransientProviderFailure(error)) {
+        return passthroughDistillation(candidate);
+      }
+      throw toDistillationExecutionError(error);
+    }
 
+    try {
       const parsed = JSON.parse(content) as Record<string, unknown>;
       const validated = validateDistillationPayload(parsed);
       return {
@@ -301,10 +416,13 @@ export class LlmDistiller {
         distillation_source: resolution.distillationSource
       };
     } catch (error) {
-      if (this.config.distillationAllowPassthrough && isTransientProviderFailure(error)) {
-        return passthroughDistillation(candidate);
-      }
-      throw error;
+      throw new DistillationExecutionError(
+        "candidate_output_schema_invalid",
+        error instanceof Error ? error.message : String(error),
+        "EE_CANDIDATE_OUTPUT_SCHEMA_INVALID",
+        "candidate_validation",
+        error instanceof Error ? { cause: error } : undefined
+      );
     }
   }
 }

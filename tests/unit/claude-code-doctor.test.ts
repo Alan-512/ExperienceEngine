@@ -95,6 +95,59 @@ To remove this server, run: claude mcp remove "experienceengine" -s project`;
     expect(inspection.distillationStatus?.distillationSource).toBeTruthy();
   });
 
+  it("isolates an explicit homeDir from stale process-level ExperienceEngine path variables", () => {
+    const homeDir = makeTempDir();
+    const projectDir = makeTempDir();
+    const unrelatedHome = makeTempDir();
+    const previousHome = process.env.EXPERIENCE_ENGINE_HOME;
+    const previousDataDir = process.env.EXPERIENCE_ENGINE_DATA_DIR;
+    const previousCaptureDir = process.env.EXPERIENCE_ENGINE_CAPTURE_DIR;
+    process.env.EXPERIENCE_ENGINE_HOME = join(unrelatedHome, ".experienceengine");
+    process.env.EXPERIENCE_ENGINE_DATA_DIR = join(unrelatedHome, "data");
+    process.env.EXPERIENCE_ENGINE_CAPTURE_DIR = join(unrelatedHome, "captures");
+    const runner = (command: { bin: string; args: string[] }) => {
+      const key = [command.bin, ...command.args].join(" ");
+      if (key === "claude mcp get experienceengine") {
+        return `experienceengine:
+  Scope: Project config (shared via .mcp.json)
+  Status: ✓ Connected
+  Type: stdio
+  Command: node
+  Args: --no-warnings /tmp/experienceengine/dist/cli/index.js mcp-server
+  Environment:
+    EXPERIENCE_ENGINE_HOME=${join(homeDir, ".experienceengine")}`;
+      }
+      return "";
+    };
+
+    try {
+      const installed = installClaudeCodeAdapter({ homeDir, projectDir, runner });
+      expect(installed.paths.productHome).toBe(resolve(homeDir, ".experienceengine"));
+      const inspection = inspectClaudeCodeInstall({ homeDir, projectDir, runner });
+      expect(inspection.versionStatus.recordedVersion).toBe(currentVersion);
+      expect(inspection.versionStatus.state).toBe("current");
+      expect(inspection.captureDir).toContain(
+        resolve(homeDir, ".experienceengine", "adapters", "claude-code")
+      );
+    } finally {
+      if (previousHome === undefined) {
+        delete process.env.EXPERIENCE_ENGINE_HOME;
+      } else {
+        process.env.EXPERIENCE_ENGINE_HOME = previousHome;
+      }
+      if (previousDataDir === undefined) {
+        delete process.env.EXPERIENCE_ENGINE_DATA_DIR;
+      } else {
+        process.env.EXPERIENCE_ENGINE_DATA_DIR = previousDataDir;
+      }
+      if (previousCaptureDir === undefined) {
+        delete process.env.EXPERIENCE_ENGINE_CAPTURE_DIR;
+      } else {
+        process.env.EXPERIENCE_ENGINE_CAPTURE_DIR = previousCaptureDir;
+      }
+    }
+  });
+
   it("reports the configured runtime target and windows launcher commands", () => {
     const homeDir = makeMountedTempDir();
     const projectDir = makeMountedTempDir();

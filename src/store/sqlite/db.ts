@@ -109,6 +109,180 @@ const backfillExperienceNodeDeliveryState = (db: DatabaseSync, forceAllRows = fa
   );
 };
 
+const ensureFencedLearningQueueSchema = (db: DatabaseSync): void => {
+  ensureColumn(db, "experience_nodes", "contains_unbenchmarked_origin", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "experience_nodes", "contains_revoked_profile_origin", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "experience_nodes", "semantic_origin_count", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "experience_nodes", "exact_provenance_key_count", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "experience_nodes", "compacted_provenance_origin_count", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "experience_nodes", "effective_generation_assurance_floor", "TEXT");
+
+  ensureColumn(db, "experience_candidates", "state_revision", "INTEGER NOT NULL DEFAULT 1");
+  ensureColumn(db, "experience_candidates", "content_retry_count", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "experience_candidates", "failure_code", "TEXT");
+  ensureColumn(db, "experience_candidates", "failure_class", "TEXT");
+  ensureColumn(db, "experience_candidates", "failure_scope", "TEXT");
+  ensureColumn(db, "experience_candidates", "blocked_at", "TEXT");
+  ensureColumn(db, "experience_candidates", "terminal_reason_code", "TEXT");
+  ensureColumn(db, "experience_candidates", "semantic_origin_provenance_key", "TEXT");
+
+  ensureColumn(db, "distillation_jobs", "home_id", "TEXT");
+  ensureColumn(db, "distillation_jobs", "state_revision", "INTEGER NOT NULL DEFAULT 1");
+  ensureColumn(db, "distillation_jobs", "claim_id", "TEXT");
+  ensureColumn(db, "distillation_jobs", "claim_owner_id", "TEXT");
+  ensureColumn(db, "distillation_jobs", "claim_fencing_token", "INTEGER");
+  ensureColumn(db, "distillation_jobs", "claimed_supervisor_owner_id", "TEXT");
+  ensureColumn(db, "distillation_jobs", "claimed_supervisor_lease_epoch", "INTEGER");
+  ensureColumn(db, "distillation_jobs", "claimed_package_generation_id", "TEXT");
+  ensureColumn(db, "distillation_jobs", "claimed_activation_revision", "INTEGER");
+  ensureColumn(db, "distillation_jobs", "claimed_production_activation_handshake_id", "TEXT");
+  ensureColumn(db, "distillation_jobs", "claimed_configuration_generation_id", "TEXT");
+  ensureColumn(db, "distillation_jobs", "claimed_effective_route_set_id", "TEXT");
+  ensureColumn(db, "distillation_jobs", "claimed_effective_route_revision", "INTEGER");
+  ensureColumn(db, "distillation_jobs", "claimed_capability", "TEXT");
+  ensureColumn(db, "distillation_jobs", "claimed_route_fingerprint", "TEXT");
+  ensureColumn(db, "distillation_jobs", "claimed_schema_version", "TEXT");
+  ensureColumn(db, "distillation_jobs", "claimed_job_schema_version", "TEXT");
+  ensureColumn(db, "distillation_jobs", "claimed_candidate_schema_version", "TEXT");
+  ensureColumn(db, "distillation_jobs", "claimed_node_schema_version", "TEXT");
+  ensureColumn(db, "distillation_jobs", "claimed_at", "TEXT");
+  ensureColumn(db, "distillation_jobs", "claim_heartbeat_at", "TEXT");
+  ensureColumn(db, "distillation_jobs", "claim_expires_at", "TEXT");
+  ensureColumn(db, "distillation_jobs", "failure_code", "TEXT");
+  ensureColumn(db, "distillation_jobs", "failure_class", "TEXT");
+  ensureColumn(db, "distillation_jobs", "failure_scope", "TEXT");
+  ensureColumn(db, "distillation_jobs", "system_attempt_count", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "distillation_jobs", "interruption_count", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "distillation_jobs", "content_retry_count", "INTEGER NOT NULL DEFAULT 0");
+  ensureColumn(db, "distillation_jobs", "next_attempt_at", "TEXT NOT NULL DEFAULT '1970-01-01T00:00:00.000Z'");
+  ensureColumn(db, "distillation_jobs", "blocked_at", "TEXT");
+  ensureColumn(db, "distillation_jobs", "route_fingerprint", "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, "distillation_jobs", "terminal_reason_code", "TEXT");
+
+  db.exec(
+    `UPDATE experience_candidates
+     SET state_revision = CASE WHEN state_revision < 1 THEN 1 ELSE state_revision END,
+         content_retry_count = CASE
+           WHEN content_retry_count = 0 AND retry_count > 0 THEN retry_count
+           ELSE content_retry_count
+         END`
+  );
+  db.exec(
+    `UPDATE distillation_jobs
+     SET state_revision = CASE WHEN state_revision < 1 THEN 1 ELSE state_revision END,
+         content_retry_count = CASE
+           WHEN content_retry_count = 0 AND retry_count > 0 THEN retry_count
+           ELSE content_retry_count
+         END,
+         next_attempt_at = CASE
+           WHEN next_attempt_at IS NULL OR next_attempt_at = '1970-01-01T00:00:00.000Z'
+             THEN updated_at
+           ELSE next_attempt_at
+         END`
+  );
+
+  db.exec(
+    `CREATE INDEX IF NOT EXISTS idx_distillation_jobs_runnable
+       ON distillation_jobs(status, next_attempt_at, updated_at);
+     CREATE INDEX IF NOT EXISTS idx_distillation_jobs_claim
+       ON distillation_jobs(claim_id, claim_owner_id, claim_fencing_token);
+     CREATE INDEX IF NOT EXISTS idx_node_semantic_origin_provenance_node
+       ON node_semantic_origin_provenance(node_id, last_origin_at);`
+  );
+
+  const claimShapePredicate = `
+    CASE
+      WHEN NEW.status NOT IN ('pending', 'processing', 'blocked', 'failed', 'succeeded', 'discarded')
+        THEN RAISE(ABORT, 'invalid learning job state')
+      WHEN NEW.state_revision < 1 OR
+           NEW.system_attempt_count < 0 OR
+           NEW.interruption_count < 0 OR
+           NEW.content_retry_count < 0
+        THEN RAISE(ABORT, 'invalid learning job revision or counter')
+      WHEN NEW.status = 'processing' AND NEW.home_id IS NOT NULL AND (
+        NEW.claim_id IS NULL OR
+        NEW.claim_owner_id IS NULL OR
+        NEW.claim_fencing_token IS NULL OR
+        NEW.claimed_supervisor_owner_id IS NULL OR
+        NEW.claimed_supervisor_lease_epoch IS NULL OR
+        NEW.claimed_package_generation_id IS NULL OR
+        NEW.claimed_activation_revision IS NULL OR
+        NEW.claimed_production_activation_handshake_id IS NULL OR
+        NEW.claimed_configuration_generation_id IS NULL OR
+        NEW.claimed_effective_route_set_id IS NULL OR
+        NEW.claimed_effective_route_revision IS NULL OR
+        NEW.claimed_capability IS NULL OR
+        NEW.claimed_route_fingerprint IS NULL OR
+        NEW.claimed_schema_version IS NULL OR
+        NEW.claimed_job_schema_version IS NULL OR
+        NEW.claimed_candidate_schema_version IS NULL OR
+        NEW.claimed_node_schema_version IS NULL OR
+        NEW.claimed_at IS NULL OR
+        NEW.claim_heartbeat_at IS NULL OR
+        NEW.claim_expires_at IS NULL
+      ) THEN RAISE(ABORT, 'processing job requires complete claim identity')
+      WHEN NEW.status = 'processing' AND NEW.home_id IS NULL AND (
+        NEW.claim_id IS NOT NULL OR
+        NEW.claim_owner_id IS NOT NULL OR
+        NEW.claim_fencing_token IS NOT NULL
+      ) THEN RAISE(ABORT, 'legacy processing job cannot persist fenced claim identity')
+      WHEN NEW.status <> 'processing' AND (
+        NEW.claim_id IS NOT NULL OR
+        NEW.claim_owner_id IS NOT NULL OR
+        NEW.claim_fencing_token IS NOT NULL OR
+        NEW.claimed_supervisor_owner_id IS NOT NULL OR
+        NEW.claimed_supervisor_lease_epoch IS NOT NULL OR
+        NEW.claimed_package_generation_id IS NOT NULL OR
+        NEW.claimed_activation_revision IS NOT NULL OR
+        NEW.claimed_production_activation_handshake_id IS NOT NULL OR
+        NEW.claimed_configuration_generation_id IS NOT NULL OR
+        NEW.claimed_effective_route_set_id IS NOT NULL OR
+        NEW.claimed_effective_route_revision IS NOT NULL OR
+        NEW.claimed_capability IS NOT NULL OR
+        NEW.claimed_route_fingerprint IS NOT NULL OR
+        NEW.claimed_schema_version IS NOT NULL OR
+        NEW.claimed_job_schema_version IS NOT NULL OR
+        NEW.claimed_candidate_schema_version IS NOT NULL OR
+        NEW.claimed_node_schema_version IS NOT NULL OR
+        NEW.claimed_at IS NOT NULL OR
+        NEW.claim_heartbeat_at IS NOT NULL OR
+        NEW.claim_expires_at IS NOT NULL
+      ) THEN RAISE(ABORT, 'non-processing job cannot retain claim identity')
+    END`;
+  db.exec(
+    `CREATE TRIGGER IF NOT EXISTS trg_distillation_jobs_contract_insert
+     BEFORE INSERT ON distillation_jobs
+     BEGIN
+       SELECT ${claimShapePredicate};
+     END;
+     CREATE TRIGGER IF NOT EXISTS trg_distillation_jobs_contract_update
+     BEFORE UPDATE ON distillation_jobs
+     BEGIN
+       SELECT ${claimShapePredicate};
+     END;
+     CREATE TRIGGER IF NOT EXISTS trg_experience_candidates_s5_contract_insert
+     BEFORE INSERT ON experience_candidates
+     BEGIN
+       SELECT CASE
+         WHEN NEW.lifecycle_state NOT IN ('pending', 'blocked', 'failed', 'distilled', 'discarded')
+           THEN RAISE(ABORT, 'invalid learning candidate state')
+         WHEN NEW.state_revision < 1 OR NEW.content_retry_count < 0
+           THEN RAISE(ABORT, 'invalid learning candidate revision or counter')
+       END;
+     END;
+     CREATE TRIGGER IF NOT EXISTS trg_experience_candidates_s5_contract_update
+     BEFORE UPDATE ON experience_candidates
+     BEGIN
+       SELECT CASE
+         WHEN NEW.lifecycle_state NOT IN ('pending', 'blocked', 'failed', 'distilled', 'discarded')
+           THEN RAISE(ABORT, 'invalid learning candidate state')
+         WHEN NEW.state_revision < 1 OR NEW.content_retry_count < 0
+           THEN RAISE(ABORT, 'invalid learning candidate revision or counter')
+       END;
+     END;`
+  );
+};
+
 export const bootstrapDatabase = (db: DatabaseSync): void => {
   const schemaPath = resolveSQLiteSchemaPath(moduleDir);
   const schema = readFileSync(schemaPath, "utf8");
@@ -188,6 +362,7 @@ export const bootstrapDatabase = (db: DatabaseSync): void => {
   ensureColumn(db, "distillation_jobs", "started_at", "TEXT");
   ensureColumn(db, "distillation_jobs", "finished_at", "TEXT");
   ensureColumn(db, "distillation_jobs", "discarded_at", "TEXT");
+  ensureFencedLearningQueueSchema(db);
   ensureColumn(db, "injection_events", "session_id", "TEXT");
   ensureColumn(db, "injection_events", "task_summary", "TEXT");
   ensureColumn(db, "injection_events", "delivery_mode", "TEXT NOT NULL DEFAULT 'live'");

@@ -7,6 +7,25 @@ const BEDROCK_SERVICE = "bedrock";
 const DEFAULT_DISTILLATION_REQUEST_TIMEOUT_MS = 45_000;
 const FREE_MODEL_DISTILLATION_REQUEST_TIMEOUT_MS = 75_000;
 
+export type LlmRequestFailureKind =
+  | "configuration"
+  | "http"
+  | "network"
+  | "timeout"
+  | "response_contract";
+
+export class LlmRequestExecutionError extends Error {
+  constructor(
+    readonly kind: LlmRequestFailureKind,
+    message: string,
+    readonly status?: number,
+    options?: ErrorOptions
+  ) {
+    super(message, options);
+    this.name = "LlmRequestExecutionError";
+  }
+}
+
 export interface LlmRequestOptions {
   systemPrompt: string;
   userPrompt: string;
@@ -145,7 +164,10 @@ async function parseResponseContent(endpoint: DistillerEndpoint, response: Respo
     const payload = (await response.json()) as { content?: Array<{ type?: string; text?: string }> };
     const textBlock = payload.content?.find((entry) => entry.type === "text" && typeof entry.text === "string");
     if (!textBlock?.text) {
-      throw new Error("Response did not include an Anthropic text payload");
+      throw new LlmRequestExecutionError(
+        "response_contract",
+        "Response did not include an Anthropic text payload"
+      );
     }
     return textBlock.text;
   }
@@ -155,7 +177,10 @@ async function parseResponseContent(endpoint: DistillerEndpoint, response: Respo
     };
     const text = payload.candidates?.[0]?.content?.parts?.find((entry) => typeof entry.text === "string")?.text;
     if (!text) {
-      throw new Error("Response did not include a Gemini text payload");
+      throw new LlmRequestExecutionError(
+        "response_contract",
+        "Response did not include a Gemini text payload"
+      );
     }
     return text;
   }
@@ -163,7 +188,10 @@ async function parseResponseContent(endpoint: DistillerEndpoint, response: Respo
     const payload = (await response.json()) as { output?: { message?: { content?: Array<{ text?: string }> } } };
     const text = payload.output?.message?.content?.find((entry) => typeof entry.text === "string")?.text;
     if (!text) {
-      throw new Error("Response did not include a Bedrock text payload");
+      throw new LlmRequestExecutionError(
+        "response_contract",
+        "Response did not include a Bedrock text payload"
+      );
     }
     return text;
   }
@@ -172,7 +200,10 @@ async function parseResponseContent(endpoint: DistillerEndpoint, response: Respo
   const payload = (await response.json()) as { choices?: Array<{ message?: { content?: string } }> };
   const content = payload.choices?.[0]?.message?.content;
   if (!content) {
-    throw new Error("Response did not include an OpenAI style message payload");
+    throw new LlmRequestExecutionError(
+      "response_contract",
+      "Response did not include an OpenAI style message payload"
+    );
   }
   return content;
 }
@@ -183,7 +214,10 @@ export class LlmRequestDispatcher {
     options: LlmRequestOptions
   ): Promise<string> {
     if (endpoints.length === 0) {
-      throw new Error("No endpoints provided for execution");
+      throw new LlmRequestExecutionError(
+        "configuration",
+        "No endpoints provided for execution"
+      );
     }
 
     const env = resolveExperienceEngineRuntimeEnv({ env: options.env ?? process.env });
@@ -206,7 +240,10 @@ export class LlmRequestDispatcher {
         if (options.maxTimeoutMs) {
           const elapsed = Date.now() - startTime;
           if (elapsed >= options.maxTimeoutMs) {
-            throw new Error(`LLM execution chain exceeded cumulative timeout cap of ${options.maxTimeoutMs}ms`);
+            throw new LlmRequestExecutionError(
+              "timeout",
+              `LLM execution chain exceeded cumulative timeout cap of ${options.maxTimeoutMs}ms`
+            );
           }
         }
 
@@ -248,21 +285,41 @@ export class LlmRequestDispatcher {
           });
 
           if (!response.ok) {
-            throw new Error(`LLM request failed with HTTP ${response.status}`);
+            throw new LlmRequestExecutionError(
+              "http",
+              `LLM request failed with HTTP ${response.status}`,
+              response.status
+            );
           }
 
           return await parseResponseContent(endpoint, response);
         } catch (error) {
-          lastError = error instanceof Error ? error : new Error(String(error));
+          if (error instanceof LlmRequestExecutionError) {
+            lastError = error;
+          } else if (error instanceof Error) {
+            const kind = error.name === "AbortError" || error.name === "TimeoutError"
+              ? "timeout"
+              : "network";
+            lastError = new LlmRequestExecutionError(kind, error.message, undefined, {
+              cause: error
+            });
+          } else {
+            lastError = new LlmRequestExecutionError("network", String(error));
+          }
 
           // Check if fallback trigger (timeout or fallback code)
           const isFallbackTrigger =
-            lastError.name === "AbortError" ||
-            lastError.name === "TimeoutError" ||
-            /timed out/i.test(lastError.message) ||
-            /aborted/i.test(lastError.message) ||
-            fallbackCodes.some(code => lastError!.message.includes(`HTTP ${code}`)) ||
-            /did not include a/i.test(lastError.message);
+            lastError instanceof LlmRequestExecutionError &&
+            (
+              lastError.kind === "timeout" ||
+              lastError.kind === "network" ||
+              lastError.kind === "response_contract" ||
+              (
+                lastError.kind === "http" &&
+                lastError.status !== undefined &&
+                fallbackCodes.includes(lastError.status)
+              )
+            );
 
           if (!isFallbackTrigger) {
             throw lastError;
@@ -286,6 +343,9 @@ export class LlmRequestDispatcher {
       }
     }
 
-    throw lastError ?? new Error("Execution failed without a valid error");
+    throw lastError ?? new LlmRequestExecutionError(
+      "network",
+      "Execution failed without a valid error"
+    );
   }
 }

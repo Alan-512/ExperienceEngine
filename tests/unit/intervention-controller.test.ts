@@ -1223,6 +1223,48 @@ describe("decideIntervention", () => {
     expect(decision.text).toContain("Diagnostic lead from prior experience:");
   });
 
+  it("keeps an unbenchmarked custom-origin diagnostic candidate record-only regardless of match strength", async () => {
+    const decision = await decideIntervention(
+      input,
+      [
+        node({
+          id: "diagnostic-custom-origin",
+          state: "candidate",
+          delivery_state: "shadow_only",
+          contains_unbenchmarked_origin: true,
+          effective_generation_assurance_floor: "unbenchmarked",
+          task_type: "test_debug",
+          trigger_pattern: "Fix the failing vitest auth test in the current workspace",
+          compact_hint: "Run the failing vitest auth test before editing and verify after the fix.",
+          recommended_steps: ["Run the focused auth test first."],
+          helped_count: 50,
+          support_count: 50
+        })
+      ],
+      stats,
+      0.6,
+      3,
+      undefined,
+      {
+        scopeId: "scope_1",
+        host: "codex",
+        taskType: "test_debug",
+        taskSummary: "Fix the failing vitest auth test in the current workspace",
+        failureSignature: "failing vitest auth test",
+        toolNames: ["vitest"],
+        outcomeSignal: "unknown",
+        injectedNodeIds: []
+      }
+    );
+
+    expect(decision.mode).toBe("skip");
+    expect(decision.selected).toEqual([]);
+    expect(decision.text).toBeUndefined();
+    expect(decision.diagnostics?.recordOnlyDiagnosticCandidateIds).toEqual([
+      "diagnostic-custom-origin"
+    ]);
+  });
+
   it("records diagnostic candidates without delivery when the live gate rejects them", async () => {
     const decision = await decideIntervention(
       input,

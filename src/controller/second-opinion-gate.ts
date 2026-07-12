@@ -10,6 +10,9 @@ import type {
   SyncSecondOpinionDecision,
   SyncSecondOpinionTrigger
 } from "../types/domain.js";
+import {
+  resolveEffectiveNodeDeliveryState
+} from "../runtime/learning-queue/delivery-policy.js";
 import type { RetrievedCandidate } from "./candidate-retriever.js";
 
 type SecondOpinionConfig = Pick<
@@ -85,14 +88,6 @@ type TestHooks = {
   evaluate?: (input: SelectiveSecondOpinionInput) => Promise<SelectiveSecondOpinionResult | null>;
 };
 
-const DEFAULT_DELIVERY_STATE_BY_LIFECYCLE: Record<ExperienceNode["state"], NonNullable<ExperienceNode["delivery_state"]>> = {
-  candidate: "shadow_only",
-  priority_candidate: "conservative_only",
-  active: "eligible",
-  cooling: "conservative_only",
-  retired: "quarantined"
-};
-
 const SECOND_OPINION_SYSTEM_PROMPT = [
   "You are a synchronous safety gate for ExperienceEngine hint injection.",
   "You review only high-risk live hint candidates before injection.",
@@ -104,10 +99,6 @@ const SECOND_OPINION_SYSTEM_PROMPT = [
 ].join(" ");
 
 let testHooks: TestHooks | null = null;
-
-const resolveDeliveryState = (
-  node: Pick<ExperienceNode, "state" | "delivery_state">
-): NonNullable<ExperienceNode["delivery_state"]> => node.delivery_state ?? DEFAULT_DELIVERY_STATE_BY_LIFECYCLE[node.state];
 
 const hasCorrectionIntent = (input: ExperienceInput): boolean => {
   const text = [input.task_summary, input.context_summary].filter(Boolean).join("\n");
@@ -193,7 +184,10 @@ export const deriveSelectiveSecondOpinionTrigger = (
     return null;
   }
 
-  const deliveryState = resolveDeliveryState(top);
+  const deliveryState = resolveEffectiveNodeDeliveryState(top);
+  if (deliveryState !== "eligible" && deliveryState !== "conservative_only") {
+    return null;
+  }
   const plannedMode = deliveryState === "conservative_only" ? "inject_conservative" : "inject";
 
   if (deliveryState === "conservative_only" && top.state === "active") {
