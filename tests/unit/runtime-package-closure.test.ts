@@ -15,6 +15,7 @@ import {
   RUNTIME_CLOSURE_REQUIRED_ENTRYPOINTS,
   RUNTIME_CLOSURE_REQUIRED_RUNTIME_FILES,
   RUNTIME_CLOSURE_REQUIRED_SCHEMA_AND_MIGRATIONS,
+  RUNTIME_PROFILE_REGISTRY_RELATIVE_PATH,
   RUNTIME_PROCESS_AUTHORITY_REGISTRY_RELATIVE_PATH,
   assertRuntimeClosureManifest,
   validateRuntimeClosureManifest,
@@ -160,6 +161,18 @@ describe("runtime package closure", () => {
       expect.objectContaining({
         role: "runtime_worker_authority",
         path: "dist/runtime/process/worker-authority.js"
+      }),
+      expect.objectContaining({
+        role: "runtime_configuration_generation",
+        path: "dist/runtime/configuration/generation.js"
+      }),
+      expect.objectContaining({
+        role: "runtime_configuration_validation",
+        path: "dist/runtime/configuration/validation.js"
+      }),
+      expect.objectContaining({
+        role: "runtime_route_authority",
+        path: "dist/runtime/configuration/route-authority.js"
       })
     ]));
     expect(first.required_runtime_files).toContainEqual(expect.objectContaining({
@@ -171,6 +184,28 @@ describe("runtime package closure", () => {
     expect(manifestText).not.toContain("key_material");
     expect(manifestText).not.toContain("artifact_integrity");
     expect(manifestText).not.toContain("package_generation_id");
+    const profileRegistry = JSON.parse(readFileSync(
+      join(root, ...RUNTIME_PROFILE_REGISTRY_RELATIVE_PATH.split("/")),
+      "utf8"
+    )) as {
+      package_build_id: string;
+      registry_digest: string;
+      entries: Array<{
+        quality_profile: string;
+        benchmark_evidence: unknown;
+        capability_contracts: Record<string, { benchmark_assurance: string }>;
+      }>;
+    };
+    expect(profileRegistry.package_build_id).toBe(first.package_build_id);
+    expect(profileRegistry.registry_digest).toBe(first.profile_registry_digest);
+    expect(profileRegistry.entries).toHaveLength(1);
+    expect(profileRegistry.entries[0]).toMatchObject({
+      quality_profile: "custom",
+      benchmark_evidence: null
+    });
+    expect(Object.values(profileRegistry.entries[0].capability_contracts).every(
+      (contract) => contract.benchmark_assurance === "unbenchmarked"
+    )).toBe(true);
     for (const asset of [
       ...first.required_entrypoints,
       ...first.required_runtime_files,

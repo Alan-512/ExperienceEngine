@@ -18,6 +18,10 @@ import type {
   RuntimeClosureManifestContent
 } from "../identity/types.js";
 import { canonicalJson, sha256Text } from "./package-generation.js";
+import {
+  loadPackagedProfileRegistry,
+  writeBoundMinimumProfileRegistry
+} from "../configuration/registry.js";
 
 export const RUNTIME_CLOSURE_MANIFEST_RELATIVE_PATH =
   "dist/runtime/package/runtime-closure-manifest.json" as const;
@@ -71,6 +75,16 @@ export const RUNTIME_CLOSURE_REQUIRED_RUNTIME_FILES: Array<Omit<RuntimeClosureAs
   { role: "runtime_process_policy", path: "dist/runtime/process/lifecycle.js" },
   { role: "runtime_process_inspection", path: "dist/runtime/process/inspection.js" },
   { role: "runtime_process_registry", path: RUNTIME_PROCESS_AUTHORITY_REGISTRY_RELATIVE_PATH },
+  { role: "runtime_configuration_constants", path: "dist/runtime/configuration/constants.js" },
+  { role: "runtime_configuration_types", path: "dist/runtime/configuration/types.js" },
+  { role: "runtime_configuration_errors", path: "dist/runtime/configuration/errors.js" },
+  { role: "runtime_configuration_integrity", path: "dist/runtime/configuration/integrity.js" },
+  { role: "runtime_profile_registry", path: "dist/runtime/configuration/registry.js" },
+  { role: "runtime_configuration_generation", path: "dist/runtime/configuration/generation.js" },
+  { role: "runtime_configuration_validation", path: "dist/runtime/configuration/validation.js" },
+  { role: "runtime_route_authority", path: "dist/runtime/configuration/route-authority.js" },
+  { role: "runtime_configuration_product_boundaries", path: "dist/runtime/configuration/product-boundaries.js" },
+  { role: "runtime_configuration_inspection", path: "dist/runtime/configuration/inspection.js" },
   { role: "runtime_package_generation", path: "dist/runtime/package/package-generation.js" },
   { role: "runtime_closure_validator", path: "dist/runtime/package/closure-manifest.js" },
   { role: "profile_registry", path: RUNTIME_PROFILE_REGISTRY_RELATIVE_PATH }
@@ -153,7 +167,34 @@ const digestSelectedPackageMetadata = (packageJson: Record<string, unknown>): {
   }))
 });
 
-export const createRuntimeClosureManifest = (packageRoot: string): RuntimeClosureManifest => {
+const createPackageBuildId = (options: {
+  packageName: string;
+  packageVersion: string;
+  requiredEntrypoints: RuntimeClosureAsset[];
+  requiredRuntimeFiles: RuntimeClosureAsset[];
+  requiredSchemaAndMigrations: RuntimeClosureAsset[];
+  dependencyRequirementsDigest: string;
+  compatibilityMetadataDigest: string;
+}): string => `build_${sha256Text(canonicalJson({
+  package_name: options.packageName,
+  package_version: options.packageVersion,
+  required_entrypoints: options.requiredEntrypoints,
+  required_runtime_files: options.requiredRuntimeFiles.filter(
+    (asset) => asset.role !== "profile_registry"
+  ),
+  profile_registry_contract: RUNTIME_CLOSURE_REQUIRED_RUNTIME_FILES.find(
+    (asset) => asset.role === "profile_registry"
+  ),
+  required_schema_and_migrations: options.requiredSchemaAndMigrations,
+  dependency_requirements_digest: options.dependencyRequirementsDigest,
+  compatibility_metadata_digest: options.compatibilityMetadataDigest
+}))}`;
+
+const readPackageIdentity = (packageRoot: string): {
+  packageJson: Record<string, unknown>;
+  packageName: string;
+  packageVersion: string;
+} => {
   const packageJson = readJson<Record<string, unknown>>(resolve(packageRoot, "package.json"));
   const packageName = packageJson.name;
   const packageVersion = packageJson.version;
@@ -163,27 +204,67 @@ export const createRuntimeClosureManifest = (packageRoot: string): RuntimeClosur
       "package.json must contain string name and version fields."
     );
   }
+  return { packageJson, packageName, packageVersion };
+};
 
+const createRuntimeBuildIdentity = (packageRoot: string): {
+  packageName: string;
+  packageVersion: string;
+  packageBuildId: string;
+  metadataDigests: ReturnType<typeof digestSelectedPackageMetadata>;
+} => {
+  const { packageJson, packageName, packageVersion } = readPackageIdentity(packageRoot);
+  const requiredEntrypoints = bindAssets(packageRoot, RUNTIME_CLOSURE_REQUIRED_ENTRYPOINTS);
+  const requiredRuntimeFiles = bindAssets(
+    packageRoot,
+    RUNTIME_CLOSURE_REQUIRED_RUNTIME_FILES.filter((asset) => asset.role !== "profile_registry")
+  );
+  const requiredSchemaAndMigrations = bindAssets(
+    packageRoot,
+    RUNTIME_CLOSURE_REQUIRED_SCHEMA_AND_MIGRATIONS
+  );
+  const metadataDigests = digestSelectedPackageMetadata(packageJson);
+  return {
+    packageName,
+    packageVersion,
+    packageBuildId: createPackageBuildId({
+      packageName,
+      packageVersion,
+      requiredEntrypoints,
+      requiredRuntimeFiles,
+      requiredSchemaAndMigrations,
+      ...metadataDigests
+    }),
+    metadataDigests
+  };
+};
+
+export const createRuntimeClosureManifest = (packageRoot: string): RuntimeClosureManifest => {
+  const buildIdentity = createRuntimeBuildIdentity(packageRoot);
+  const { packageName, packageVersion, packageBuildId, metadataDigests } = buildIdentity;
   const requiredEntrypoints = bindAssets(packageRoot, RUNTIME_CLOSURE_REQUIRED_ENTRYPOINTS);
   const requiredRuntimeFiles = bindAssets(packageRoot, RUNTIME_CLOSURE_REQUIRED_RUNTIME_FILES);
   const requiredSchemaAndMigrations = bindAssets(packageRoot, RUNTIME_CLOSURE_REQUIRED_SCHEMA_AND_MIGRATIONS);
-  const profileRegistry = requiredRuntimeFiles.find((asset) => asset.role === "profile_registry");
-  if (!profileRegistry) {
+  const profileRegistryAsset = requiredRuntimeFiles.find(
+    (asset) => asset.role === "profile_registry"
+  );
+  if (!profileRegistryAsset) {
     throw new RuntimeIdentityError(
       "EE_RUNTIME_CLOSURE_INVALID",
       "Runtime closure profile registry asset is missing."
     );
   }
 
-  const metadataDigests = digestSelectedPackageMetadata(packageJson);
-  const packageBuildId = `build_${sha256Text(canonicalJson({
-    package_name: packageName,
-    package_version: packageVersion,
-    required_entrypoints: requiredEntrypoints,
-    required_runtime_files: requiredRuntimeFiles,
-    required_schema_and_migrations: requiredSchemaAndMigrations,
-    ...metadataDigests
-  }))}`;
+  const profileRegistryPath = resolvePackageAsset(
+    packageRoot,
+    RUNTIME_PROFILE_REGISTRY_RELATIVE_PATH
+  );
+  const profileRegistry = loadPackagedProfileRegistry({
+    path: profileRegistryPath,
+    expectedPackageName: packageName,
+    expectedPackageVersion: packageVersion,
+    expectedPackageBuildId: packageBuildId
+  });
   const content: RuntimeClosureManifestContent = {
     closure_manifest_version: RUNTIME_CLOSURE_MANIFEST_VERSION,
     package_name: packageName,
@@ -192,7 +273,7 @@ export const createRuntimeClosureManifest = (packageRoot: string): RuntimeClosur
     required_entrypoints: requiredEntrypoints,
     required_runtime_files: requiredRuntimeFiles,
     required_schema_and_migrations: requiredSchemaAndMigrations,
-    profile_registry_digest: profileRegistry.sha256,
+    profile_registry_digest: profileRegistry.registry_digest,
     dependency_requirements_digest: metadataDigests.dependencyRequirementsDigest,
     compatibility_metadata_digest: metadataDigests.compatibilityMetadataDigest
   };
@@ -207,6 +288,18 @@ export const writeRuntimePackageIdentityAssets = (packageRoot: string): RuntimeC
   const controlDdlPath = resolvePackageAsset(packageRoot, RUNTIME_CONTROL_DDL_ASSET_RELATIVE_PATH);
   mkdirSync(dirname(controlDdlPath), { recursive: true });
   writeFileSync(controlDdlPath, FIXED_CONTROL_PLANE_DDL, "utf8");
+
+  const buildIdentity = createRuntimeBuildIdentity(packageRoot);
+  const profileRegistryPath = resolvePackageAsset(
+    packageRoot,
+    RUNTIME_PROFILE_REGISTRY_RELATIVE_PATH
+  );
+  writeBoundMinimumProfileRegistry({
+    path: profileRegistryPath,
+    packageName: buildIdentity.packageName,
+    packageVersion: buildIdentity.packageVersion,
+    packageBuildId: buildIdentity.packageBuildId
+  });
 
   const manifest = createRuntimeClosureManifest(packageRoot);
   const manifestPath = resolvePackageAsset(packageRoot, RUNTIME_CLOSURE_MANIFEST_RELATIVE_PATH);
@@ -333,8 +426,24 @@ export const validateRuntimeClosureManifest = (packageRoot: string): RuntimeClos
     issues.push("asset_set_not_exhaustive");
   }
   const profileAsset = manifestAssets.find((asset) => asset.role === "profile_registry");
-  if (!profileAsset || profileAsset.sha256 !== manifest.profile_registry_digest) {
-    issues.push("profile_registry_digest_mismatch");
+  if (!profileAsset) {
+    issues.push("profile_registry_asset_missing");
+  } else {
+    try {
+      const registry = loadPackagedProfileRegistry({
+        path: resolvePackageAsset(packageRoot, profileAsset.path),
+        expectedPackageName: String(manifest.package_name),
+        expectedPackageVersion: String(manifest.package_version),
+        expectedPackageBuildId: String(manifest.package_build_id)
+      });
+      if (registry.registry_digest !== manifest.profile_registry_digest) {
+        issues.push("profile_registry_digest_mismatch");
+      }
+    } catch (error) {
+      issues.push(
+        `profile_registry_invalid:${error instanceof Error ? error.message : String(error)}`
+      );
+    }
   }
 
   try {

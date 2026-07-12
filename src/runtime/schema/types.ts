@@ -149,6 +149,7 @@ export type RuntimeSqliteOperationCategory =
   | "lease"
   | "claim"
   | "migration"
+  | "configuration_commit"
   | "protected_result_commit";
 
 export type RuntimeSqlitePolicyReport = {
