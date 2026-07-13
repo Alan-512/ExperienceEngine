@@ -1,9 +1,16 @@
 ## 1. Artifact Closure Harness
 
-- [ ] 1.1 Materialize the imported embedded closure, external attestation, validation-step, Windows resolution, and evidence-classification schemas as typed exhaustive fixtures/constants.
-- [ ] 1.2 Add isolated download/install helpers for exact npm and ClawHub artifact versions.
-- [ ] 1.3 Derive observed closure and compare entrypoints, dependencies, schemas, migrations, profiles, compatibility metadata, and integrity with S1 manifests.
-- [ ] 1.4 Reject declared-but-omitted, unresolved, integrity-mismatched, or source-repo-dependent artifacts.
+- [x] 1.1 Materialize the imported embedded closure, external attestation, validation-step, Windows resolution, and evidence-classification schemas as typed exhaustive fixtures/constants.
+- [x] 1.2 Add isolated download/install helpers for exact npm and ClawHub artifact versions.
+- [x] 1.3 Derive observed closure and compare entrypoints, dependencies, schemas, migrations, profiles, compatibility metadata, and integrity with S1 manifests.
+- [x] 1.4 Reject declared-but-omitted, unresolved, integrity-mismatched, or source-repo-dependent artifacts.
+
+### Artifact Closure Harness Evidence
+
+- The embedded manifest field list, external distribution attestation, exact eight-step validation order, Windows fallback resolution record, live activation/queue/shutdown evidence, evidence tiers, and documentation matrix are frozen as typed constants and strict validators.
+- npm materialization downloads exact registry metadata and artifact bytes directly, validates SRI, and writes only into an isolated destination. ClawHub materialization uses a channel-specific adapter but shares exact version/integrity enforcement; one channel cannot satisfy the other.
+- Installed dependency closure is derived recursively from the isolated package root without persisting source paths. Observed closure reuses the S1 validator and additionally binds artifact size/integrity, registry identity, channel, profile, compatibility, dependency closure, and embedded closure digest.
+- The embedded compatibility digest now truthfully records `source_local_pack_implemented_published_pending`; it does not declare npm or ClawHub support.
 
 ## 2. Clean-Home Runtime Validation
 

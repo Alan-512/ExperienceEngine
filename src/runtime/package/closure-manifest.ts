@@ -38,6 +38,9 @@ export const RUNTIME_MIGRATION_REGISTRY_RELATIVE_PATH =
 export const RUNTIME_PROCESS_AUTHORITY_REGISTRY_RELATIVE_PATH =
   "dist/runtime/package/assets/process/registry.json" as const;
 
+export const RUNTIME_ACTIVATION_COMPATIBILITY_STATUS =
+  "source_local_pack_implemented_published_pending" as const;
+
 export const RUNTIME_CLOSURE_REQUIRED_ENTRYPOINTS: Array<Omit<RuntimeClosureAsset, "sha256">> = [
   { role: "openclaw_plugin", path: "dist/plugin/openclaw-plugin.js" },
   { role: "package_local_supervisor", path: "dist/runtime/package/supervisor-entrypoint.js" },
@@ -199,7 +202,7 @@ const digestSelectedPackageMetadata = (packageJson: Record<string, unknown>): {
   compatibilityMetadataDigest: sha256Text(canonicalJson({
     openclaw: packageJson.openclaw ?? {},
     runtime_identity_contract: "phase-0.5a.1-freeze-2026-07-11",
-    runtime_activation: "disabled_until_later_slices"
+    runtime_activation: RUNTIME_ACTIVATION_COMPATIBILITY_STATUS
   }))
 });
 

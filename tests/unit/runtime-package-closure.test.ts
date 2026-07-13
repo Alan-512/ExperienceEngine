@@ -12,6 +12,7 @@ import { inspectRuntimeIdentityFoundation } from "../../src/runtime/identity/ins
 import type { RuntimeHomeIdentity } from "../../src/runtime/identity/types.js";
 import {
   RUNTIME_CLOSURE_MANIFEST_RELATIVE_PATH,
+  RUNTIME_ACTIVATION_COMPATIBILITY_STATUS,
   RUNTIME_CLOSURE_REQUIRED_ENTRYPOINTS,
   RUNTIME_CLOSURE_REQUIRED_RUNTIME_FILES,
   RUNTIME_CLOSURE_REQUIRED_SCHEMA_AND_MIGRATIONS,
@@ -136,6 +137,9 @@ describe("runtime package closure", () => {
       packageBuildId: first.package_build_id
     });
     expect(first.required_entrypoints).toHaveLength(3);
+    expect(RUNTIME_ACTIVATION_COMPATIBILITY_STATUS).toBe(
+      "source_local_pack_implemented_published_pending"
+    );
     expect(first.required_runtime_files.length).toBeGreaterThan(0);
     expect(first.required_runtime_files).toEqual(expect.arrayContaining([
       expect.objectContaining({
