@@ -487,7 +487,8 @@ export const createS6ProcessProductionWriteAuthorityProvider = (
       configurationGenerationId: evidence.configuration_generation_id,
       packageGenerationId: evidence.package_generation_id,
       effectiveRouteSetId: evidence.effective_route_set_id,
-      capability
+      capability,
+      observedAt
     });
     if (
       !route.available ||
@@ -529,7 +530,6 @@ export const createS6LearningQueueProductionWriteAuthorityProvider = (options: {
 } = {}): LearningQueueProductionWriteAuthorityProvider => {
   const routeAuthorityProvider = options.routeAuthorityProvider ??
     UNAVAILABLE_RUNTIME_CAPABILITY_ROUTE_AUTHORITY_PROVIDER;
-  const clock = options.clock ?? SYSTEM_PROCESS_AUTHORITY_CLOCK;
   return {
     getProductionWriteAuthorityInTransaction(input) {
       if (!input.db.isTransaction) {
@@ -542,7 +542,7 @@ export const createS6LearningQueueProductionWriteAuthorityProvider = (options: {
           reason: "production_activation_not_current"
         };
       }
-      const observedAt = clock.captureObservedNowInTransaction(input.db);
+      const observedAt = input.observedAt;
       const canonical = evaluateCanonicalProductionActivationInTransaction({
         db: input.db,
         homeId: input.homeId,
@@ -565,7 +565,8 @@ export const createS6LearningQueueProductionWriteAuthorityProvider = (options: {
         configurationGenerationId: canonical.configuration_generation_id,
         packageGenerationId: canonical.package_generation_id,
         effectiveRouteSetId: canonical.effective_route_set_id,
-        capability
+        capability,
+        observedAt
       });
       if (
         !route.available ||
@@ -650,7 +651,6 @@ export const createS6LearningQueueMaintenanceAuthorityProvider = (options: {
 } = {}): LearningQueueMaintenanceAuthorityProvider => {
   const routeAuthorityProvider = options.routeAuthorityProvider ??
     UNAVAILABLE_RUNTIME_CAPABILITY_ROUTE_AUTHORITY_PROVIDER;
-  const clock = options.clock ?? SYSTEM_PROCESS_AUTHORITY_CLOCK;
   return {
     getLearningQueueMaintenanceAuthorityInTransaction(input) {
       const unavailable = () => ({
@@ -664,7 +664,7 @@ export const createS6LearningQueueMaintenanceAuthorityProvider = (options: {
       if (!input.db.isTransaction) {
         return unavailable();
       }
-      const observedAt = clock.captureObservedNowInTransaction(input.db);
+      const observedAt = input.observedAt;
       const job = input.db.prepare(
         `SELECT status, claim_id
          FROM distillation_jobs
@@ -790,7 +790,8 @@ export const createS6LearningQueueMaintenanceAuthorityProvider = (options: {
         configurationGenerationId: pointer.generation_id,
         packageGenerationId: activation.active_package_generation_id,
         effectiveRouteSetId: handshake.effective_route_set_id,
-        capability: "distillation"
+        capability: "distillation",
+        observedAt
       });
       if (
         !route.available ||

@@ -330,9 +330,9 @@ describe("runtime package closure", () => {
       semanticOriginProvenanceImplemented: true,
       productionWriteAuthorityProviderPackaged: true,
       activationHandshakeAcknowledgementConnected: true,
-      productionWriteAuthorityConnected: false,
-      productionQueueImplemented: false,
-      semanticWritesImplemented: false
+      productionWriteAuthorityConnected: true,
+      productionQueueImplemented: true,
+      semanticWritesImplemented: true
     });
     expect(inspectRuntimeProcessAuthority({
       supervisorAuthority: {

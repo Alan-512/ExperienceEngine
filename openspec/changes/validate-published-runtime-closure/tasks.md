@@ -20,6 +20,13 @@
 - [ ] 2.4 Validate authority invalidation, interruption recovery, gateway stop, drain, and shutdown.
 - [ ] 2.5 Prove canonical activation uses only the plugin service lifecycle and package-local entrypoints without resolving or executing a global `openclaw` command.
 
+### Source/Local-Pack Clean-Home Preflight Evidence
+
+- The package-local production worker now recovers the current verified S4 configuration generation and route authority, maps only explicit supported provider adapters, and fails closed for unknown provider families without legacy-rule fallback.
+- Production semantic execution claims, renews, completes, fails, and recovers interruption only through the S5 fenced learning queue. Provider/model/embedding work runs outside SQLite authority transactions; semantic node/provenance/candidate/job completion remains one fenced atomic commit.
+- `pnpm runtime:validate-openclaw-binding` now uses a deterministic local provider fixture and a clean temporary home to prove one production claim/completion, then changes configuration authority while a second provider request is in flight and proves stale output rejection, interruption recovery, and zero content-retry consumption.
+- This is source/local-pack preflight evidence only. Tasks 2.1–2.5 remain unchecked until the exact npm and ClawHub artifacts independently pass the frozen clean-home sequence; `production_learning_ready` remains false in the local-pack evidence.
+
 ## 3. Platform And Upgrade Coverage
 
 - [ ] 3.1 Implement bounded Windows OpenClaw executable resolution and version probing for supported doctor/repair fallback command forms.

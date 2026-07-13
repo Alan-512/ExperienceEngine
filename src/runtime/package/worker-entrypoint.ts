@@ -24,9 +24,9 @@ export const PACKAGE_LOCAL_WORKER_ENTRYPOINT = Object.freeze({
   semanticOriginProvenanceImplemented: true,
   productionWriteAuthorityProviderPackaged: true,
   activationHandshakeAcknowledgementConnected: true,
-  productionWriteAuthorityConnected: false,
-  productionQueueImplemented: false,
-  semanticWritesImplemented: false
+  productionWriteAuthorityConnected: true,
+  productionQueueImplemented: true,
+  semanticWritesImplemented: true
 });
 
 export const consumeWorkerIdentityEnvelope = consumeGatewayRuntimeIdentityEnvelope;
@@ -36,10 +36,15 @@ const isDirectExecution = (): boolean => Boolean(
 );
 
 if (isDirectExecution()) {
-  void runPackageLocalWorkerProcess().catch((error) => {
+  const reportFailure = (error: unknown): void => {
     process.stderr.write(
       `${error instanceof Error ? error.stack ?? error.message : String(error)}\n`
     );
+  };
+  void runPackageLocalWorkerProcess({
+    onFailure: reportFailure
+  }).catch((error) => {
+    reportFailure(error);
     process.exitCode = 1;
   });
 }

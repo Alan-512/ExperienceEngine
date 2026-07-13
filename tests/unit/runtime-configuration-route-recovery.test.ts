@@ -105,7 +105,8 @@ describe("current S4 configuration route recovery", () => {
             packageGenerationId:
               prepared.packageIdentity.package_generation_id,
             effectiveRouteSetId: prepared.effectiveRouteSetId,
-            capability: "distillation"
+            capability: "distillation",
+            observedAt: CONFIGURATION_FIXTURE_START
           })
       });
       expect(evidence).toMatchObject({
@@ -140,7 +141,8 @@ describe("current S4 configuration route recovery", () => {
             packageGenerationId:
               prepared.packageIdentity.package_generation_id,
             effectiveRouteSetId: prepared.effectiveRouteSetId,
-            capability: "distillation"
+            capability: "distillation",
+            observedAt: CONFIGURATION_FIXTURE_START
           })
       });
       expect(stale).toEqual({

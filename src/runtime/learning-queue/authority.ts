@@ -90,12 +90,13 @@ export const requireProductionWriteAuthorityInTransaction = (options: {
     operation: options.operation,
     homeId: options.homeId,
     jobId: options.jobId,
-    claimId: options.claimId
+    claimId: options.claimId,
+    observedAt: options.now
   });
   if (!evidence.available || !evidence.authorized || !evidence.fresh) {
     throw new LearningQueueError(
       "EE_PRODUCTION_WRITE_AUTHORITY_UNAVAILABLE",
-      "S6 production write authority is unavailable for this queue operation."
+      `S6 production write authority is unavailable for this queue operation: ${evidence.reason}.`
     );
   }
   if (
@@ -204,7 +205,8 @@ export const requireLearningQueueMaintenanceAuthorityInTransaction = (options: {
     operation: options.operation,
     homeId: options.homeId,
     jobId: options.jobId,
-    claimId: options.claimId
+    claimId: options.claimId,
+    observedAt: options.now
   });
   if (!evidence.available || !evidence.fresh) {
     throw new LearningQueueError(

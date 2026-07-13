@@ -68,6 +68,7 @@ export type ProductionWriteAuthorityProvider = {
     homeId: string;
     jobId?: string;
     claimId?: string;
+    observedAt: string;
   }): ProductionWriteAuthorityEvidence |
     UnavailableProductionWriteAuthorityEvidence;
 };
@@ -106,6 +107,7 @@ export type LearningQueueMaintenanceAuthorityProvider = {
     homeId: string;
     jobId: string;
     claimId?: string;
+    observedAt: string;
   }): LearningQueueMaintenanceAuthorityEvidence |
     UnavailableLearningQueueMaintenanceAuthorityEvidence;
 };

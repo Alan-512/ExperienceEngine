@@ -124,6 +124,9 @@ export const RUNTIME_CLOSURE_REQUIRED_RUNTIME_FILES: Array<Omit<RuntimeClosureAs
   { role: "openclaw_production_runtime_binding", path: "dist/plugin/openclaw-production-runtime.js" },
   { role: "runtime_package_generation", path: "dist/runtime/package/package-generation.js" },
   { role: "runtime_package_local_worker_runtime", path: "dist/runtime/package/worker-runtime.js" },
+  { role: "runtime_package_semantic_route_adapter", path: "dist/runtime/package/semantic-route-adapter.js" },
+  { role: "runtime_package_semantic_queue_executor", path: "dist/runtime/package/semantic-queue-executor.js" },
+  { role: "shared_semantic_distillation_processor", path: "dist/distillation/semantic-processor.js" },
   { role: "runtime_package_local_supervisor_runtime", path: "dist/runtime/package/supervisor-runtime.js" },
   { role: "runtime_closure_validator", path: "dist/runtime/package/closure-manifest.js" },
   { role: "profile_registry", path: RUNTIME_PROFILE_REGISTRY_RELATIVE_PATH }

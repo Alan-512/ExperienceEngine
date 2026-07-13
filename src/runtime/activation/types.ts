@@ -179,6 +179,7 @@ export type RuntimeCapabilityRouteAuthorityProvider = {
     packageGenerationId: string;
     effectiveRouteSetId: string;
     capability: RuntimeConfigurationCapability;
+    observedAt: string;
   }): RuntimeCapabilityRouteAuthorityEvidence | {
     available: false;
     fresh: false;

@@ -35,7 +35,6 @@ import {
   PACKAGE_ACTIVATION_TIMING_POLICY
 } from "../process/constants.js";
 import {
-  SYSTEM_PROCESS_AUTHORITY_CLOCK,
   toProcessAuthorityEpochMs
 } from "../process/clock.js";
 import type {
@@ -212,7 +211,6 @@ export const recoverCurrentRuntimeConfigurationRouteAuthority = async (options: 
       pointer.manifest_digest === generation.manifestDigest
     );
   };
-  const clock = options.clock ?? SYSTEM_PROCESS_AUTHORITY_CLOCK;
   const evidenceFor = (
     capability: RuntimeConfigurationCapability,
     observedAt: string
@@ -270,8 +268,7 @@ export const recoverCurrentRuntimeConfigurationRouteAuthority = async (options: 
           reason: "route_authority_not_current"
         };
       }
-      const observedAt = clock.captureObservedNowInTransaction(input.db);
-      return evidenceFor(input.capability, observedAt) ?? {
+      return evidenceFor(input.capability, input.observedAt) ?? {
         available: false,
         fresh: false,
         authority_contract_version: "s6-capability-route-authority-v1",

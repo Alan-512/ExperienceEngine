@@ -48,7 +48,8 @@ describe("runtime production maintenance authority", () => {
           operation: "recover_authority_loss",
           homeId: PROCESS_FIXTURE_HOME_ID,
           jobId: "job-recover-test",
-          claimId: "claim-recover-test"
+          claimId: "claim-recover-test",
+          observedAt: PROCESS_FIXTURE_START
         })
       });
       expect(evidence).toMatchObject({
@@ -85,7 +86,8 @@ describe("runtime production maintenance authority", () => {
           operation: "recover_authority_loss",
           homeId: PROCESS_FIXTURE_HOME_ID,
           jobId: "job-claim-mismatch",
-          claimId: "claim-stale"
+          claimId: "claim-stale",
+          observedAt: PROCESS_FIXTURE_START
         })
       });
       expect(evidence).toMatchObject({
@@ -115,7 +117,8 @@ describe("runtime production maintenance authority", () => {
           db: fixture.db,
           operation: "resume_blocked",
           homeId: PROCESS_FIXTURE_HOME_ID,
-          jobId: "job-resume-test"
+          jobId: "job-resume-test",
+          observedAt: PROCESS_FIXTURE_START
         })
       });
       expect(unavailableEvidence).toMatchObject({
@@ -133,7 +136,8 @@ describe("runtime production maintenance authority", () => {
           db: fixture.db,
           operation: "resume_blocked",
           homeId: PROCESS_FIXTURE_HOME_ID,
-          jobId: "job-resume-test"
+          jobId: "job-resume-test",
+          observedAt: PROCESS_FIXTURE_START
         })
       });
       expect(evidence).toMatchObject({
@@ -174,7 +178,8 @@ describe("runtime production maintenance authority", () => {
           db: fixture.db,
           operation: "operator_cancel",
           homeId: PROCESS_FIXTURE_HOME_ID,
-          jobId: "job-operator-cancel"
+          jobId: "job-operator-cancel",
+          observedAt: PROCESS_FIXTURE_START
         })
       });
       expect(evidence).toMatchObject({
@@ -198,7 +203,8 @@ describe("runtime production maintenance authority", () => {
           db: fixture.db,
           operation: "operator_cancel",
           homeId: PROCESS_FIXTURE_HOME_ID,
-          jobId: "job-operator-cancel"
+          jobId: "job-operator-cancel",
+          observedAt: PROCESS_FIXTURE_START
         })
       });
       expect(expiredEvidence).toMatchObject({

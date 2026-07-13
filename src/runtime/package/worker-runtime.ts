@@ -61,6 +61,11 @@ import {
   assertRuntimeClosureManifest
 } from "./closure-manifest.js";
 import { canonicalJson } from "./package-generation.js";
+import {
+  createCurrentPackageWorkerSemanticQueueExecutor,
+  PACKAGE_WORKER_SEMANTIC_QUEUE_POLICY,
+  type PackageWorkerSemanticQueueExecutor
+} from "./semantic-queue-executor.js";
 
 export const PACKAGE_LOCAL_WORKER_CONTEXT_ENV =
   "EXPERIENCE_ENGINE_WORKER_CONTEXT_JSON" as const;
@@ -385,8 +390,12 @@ export const runPackageLocalWorkerProcess = async (options: {
   packageRoot?: string;
   onReady?: (lease: WorkerLeaseRow) => void;
   onFailure?: (error: unknown) => void;
+  createSemanticExecutor?:
+    typeof createCurrentPackageWorkerSemanticQueueExecutor;
+  semanticPollIntervalMs?: number;
 } = {}): Promise<void> => {
   const context = parsePackageLocalWorkerEnvironment(options.env);
+  const packageRoot = options.packageRoot ?? packageRootFromRuntimeModule();
   const db = new DatabaseSync(databasePathFromContext(context));
   configureRuntimeSqlitePolicy(db, {
     accessMode: "read_write",
@@ -394,10 +403,13 @@ export const runPackageLocalWorkerProcess = async (options: {
   });
   const session = new RuntimePackageLocalWorkerLeaseSession({
     db,
-    packageRoot: options.packageRoot ?? packageRootFromRuntimeModule(),
+    packageRoot,
     context
   });
   let heartbeat: NodeJS.Timeout | undefined;
+  let semanticDrainTimer: NodeJS.Timeout | undefined;
+  let semanticExecutor: PackageWorkerSemanticQueueExecutor | undefined;
+  let semanticDrainPromise: Promise<void> | undefined;
   let stopping = false;
   let resolveStop: (() => void) | undefined;
   const stopped = new Promise<void>((resolvePromise) => {
@@ -462,6 +474,66 @@ export const runPackageLocalWorkerProcess = async (options: {
       worker_fencing_token: lease.fencing_token,
       worker_mode: lease.worker_mode
     });
+    if (context.workerMode === "production") {
+      const closure = assertRuntimeClosureManifest(packageRoot);
+      if (!closure.packageBuildId) {
+        throw new RuntimeActivationError(
+          "EE_PACKAGE_CLOSURE_REQUIRED",
+          "Production worker closure is missing its package build id."
+        );
+      }
+      const drainSemanticQueue = (): void => {
+        if (stopping || semanticDrainPromise) {
+          return;
+        }
+        semanticDrainPromise = (async () => {
+          try {
+            const current = session.current();
+            if (
+              !current ||
+              current.worker_mode !== "production" ||
+              current.state === "stopped" ||
+              current.state === "blocked" ||
+              current.shutdown_requested_at !== null
+            ) {
+              return;
+            }
+            semanticExecutor ??= await (
+              options.createSemanticExecutor ??
+              createCurrentPackageWorkerSemanticQueueExecutor
+            )({
+              db,
+              canonicalHome:
+                context.identityEnvelope.canonical_home_resolution
+                  .resolved_home,
+              homeId: context.identityEnvelope.home.home_id,
+              packageRoot,
+              packageBuildId: closure.packageBuildId!,
+              packageIdentity: context.packageClosure.package_identity
+            });
+            if (!semanticExecutor) {
+              return;
+            }
+            const result = await semanticExecutor.drainOne();
+            if (result.status === "authority_unavailable") {
+              semanticExecutor = undefined;
+            }
+          } catch (error) {
+            semanticExecutor = undefined;
+            options.onFailure?.(error);
+          }
+        })().finally(() => {
+          semanticDrainPromise = undefined;
+        });
+      };
+      semanticDrainTimer = setInterval(
+        drainSemanticQueue,
+        options.semanticPollIntervalMs ??
+          PACKAGE_WORKER_SEMANTIC_QUEUE_POLICY.poll_interval_ms
+      );
+      semanticDrainTimer.unref?.();
+      drainSemanticQueue();
+    }
     heartbeat = setInterval(() => {
       try {
         const current = session.current();
@@ -482,10 +554,18 @@ export const runPackageLocalWorkerProcess = async (options: {
       }
     }, SUPERVISOR_RUNTIME_POLICY.heartbeat_interval_ms);
     await stopped;
+    if (semanticDrainTimer) {
+      clearInterval(semanticDrainTimer);
+      semanticDrainTimer = undefined;
+    }
+    await semanticDrainPromise;
     session.release();
   } finally {
     if (heartbeat) {
       clearInterval(heartbeat);
+    }
+    if (semanticDrainTimer) {
+      clearInterval(semanticDrainTimer);
     }
     process.off("SIGTERM", requestStop);
     process.off("SIGINT", requestStop);
@@ -502,5 +582,8 @@ export const PACKAGE_LOCAL_WORKER_RUNTIME_CONTRACT = Object.freeze({
   graceful_shutdown_transport: "node_ipc",
   handshake_acknowledgement_transport: "node_ipc",
   worker_persists_handshake_rows: false,
-  semantic_queue_execution_connected: false
+  semantic_queue_execution_connected: true,
+  semantic_queue_authority: "s5_fenced_learning_queue",
+  semantic_provider_work_inside_sqlite_authority_transaction: false,
+  authority_loss_consumes_content_retry: false
 });

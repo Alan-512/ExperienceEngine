@@ -323,7 +323,8 @@ export class RuntimeActivationHandshakeRepository {
               configurationGenerationId: options.configurationGenerationId,
               packageGenerationId: supervisor.package_generation_id,
               effectiveRouteSetId: options.effectiveRouteSetId,
-              capability
+              capability,
+              observedAt
             });
           if (
             !route.available ||

@@ -1,4 +1,5 @@
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -17,6 +18,9 @@ import {
 import {
   RuntimeConfigurationGenerationRepository
 } from "../../dist/runtime/configuration/generation.js";
+import {
+  createS6ConfigurationActivationInvalidationProvider
+} from "../../dist/runtime/activation/configuration-invalidation.js";
 import {
   computeEffectiveRouteSetId,
   createSupportedRouteOverrideSnapshot
@@ -52,6 +56,15 @@ import {
   RUNTIME_SCHEMA_VERSION_ORDER
 } from "../../dist/runtime/schema/constants.js";
 import { bootstrapDatabase } from "../../dist/store/sqlite/db.js";
+import {
+  FencedLearningQueueRepository
+} from "../../dist/runtime/learning-queue/repository.js";
+import {
+  createSemanticOriginReference
+} from "../../dist/runtime/learning-queue/provenance.js";
+import {
+  CandidateRepository
+} from "../../dist/store/sqlite/repositories/candidate-repo.js";
 
 const packageRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const packageJson = JSON.parse(
@@ -73,6 +86,73 @@ const installStatePath = join(
 );
 const originalProductHome = process.env.EXPERIENCE_ENGINE_HOME;
 const waitTimeoutMs = 45_000;
+
+let distillationRequestCount = 0;
+let releaseDelayedDistillation;
+let observeDelayedDistillation;
+const delayedDistillationObserved = new Promise((resolveObserved) => {
+  observeDelayedDistillation = resolveObserved;
+});
+const delayedDistillationRelease = new Promise((resolveRelease) => {
+  releaseDelayedDistillation = resolveRelease;
+});
+
+const providerServer = createServer(async (request, response) => {
+  const requestUrl = new URL(
+    request.url ?? "/",
+    "http://127.0.0.1"
+  );
+  if (requestUrl.pathname === "/distillation/v1/chat/completions") {
+    distillationRequestCount += 1;
+    if (distillationRequestCount === 2) {
+      observeDelayedDistillation();
+      await delayedDistillationRelease;
+    }
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({
+      choices: [{
+        message: {
+          content: JSON.stringify({
+            compact_hint: distillationRequestCount === 1
+              ? "Complete local-pack semantic work through the fenced queue."
+              : "Reject semantic output after configuration authority changes.",
+            trigger_conditions: "A deterministic local-pack queue candidate is claimed.",
+            success_criteria: "The fenced completion or interruption contract is observed.",
+            risk_level: "low",
+            goal: "Validate package-local production semantic execution.",
+            recommended_steps: [
+              "Claim through S5 authority.",
+              "Run provider work outside SQLite authority.",
+              "Commit only through fenced semantic completion."
+            ],
+            avoid_steps: ["Bypass the fenced queue repository."],
+            evidence_summary: "Deterministic local-pack provider fixture."
+          })
+        }
+      }]
+    }));
+    return;
+  }
+  if (requestUrl.pathname === "/embedding") {
+    response.writeHead(200, { "Content-Type": "application/json" });
+    response.end(JSON.stringify({
+      data: [{ embedding: [0.1, 0.2, 0.3] }]
+    }));
+    return;
+  }
+  response.writeHead(204);
+  response.end();
+});
+
+await new Promise((resolveListen, rejectListen) => {
+  providerServer.once("error", rejectListen);
+  providerServer.listen(0, "127.0.0.1", () => resolveListen());
+});
+const providerAddress = providerServer.address();
+if (!providerAddress || typeof providerAddress === "string") {
+  throw new Error("Local-pack provider fixture did not bind a TCP address.");
+}
+const providerBaseUrl = `http://127.0.0.1:${providerAddress.port}`;
 
 const sleep = (milliseconds) => new Promise((resolveSleep) =>
   setTimeout(resolveSleep, milliseconds)
@@ -143,7 +223,7 @@ const createConfiguredRoute = ({
     route_id: `${capability}-local-pack-primary`,
     provider_family: routeSpec.provider_family,
     model_or_deployment_identity: `${capability}-local-pack-deployment`,
-    endpoint_identity: `https://local-pack-validation.invalid/${capability}`,
+    endpoint_identity: `${providerBaseUrl}/${capability === "distillation" ? "distillation" : capability}`,
     auth_mode: authMode,
     secret_refs: authMode === "api_key" ? [secretRef] : [],
     provider_adapter_version: routeSpec.provider_adapter_version,
@@ -154,7 +234,10 @@ const createConfiguredRoute = ({
 
 const publishCurrentConfiguration = async ({
   installState,
-  observedAt
+  observedAt,
+  parentGenerationId = null,
+  expectedPointerRevision = 0,
+  activationInvalidationProvider
 }) => {
   const initialized = await initializeRuntimeHomeIdentity({
     writer: "package_local_initializer",
@@ -267,7 +350,7 @@ const publishCurrentConfiguration = async ({
     env: {},
     integrityKey: initialized.integrityKey
   });
-  const generationId = `config_local_pack_${Date.now()}`;
+  const generationId = `config_local_pack_${Date.now()}_${expectedPointerRevision}`;
   const selectionContext = profileSelectionContext(packageIdentity);
   const effectiveRouteSetId = computeEffectiveRouteSetId({
     homeId: initialized.homeIdentity.home_id,
@@ -318,11 +401,12 @@ const publishCurrentConfiguration = async ({
     await new RuntimeConfigurationGenerationRepository(
       db,
       runtimeHome,
-      initialized.homeIdentity.home_id
+      initialized.homeIdentity.home_id,
+      activationInvalidationProvider
     ).publish({
       candidate: {
         generationId,
-        parentGenerationId: null,
+        parentGenerationId,
         settings,
         secrets,
         validationState: {
@@ -336,19 +420,124 @@ const publishCurrentConfiguration = async ({
         createdByInstanceId: "local-pack-validation",
         createdAt: observedAt
       },
-      expectedPointerRevision: 0,
-      expectedGenerationId: null,
-      commitId: "commit-local-pack-validation",
+      expectedPointerRevision,
+      expectedGenerationId: parentGenerationId,
+      commitId: `commit-local-pack-validation-${expectedPointerRevision}`,
       committedAt: observedAt
     });
   } finally {
     db.close();
   }
   return {
+    homeId: initialized.homeIdentity.home_id,
     generationId,
     effectiveRouteSetId,
-    packageGenerationId: packageIdentity.package_generation_id
+    packageGenerationId: packageIdentity.package_generation_id,
+    packageIdentity,
+    packageBuildId,
+    profileEntry,
+    routes,
+    validationRecords
   };
+};
+
+const registerQueueCandidate = ({
+  configured,
+  candidateId,
+  jobId,
+  observedAt,
+  triggerPattern
+}) => {
+  const validationFor = (capability) => {
+    const record = configured.validationRecords.find((entry) =>
+      entry.capability === capability
+    );
+    if (!record) {
+      throw new Error(`Missing ${capability} validation for queue candidate.`);
+    }
+    return record;
+  };
+  const learningGate = validationFor("learning_gate");
+  const distillation = validationFor("distillation");
+  const db = new DatabaseSync(sqlitePath);
+  try {
+    configureRuntimeSqlitePolicy(db, {
+      accessMode: "read_write",
+      role: "plugin"
+    });
+    bootstrapDatabase(db);
+    new CandidateRepository(db).upsert({
+      id: candidateId,
+      task_run_id: `taskrun-${candidateId}`,
+      candidate_kind: "successful_fix",
+      source_record_id: `input-${candidateId}`,
+      scope_id: "scope-local-pack-production",
+      task_type: "test_debug",
+      node_type: "strategy",
+      trigger_pattern: triggerPattern,
+      compact_hint: "Use the package-local fenced semantic worker.",
+      success_signal: "The local-pack queue contract passes.",
+      evidence_summary: "A deterministic local-pack fixture produced this candidate.",
+      source_kind: "system_derived",
+      source_outcome_signal: "success",
+      source_signal: {
+        task_summary: "Validate package-local fenced semantic execution",
+        outcome_signal: "success",
+        tool_events: [],
+        evidence: ["local-pack-runtime"],
+        retry_count: 0,
+        correction_signals: [],
+        tool_event_summary: []
+      },
+      lifecycle_state: "pending",
+      retry_count: 0,
+      created_at: observedAt,
+      updated_at: observedAt
+    });
+    const semanticOrigin = createSemanticOriginReference({
+      configuration_generation_id: configured.generationId,
+      package_generation_id: configured.packageGenerationId,
+      generation_profile_id: configured.profileEntry.profile_id,
+      generation_profile_version: configured.profileEntry.profile_version,
+      generation_profile_status: configured.profileEntry.entry_status,
+      quality_profile: configured.profileEntry.quality_profile,
+      stage_routes: {
+        learning_gate: {
+          route_fingerprint: learningGate.route_fingerprint,
+          validation_record_id: learningGate.validation_record_id,
+          benchmark_assurance: learningGate.benchmark_assurance,
+          contract_version: learningGate.contract_version
+        },
+        distillation: {
+          route_fingerprint: distillation.route_fingerprint,
+          validation_record_id: distillation.validation_record_id,
+          benchmark_assurance: distillation.benchmark_assurance,
+          contract_version: distillation.contract_version
+        },
+        merge_decision: {
+          route_kind: "deterministic",
+          route_fingerprint: "deterministic-merge-local-pack-v1",
+          validation_record_id: "validation-local-pack-deterministic-merge",
+          benchmark_assurance: "unbenchmarked",
+          contract_version: "merge-contract-v1"
+        }
+      },
+      createdAt: observedAt
+    });
+    new FencedLearningQueueRepository(
+      db,
+      configured.homeId
+    ).registerPendingJob({
+      jobId,
+      candidateId,
+      extractorProfile: "balanced",
+      routeFingerprint: distillation.route_fingerprint,
+      semanticOrigin,
+      createdAt: observedAt
+    });
+  } finally {
+    db.close();
+  }
 };
 
 let binding;
@@ -382,6 +571,13 @@ try {
   const configured = await publishCurrentConfiguration({
     installState,
     observedAt
+  });
+  registerQueueCandidate({
+    configured,
+    candidateId: "candidate-local-pack-complete",
+    jobId: "job-local-pack-complete",
+    observedAt,
+    triggerPattern: "Complete one package-local semantic queue job."
   });
 
   binding = await bindInstalledOpenClawProductionRuntime({
@@ -445,6 +641,43 @@ try {
     (row) => row.state === "active" && row.worker_mode === "production",
     "package-local production worker fence"
   );
+  const completedSemanticJob = await waitForRow(
+    inspectionDb,
+    (db) => db.prepare(
+      `SELECT status, system_attempt_count, interruption_count,
+              content_retry_count, distillation_source, claim_id
+       FROM distillation_jobs
+       WHERE id = 'job-local-pack-complete'`
+    ).get(),
+    (row) => row.status === "succeeded" &&
+      row.system_attempt_count === 1 &&
+      row.interruption_count === 0 &&
+      row.content_retry_count === 0 &&
+      row.claim_id === null,
+    "package-local fenced semantic completion"
+  );
+  const completedCandidate = inspectionDb.prepare(
+    `SELECT lifecycle_state, distilled_node_id, content_retry_count
+     FROM experience_candidates
+     WHERE id = 'candidate-local-pack-complete'`
+  ).get();
+  if (
+    completedCandidate?.lifecycle_state !== "distilled" ||
+    !completedCandidate.distilled_node_id ||
+    completedCandidate.content_retry_count !== 0
+  ) {
+    throw new Error(
+      `Unexpected completed candidate evidence: ${JSON.stringify(completedCandidate)}.`
+    );
+  }
+  const completedNodeBeforeStaleWork = inspectionDb.prepare(
+    `SELECT id, support_count, updated_at
+     FROM experience_nodes
+     WHERE id = ?`
+  ).get(completedCandidate.distilled_node_id);
+  if (!completedNodeBeforeStaleWork) {
+    throw new Error("Package-local semantic completion did not persist its node.");
+  }
   const completeHandshakes = inspectionDb.prepare(
     `SELECT handshake_purpose, status, worker_fencing_token,
             configuration_generation_id, effective_route_set_id
@@ -479,11 +712,88 @@ try {
     );
   }
 
-  const stopped = await binding.service.stop({ stateDir });
+  const staleCandidateObservedAt = new Date().toISOString();
+  registerQueueCandidate({
+    configured,
+    candidateId: "candidate-local-pack-stale",
+    jobId: "job-local-pack-stale",
+    observedAt: staleCandidateObservedAt,
+    triggerPattern: "Reject stale package-local semantic output."
+  });
+  await Promise.race([
+    delayedDistillationObserved,
+    sleep(waitTimeoutMs).then(() => {
+      throw new Error("Timed out waiting for delayed semantic provider work.");
+    })
+  ]);
+  const replacementObservedAt = new Date().toISOString();
+  const replacementConfiguration = await publishCurrentConfiguration({
+    installState,
+    observedAt: replacementObservedAt,
+    parentGenerationId: configured.generationId,
+    expectedPointerRevision: 1,
+    activationInvalidationProvider:
+      createS6ConfigurationActivationInvalidationProvider()
+  });
+  releaseDelayedDistillation();
+  const interruptedSemanticJob = await waitForRow(
+    inspectionDb,
+    (db) => db.prepare(
+      `SELECT status, system_attempt_count, interruption_count,
+              content_retry_count, failure_code, claim_id
+       FROM distillation_jobs
+       WHERE id = 'job-local-pack-stale'`
+    ).get(),
+    (row) => row.status === "pending" &&
+      row.system_attempt_count === 1 &&
+      row.interruption_count === 1 &&
+      row.content_retry_count === 0 &&
+      row.claim_id === null,
+    "package-local authority-loss interruption recovery"
+  );
+  const interruptedCandidate = inspectionDb.prepare(
+    `SELECT lifecycle_state, distilled_node_id, content_retry_count,
+            failure_class
+     FROM experience_candidates
+     WHERE id = 'candidate-local-pack-stale'`
+  ).get();
   if (
-    !stopped.ok ||
-    stopped.code !== "deliberate_runtime_drain_requested"
+    interruptedCandidate?.lifecycle_state !== "pending" ||
+    interruptedCandidate.distilled_node_id !== null ||
+    interruptedCandidate.content_retry_count !== 0 ||
+    interruptedCandidate.failure_class !== "interruption"
   ) {
+    throw new Error(
+      `Unexpected interrupted candidate evidence: ${JSON.stringify(interruptedCandidate)}.`
+    );
+  }
+  const completedNodeAfterStaleWork = inspectionDb.prepare(
+    `SELECT id, support_count, updated_at
+     FROM experience_nodes
+     WHERE id = ?`
+  ).get(completedCandidate.distilled_node_id);
+  if (
+    JSON.stringify(completedNodeAfterStaleWork) !==
+      JSON.stringify(completedNodeBeforeStaleWork)
+  ) {
+    throw new Error(
+      "Stale semantic output mutated the previously completed node."
+    );
+  }
+
+  const stopped = await binding.service.stop({ stateDir });
+  const expectedStaleStop =
+    !stopped.ok &&
+    stopped.code === "EE_PACKAGE_ACTIVATION_STALE" &&
+    stopped.detail.supervisor_signal_sent === true;
+  const expectedNormalStop =
+    stopped.ok &&
+    [
+      "deliberate_runtime_drain_requested",
+      "supervisor_stop_signalled",
+      "runtime_already_stopped"
+    ].includes(stopped.code);
+  if (!expectedStaleStop && !expectedNormalStop) {
     throw new Error(
       `Unexpected production binding stop result: ${JSON.stringify(stopped)}.`
     );
@@ -552,6 +862,17 @@ try {
     completed_handshakes: completeHandshakes.map((row) =>
       row.handshake_purpose
     ),
+    semantic_completion_job_status: completedSemanticJob.status,
+    semantic_completion_distillation_source:
+      completedSemanticJob.distillation_source,
+    stale_output_job_status: interruptedSemanticJob.status,
+    stale_output_failure_code: interruptedSemanticJob.failure_code,
+    stale_output_interruption_count:
+      interruptedSemanticJob.interruption_count,
+    stale_output_content_retry_count:
+      interruptedSemanticJob.content_retry_count,
+    replacement_configuration_generation_id:
+      replacementConfiguration.generationId,
     learning_runtime_active: status.result.learning_runtime_active,
     production_learning_ready: status.result.production_learning_ready,
     worker_terminal_state: releasedWorker.state,
@@ -561,6 +882,7 @@ try {
     evidence_class: "local_pack"
   }));
 } finally {
+  releaseDelayedDistillation?.();
   inspectionDb?.close();
   if (binding && !stoppedCleanly) {
     await binding.service.stop({ stateDir }).catch(() => undefined);
@@ -571,6 +893,12 @@ try {
   } else {
     process.env.EXPERIENCE_ENGINE_HOME = originalProductHome;
   }
+  const providerClose = new Promise((resolveClose) =>
+    providerServer.close(() => resolveClose())
+  );
+  providerServer.closeIdleConnections?.();
+  providerServer.closeAllConnections?.();
+  await Promise.race([providerClose, sleep(1_000)]);
   await rm(temporaryRoot, {
     recursive: true,
     force: true,
@@ -578,3 +906,5 @@ try {
     retryDelay: 200
   });
 }
+
+process.exit(0);
