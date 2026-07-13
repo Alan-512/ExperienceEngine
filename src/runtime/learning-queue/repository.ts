@@ -999,6 +999,20 @@ export class FencedLearningQueueRepository {
     routeFingerprint: string;
     now: string;
   }): { job: FencedLearningJob; candidate: FencedLearningCandidateState } {
+    return runRuntimeImmediateTransaction(this.db, {
+      category: "claim",
+      operation: () => this.resumeBlockedInTransaction(options)
+    });
+  }
+
+  resumeBlockedInTransaction(options: {
+    jobId: string;
+    expectedJobStateRevision: number;
+    expectedCandidateStateRevision: number;
+    expectedFailureCode: LearningFailureCode;
+    routeFingerprint: string;
+    now: string;
+  }): { job: FencedLearningJob; candidate: FencedLearningCandidateState } {
     assertPositiveInteger(options.expectedJobStateRevision, "expectedJobStateRevision");
     assertPositiveInteger(
       options.expectedCandidateStateRevision,
@@ -1006,93 +1020,94 @@ export class FencedLearningQueueRepository {
     );
     assertNonEmpty(options.routeFingerprint, "routeFingerprint");
     canonicalEpoch(options.now, "now");
-    return runRuntimeImmediateTransaction(this.db, {
-      category: "claim",
-      operation: () => {
-        const resumeAuthority =
-          requireLearningQueueMaintenanceAuthorityInTransaction({
-          db: this.db,
-          provider: this.maintenanceAuthorityProvider,
-          operation: "resume_blocked",
-          homeId: this.homeId,
-          jobId: options.jobId,
-          now: options.now
-        });
-        if (resumeAuthority.route_fingerprint !== options.routeFingerprint) {
-          throw new LearningQueueError(
-            "EE_LEARNING_QUEUE_MAINTENANCE_AUTHORITY_UNAVAILABLE",
-            "Blocked resume route fingerprint does not match current validated route authority."
-          );
-        }
-        const job = readJob(this.db, options.jobId);
-        if (
-          !job ||
-          job.status !== "blocked" ||
-          job.state_revision !== options.expectedJobStateRevision ||
-          job.failure_code !== options.expectedFailureCode
-        ) {
-          throw new LearningQueueError(
-            "EE_LEARNING_QUEUE_CAS_CONFLICT",
-            "Blocked job no longer matches the expected resumable state."
-          );
-        }
-        const candidate = readCandidate(this.db, job.candidate_id);
-        if (
-          !candidate ||
-          candidate.lifecycle_state !== "blocked" ||
-          candidate.state_revision !== options.expectedCandidateStateRevision
-        ) {
-          throw new LearningQueueError(
-            "EE_LEARNING_QUEUE_CAS_CONFLICT",
-            "Blocked candidate no longer matches the expected resumable state."
-          );
-        }
-        const jobResult = this.db.prepare(
-          `UPDATE distillation_jobs
-           SET status = 'pending',
-               state_revision = state_revision + 1,
-               failure_code = NULL,
-               failure_class = NULL,
-               failure_scope = NULL,
-               blocked_at = NULL,
-               next_attempt_at = ?,
-               route_fingerprint = ?,
-               updated_at = ?
-           WHERE id = ? AND home_id = ? AND status = 'blocked'
-             AND state_revision = ? AND failure_code = ?`
-        ).run(
-          options.now,
-          resumeAuthority.route_fingerprint,
-          options.now,
-          job.id,
-          this.homeId,
-          options.expectedJobStateRevision,
-          options.expectedFailureCode
-        );
-        if (Number(jobResult.changes) !== 1) {
-          throw new LearningQueueError(
-            "EE_LEARNING_QUEUE_CAS_CONFLICT",
-            "Blocked job resume lost its exact CAS."
-          );
-        }
-        const updatedCandidate = updateCandidateTransition({
-          db: this.db,
-          candidate,
-          nextState: "pending",
-          failureCode: null,
-          failureClass: null,
-          failureScope: null,
-          contentRetryCount: candidate.content_retry_count,
-          blockedAt: null,
-          terminalReasonCode: null,
-          updatedAt: options.now
-        });
-        return {
-          job: readJob(this.db, job.id)!,
-          candidate: updatedCandidate
-        };
-      }
+    if (!this.db.isTransaction) {
+      throw new LearningQueueError(
+        "EE_LEARNING_QUEUE_CONTRACT_INVALID",
+        "In-transaction blocked resume requires an active SQLite authority transaction."
+      );
+    }
+    const resumeAuthority =
+      requireLearningQueueMaintenanceAuthorityInTransaction({
+      db: this.db,
+      provider: this.maintenanceAuthorityProvider,
+      operation: "resume_blocked",
+      homeId: this.homeId,
+      jobId: options.jobId,
+      now: options.now
     });
+    if (resumeAuthority.route_fingerprint !== options.routeFingerprint) {
+      throw new LearningQueueError(
+        "EE_LEARNING_QUEUE_MAINTENANCE_AUTHORITY_UNAVAILABLE",
+        "Blocked resume route fingerprint does not match current validated route authority."
+      );
+    }
+    const job = readJob(this.db, options.jobId);
+    if (
+      !job ||
+      job.status !== "blocked" ||
+      job.state_revision !== options.expectedJobStateRevision ||
+      job.failure_code !== options.expectedFailureCode
+    ) {
+      throw new LearningQueueError(
+        "EE_LEARNING_QUEUE_CAS_CONFLICT",
+        "Blocked job no longer matches the expected resumable state."
+      );
+    }
+    const candidate = readCandidate(this.db, job.candidate_id);
+    if (
+      !candidate ||
+      candidate.lifecycle_state !== "blocked" ||
+      candidate.state_revision !== options.expectedCandidateStateRevision
+    ) {
+      throw new LearningQueueError(
+        "EE_LEARNING_QUEUE_CAS_CONFLICT",
+        "Blocked candidate no longer matches the expected resumable state."
+      );
+    }
+    const jobResult = this.db.prepare(
+      `UPDATE distillation_jobs
+       SET status = 'pending',
+           state_revision = state_revision + 1,
+           failure_code = NULL,
+           failure_class = NULL,
+           failure_scope = NULL,
+           blocked_at = NULL,
+           next_attempt_at = ?,
+           route_fingerprint = ?,
+           updated_at = ?
+       WHERE id = ? AND home_id = ? AND status = 'blocked'
+         AND state_revision = ? AND failure_code = ?`
+    ).run(
+      options.now,
+      resumeAuthority.route_fingerprint,
+      options.now,
+      job.id,
+      this.homeId,
+      options.expectedJobStateRevision,
+      options.expectedFailureCode
+    );
+    if (Number(jobResult.changes) !== 1) {
+      throw new LearningQueueError(
+        "EE_LEARNING_QUEUE_CAS_CONFLICT",
+        "Blocked job resume lost its exact CAS."
+      );
+    }
+    const updatedCandidate = updateCandidateTransition({
+      db: this.db,
+      candidate,
+      nextState: "pending",
+      failureCode: null,
+      failureClass: null,
+      failureScope: null,
+      contentRetryCount: candidate.content_retry_count,
+      blockedAt: null,
+      terminalReasonCode: null,
+      updatedAt: options.now
+    });
+    return {
+      job: readJob(this.db, job.id)!,
+      candidate: updatedCandidate
+    };
   }
 
   cancel(options: {

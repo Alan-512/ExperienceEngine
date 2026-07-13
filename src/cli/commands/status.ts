@@ -14,6 +14,11 @@ import {
   deriveValueState,
   inspectSharedSetupState
 } from "../state-model.js";
+import {
+  inspectCliRuntimeAuthority,
+  logCliRuntimeAuthorityInspection,
+  type CliRuntimeAuthorityInspection
+} from "../../runtime/activation/cli-inspection.js";
 
 const summarizeRetrievalPattern = (decisionHealth: ExperienceDecisionHealth): string | undefined => {
   if (decisionHealth.recentDecisions === 0) {
@@ -75,6 +80,7 @@ const logLearningQualityHealth = (health: ExperienceLearningQualityHealth): void
 };
 export type StatusCommandOptions = {
   verbose?: boolean;
+  runtimeAuthorityInspection?: CliRuntimeAuthorityInspection;
 };
 
 export const runStatusCommand = (options: StatusCommandOptions = {}): void => {
@@ -108,6 +114,12 @@ export const runStatusCommand = (options: StatusCommandOptions = {}): void => {
     interactionReady
   });
   const valueState = deriveValueState(firstValueReadiness);
+  const runtimeAuthority = options.runtimeAuthorityInspection ??
+    inspectCliRuntimeAuthority({
+      sqlitePath: config.sqlitePath ?? "",
+      interactionActive: Boolean(openclaw.hostState?.enabled),
+      packageInstalled: openclaw.installed
+    });
 
   console.log("ExperienceEngine status:");
   console.log(`- Available host CLIs: ${availableHosts.join(", ") || "none"}`);
@@ -117,6 +129,9 @@ export const runStatusCommand = (options: StatusCommandOptions = {}): void => {
   console.log(`- Setup state: ${setupState}`);
   console.log(`- Value state: ${valueState}`);
   console.log(`- Next step: ${firstValueReadiness.nextStep}`);
+  logCliRuntimeAuthorityInspection(runtimeAuthority, {
+    verbose: options.verbose
+  });
 
   if (!options.verbose) {
     console.log(

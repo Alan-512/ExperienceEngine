@@ -291,9 +291,9 @@ describe("runtime package closure", () => {
     )) as Record<string, unknown>;
     expect(registry).toMatchObject({
       process_authority_stage: "process_authority_foundation_s3",
-      package_authorization_issuer: "blocked_until_s6_package_authority",
-      worker_acquisition_authority: "blocked_until_s6_worker_authority",
-      production_write_authority: "blocked_until_s6_production_activation",
+      package_authorization_issuer: "s6-package-authorization-mutation-v1",
+      worker_acquisition_authority: "s6-worker-acquisition-authority-v1",
+      production_write_authority: "s6-production-write-authority-v1",
       queue_claiming_enabled: false,
       semantic_writes_enabled: false,
       production_learning_ready: false,
@@ -306,8 +306,12 @@ describe("runtime package closure", () => {
       processAuthorityImplemented: true,
       migrationAuthorityProviderImplemented: true,
       fencedQueueMaintenanceConsumerImplemented: true,
+      productionActivationAuthorityPackaged: true,
+      activationHandshakeOrchestratorPackaged: true,
+      nativeControlServicePackaged: true,
       productionWriteAuthorityProviderConnected: false,
       packageAuthorizationIssuerConnected: false,
+      executableLeaseLifecycleConnected: true,
       productionActivationImplemented: false
     });
     expect(PACKAGE_LOCAL_WORKER_ENTRYPOINT).toEqual({
@@ -315,10 +319,13 @@ describe("runtime package closure", () => {
       stage: "fenced_learning_queue_s5",
       processAuthorityStage: "process_authority_foundation_s3",
       workerLeaseImplemented: true,
-      workerAcquisitionAuthorityConnected: false,
+      executableLeaseLifecycleConnected: true,
+      workerAcquisitionAuthorityConnected: true,
       fencedQueueSemanticsImplemented: true,
       separateRetryCountersImplemented: true,
       semanticOriginProvenanceImplemented: true,
+      productionWriteAuthorityProviderPackaged: true,
+      activationHandshakeAcknowledgementConnected: true,
       productionWriteAuthorityConnected: false,
       productionQueueImplemented: false,
       semanticWritesImplemented: false

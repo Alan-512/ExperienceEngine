@@ -1149,6 +1149,37 @@ describe("doctor command", () => {
         candidates: 0,
         nodes: 1,
         nextStep: "Keep working in the same repo."
+      }),
+      inspectRuntimeAuthority: () => ({
+        inspection_schema_version: "cli-runtime-authority-inspection-v1",
+        control_database_state: "available",
+        evidence_scope: {
+          local_source_and_package_closure: "available",
+          local_control_database: "available",
+          published_npm_clawhub: "not_verified"
+        },
+        interaction_active: true,
+        package_installed: true,
+        setup_state: "ready",
+        home_id: "home-doctor-runtime-test",
+        package_activation_state: "blocked",
+        package_activation_revision: 8,
+        blocked_boundary: "post_identity",
+        process_activation_current: false,
+        route_authority_verification: "not_available_to_global_cli",
+        learning_runtime_active: false,
+        production_learning_ready: false,
+        quality_profile: "not_evaluated",
+        core_learning_quality: "not_evaluated",
+        learning_health: "blocked",
+        configuration_generation_id: "configuration-doctor-runtime-test",
+        production_activation_handshake_id: null,
+        supervisor_state: "active",
+        supervisor_lease_epoch: 5,
+        worker_state: "blocked",
+        worker_fencing_token: 11,
+        next_action: "Use retry_production_activation or prepare_package_rollback through OpenClaw.",
+        warning: "Package activation is blocked at post_identity."
       })
     });
 
@@ -1156,6 +1187,14 @@ describe("doctor command", () => {
     expect(consoleLogSpy.mock.calls).toEqual(
       expect.arrayContaining([
         ["Host drift: Installed OpenClaw plugin bundle differs from the current ExperienceEngine package at dist/runtime/service.js."],
+        ["OpenClaw production runtime:"],
+        ["- Package activation: blocked (revision 8)"],
+        ["- Learning runtime active: not verified"],
+        ["- Production learning ready: not verified"],
+        ["Runtime authority evidence:"],
+        ["- Blocked boundary: post_identity"],
+        ["- Worker: blocked; fence 11"],
+        ["- Published distribution evidence: not_verified"],
         ["OpenClaw workspace note: default workspace is the global OpenClaw workspace; ExperienceEngine will session-isolate unresolved turns instead of reusing broad workspace experience."],
         ["Recommended next step: ee repair openclaw"]
       ])

@@ -7,19 +7,39 @@ import {
 import {
   FENCED_LEARNING_QUEUE_STAGE
 } from "../learning-queue/constants.js";
+import { pathToFileURL } from "node:url";
+import {
+  runPackageLocalWorkerProcess
+} from "./worker-runtime.js";
 
 export const PACKAGE_LOCAL_WORKER_ENTRYPOINT = Object.freeze({
   role: "package_local_worker",
   stage: FENCED_LEARNING_QUEUE_STAGE,
   processAuthorityStage: RUNTIME_PROCESS_AUTHORITY_STAGE,
   workerLeaseImplemented: true,
-  workerAcquisitionAuthorityConnected: false,
+  executableLeaseLifecycleConnected: true,
+  workerAcquisitionAuthorityConnected: true,
   fencedQueueSemanticsImplemented: true,
   separateRetryCountersImplemented: true,
   semanticOriginProvenanceImplemented: true,
+  productionWriteAuthorityProviderPackaged: true,
+  activationHandshakeAcknowledgementConnected: true,
   productionWriteAuthorityConnected: false,
   productionQueueImplemented: false,
   semanticWritesImplemented: false
 });
 
 export const consumeWorkerIdentityEnvelope = consumeGatewayRuntimeIdentityEnvelope;
+
+const isDirectExecution = (): boolean => Boolean(
+  process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href
+);
+
+if (isDirectExecution()) {
+  void runPackageLocalWorkerProcess().catch((error) => {
+    process.stderr.write(
+      `${error instanceof Error ? error.stack ?? error.message : String(error)}\n`
+    );
+    process.exitCode = 1;
+  });
+}

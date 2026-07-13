@@ -27,8 +27,50 @@ import {
   extractSessionKey,
   mergeHookPayload
 } from "./runtime-helpers.js";
+import {
+  OPENCLAW_RUNTIME_NATIVE_SERVICE_CONTRACT,
+  type OpenClawRuntimeNativeService
+} from "../runtime/activation/native-service.js";
+import {
+  OPENCLAW_NATIVE_OPERATIONS,
+  type OpenClawNativeOperation
+} from "../runtime/activation/constants.js";
+import {
+  createUnavailableOpenClawRuntimeNativeService
+} from "../runtime/activation/production-service.js";
+import {
+  createDefaultInstalledOpenClawRuntimeService
+} from "./openclaw-production-runtime.js";
 
 const loadOpenClawRoutineInteractionModule = () => import("./openclaw-routine-interaction.js");
+
+const OPENCLAW_RUNTIME_COMMAND_PREFIX = "experienceengine_" as const;
+
+const parseRuntimeCommandPayload = (args: string | undefined): Record<string, unknown> => {
+  const trimmed = args?.trim();
+  if (!trimmed) {
+    return {};
+  }
+  const parsed = JSON.parse(trimmed) as unknown;
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("Runtime command arguments must be one JSON object.");
+  }
+  return parsed as Record<string, unknown>;
+};
+
+const formatRuntimeCommandResult = (value: unknown): string =>
+  JSON.stringify(value, null, 2);
+
+const runtimeCommandDescription = (operation: OpenClawNativeOperation): string => {
+  switch (operation) {
+    case "status":
+      return "Show truthful ExperienceEngine package-local runtime status.";
+    case "repair_explanation":
+      return "Explain the exact next repair action for ExperienceEngine runtime authority.";
+    default:
+      return `Run the idempotent ExperienceEngine runtime control ${operation}.`;
+  }
+};
 
 const buildFinalizeDedupKey = (source: unknown, context: HostPromptContext): string | null => {
   if (!context.sessionId) {
@@ -44,7 +86,21 @@ const buildFinalizeDedupKey = (source: unknown, context: HostPromptContext): str
 };
 
 class OpenClawExperiencePlugin implements ExperiencePlugin {
-  constructor(private readonly runtime: ExperienceRuntimeService) {}
+  private nativeRuntimeService: OpenClawRuntimeNativeService;
+
+  constructor(
+    private readonly runtime: ExperienceRuntimeService,
+    nativeRuntimeService?: OpenClawRuntimeNativeService
+  ) {
+    this.nativeRuntimeService = nativeRuntimeService ??
+      createUnavailableOpenClawRuntimeNativeService({
+        reason: "verified_package_local_runtime_dependencies_not_bound",
+        interactionActive: true
+      });
+    this.nativeRuntimeServiceInjected = nativeRuntimeService !== undefined;
+  }
+
+  private readonly nativeRuntimeServiceInjected: boolean;
 
   async beforePromptBuild(context: HostPromptContext) {
     return this.runtime.beforePromptBuild({
@@ -65,6 +121,13 @@ class OpenClawExperiencePlugin implements ExperiencePlugin {
   }
 
   register(api: OpenClawPluginApi): void {
+    if (!this.nativeRuntimeServiceInjected && api.rootDir?.trim()) {
+      this.nativeRuntimeService = createDefaultInstalledOpenClawRuntimeService({
+        packageRoot: api.rootDir,
+        config: this.runtime.config,
+        interactionActive: true
+      });
+    }
     const completedFinalizations = new Map<string, number>();
     const inFlightFinalizations = new Map<string, Promise<void>>();
     const FINALIZE_CACHE_LIMIT = 256;
@@ -95,6 +158,67 @@ class OpenClawExperiencePlugin implements ExperiencePlugin {
       captureDir: this.runtime.config.captureDir,
       sqlitePath: this.runtime.config.sqlitePath
     });
+
+    api.registerService?.({
+      id: OPENCLAW_RUNTIME_NATIVE_SERVICE_CONTRACT.service_id,
+      start: async (context) => {
+        const lifecycle = await this.nativeRuntimeService.start(context);
+        if (!lifecycle.ok) {
+          (api.logger ?? api.log)?.warn?.(
+            "experienceengine.runtime_service_inactive",
+            lifecycle
+          );
+        }
+      },
+      stop: async (context) => {
+        const lifecycle = await this.nativeRuntimeService.stop(context);
+        if (!lifecycle.ok) {
+          (api.logger ?? api.log)?.warn?.(
+            "experienceengine.runtime_service_stop_failed",
+            lifecycle
+          );
+        }
+      }
+    });
+
+    for (const operation of OPENCLAW_NATIVE_OPERATIONS) {
+      api.registerCommand?.({
+        name: `${OPENCLAW_RUNTIME_COMMAND_PREFIX}${operation}`,
+        description: runtimeCommandDescription(operation),
+        acceptsArgs: operation !== "status" && operation !== "repair_explanation",
+        requireAuth: true,
+        handler: async (context) => {
+          if (!context.isAuthorizedSender) {
+            return {
+              text: formatRuntimeCommandResult({
+                ok: false,
+                operation,
+                code: "EE_NATIVE_COMMAND_UNAUTHORIZED",
+                result: null
+              })
+            };
+          }
+          try {
+            const execution = await this.nativeRuntimeService.execute({
+              operation,
+              payload: parseRuntimeCommandPayload(context.args)
+            });
+            return { text: formatRuntimeCommandResult(execution) };
+          } catch (error) {
+            return {
+              text: formatRuntimeCommandResult({
+                ok: false,
+                operation,
+                code: "EE_NATIVE_COMMAND_ARGUMENT_INVALID",
+                result: {
+                  message: error instanceof Error ? error.message : String(error)
+                }
+              })
+            };
+          }
+        }
+      });
+    }
 
     api.on?.("before_prompt_build", async (payload, hookContext) => {
       const source = mergeHookPayload(payload, hookContext);
@@ -208,7 +332,8 @@ class OpenClawExperiencePlugin implements ExperiencePlugin {
 export const createExperiencePlugin = (
   configOverrides: Partial<ExperienceEngineConfig> = {},
   logger?: OpenClawLogger,
-  runtimeOptions: ConstructorParameters<typeof ExperienceRuntimeService>[2] = {}
+  runtimeOptions: ConstructorParameters<typeof ExperienceRuntimeService>[2] = {},
+  nativeRuntimeService?: OpenClawRuntimeNativeService
 ): OpenClawExperiencePlugin =>
   new OpenClawExperiencePlugin(
     new ExperienceRuntimeService(loadConfig({
@@ -222,7 +347,8 @@ export const createExperiencePlugin = (
         enabled: true,
         ...runtimeOptions.autonomousHygieneGovernance
       }
-    })
+    }),
+    nativeRuntimeService
   );
 
 const resolvePluginConfig = (api: OpenClawPluginApi): Partial<ExperienceEngineConfig> => {

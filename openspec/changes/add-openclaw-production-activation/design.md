@@ -78,6 +78,8 @@ Authorization, attempt, and supervisor lease keep immutable historical launch ac
 
 Each blocked boundary defines exactly which retry, cancel, production retry, or rollback operation is legal and its effects on identities, deadlines, authorization, handshakes, leases, and fences.
 
+Pre-identity rollback cancellation is mechanically distinct from upgrade cancellation. Rollback preparation originates after identity publication and clears the current production-handshake pointer, so cancellation preserves the selected active generation but returns to `production_activating`, never directly to `active`. A current supervisor may continue only when it belongs to that selected active generation; otherwise it must be terminal before the gateway atomically issues a fresh `active` replacement authorization. Upgrade cancellation may return directly to `active` only when its preserved production handshake remains current.
+
 ### 8. Commit control result with mutation
 
 Request id, digest, expected revisions, mutation, and completed/rejected idempotency result commit atomically. Reusing a request id with another digest is a stable rejection.

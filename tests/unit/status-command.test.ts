@@ -3,6 +3,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runStatusCommand } from "../../src/cli/commands/status.js";
+import type {
+  CliRuntimeAuthorityInspection
+} from "../../src/runtime/activation/cli-inspection.js";
 
 const consoleLogSpy = vi.spyOn(console, "log").mockImplementation(() => {});
 const tempDirs: string[] = [];
@@ -198,6 +201,38 @@ const writeSharedSettings = (productHome: string): void => {
   );
 };
 
+const runtimeAuthorityInspection = (): CliRuntimeAuthorityInspection => ({
+  inspection_schema_version: "cli-runtime-authority-inspection-v1",
+  control_database_state: "available",
+  evidence_scope: {
+    local_source_and_package_closure: "available",
+    local_control_database: "available",
+    published_npm_clawhub: "not_verified"
+  },
+  interaction_active: true,
+  package_installed: true,
+  setup_state: "ready",
+  home_id: "home-status-runtime-test",
+  package_activation_state: "active",
+  package_activation_revision: 7,
+  blocked_boundary: "none",
+  process_activation_current: true,
+  route_authority_verification: "not_available_to_global_cli",
+  learning_runtime_active: false,
+  production_learning_ready: false,
+  quality_profile: "not_evaluated",
+  core_learning_quality: "not_evaluated",
+  learning_health: "process_active_route_unverified",
+  configuration_generation_id: "configuration-status-runtime-test",
+  production_activation_handshake_id: "handshake-status-runtime-test",
+  supervisor_state: "active",
+  supervisor_lease_epoch: 4,
+  worker_state: "active",
+  worker_fencing_token: 9,
+  next_action: "Use OpenClaw native status to verify current route and quality evidence.",
+  warning: "Global CLI does not claim learning-runtime or production readiness without package-local route authority."
+});
+
 afterEach(() => {
   while (tempDirs.length) {
     const dir = tempDirs.pop();
@@ -389,6 +424,35 @@ vi.mock("../../src/interaction/service.js", () => ({
 }));
 
 describe("status command", () => {
+  it("prints orthogonal runtime projections and verbose authority evidence without published-support claims", () => {
+    const home = makeTempDir();
+    process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");
+    writeSharedSettings(process.env.EXPERIENCE_ENGINE_HOME);
+
+    runStatusCommand({
+      verbose: true,
+      runtimeAuthorityInspection: runtimeAuthorityInspection()
+    });
+
+    expect(consoleLogSpy.mock.calls).toEqual(expect.arrayContaining([
+      ["OpenClaw production runtime:"],
+      ["- Interaction active: yes"],
+      ["- Package activation: active (revision 7)"],
+      ["- Learning runtime active: not verified"],
+      ["- Production learning ready: not verified"],
+      ["- Quality profile: not_evaluated"],
+      ["- Learning health: process_active_route_unverified"],
+      ["Runtime authority evidence:"],
+      ["- Process activation current: yes"],
+      ["- Worker: active; fence 9"],
+      ["- Published distribution evidence: not_verified"]
+    ]));
+    const output = consoleLogSpy.mock.calls.flat().join("\n").toLowerCase();
+    expect(output).not.toContain("published support: yes");
+    expect(output).not.toContain("api key");
+    expect(output).not.toContain("secret");
+  });
+
   it("prints a verbose product-facing summary", () => {
     const home = makeTempDir();
     process.env.EXPERIENCE_ENGINE_HOME = join(home, ".experienceengine");

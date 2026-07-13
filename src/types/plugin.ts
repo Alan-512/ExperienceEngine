@@ -58,11 +58,43 @@ export type OpenClawLogger = {
 };
 
 export type OpenClawPluginApi = {
+  id?: string;
+  name?: string;
+  version?: string;
+  source?: string;
+  rootDir?: string;
   config?: Record<string, unknown>;
   pluginConfig?: Partial<ExperienceEngineConfig>;
   log?: OpenClawLogger;
   logger?: OpenClawLogger;
   resolvePath?: (path: string) => string;
+  registerService?: (service: {
+    id: string;
+    start: (context?: {
+      config?: Record<string, unknown>;
+      workspaceDir?: string;
+      stateDir?: string;
+      logger?: OpenClawLogger;
+    }) => void | Promise<void>;
+    stop?: (context?: {
+      config?: Record<string, unknown>;
+      workspaceDir?: string;
+      stateDir?: string;
+      logger?: OpenClawLogger;
+    }) => void | Promise<void>;
+  }) => void;
+  registerCommand?: (command: {
+    name: string;
+    description: string;
+    acceptsArgs?: boolean;
+    requireAuth?: boolean;
+    handler: (context: {
+      isAuthorizedSender: boolean;
+      args?: string;
+      commandBody: string;
+      config?: Record<string, unknown>;
+    }) => { text: string } | Promise<{ text: string }>;
+  }) => void;
   on?: (
     event: string,
     handler: (payload: unknown, context?: unknown) => unknown | Promise<unknown>

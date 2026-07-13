@@ -155,6 +155,7 @@ export class RuntimeSupervisorAuthorityRepository {
           : undefined;
         const activation = readActivation(this.db, this.homeId);
         const previousLease = readSupervisorLease(this.db, this.homeId);
+        const previousWorker = readWorkerLease(this.db, this.homeId);
         const priorLeaseIsTerminal = !previousLease || (
           (previousLease.state === "stopped" || previousLease.state === "expired") &&
           previousLease.lease_terminal_at !== null &&
@@ -166,6 +167,15 @@ export class RuntimeSupervisorAuthorityRepository {
           !authorization ||
           !activation ||
           !priorLeaseIsTerminal ||
+          (
+            previousWorker !== undefined &&
+            (
+              !previousLease ||
+              previousWorker.state !== "stopped" ||
+              previousWorker.supervisor_owner_id !== previousLease.owner_id ||
+              previousWorker.supervisor_lease_epoch !== previousLease.lease_epoch
+            )
+          ) ||
           attempt.attempt_state !== "reserved_bound" ||
           attempt.attempt_state_revision !== options.expectedAttemptStateRevision ||
           attempt.child_process_id === null ||
@@ -275,6 +285,9 @@ export class RuntimeSupervisorAuthorityRepository {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, 'starting', ?, ?, ?, ?)`
           ).run(...values);
         } else {
+          if (previousWorker) {
+            this.db.exec("PRAGMA defer_foreign_keys = ON");
+          }
           const leaseUpdate = this.db.prepare(
             `UPDATE supervisor_leases
              SET supervisor_lease_key = ?,
@@ -337,6 +350,33 @@ export class RuntimeSupervisorAuthorityRepository {
               "EE_SUPERVISOR_AUTHORITY_STALE",
               "Supervisor takeover lost the terminal prior-lease revision CAS."
             );
+          }
+          if (previousWorker) {
+            const workerProjectionUpdate = this.db.prepare(
+              `UPDATE worker_leases
+               SET supervisor_owner_id = ?,
+                   supervisor_lease_epoch = ?
+               WHERE home_id = ?
+                 AND owner_id = ?
+                 AND fencing_token = ?
+                 AND state = 'stopped'
+                 AND supervisor_owner_id = ?
+                 AND supervisor_lease_epoch = ?`
+            ).run(
+              options.ownerId,
+              nextEpoch,
+              this.homeId,
+              previousWorker.owner_id,
+              previousWorker.fencing_token,
+              previousLease.owner_id,
+              previousLease.lease_epoch
+            );
+            if (!changedOneRow(workerProjectionUpdate)) {
+              throw new RuntimeProcessAuthorityError(
+                "EE_SUPERVISOR_AUTHORITY_STALE",
+                "Supervisor takeover lost the stopped worker projection rebind CAS."
+              );
+            }
           }
         }
         const attemptUpdate = this.db.prepare(

@@ -183,6 +183,69 @@ describe("runtime configuration generations", () => {
     }
   }, 15_000);
 
+  it("rejects an active-runtime configuration change when the S6 invalidation provider is absent", async () => {
+    const home = makeTempDir();
+    const fixture = await createRuntimeConfigurationHome(home);
+    try {
+      const repository = new RuntimeConfigurationGenerationRepository(
+        fixture.db,
+        fixture.canonicalHome,
+        fixture.homeId
+      );
+      const first = createConfigurationFixtureCandidate({
+        homeId: fixture.homeId,
+        integrityKey: fixture.integrityKey,
+        generationId: "config-active-runtime-1"
+      });
+      await repository.publish({
+        candidate: first.candidate,
+        expectedPointerRevision: 0,
+        expectedGenerationId: null,
+        committedAt: "2026-07-12T12:01:00.000Z"
+      });
+      fixture.db.prepare(
+        `UPDATE package_activation_state
+         SET activation_revision = 1,
+             active_package_generation_id = ?,
+             production_activation_handshake_id = NULL,
+             activation_state = 'active',
+             updated_by_kind = 'gateway_service_controller',
+             updated_by_gateway_instance_id = ?,
+             updated_at = ?
+         WHERE home_id = ?`
+      ).run(
+        first.packageIdentity.package_generation_id,
+        "gateway-active-runtime-configuration-test",
+        "2026-07-12T12:01:00.000Z",
+        fixture.homeId
+      );
+      const second = createConfigurationFixtureCandidate({
+        homeId: fixture.homeId,
+        integrityKey: fixture.integrityKey,
+        generationId: "config-active-runtime-2",
+        parentGenerationId: "config-active-runtime-1"
+      });
+      await expect(repository.publish({
+        candidate: second.candidate,
+        expectedPointerRevision: 1,
+        expectedGenerationId: "config-active-runtime-1",
+        committedAt: "2026-07-12T12:02:00.000Z"
+      })).rejects.toMatchObject({
+        code: "EE_CONFIGURATION_ACTIVATION_INVALIDATION_REQUIRED"
+      });
+      expect(repository.readPointer()).toMatchObject({
+        pointer_revision: 1,
+        generation_id: "config-active-runtime-1"
+      });
+      expect(fixture.db.prepare(
+        `SELECT COUNT(*) AS count FROM configuration_generations
+         WHERE home_id = ? AND generation_id = ?`
+      ).get(fixture.homeId, "config-active-runtime-2")).toEqual({ count: 0 });
+    } finally {
+      fixture.db.close();
+    }
+  }, 15_000);
+
   it("treats prepared-but-uncommitted generation files as non-authoritative and accepts exact replay", async () => {
     const home = makeTempDir();
     const fixture = await createRuntimeConfigurationHome(home);

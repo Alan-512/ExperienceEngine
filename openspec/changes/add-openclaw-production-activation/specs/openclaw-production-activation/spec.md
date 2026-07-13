@@ -222,6 +222,22 @@ ExperienceEngine SHALL define the legal retry, cancellation, production-retry, o
 - **THEN** package identities, authorization/handshake projections, lease/attempt terminalization, and target state SHALL follow the exact imported boundary row
 - **AND** historical rows SHALL remain immutable
 
+#### Scenario: Pre-identity rollback cancellation runs
+
+- **WHEN** a rollback transition is cancelled before the pending rollback generation becomes active
+- **THEN** the selected active generation SHALL remain unchanged, pending rollback identity SHALL be cleared, and package state SHALL become `production_activating`
+- **AND** the operation SHALL create a new activation deadline and SHALL NOT restore or reuse a prior production handshake
+- **AND** a current supervisor MAY continue only when it belongs to the selected active generation
+- **AND** when no such supervisor is current, the gateway branch SHALL require terminal prior supervisor/attempt authority and SHALL issue a fresh `active` authorization atomically with the cancellation
+- **AND** a fresh pending/rollback-generation supervisor SHALL be rejected until it releases its authority
+
+#### Scenario: Pre-identity upgrade cancellation preserves active
+
+- **WHEN** an upgrade transition is cancelled and the selected active generation's production handshake remains current
+- **THEN** the package MAY return directly to `active` without changing selected identity
+- **BUT WHEN** that handshake is absent
+- **THEN** cancellation SHALL enter `production_activating` and follow the same continuing-selected-supervisor or gateway replacement-authorization rule
+
 ### Requirement: Control requests are crash-safe and idempotent
 
 ExperienceEngine SHALL commit a control mutation and its completed or rejected idempotency result in one transaction keyed by request id and request digest.

@@ -29,6 +29,11 @@ import {
   type SharedSetupState
 } from "../state-model.js";
 import { loadOfflineManifestForModel } from "../../store/vector/offline-manifest.js";
+import {
+  inspectCliRuntimeAuthority,
+  logCliRuntimeAuthorityInspection,
+  type CliRuntimeAuthorityInspection
+} from "../../runtime/activation/cli-inspection.js";
 
 type DoctorDeps = {
   fetchLatestGitHubReleaseStatus?: typeof fetchLatestGitHubReleaseStatus;
@@ -41,6 +46,11 @@ type DoctorDeps = {
   inspectDecisionHealth?: () => ExperienceDecisionHealth;
   inspectLearningQualityHealth?: () => ExperienceLearningQualityHealth;
   inspectSharedSetupState?: () => SharedSetupState;
+  inspectRuntimeAuthority?: (options: {
+    sqlitePath: string;
+    interactionActive: boolean;
+    packageInstalled: boolean;
+  }) => CliRuntimeAuthorityInspection;
 };
 
 const logRemoteReleaseStatus = (target: string, remoteStatus: RemoteReleaseStatus): void => {
@@ -639,6 +649,13 @@ export const runDoctorCommand = async (
         `- OpenClaw async posttask default: ${openclawStatus.runtimeDefaults.hybridPosttaskEnabled ? "enabled" : "disabled"}`
       );
     }
+    logCliRuntimeAuthorityInspection(
+      (deps.inspectRuntimeAuthority ?? inspectCliRuntimeAuthority)({
+        sqlitePath: config.sqlitePath ?? "",
+        interactionActive: Boolean(openclawStatus.hostState.enabled),
+        packageInstalled: openclawStatus.installed
+      })
+    );
     console.log("- Host health details: ee doctor <codex|claude-code|openclaw|antigravity>");
     console.log("Distillation summary:");
     console.log(`- Provider: ${config.distillerProvider}`);
@@ -911,6 +928,11 @@ export const runDoctorCommand = async (
   }
 
   const status = (deps.inspectOpenClawInstall ?? inspectOpenClawInstall)();
+  const runtimeAuthority = (deps.inspectRuntimeAuthority ?? inspectCliRuntimeAuthority)({
+    sqlitePath: status.sqlitePath || loadConfig().sqlitePath || "",
+    interactionActive: Boolean(status.hostState.enabled ?? status.hostWiring?.wired),
+    packageInstalled: status.installed
+  });
   const remoteStatus = await resolveRemoteStatus({
     currentVersion: status.versionStatus.currentVersion
   });
@@ -949,6 +971,8 @@ export const runDoctorCommand = async (
   if (status.hostState.error) {
     console.log(`Host error: ${status.hostState.error}`);
   }
+
+  logCliRuntimeAuthorityInspection(runtimeAuthority, { verbose: true });
 
   if (status.hostState.driftDetected && status.hostState.driftReason) {
     console.log(`Host drift: ${status.hostState.driftReason}`);

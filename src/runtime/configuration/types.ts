@@ -187,6 +187,16 @@ export type RuntimeConfigurationPointerRow = {
   committed_at: string | null;
 };
 
+export type RuntimeConfigurationActivationInvalidationProvider = {
+  invalidateForConfigurationCommitInTransaction(input: {
+    db: DatabaseSync;
+    homeId: string;
+    currentConfigurationGenerationId: string | null;
+    nextConfigurationGenerationId: string;
+    committedAt: string;
+  }): void;
+};
+
 export type RuntimeConfigurationGenerationAuthorityRow = {
   generation_id: string;
   home_id: string;

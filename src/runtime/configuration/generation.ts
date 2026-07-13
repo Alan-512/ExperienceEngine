@@ -36,6 +36,7 @@ import type {
   PackagedProfileRegistry,
   RuntimeConfigurationCandidate,
   RuntimeConfigurationGenerationAuthorityRow,
+  RuntimeConfigurationActivationInvalidationProvider,
   RuntimeConfigurationGenerationManifest,
   RuntimeConfigurationPointerRow,
   RuntimeConfigurationSecrets,
@@ -43,6 +44,33 @@ import type {
   RuntimeValidationState,
   VerifiedRuntimeConfigurationGeneration
 } from "./types.js";
+
+const UNAVAILABLE_CONFIGURATION_ACTIVATION_INVALIDATION_PROVIDER:
+RuntimeConfigurationActivationInvalidationProvider = {
+  invalidateForConfigurationCommitInTransaction(input) {
+    if (!input.db.isTransaction) {
+      throw new RuntimeConfigurationError(
+        "EE_CONFIGURATION_ACTIVATION_INVALIDATION_REQUIRED",
+        "Configuration activation invalidation requires the current commit transaction."
+      );
+    }
+    const activation = input.db.prepare(
+      `SELECT activation_state
+       FROM package_activation_state
+       WHERE home_id = ?`
+    ).get(input.homeId) as { activation_state: string } | undefined;
+    if (
+      activation?.activation_state === "active" &&
+      input.currentConfigurationGenerationId !==
+        input.nextConfigurationGenerationId
+    ) {
+      throw new RuntimeConfigurationError(
+        "EE_CONFIGURATION_ACTIVATION_INVALIDATION_REQUIRED",
+        "Active production configuration changes require the S6 same-transaction invalidation provider."
+      );
+    }
+  }
+};
 
 const GENERATION_ID_PATTERN = /^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,127}$/u;
 
@@ -502,7 +530,10 @@ export class RuntimeConfigurationGenerationRepository {
   constructor(
     private readonly db: DatabaseSync,
     private readonly canonicalHome: string,
-    private readonly homeId: string
+    private readonly homeId: string,
+    private readonly activationInvalidationProvider:
+      RuntimeConfigurationActivationInvalidationProvider =
+        UNAVAILABLE_CONFIGURATION_ACTIVATION_INVALIDATION_PROVIDER
   ) {}
 
   readPointer(): RuntimeConfigurationPointerRow | undefined {
@@ -582,6 +613,14 @@ export class RuntimeConfigurationGenerationRepository {
         }
         const committedAt = options.committedAt ?? new Date().toISOString();
         const commitId = options.commitId ?? randomUUID();
+        this.activationInvalidationProvider
+          .invalidateForConfigurationCommitInTransaction({
+            db: this.db,
+            homeId: this.homeId,
+            currentConfigurationGenerationId: observedGeneration,
+            nextConfigurationGenerationId: verified.manifest.generation_id,
+            committedAt
+          });
         this.db.prepare(
           `INSERT INTO configuration_generations (
             generation_id,

@@ -7,6 +7,12 @@ export const FENCED_LEARNING_QUEUE_CONTRACT_VERSION =
   "fenced-learning-queue-v1" as const;
 export const FENCED_LEARNING_QUEUE_STAGE =
   "fenced_learning_queue_s5" as const;
+export const FENCED_LEARNING_JOB_SCHEMA_VERSION =
+  "fenced-learning-job-v1" as const;
+export const FENCED_LEARNING_CANDIDATE_SCHEMA_VERSION =
+  "fenced-learning-candidate-v1" as const;
+export const FENCED_LEARNING_NODE_SCHEMA_VERSION =
+  "fenced-learning-node-v1" as const;
 export const PRODUCTION_WRITE_AUTHORITY_CONTRACT_VERSION =
   "s6-production-write-authority-v1" as const;
 export const LEARNING_QUEUE_MAINTENANCE_AUTHORITY_CONTRACT_VERSION =

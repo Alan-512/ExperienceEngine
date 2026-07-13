@@ -106,6 +106,27 @@ const assertNonEmpty = (value: string, label: string): void => {
   }
 };
 
+export type RuntimeLaunchAuthorizationIssueOptions = {
+  authorizationId: string;
+  packageGenerationId: string;
+  gatewayPackageGenerationId?: string;
+  authorizationRole: LaunchAuthorizationRole;
+  gatewayInstanceId: string;
+  gatewayProcessStartToken: string;
+  expectedLaunchRevision: number;
+  resetLaunchBudget?: boolean;
+  issuer:
+    | {
+      kind: "gateway_service_controller";
+      gatewayInstanceId: string;
+    }
+    | {
+      kind: "supervisor";
+      supervisorOwnerId: string;
+      supervisorLeaseEpoch: number;
+    };
+};
+
 export class RuntimeLaunchAuthorizationIssuer {
   constructor(
     private readonly db: DatabaseSync,
@@ -115,32 +136,28 @@ export class RuntimeLaunchAuthorizationIssuer {
     private readonly clock: RuntimeProcessAuthorityClock = SYSTEM_PROCESS_AUTHORITY_CLOCK
   ) {}
 
-  issue(options: {
-    authorizationId: string;
-    packageGenerationId: string;
-    authorizationRole: LaunchAuthorizationRole;
-    gatewayInstanceId: string;
-    gatewayProcessStartToken: string;
-    expectedLaunchRevision: number;
-    issuer:
-      | {
-        kind: "gateway_service_controller";
-        gatewayInstanceId: string;
-      }
-      | {
-        kind: "supervisor";
-        supervisorOwnerId: string;
-        supervisorLeaseEpoch: number;
-      };
-  }): {
+  issue(options: RuntimeLaunchAuthorizationIssueOptions): {
     authorization: PackageLaunchAuthorizationRow;
     launchState: SupervisorLaunchStateRow;
   } {
-    assertNonEmpty(options.authorizationId, "authorizationId");
-    assertNonEmpty(options.packageGenerationId, "packageGenerationId");
     return runRuntimeImmediateTransaction(this.db, {
       category: "lease",
-      operation: () => {
+      operation: () => this.issueInTransaction(options)
+    });
+  }
+
+  issueInTransaction(options: RuntimeLaunchAuthorizationIssueOptions): {
+    authorization: PackageLaunchAuthorizationRow;
+    launchState: SupervisorLaunchStateRow;
+  } {
+    if (!this.db.isTransaction) {
+      throw new RuntimeProcessAuthorityError(
+        "EE_PROCESS_AUTHORITY_INVALID",
+        "Transaction-scoped launch authorization issuance requires an active authority transaction."
+      );
+    }
+    assertNonEmpty(options.authorizationId, "authorizationId");
+    assertNonEmpty(options.packageGenerationId, "packageGenerationId");
         assertCanonicalHomeExists(this.db, this.homeId);
         const evidence = this.provider.getAuthorizationMutationEvidenceInTransaction({
           db: this.db,
@@ -173,7 +190,8 @@ export class RuntimeLaunchAuthorizationIssuer {
           homeId: this.homeId,
           gatewayInstanceId: options.gatewayInstanceId,
           gatewayProcessStartToken: options.gatewayProcessStartToken,
-          packageGenerationId: options.packageGenerationId,
+          packageGenerationId:
+            options.gatewayPackageGenerationId ?? options.packageGenerationId,
           observedAt
         });
         const objectiveSupervisor = evaluateFreshSupervisorAuthorityInTransaction({
@@ -414,6 +432,9 @@ export class RuntimeLaunchAuthorizationIssuer {
                  expected_pending_package_generation_id = ?,
                  launch_owner_gateway_instance_id = ?,
                  launch_owner_process_start_token = ?,
+                 restart_window_started_at = CASE WHEN ? = 1 THEN NULL ELSE restart_window_started_at END,
+                 launch_count_in_window = CASE WHEN ? = 1 THEN 0 ELSE launch_count_in_window END,
+                 next_launch_at = CASE WHEN ? = 1 THEN NULL ELSE next_launch_at END,
                  last_failure_code = NULL
              WHERE home_id = ? AND launch_revision = ?`
           ).run(
@@ -428,6 +449,9 @@ export class RuntimeLaunchAuthorizationIssuer {
             activation.pending_package_generation_id,
             options.gatewayInstanceId,
             options.gatewayProcessStartToken,
+            options.resetLaunchBudget ? 1 : 0,
+            options.resetLaunchBudget ? 1 : 0,
+            options.resetLaunchBudget ? 1 : 0,
             this.homeId,
             options.expectedLaunchRevision
           );
@@ -446,8 +470,6 @@ export class RuntimeLaunchAuthorizationIssuer {
           )!,
           launchState: readSupervisorLaunchState(this.db, this.homeId)!
         };
-      }
-    });
   }
 }
 

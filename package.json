@@ -51,6 +51,7 @@
     "runtime:promote-payload": "tsx scripts/openclaw/promote-runtime-payload.ts",
     "runtime:replay-fixture": "tsx scripts/openclaw/replay-runtime-fixture.ts",
     "runtime:validate-closure": "node scripts/validation/validate-runtime-closure.mjs",
+    "runtime:validate-openclaw-binding": "node scripts/validation/validate-openclaw-production-binding.mjs",
     "prepack": "pnpm build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
