@@ -92,13 +92,17 @@
 - [x] 9.4 Persist stable runtime-health failures and include the stable code in the primary Gateway log message.
 - [x] 9.5 Add strict `ee verify openclaw-production` non-zero automation semantics.
 - [x] 9.6 Separate `artifact_runtime_validated` from `support_claim_allowed`.
+- [x] 9.7 Prove cold host-native initialization through the real OpenClaw user-command channel, including read-only preparation, exact-revision initialization, and idempotent replay.
 
 ### Local-Pack Real OpenClaw Host Preflight Evidence
 
 - The final preflight used OpenClaw `2026.4.1 (da64a97)` on Linux x64 under WSL with Node `v25.5.0`.
-- The exact local tarball passed manifest-driven staging and final-archive validation with closure digest `80035592ceea42c1aff9e3809c8a0c9b34d219c777227c2498478eb2a078390b` and package build id `build_e6b9ce3647e398c2e2184c7d03b679dd7105fe60542275ec6afd26023dd11e55`.
+- The exact local tarball passed manifest-driven staging and final-archive validation with closure digest `41882a3c00f16f313abd306f9ad48c4cc5e09aa21a5f3c88995e4c81b53a8ef0` and package build id `build_e73ef017486b8f5bb8d9ff83995ebc6b3c371123ba531449a9ea4120333e3dbd`.
 - OpenClaw's default security scan blocked the package on explicit runtime/network/process patterns. The validator normalized the scan, recorded digest `b9b919519513927b1a9f94714b676a5fe08e3f3a58ee853dc3517b5748655760`, and retried only after explicit approval.
-- A real isolated Gateway loaded the installed plugin service, completed a real agent turn, established current production activation, completed one fenced semantic job, rejected stale output after configuration authority changed, recorded interruption without content retry, restarted with fresh process authority, and terminalized worker/supervisor state on shutdown.
+- The first Gateway service start preserved the empty package activation state and returned `package_activation_initialization_required`; it did not create launch authority implicitly.
+- The validator sent `/experienceengine_prepare_package_activation` through the real authorized `chat.send` user-command path, read the exact plugin JSON back through `chat.history`, and proved the complete activation/process authority snapshot was unchanged.
+- The validator then sent `/experienceengine_initialize_package_activation` with the exact returned package generation, projection revision, launch revision, control request id, and authorization id. Replaying the identical command payload returned the original result and left exactly one control request and one launch authorization.
+- The same isolated Gateway then completed a real agent turn, established current production activation, completed one fenced semantic job, rejected stale output after configuration authority changed, recorded interruption without content retry, restarted with fresh process authority, and terminalized worker/supervisor state on shutdown.
 - The run exited successfully with `interaction_active = true`, `learning_runtime_active = true`, `production_learning_ready = false`, `artifact_runtime_validated = false`, and `support_claim_allowed = false` because this was local-pack preflight rather than npm/ClawHub published evidence.
 
 ### Remaining Publication Gates

@@ -7,6 +7,7 @@ import {
   invokeResolvedWindowsOpenClaw,
   probeWindowsOpenClawVersion,
   resolveWindowsOpenClawExecutable,
+  resolveWindowsOpenClawProcessInvocation,
   type WindowsOpenClawExecutor
 } from "../../src/install/windows-openclaw-resolver.js";
 
@@ -100,11 +101,66 @@ describe("Windows OpenClaw resolver", () => {
     expect(result.record.version_probe_output_digest).toMatch(/^[a-f0-9]{64}$/u);
   });
 
+  it("resolves a local npm .cmd shim to the validated package Node entrypoint", async () => {
+    const root = await makeRoot();
+    const shim = join(root, "node_modules", ".bin", "openclaw.cmd");
+    const packageRoot = join(root, "node_modules", "openclaw");
+    await mkdir(join(root, "node_modules", ".bin"), { recursive: true });
+    await mkdir(packageRoot, { recursive: true });
+    await writeFile(shim, "@echo off\r\n", "utf8");
+    await writeFile(join(packageRoot, "openclaw.mjs"), "export {};\n", "utf8");
+    await writeFile(join(packageRoot, "package.json"), JSON.stringify({
+      name: "openclaw",
+      version: "2026.4.1"
+    }), "utf8");
+    expect(resolveWindowsOpenClawProcessInvocation({
+      executable: {
+        path: shim,
+        source: "operator_configured_path",
+        extension: ".cmd"
+      },
+      nodeExecutable: "C:\\Program Files\\nodejs\\node.exe"
+    })).toEqual({
+      file: "C:\\Program Files\\nodejs\\node.exe",
+      args_prefix: [join(packageRoot, "openclaw.mjs")],
+      launch_mode: "validated_node_entrypoint",
+      resolved_executable: {
+        path: shim,
+        source: "operator_configured_path",
+        extension: ".cmd"
+      }
+    });
+  });
+
+  it("rejects a batch shim whose adjacent package identity is not OpenClaw", async () => {
+    const root = await makeRoot();
+    const shim = join(root, "node_modules", ".bin", "openclaw.cmd");
+    const packageRoot = join(root, "node_modules", "openclaw");
+    await mkdir(join(root, "node_modules", ".bin"), { recursive: true });
+    await mkdir(packageRoot, { recursive: true });
+    await writeFile(shim, "@echo off\r\n", "utf8");
+    await writeFile(join(packageRoot, "openclaw.mjs"), "export {};\n", "utf8");
+    await writeFile(join(packageRoot, "package.json"), JSON.stringify({
+      name: "not-openclaw"
+    }), "utf8");
+    expect(() => resolveWindowsOpenClawProcessInvocation({
+      executable: {
+        path: shim,
+        source: "operator_configured_path",
+        extension: ".cmd"
+      }
+    })).toThrow(expect.objectContaining({
+      code: "EE_OPENCLAW_EXECUTABLE_UNRESOLVED"
+    }));
+  });
+
   it("freezes bounded fallback behavior", () => {
     expect(WINDOWS_OPENCLAW_RESOLVER_CONTRACT).toMatchObject({
       extensionless_lookup_is_sufficient: false,
       broad_shell_true_allowed: false,
       batch_invocation_uses_fixed_cmd_arguments: true,
+      long_running_batch_shim_uses_validated_node_entrypoint: true,
+      batch_shim_entrypoint_requires_openclaw_package_metadata: true,
       canonical_package_local_activation_depends_on_resolver: false
     });
   });

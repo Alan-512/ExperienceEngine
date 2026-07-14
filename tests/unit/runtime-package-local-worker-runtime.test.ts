@@ -3,6 +3,9 @@ import {
   RuntimePackageLocalServiceController
 } from "../../src/runtime/activation/service-controller.js";
 import {
+  RuntimePackageActivationRepository
+} from "../../src/runtime/activation/repository.js";
+import {
   RuntimePackageLocalSupervisorLeaseSession
 } from "../../src/runtime/package/supervisor-runtime.js";
 import {
@@ -55,10 +58,7 @@ const fakeWorkerChild = (pid: number): SpawnedWorkerProcess => ({
 const createActivationWorkerAuthority = async () => {
   const db = createRuntimeProductionActivationDatabase();
   const envelope = createActivationFixtureRuntimeIdentityEnvelope();
-  const ids = [
-    "authorization-worker-runtime-test",
-    "attempt-worker-runtime-test"
-  ];
+  const ids = ["attempt-worker-runtime-test"];
   const controller = new RuntimePackageLocalServiceController({
     db,
     homeId: ACTIVATION_FIXTURE_HOME_ID,
@@ -74,6 +74,26 @@ const createActivationWorkerAuthority = async () => {
     spawner: () => fakeSupervisorChild(8911),
     idFactory: () => ids.shift()!,
     clock: createFixedProcessAuthorityClock(ACTIVATION_FIXTURE_NOW)
+  });
+  expect(controller.start()).toMatchObject({
+    ok: false,
+    code: "package_activation_initialization_required"
+  });
+  new RuntimePackageActivationRepository(
+    db,
+    ACTIVATION_FIXTURE_HOME_ID,
+    createFixedProcessAuthorityClock(ACTIVATION_FIXTURE_NOW)
+  ).initializePackageActivation({
+    expectedActivationRevision: 0,
+    expectedLaunchRevision: 0,
+    authorizationId: "authorization-worker-runtime-test",
+    packageClosure: ACTIVATION_FIXTURE_PACKAGE_CLOSURE,
+    writer: {
+      kind: "gateway_service_controller",
+      gateway_instance_id: ACTIVATION_FIXTURE_GATEWAY_ID,
+      gateway_process_start_token: ACTIVATION_FIXTURE_GATEWAY_START,
+      plugin_package_generation_id: ACTIVATION_FIXTURE_PACKAGE_ID
+    }
   });
   expect(controller.start()).toMatchObject({
     ok: true,

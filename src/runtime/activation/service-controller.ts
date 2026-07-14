@@ -223,33 +223,17 @@ export class RuntimePackageLocalServiceController {
     );
 
     if (activation.activation_state === "uninitialized") {
-      const descriptor = this.options.resolvePackageGeneration(
-        this.options.currentPluginPackageGenerationId
-      );
-      if (!descriptor) {
-        return {
-          ok: false,
-          code: "current_package_generation_not_resolvable"
-        };
-      }
-      repository.initializePackageActivation({
-        expectedActivationRevision: activation.activation_revision,
-        expectedLaunchRevision: launchState?.launch_revision ?? 0,
-        authorizationId: idFactory(),
-        packageClosure: descriptor.packageClosure,
-        writer: {
-          kind: "gateway_service_controller",
-          gateway_instance_id: this.options.gatewayInstanceId,
-          gateway_process_start_token: this.options.gatewayProcessStartToken,
-          plugin_package_generation_id:
-            this.options.currentPluginPackageGenerationId
+      this.ensureGatewayHeartbeatLoop();
+      return {
+        ok: false,
+        code: "package_activation_initialization_required",
+        detail: {
+          package_generation_id:
+            this.options.currentPluginPackageGenerationId,
+          projection_revision: activation.activation_revision,
+          launch_revision: launchState?.launch_revision ?? 0
         }
-      });
-      activation = repository.read()!;
-      launchState = readSupervisorLaunchState(
-        this.options.db,
-        this.options.homeId
-      );
+      };
     } else if (
       activation.activation_state === "active" &&
       activation.active_package_generation_id ===

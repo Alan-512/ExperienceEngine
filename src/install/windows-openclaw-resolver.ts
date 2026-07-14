@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { execFileSync } from "node:child_process";
-import { existsSync, statSync } from "node:fs";
-import { delimiter, extname, isAbsolute, join, resolve } from "node:path";
+import { existsSync, readFileSync, statSync } from "node:fs";
+import { delimiter, dirname, extname, isAbsolute, join, resolve } from "node:path";
 import type {
   WindowsOpenClawExecutableExtension,
   WindowsOpenClawResolutionSource
@@ -26,6 +26,13 @@ export type ResolvedWindowsOpenClawExecutable = {
   path: string;
   source: WindowsOpenClawResolutionSource;
   extension: WindowsOpenClawExecutableExtension;
+};
+
+export type WindowsOpenClawProcessInvocation = {
+  file: string;
+  args_prefix: string[];
+  launch_mode: "native_executable" | "validated_node_entrypoint";
+  resolved_executable: ResolvedWindowsOpenClawExecutable;
 };
 
 export type WindowsOpenClawExecutor = (options: {
@@ -67,6 +74,54 @@ const supportedExtension = (
   )
     ? extension as WindowsOpenClawExecutableExtension
     : null;
+};
+
+const isOpenClawPackageEntrypoint = (entrypoint: string): boolean => {
+  if (!isFile(entrypoint)) {
+    return false;
+  }
+  const packageJsonPath = join(dirname(entrypoint), "package.json");
+  try {
+    const parsed = JSON.parse(readFileSync(packageJsonPath, "utf8")) as {
+      name?: unknown;
+    };
+    return parsed.name === "openclaw";
+  } catch {
+    return false;
+  }
+};
+
+export const resolveWindowsOpenClawProcessInvocation = (options: {
+  executable: ResolvedWindowsOpenClawExecutable;
+  nodeExecutable?: string;
+}): WindowsOpenClawProcessInvocation => {
+  if (options.executable.extension === ".exe") {
+    return {
+      file: options.executable.path,
+      args_prefix: [],
+      launch_mode: "native_executable",
+      resolved_executable: options.executable
+    };
+  }
+  const shimDirectory = dirname(options.executable.path);
+  const candidates = [
+    join(shimDirectory, "node_modules", "openclaw", "openclaw.mjs"),
+    resolve(shimDirectory, "..", "openclaw", "openclaw.mjs"),
+    join(shimDirectory, "openclaw.mjs")
+  ];
+  const entrypoint = candidates.find(isOpenClawPackageEntrypoint);
+  if (!entrypoint) {
+    throw new WindowsOpenClawResolutionError(
+      "EE_OPENCLAW_EXECUTABLE_UNRESOLVED",
+      "The OpenClaw batch shim did not resolve to a validated adjacent npm package entrypoint."
+    );
+  }
+  return {
+    file: options.nodeExecutable ?? process.execPath,
+    args_prefix: [entrypoint],
+    launch_mode: "validated_node_entrypoint",
+    resolved_executable: options.executable
+  };
 };
 
 const addCandidate = (
@@ -257,5 +312,7 @@ export const WINDOWS_OPENCLAW_RESOLVER_CONTRACT = Object.freeze({
   extensionless_lookup_is_sufficient: false,
   broad_shell_true_allowed: false,
   batch_invocation_uses_fixed_cmd_arguments: true,
+  long_running_batch_shim_uses_validated_node_entrypoint: true,
+  batch_shim_entrypoint_requires_openclaw_package_metadata: true,
   canonical_package_local_activation_depends_on_resolver: false
 });

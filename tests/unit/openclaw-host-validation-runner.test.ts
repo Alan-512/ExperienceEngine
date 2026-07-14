@@ -11,7 +11,8 @@ import {
   type OpenClawGatewayProcess,
   type OpenClawHostActiveEvidence,
   type OpenClawHostAuthorityCollector,
-  type OpenClawHostCommand
+  type OpenClawHostCommand,
+  type OpenClawHostInitializationSnapshot
 } from "../../src/runtime/distribution/openclaw-host-validation-runner.js";
 
 const roots: string[] = [];
@@ -72,11 +73,33 @@ const activeEvidence: OpenClawHostActiveEvidence = {
   production_learning_ready: false
 };
 
+const initializationSnapshot: OpenClawHostInitializationSnapshot = {
+  home_id: "home-host-fixture",
+  projection_revision: 0,
+  launch_revision: 0,
+  authority_tables: {
+    package_activation_state: [{
+      home_id: "home-host-fixture",
+      activation_revision: 0,
+      activation_state: "uninitialized"
+    }],
+    supervisor_launch_state: [],
+    package_launch_authorizations: [],
+    supervisor_launch_attempts: [],
+    supervisor_leases: [],
+    worker_leases: [],
+    activation_handshakes: [],
+    control_request_idempotency: []
+  }
+};
+
 describe("OpenClaw real-host validation runner", () => {
   it("requires real install, Gateway, agent turn, restart, authoritative evidence, and shutdown", async () => {
     const root = await makeRoot();
     const installedRoot = join(root, "openclaw-state", "extensions", "experienceengine");
     const commands: OpenClawHostCommand[] = [];
+    let initializationCalls = 0;
+    const chatMessages: Array<Record<string, unknown>> = [];
     const commandRunner = vi.fn(async (command: OpenClawHostCommand) => {
       commands.push(command);
       if (command.args[0] === "--version") {
@@ -95,6 +118,79 @@ describe("OpenClaw real-host validation runner", () => {
           stderr: ""
         };
       }
+      if (
+        command.args[0] === "gateway" &&
+        command.args[1] === "call" &&
+        command.args[2] === "chat.history"
+      ) {
+        return {
+          stdout: JSON.stringify({
+            sessionKey: "agent:main:ee-native-activation-fixture",
+            sessionId: "native-session-fixture",
+            messages: chatMessages
+          }),
+          stderr: ""
+        };
+      }
+      if (
+        command.args[0] === "gateway" &&
+        command.args[1] === "call" &&
+        command.args[2] === "chat.send"
+      ) {
+        const paramsIndex = command.args.indexOf("--params");
+        const params = JSON.parse(command.args[paramsIndex + 1]) as {
+          message: string;
+        };
+        chatMessages.push({
+          role: "user",
+          content: [{ type: "text", text: params.message }]
+        });
+        if (params.message === "/experienceengine_prepare_package_activation") {
+          chatMessages.push({
+            role: "assistant",
+            content: [{
+              type: "text",
+              text: JSON.stringify({
+                ok: true,
+                operation: "prepare_package_activation",
+                code: "package_activation_request_prepared",
+                result: {
+                  operation: "initialize_package_activation",
+                  package_generation_id: "package-host-fixture",
+                  expected_projection_revision: 0,
+                  expected_launch_revision: 0,
+                  control_request_id: "control-host-initialize",
+                  authorization_id: "authorization-host-initialize",
+                  mutates_authority: false
+                }
+              })
+            }]
+          });
+        } else if (params.message.startsWith(
+          "/experienceengine_initialize_package_activation "
+        )) {
+          initializationCalls += 1;
+          chatMessages.push({
+            role: "assistant",
+            text: JSON.stringify({
+              ok: true,
+              operation: "initialize_package_activation",
+              code: "package_activation_initialized",
+              result: {
+                replayed: initializationCalls > 1,
+                projection_revision: 1
+              }
+            })
+          });
+        }
+        return {
+          stdout: JSON.stringify({
+            runId: `native-run-${chatMessages.length}`,
+            status: "started"
+          }),
+          stderr: ""
+        };
+      }
       if (command.args[0] === "agent") {
         return { stdout: '{"ok":true,"sessionId":"fixture"}\n', stderr: "" };
       }
@@ -106,13 +202,16 @@ describe("OpenClaw real-host validation runner", () => {
       const pid = ++processId;
       return {
         pid,
+        readOutput: () => ({ stdout: "", stderr: "" }),
         stop: async () => {
           stopped.push(pid);
         },
-        waitForExit: async () => ({ code: 0, signal: null })
+        waitForExit: () => new Promise(() => undefined)
       };
     });
     const collector: OpenClawHostAuthorityCollector = {
+      captureInitializationSnapshot: vi.fn(async () => initializationSnapshot),
+      verifyInitializationIdempotency: vi.fn(async () => undefined),
       captureActiveEvidence: vi.fn(async () => activeEvidence),
       verifyRestartRecovery: vi.fn(async () => undefined),
       captureShutdownEvidence: vi.fn(async () => ({
@@ -144,6 +243,9 @@ describe("OpenClaw real-host validation runner", () => {
       gatewaySpawner,
       installedPackageVerifier,
       publishedAttestationIssuer,
+      prepareRuntimeAuthority: vi.fn(async () => ({
+        packageGenerationId: "package-host-fixture"
+      })),
       now: () => new Date("2026-07-14T12:00:00.000Z")
     });
     expect(evidence).toMatchObject({
@@ -154,6 +256,10 @@ describe("OpenClaw real-host validation runner", () => {
         openclaw_version: "OpenClaw 2026.4.1 (fixture)",
         install_method: "openclaw_plugins_install",
         plugin_service_registered: true,
+        native_activation_prepare_observed: true,
+        native_activation_prepare_read_only: true,
+        native_activation_initialize_observed: true,
+        native_activation_idempotent_replay_observed: true,
         real_agent_turn_observed: true,
         gateway_restart_recovered: true
       },
@@ -162,12 +268,31 @@ describe("OpenClaw real-host validation runner", () => {
       production_learning_ready: false
     });
     expect(commands.some((command) => command.args[0] === "plugins" && command.args[1] === "install")).toBe(true);
-    expect(commands.some((command) => command.args[0] === "agent")).toBe(true);
+    expect(commands.filter((command) => command.args[0] === "agent")).toHaveLength(1);
+    expect(commands.filter((command) =>
+      command.args[0] === "gateway" &&
+      command.args[1] === "call" &&
+      command.args[2] === "chat.send"
+    )).toHaveLength(3);
+    expect(commands.some((command) => command.args.some((argument) =>
+      argument.includes("experienceengine_prepare_package_activation")
+    ))).toBe(true);
+    expect(commands.filter((command) => command.args.some((argument) =>
+      argument.includes("experienceengine_initialize_package_activation")
+    ))).toHaveLength(2);
     expect(gatewaySpawner).toHaveBeenCalledTimes(2);
     expect(stopped).toEqual([1001, 1002, 1002]);
     expect(collector.captureActiveEvidence).toHaveBeenCalledOnce();
+    expect(collector.captureInitializationSnapshot).toHaveBeenCalledTimes(2);
+    expect(collector.verifyInitializationIdempotency).toHaveBeenCalledWith(
+      expect.objectContaining({
+        controlRequestId: "control-host-initialize",
+        authorizationId: "authorization-host-initialize",
+        expectedPackageGenerationId: "package-host-fixture"
+      })
+    );
     expect(collector.verifyRestartRecovery).toHaveBeenCalledOnce();
-    expect(collector.captureShutdownEvidence).toHaveBeenCalledOnce();
+    expect(collector.captureShutdownEvidence).toHaveBeenCalledTimes(2);
     expect(installedPackageVerifier).toHaveBeenCalledWith(installedRoot);
     expect(publishedAttestationIssuer).toHaveBeenCalledOnce();
   });
@@ -183,7 +308,14 @@ describe("OpenClaw real-host validation runner", () => {
       installed_artifact_smoke_substitution_allowed: false,
       explicit_security_approval_required_when_blocked: true,
       isolated_gateway_port_and_token_required: true,
-      seed_agent_auth_is_copied_only_into_temporary_state: true
+      seed_agent_auth_is_copied_only_into_temporary_state: true,
+      native_activation_prepare_command_required: true,
+      native_activation_initialize_command_required: true,
+      native_activation_prepare_must_be_read_only: true,
+      native_activation_initialize_replay_required: true,
+      gateway_lifecycle_stop_drives_runtime_drain: true,
+      windows_batch_shim_uses_validated_node_entrypoint: true,
+      shell_true_allowed: false
     });
   });
 });

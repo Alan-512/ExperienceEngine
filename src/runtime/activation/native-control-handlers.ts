@@ -204,9 +204,7 @@ export const createRuntimeNativeControlHandlers = (options: {
     if (!activationRepository.read()) {
       activationRepository.bootstrapPackageActivationAuthority();
     }
-    return resultFromControl(
-      "initialize_package_activation",
-      control.initializePackageActivation({
+    const initialized = control.initializePackageActivation({
         controlRequestId: controlRequestId(payload),
         expectedProjectionRevision: requiredRevision(
           payload,
@@ -226,8 +224,28 @@ export const createRuntimeNativeControlHandlers = (options: {
           plugin_package_generation_id:
             options.currentPluginPackageGenerationId
         }
-      })
-    );
+      });
+    if (
+      initialized.record.request_state === "completed" &&
+      !initialized.replayed
+    ) {
+      const lifecycle = await options.initializeOrResume();
+      if (!lifecycle.ok) {
+        return {
+          ok: false,
+          operation: "initialize_package_activation",
+          code: lifecycle.code,
+          result: {
+            control_result: resultFromControl(
+              "initialize_package_activation",
+              initialized
+            ).result,
+            lifecycle_detail: lifecycle.detail ?? null
+          }
+        };
+      }
+    }
+    return resultFromControl("initialize_package_activation", initialized);
   };
 
   const pauseLearning: OpenClawNativeOperationHandler = async (payload) => {

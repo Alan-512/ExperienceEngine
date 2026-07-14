@@ -204,6 +204,10 @@ export const LIVE_HOST_ENVIRONMENT_FIELDS = [
   "security_scan_status",
   "security_scan_summary_digest",
   "plugin_service_registered",
+  "native_activation_prepare_observed",
+  "native_activation_prepare_read_only",
+  "native_activation_initialize_observed",
+  "native_activation_idempotent_replay_observed",
   "real_agent_turn_observed",
   "gateway_restart_recovered"
 ] as const;

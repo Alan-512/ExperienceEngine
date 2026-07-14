@@ -11,7 +11,8 @@ import type {
 } from "../activation/types.js";
 import type {
   OpenClawHostActiveEvidence,
-  OpenClawHostAuthorityCollector
+  OpenClawHostAuthorityCollector,
+  OpenClawHostInitializationSnapshot
 } from "./openclaw-host-validation-runner.js";
 import type {
   PublishedProtectedQueueEvidence,
@@ -57,6 +58,45 @@ const readHomeId = (db: DatabaseSync): string | null => {
     "SELECT home_id FROM runtime_control_meta ORDER BY created_at, home_id LIMIT 1"
   ).get() as { home_id?: string } | undefined;
   return typeof row?.home_id === "string" ? row.home_id : null;
+};
+
+const INITIALIZATION_AUTHORITY_TABLES = [
+  "package_activation_state",
+  "supervisor_launch_state",
+  "package_launch_authorizations",
+  "supervisor_launch_attempts",
+  "supervisor_leases",
+  "worker_leases",
+  "activation_handshakes",
+  "control_request_idempotency"
+] as const;
+
+const readInitializationSnapshot = (options: {
+  db: DatabaseSync;
+  homeId: string;
+}): OpenClawHostInitializationSnapshot => {
+  const authorityTables: Record<string, Array<Record<string, unknown>>> = {};
+  for (const table of INITIALIZATION_AUTHORITY_TABLES) {
+    authorityTables[table] = tableExists(options.db, table)
+      ? options.db.prepare(
+        `SELECT * FROM ${table} WHERE home_id = ?`
+      ).all(options.homeId) as Array<Record<string, unknown>>
+      : [];
+  }
+  const activation = authorityTables.package_activation_state[0];
+  const launch = authorityTables.supervisor_launch_state[0];
+  return {
+    home_id: options.homeId,
+    projection_revision:
+      typeof activation?.activation_revision === "number"
+        ? activation.activation_revision
+        : 0,
+    launch_revision:
+      typeof launch?.launch_revision === "number"
+        ? launch.launch_revision
+        : 0,
+    authority_tables: authorityTables
+  };
 };
 
 const readProcessingClaim = (
@@ -220,6 +260,87 @@ export const createSqliteOpenClawHostAuthorityCollector = (options: {
   let fixtureIds: FixtureIds = {};
   let capturedClaim: ProcessingClaimSnapshot | null = null;
   return {
+    async captureInitializationSnapshot(input) {
+      const deadline = Date.now() + input.timeoutMs;
+      while (Date.now() < deadline) {
+        let db: DatabaseSync | null = null;
+        try {
+          db = new DatabaseSync(input.sqlitePath, { readOnly: true });
+          const homeId = readHomeId(db);
+          if (homeId) {
+            return readInitializationSnapshot({ db, homeId });
+          }
+        } catch {
+          // Gateway bootstrap may not have created the database yet.
+        } finally {
+          db?.close();
+        }
+        await sleep(options.pollIntervalMs ?? 25);
+      }
+      throw new PublishedRuntimeClosureError(
+        "EE_OPENCLAW_LIVE_HOST_AUTHORITY_TIMEOUT",
+        "Timed out waiting for the empty real-host activation control plane."
+      );
+    },
+
+    async verifyInitializationIdempotency(input) {
+      const deadline = Date.now() + input.timeoutMs;
+      const db = new DatabaseSync(input.sqlitePath, { readOnly: true });
+      try {
+        while (Date.now() < deadline) {
+          try {
+            const homeId = readHomeId(db);
+            if (!homeId) {
+              await sleep(options.pollIntervalMs ?? 25);
+              continue;
+            }
+            const control = db.prepare(
+              `SELECT COUNT(*) AS count,
+                      MIN(requested_operation) AS requested_operation,
+                      MIN(request_state) AS request_state,
+                      MIN(result_code) AS result_code
+                 FROM control_request_idempotency
+                WHERE home_id = ? AND control_request_id = ?`
+            ).get(homeId, input.controlRequestId) as {
+              count: number;
+              requested_operation: string | null;
+              request_state: string | null;
+              result_code: string | null;
+            };
+            const authorization = db.prepare(
+              `SELECT COUNT(*) AS count,
+                      MIN(authorized_package_generation_id) AS generation_id
+                 FROM package_launch_authorizations
+                WHERE home_id = ? AND launch_authorization_id = ?`
+            ).get(homeId, input.authorizationId) as {
+              count: number;
+              generation_id: string | null;
+            };
+            if (
+              Number(control.count) === 1 &&
+              control.requested_operation === "initialize_package_activation" &&
+              control.request_state === "completed" &&
+              control.result_code === "package_activation_initialized" &&
+              Number(authorization.count) === 1 &&
+              authorization.generation_id ===
+                input.expectedPackageGenerationId
+            ) {
+              return;
+            }
+          } catch {
+            // Supervisor startup may be consuming the authorization concurrently.
+          }
+          await sleep(options.pollIntervalMs ?? 25);
+        }
+      } finally {
+        db.close();
+      }
+      throw new PublishedRuntimeClosureError(
+        "EE_OPENCLAW_LIVE_HOST_NATIVE_COMMAND_INVALID",
+        "The real-host initialization replay created duplicate or mismatched control authority."
+      );
+    },
+
     async captureActiveEvidence(input) {
       const deadline = Date.now() + input.timeoutMs;
       const db = new DatabaseSync(input.sqlitePath, { readOnly: false });

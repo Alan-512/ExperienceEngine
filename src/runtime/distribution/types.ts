@@ -113,6 +113,10 @@ export type OpenClawLiveHostEnvironment = {
   security_scan_status: "not_required" | "approved";
   security_scan_summary_digest: string | null;
   plugin_service_registered: true;
+  native_activation_prepare_observed: true;
+  native_activation_prepare_read_only: true;
+  native_activation_initialize_observed: true;
+  native_activation_idempotent_replay_observed: true;
   real_agent_turn_observed: true;
   gateway_restart_recovered: true;
 };

@@ -255,7 +255,7 @@ export const createPublishedOpenClawHostFixture = async (options: {
     sqlitePath: string;
     artifact: MaterializedPublishedArtifact;
     openclawVersion: string;
-  }) => Promise<void>;
+  }) => Promise<{ packageGenerationId: string }>;
   startFixture: OpenClawHostValidationFixtureStarter;
   cleanup: () => Promise<void>;
 }> => {
@@ -755,6 +755,9 @@ export const createPublishedOpenClawHostFixture = async (options: {
         artifact: input.artifact,
         openclawVersion: input.openclawVersion
       });
+      return {
+        packageGenerationId: configured.packageGenerationId
+      };
     },
 
     async startFixture(input) {

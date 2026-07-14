@@ -675,9 +675,66 @@ try {
     interactionActive: true
   });
   const started = await binding.service.start({ stateDir });
-  if (!started.ok || started.code !== "supervisor_launch_reserved_and_bound") {
+  if (
+    started.ok ||
+    started.code !== "package_activation_initialization_required"
+  ) {
     throw new Error(
       `Unexpected production binding start result: ${JSON.stringify(started)}.`
+    );
+  }
+  const preparedInitialization = await binding.service.execute({
+    operation: "prepare_package_activation"
+  });
+  const preparedPayload = preparedInitialization.result;
+  if (
+    !preparedInitialization.ok ||
+    preparedInitialization.code !== "package_activation_request_prepared" ||
+    !preparedPayload ||
+    typeof preparedPayload !== "object" ||
+    Array.isArray(preparedPayload) ||
+    preparedPayload.package_generation_id !== configured.packageGenerationId ||
+    preparedPayload.expected_projection_revision !== 0 ||
+    preparedPayload.expected_launch_revision !== 0 ||
+    preparedPayload.mutates_authority !== false
+  ) {
+    throw new Error(
+      `Unexpected package activation preparation: ${JSON.stringify(preparedInitialization)}.`
+    );
+  }
+  const initializationPayload = {
+    expected_projection_revision:
+      preparedPayload.expected_projection_revision,
+    expected_launch_revision: preparedPayload.expected_launch_revision,
+    control_request_id: preparedPayload.control_request_id,
+    authorization_id: preparedPayload.authorization_id
+  };
+  const initialized = await binding.service.execute({
+    operation: "initialize_package_activation",
+    payload: initializationPayload
+  });
+  if (
+    !initialized.ok ||
+    initialized.code !== "package_activation_initialized" ||
+    initialized.result?.replayed !== false
+  ) {
+    throw new Error(
+      `Unexpected package activation initialization: ${JSON.stringify(initialized)}.`
+    );
+  }
+  const replayedInitialization = await binding.service.execute({
+    operation: "initialize_package_activation",
+    payload: initializationPayload
+  });
+  if (
+    !replayedInitialization.ok ||
+    replayedInitialization.code !== "package_activation_initialized" ||
+    replayedInitialization.result?.replayed !== true ||
+    replayedInitialization.result?.projection_revision !==
+      initialized.result?.projection_revision
+  ) {
+    throw new Error(
+      `Unexpected package activation replay: ${JSON.stringify(replayedInitialization)}.`
     );
   }
 

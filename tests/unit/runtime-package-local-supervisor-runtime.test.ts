@@ -8,6 +8,9 @@ import {
 import {
   RuntimePackageLocalServiceController
 } from "../../src/runtime/activation/service-controller.js";
+import {
+  RuntimePackageActivationRepository
+} from "../../src/runtime/activation/repository.js";
 import type {
   SpawnedSupervisorProcess
 } from "../../src/runtime/activation/supervisor-launcher.js";
@@ -34,10 +37,7 @@ const fakeChild = (pid: number): SpawnedSupervisorProcess => ({
 
 const createBoundSupervisorLaunch = () => {
   const db = createRuntimeProductionActivationDatabase();
-  const ids = [
-    "authorization-supervisor-runtime-test",
-    "attempt-supervisor-runtime-test"
-  ];
+  const ids = ["attempt-supervisor-runtime-test"];
   const envelope = createActivationFixtureRuntimeIdentityEnvelope();
   const controller = new RuntimePackageLocalServiceController({
     db,
@@ -54,6 +54,26 @@ const createBoundSupervisorLaunch = () => {
     spawner: () => fakeChild(8811),
     idFactory: () => ids.shift()!,
     clock: createFixedProcessAuthorityClock(ACTIVATION_FIXTURE_NOW)
+  });
+  expect(controller.start()).toMatchObject({
+    ok: false,
+    code: "package_activation_initialization_required"
+  });
+  new RuntimePackageActivationRepository(
+    db,
+    ACTIVATION_FIXTURE_HOME_ID,
+    createFixedProcessAuthorityClock(ACTIVATION_FIXTURE_NOW)
+  ).initializePackageActivation({
+    expectedActivationRevision: 0,
+    expectedLaunchRevision: 0,
+    authorizationId: "authorization-supervisor-runtime-test",
+    packageClosure: ACTIVATION_FIXTURE_PACKAGE_CLOSURE,
+    writer: {
+      kind: "gateway_service_controller",
+      gateway_instance_id: ACTIVATION_FIXTURE_GATEWAY_ID,
+      gateway_process_start_token: ACTIVATION_FIXTURE_GATEWAY_START,
+      plugin_package_generation_id: ACTIVATION_FIXTURE_PACKAGE_ID
+    }
   });
   expect(controller.start()).toMatchObject({
     ok: true,

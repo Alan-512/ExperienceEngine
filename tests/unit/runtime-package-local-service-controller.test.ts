@@ -2,6 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 import {
   RuntimePackageLocalServiceController
 } from "../../src/runtime/activation/service-controller.js";
+import {
+  RuntimePackageActivationRepository
+} from "../../src/runtime/activation/repository.js";
 import type {
   SpawnedSupervisorProcess
 } from "../../src/runtime/activation/supervisor-launcher.js";
@@ -37,12 +40,88 @@ const fakeChild = (pid: number): SpawnedSupervisorProcess => ({
   unref: vi.fn()
 });
 
+const initializeColdActivation = (
+  db: ReturnType<typeof createRuntimeProductionActivationDatabase>,
+  authorizationId: string
+): void => {
+  new RuntimePackageActivationRepository(
+    db,
+    ACTIVATION_FIXTURE_HOME_ID,
+    createFixedProcessAuthorityClock(ACTIVATION_FIXTURE_NOW)
+  ).initializePackageActivation({
+    expectedActivationRevision: 0,
+    expectedLaunchRevision: 0,
+    authorizationId,
+    packageClosure: ACTIVATION_FIXTURE_PACKAGE_CLOSURE,
+    writer: {
+      kind: "gateway_service_controller",
+      gateway_instance_id: ACTIVATION_FIXTURE_GATEWAY_ID,
+      gateway_process_start_token: ACTIVATION_FIXTURE_GATEWAY_START,
+      plugin_package_generation_id: ACTIVATION_FIXTURE_PACKAGE_ID
+    }
+  });
+};
+
 describe("package-local OpenClaw runtime service controller", () => {
-  it("publishes gateway identity, initializes an empty activation, and launches the package-local supervisor", () => {
+  it("publishes gateway identity but keeps an empty activation command-initialized", () => {
     const db = createRuntimeProductionActivationDatabase();
     try {
-      const ids = ["authorization-controller-cold-start", "attempt-controller-cold-start"];
       const spawner = vi.fn(() => fakeChild(7811));
+      const controller = new RuntimePackageLocalServiceController({
+        db,
+        homeId: ACTIVATION_FIXTURE_HOME_ID,
+        gatewayInstanceId: ACTIVATION_FIXTURE_GATEWAY_ID,
+        gatewayProcessStartToken: ACTIVATION_FIXTURE_GATEWAY_START,
+        currentPluginPackageGenerationId: ACTIVATION_FIXTURE_PACKAGE_ID,
+        runtimeIdentityEnvelope: createActivationFixtureRuntimeIdentityEnvelope(),
+        resolvePackageGeneration: (generationId) => generationId ===
+          ACTIVATION_FIXTURE_PACKAGE_ID
+          ? {
+            packageRoot: process.cwd(),
+            packageClosure: ACTIVATION_FIXTURE_PACKAGE_CLOSURE
+          }
+          : undefined,
+        processStartTokenResolver: (pid) => `os-controller-start-${pid}`,
+        spawner,
+        clock: createFixedProcessAuthorityClock(ACTIVATION_FIXTURE_NOW)
+      });
+      expect(controller.start()).toEqual({
+        ok: false,
+        code: "package_activation_initialization_required",
+        detail: {
+          package_generation_id: ACTIVATION_FIXTURE_PACKAGE_ID,
+          projection_revision: 0,
+          launch_revision: 0
+        }
+      });
+      expect(spawner).not.toHaveBeenCalled();
+      const activation = db.prepare(
+        "SELECT * FROM package_activation_state WHERE home_id = ?"
+      ).get(ACTIVATION_FIXTURE_HOME_ID) as Record<string, unknown>;
+      expect(activation).toMatchObject({
+        activation_revision: 0,
+        activation_state: "uninitialized",
+        pending_package_generation_id: null,
+        launch_authorization_id: null
+      });
+      const heartbeat = db.prepare(
+        "SELECT * FROM gateway_heartbeats WHERE home_id = ?"
+      ).get(ACTIVATION_FIXTURE_HOME_ID) as Record<string, unknown>;
+      expect(heartbeat).toMatchObject({
+        gateway_instance_id: ACTIVATION_FIXTURE_GATEWAY_ID,
+        gateway_process_start_token: ACTIVATION_FIXTURE_GATEWAY_START,
+        package_generation_id: ACTIVATION_FIXTURE_PACKAGE_ID
+      });
+    } finally {
+      db.close();
+    }
+  });
+
+  it("launches the package-local supervisor after exact command initialization", () => {
+    const db = createRuntimeProductionActivationDatabase();
+    try {
+      const ids = ["attempt-controller-explicit-start"];
+      const spawner = vi.fn(() => fakeChild(7812));
       const controller = new RuntimePackageLocalServiceController({
         db,
         homeId: ACTIVATION_FIXTURE_HOME_ID,
@@ -62,37 +141,45 @@ describe("package-local OpenClaw runtime service controller", () => {
         idFactory: () => ids.shift()!,
         clock: createFixedProcessAuthorityClock(ACTIVATION_FIXTURE_NOW)
       });
+      expect(controller.start()).toMatchObject({
+        ok: false,
+        code: "package_activation_initialization_required"
+      });
+      new RuntimePackageActivationRepository(
+        db,
+        ACTIVATION_FIXTURE_HOME_ID,
+        createFixedProcessAuthorityClock(ACTIVATION_FIXTURE_NOW)
+      ).initializePackageActivation({
+        expectedActivationRevision: 0,
+        expectedLaunchRevision: 0,
+        authorizationId: "authorization-controller-explicit-start",
+        packageClosure: ACTIVATION_FIXTURE_PACKAGE_CLOSURE,
+        writer: {
+          kind: "gateway_service_controller",
+          gateway_instance_id: ACTIVATION_FIXTURE_GATEWAY_ID,
+          gateway_process_start_token: ACTIVATION_FIXTURE_GATEWAY_START,
+          plugin_package_generation_id: ACTIVATION_FIXTURE_PACKAGE_ID
+        }
+      });
       expect(controller.start()).toEqual({
         ok: true,
         code: "supervisor_launch_reserved_and_bound",
         detail: {
-          launch_attempt_id: "attempt-controller-cold-start",
+          launch_attempt_id: "attempt-controller-explicit-start",
           package_generation_id: ACTIVATION_FIXTURE_PACKAGE_ID,
-          child_process_id: 7811
+          child_process_id: 7812
         }
       });
       expect(spawner).toHaveBeenCalledOnce();
-      const launchedChild = spawner.mock.results[0].value as SpawnedSupervisorProcess;
-      expect(launchedChild.once).toHaveBeenCalledWith("exit", expect.any(Function));
       const activation = db.prepare(
-        "SELECT * FROM package_activation_state WHERE home_id = ?"
+        "SELECT activation_revision, activation_state, launch_authorization_state, launch_authorization_consumed_by_attempt_id FROM package_activation_state WHERE home_id = ?"
       ).get(ACTIVATION_FIXTURE_HOME_ID) as Record<string, unknown>;
       expect(activation).toMatchObject({
         activation_revision: 1,
         activation_state: "preparing",
-        pending_package_generation_id: ACTIVATION_FIXTURE_PACKAGE_ID,
-        launch_authorization_id: "authorization-controller-cold-start",
         launch_authorization_state: "consumed",
         launch_authorization_consumed_by_attempt_id:
-          "attempt-controller-cold-start"
-      });
-      const heartbeat = db.prepare(
-        "SELECT * FROM gateway_heartbeats WHERE home_id = ?"
-      ).get(ACTIVATION_FIXTURE_HOME_ID) as Record<string, unknown>;
-      expect(heartbeat).toMatchObject({
-        gateway_instance_id: ACTIVATION_FIXTURE_GATEWAY_ID,
-        gateway_process_start_token: ACTIVATION_FIXTURE_GATEWAY_START,
-        package_generation_id: ACTIVATION_FIXTURE_PACKAGE_ID
+          "attempt-controller-explicit-start"
       });
     } finally {
       db.close();
@@ -193,7 +280,7 @@ describe("package-local OpenClaw runtime service controller", () => {
     const db = createRuntimeProductionActivationDatabase();
     try {
       const child = fakeChild(8011);
-      const ids = ["authorization-stop-signal-test", "attempt-stop-signal-test"];
+      const ids = ["attempt-stop-signal-test"];
       const controller = new RuntimePackageLocalServiceController({
         db,
         homeId: ACTIVATION_FIXTURE_HOME_ID,
@@ -210,6 +297,11 @@ describe("package-local OpenClaw runtime service controller", () => {
         idFactory: () => ids.shift()!,
         clock: createFixedProcessAuthorityClock(ACTIVATION_FIXTURE_NOW)
       });
+      expect(controller.start()).toMatchObject({
+        ok: false,
+        code: "package_activation_initialization_required"
+      });
+      initializeColdActivation(db, "authorization-stop-signal-test");
       expect(controller.start()).toMatchObject({
         ok: true,
         code: "supervisor_launch_reserved_and_bound"
@@ -232,7 +324,7 @@ describe("package-local OpenClaw runtime service controller", () => {
     const db = createRuntimeProductionActivationDatabase();
     try {
       const child = fakeChild(8012);
-      const ids = ["authorization-heartbeat-test", "attempt-heartbeat-test"];
+      const ids = ["attempt-heartbeat-test"];
       const controller = new RuntimePackageLocalServiceController({
         db,
         homeId: ACTIVATION_FIXTURE_HOME_ID,
@@ -250,6 +342,11 @@ describe("package-local OpenClaw runtime service controller", () => {
         gatewayHeartbeatDurationMs: 10_000,
         clock: createFixedProcessAuthorityClock(ACTIVATION_FIXTURE_NOW)
       });
+      expect(controller.start()).toMatchObject({
+        ok: false,
+        code: "package_activation_initialization_required"
+      });
+      initializeColdActivation(db, "authorization-heartbeat-test");
       expect(controller.start()).toMatchObject({
         ok: true,
         code: "supervisor_launch_reserved_and_bound"
@@ -280,7 +377,7 @@ describe("package-local OpenClaw runtime service controller", () => {
     const db = createRuntimeProductionActivationDatabase();
     try {
       const child = fakeChild(8013);
-      const ids = ["authorization-handshake-requester", "attempt-handshake-requester"];
+      const ids = ["attempt-handshake-requester"];
       const requestIfReady = vi.fn(() => {
         throw new Error("route authority still warming");
       });
@@ -302,6 +399,11 @@ describe("package-local OpenClaw runtime service controller", () => {
         activationHandshakeCoordinator: { requestIfReady },
         clock: createFixedProcessAuthorityClock(ACTIVATION_FIXTURE_NOW)
       });
+      expect(controller.start()).toMatchObject({
+        ok: false,
+        code: "package_activation_initialization_required"
+      });
+      initializeColdActivation(db, "authorization-handshake-requester");
       expect(controller.start()).toMatchObject({
         ok: true,
         code: "supervisor_launch_reserved_and_bound"

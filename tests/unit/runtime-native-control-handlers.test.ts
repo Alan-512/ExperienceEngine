@@ -345,6 +345,10 @@ describe("runtime native control handlers", () => {
     const db = createRuntimeProductionActivationDatabase();
     seedActivationGatewayHeartbeat(db);
     try {
+      const initializeOrResume = vi.fn(() => ({
+        ok: true,
+        code: "supervisor_launch_reserved_and_bound"
+      }));
       const service = new OpenClawRuntimeNativeService({
         handlers: createRuntimeNativeControlHandlers({
           db,
@@ -359,7 +363,7 @@ describe("runtime native control handlers", () => {
               packageClosure: ACTIVATION_FIXTURE_PACKAGE_CLOSURE
             }
             : undefined,
-          initializeOrResume: () => ({ ok: true, code: "unused" }),
+          initializeOrResume,
           clock: createFixedProcessAuthorityClock(ACTIVATION_FIXTURE_NOW)
         })
       });
@@ -405,6 +409,7 @@ describe("runtime native control handlers", () => {
         "control-native-initialize"
       ) as { count: number };
       expect(Number(requests.count)).toBe(1);
+      expect(initializeOrResume).toHaveBeenCalledOnce();
     } finally {
       db.close();
     }
