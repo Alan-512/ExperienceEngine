@@ -1,5 +1,7 @@
 # ExperienceEngine — Unreleased
 
+Release candidate metadata is now prepared for `v0.5.0`. No npm package, ClawHub artifact, Git tag, or GitHub Release has been published for this candidate. See `docs/releases/v0.5.0.md` for the candidate release summary and remaining publication gates.
+
 ## OpenClaw runtime closure remediation
 
 - Made the embedded runtime closure manifest the sole production-runtime packaging authority.

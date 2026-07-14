@@ -12,10 +12,10 @@
 
 | 字段 | 当前值 |
 | --- | --- |
-| 最近同步日期 | 2026-07-06 |
-| 最近同步范围 | `v0.4.8` 当前架构：host trace capsule、trace 持久化边界、OpenClaw runtime closure、Codex lifecycle 安装修复、Claude/Codex 用户级 wiring、Antigravity 用户级 wiring、runtime worker factory、runtime session store、finalize task coordinator、tool result runtime 与 host lifecycle runtime 边界 |
+| 最近同步日期 | 2026-07-14 |
+| 最近同步范围 | `v0.5.0` 发布候选当前架构：OpenClaw package-local supervisor/worker、canonical home/package identity、SQLite migration authority、process fencing、immutable configuration/route authority、fenced semantic queue、production activation、published-artifact closure validation，以及既有 host trace/runtime service 边界 |
 | 当前宿主基线 | OpenClaw、Claude Code、Codex、Antigravity |
-| 发布基线 | 当前仓库版本为 `v0.4.8`，最近发布说明记录 ExperienceRuntimeService boundary extraction、status UX、runtime path isolation 与 settings/doctor JSON read hardening；历史 `v0.4.2` ClawHub 状态不再作为当前架构基线 |
+| 发布基线 | 当前仓库版本已准备为 `v0.5.0` 发布候选，但尚未发布、打 tag 或完成 npm/ClawHub published-artifact 验证；公开渠道基线仍是 `v0.4.8` |
 | Antigravity 状态 | 已记录用户级全局插件/MCP wiring、Agent Desktop、`agy` CLI、IDE hooks 观测、项目级 fallback 与 `ee agy exec -C <project>` 包装器 |
 | TraceCapsule 状态 | 已落地为 runtime trace 输入模型和诊断快照模型；normal mode 只持久化 `trace_provenance_json` / `trace_completeness` 摘要，不写 full trace capsule/events；诊断快照需显式开启并命中 host/scope allowlist |
 | 更新原则 | 记录当前真实架构；进行中的实现只在代码落地并验证后同步到正文架构图 |
@@ -279,9 +279,9 @@ Antigravity
 
 | 渠道 | 当前状态 |
 | --- | --- |
-| npm | `@alan512/experienceengine@0.4.2` 已发布，`latest=0.4.2` |
-| GitHub | `v0.4.2` tag 和 GitHub Release 已发布 |
-| ClawHub | `@alan512/experienceengine@0.4.2` code-plugin package 已发布，latest 指向 `0.4.2`，source ref 为 `v0.4.2` |
+| npm | 仓库记录的公开基线为 `@alan512/experienceengine@0.4.8`；`v0.5.0` 仅完成候选元数据，尚未发布或验证 |
+| GitHub | 仓库记录的公开基线为 `v0.4.8`；尚未创建 `v0.5.0` tag 或 GitHub Release |
+| ClawHub | 公开 `0.4.8` artifact 已知缺少当前 runtime closure；`v0.5.0` 尚未发布或执行独立 channel validation |
 
 当前 trace capability 基线：
 
@@ -587,6 +587,44 @@ beforePromptBuild(context)
 ```
 
 该 runtime 不直接查询候选经验、不写 `InjectionEvent`，这些仍由 `PromptDecisionPipeline` 负责。它只维护 host lifecycle 的 session/trace/governance 调度边界。
+
+### 5.9 OpenClaw package-local production runtime
+
+OpenClaw 的后台学习运行时不复用宿主进程作为隐式 writer authority，而是由 package-local supervisor 和 worker 组成独立受控运行时。核心实现分布在：
+
+```text
+src/runtime/identity/
+src/runtime/schema/
+src/runtime/process/
+src/runtime/configuration/
+src/runtime/learning-queue/
+src/runtime/activation/
+src/runtime/package/
+src/runtime/distribution/
+```
+
+当前执行链为：
+
+```text
+canonical home + package generation identity
+  -> SQLite compatibility / migration authority
+  -> launch authorization + supervisor/worker lease + fencing
+  -> immutable configuration generation + validated route authority
+  -> OpenClaw prepare / initialize / activation handshake
+  -> production_write_authorized
+  -> fenced semantic queue claim / renew / complete / recover
+  -> terminal worker/supervisor authority release
+```
+
+关键边界：
+
+- Gateway/plugin 只通过冻结的 control whitelist 改变 package activation authority。
+- supervisor 是 migration、runtime route projection 和 worker lifecycle 的唯一协调者。
+- worker 只有在当前 package/configuration/route/activation handshake 和 fencing authority 全部有效时，才能执行受保护的语义写入。
+- authority 丢失只允许 interruption recovery，不能提交旧语义结果或消耗 content retry。
+- `interaction_active`、`learning_runtime_active`、`production_learning_ready` 是三个独立投影；插件加载不等于后台学习已就绪。
+- `artifact_runtime_validated` 需要 exact artifact 的 installed-artifact 与真实宿主证据；`support_claim_allowed` 还受 published channel、平台、repair/upgrade、文档和 S8 benchmark/quality gate 约束。
+- 当前 WSL 与原生 Windows 的 local-pack real-host preflight 已通过，但 npm/ClawHub `v0.5.0` published-artifact 验证尚未发生，因此完整 production background learning 仍不能称为 supported。
 
 ---
 
