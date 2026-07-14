@@ -1,11 +1,23 @@
-import { randomBytes } from "node:crypto";
+import {
+  createHash,
+  createPrivateKey,
+  createPublicKey,
+  generateKeyPairSync,
+  randomBytes,
+  randomUUID,
+  sign
+} from "node:crypto";
 import { spawn, execFile } from "node:child_process";
 import {
   access,
+  chmod,
   copyFile,
   mkdir,
-  rm
+  readFile,
+  rm,
+  writeFile
 } from "node:fs/promises";
+import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { promisify } from "node:util";
 import type {
@@ -48,6 +60,37 @@ import {
 
 const execFileAsync = promisify(execFile);
 
+const WINDOWS_GATEWAY_GRACEFUL_STOP_COMMAND =
+  "__experienceengine_openclaw_gateway_graceful_stop__";
+
+const WINDOWS_GATEWAY_WRAPPER_SOURCE = `
+import { pathToFileURL } from "node:url";
+
+const stopCommand = ${JSON.stringify(WINDOWS_GATEWAY_GRACEFUL_STOP_COMMAND)};
+let stdinBuffer = "";
+process.stdin.setEncoding("utf8");
+process.stdin.on("data", (chunk) => {
+  stdinBuffer += chunk;
+  for (;;) {
+    const newlineIndex = stdinBuffer.indexOf("\\n");
+    if (newlineIndex < 0) {
+      break;
+    }
+    const line = stdinBuffer.slice(0, newlineIndex).trim();
+    stdinBuffer = stdinBuffer.slice(newlineIndex + 1);
+    if (line === stopCommand) {
+      process.emit("SIGINT");
+    }
+  }
+});
+
+const entrypoint = process.argv[1];
+if (!entrypoint) {
+  throw new Error("Missing OpenClaw entrypoint for Windows Gateway wrapper.");
+}
+await import(pathToFileURL(entrypoint).href);
+`;
+
 export type OpenClawHostCommand = {
   executable: string;
   args: string[];
@@ -83,6 +126,35 @@ export type OpenClawGatewaySpawner = (options: {
   env: NodeJS.ProcessEnv;
   cwd?: string;
 }) => Promise<OpenClawGatewayProcess>;
+
+export type OpenClawGatewaySpawnPlan = {
+  file: string;
+  args: string[];
+  gracefulStopViaStdin: boolean;
+};
+
+export const buildOpenClawGatewaySpawnPlan = (options: {
+  invocation: { file: string; args: string[] };
+  platform?: NodeJS.Platform;
+}): OpenClawGatewaySpawnPlan => {
+  if ((options.platform ?? process.platform) !== "win32") {
+    return {
+      ...options.invocation,
+      gracefulStopViaStdin: false
+    };
+  }
+  return {
+    file: options.invocation.file,
+    args: [
+      "--disable-warning=ExperimentalWarning",
+      "--input-type=module",
+      "-e",
+      WINDOWS_GATEWAY_WRAPPER_SOURCE,
+      ...options.invocation.args
+    ],
+    gracefulStopViaStdin: true
+  };
+};
 
 export type OpenClawHostActiveEvidence = {
   activation: PublishedLiveActivationBinding;
@@ -193,10 +265,20 @@ const defaultCommandRunner: OpenClawHostCommandRunner = async (command) => {
       stderr: result.stderr
     };
   } catch (error) {
-    const failure = error as Error & { stdout?: string; stderr?: string; code?: unknown };
+    const failure = error as Error & {
+      stdout?: string;
+      stderr?: string;
+      code?: unknown;
+      signal?: unknown;
+      killed?: unknown;
+    };
     throw new PublishedRuntimeClosureError(
       "EE_OPENCLAW_LIVE_HOST_COMMAND_FAILED",
-      `OpenClaw command failed (${String(failure.code ?? "unknown")}): ${
+      `OpenClaw command failed (code=${String(
+        failure.code ?? "unknown"
+      )}, signal=${String(failure.signal ?? "none")}, killed=${String(
+        failure.killed ?? false
+      )}): ${
         failure.stderr?.trim() || failure.stdout?.trim() || failure.message
       }`
     );
@@ -204,16 +286,23 @@ const defaultCommandRunner: OpenClawHostCommandRunner = async (command) => {
 };
 
 const defaultGatewaySpawner: OpenClawGatewaySpawner = async (options) => {
-  const invocation = resolveHostProcessInvocation({
-    executable: options.executable,
-    args: options.args,
-    env: options.env
+  const spawnPlan = buildOpenClawGatewaySpawnPlan({
+    invocation: resolveHostProcessInvocation({
+      executable: options.executable,
+      args: options.args,
+      env: options.env
+    })
   });
-  const child = spawn(invocation.file, invocation.args, {
+  const child = spawn(spawnPlan.file, spawnPlan.args, {
     cwd: options.cwd,
     env: options.env,
-    stdio: ["ignore", "pipe", "pipe"],
-    windowsHide: true
+    stdio: [
+      spawnPlan.gracefulStopViaStdin ? "pipe" : "ignore",
+      "pipe",
+      "pipe"
+    ],
+    windowsHide: true,
+    detached: process.platform === "win32"
   });
   let stderr = "";
   let stdout = "";
@@ -252,17 +341,33 @@ const defaultGatewaySpawner: OpenClawGatewaySpawner = async (options) => {
       if (child.exitCode !== null || child.signalCode !== null) {
         return;
       }
-      child.kill("SIGTERM");
+      if (spawnPlan.gracefulStopViaStdin) {
+        if (!child.stdin?.writable) {
+          throw new PublishedRuntimeClosureError(
+            "EE_OPENCLAW_LIVE_HOST_SHUTDOWN_TIMEOUT",
+            "OpenClaw Gateway Windows shutdown channel is unavailable."
+          );
+        }
+        child.stdin.write(`${WINDOWS_GATEWAY_GRACEFUL_STOP_COMMAND}\n`);
+        child.stdin.end();
+      } else {
+        child.kill("SIGTERM");
+      }
       const timeout = new Promise<never>((_, rejectTimeout) => {
         const timer = setTimeout(() => {
           rejectTimeout(new PublishedRuntimeClosureError(
             "EE_OPENCLAW_LIVE_HOST_SHUTDOWN_TIMEOUT",
-            `OpenClaw Gateway did not stop after SIGTERM. ${stderr.trim()}`
+            `OpenClaw Gateway did not stop after the graceful shutdown request. ${stderr.trim()}`
           ));
-        }, 20_000);
+        }, spawnPlan.gracefulStopViaStdin ? 35_000 : 20_000);
         timer.unref();
       });
-      await Promise.race([exitPromise, timeout]);
+      try {
+        await Promise.race([exitPromise, timeout]);
+      } catch (error) {
+        child.kill();
+        throw error;
+      }
     },
     waitForExit: () => exitPromise
   };
@@ -270,6 +375,16 @@ const defaultGatewaySpawner: OpenClawGatewaySpawner = async (options) => {
 
 const sleep = (milliseconds: number): Promise<void> =>
   new Promise((resolveSleep) => setTimeout(resolveSleep, milliseconds));
+
+const boundedOpenClawCliTimeout = (
+  overallTimeoutMs: number,
+  defaultTimeoutMs: number
+): number => Math.min(
+  overallTimeoutMs,
+  process.platform === "win32"
+    ? Math.max(defaultTimeoutMs, 60_000)
+    : defaultTimeoutMs
+);
 
 const runCommand = async (options: {
   runner: OpenClawHostCommandRunner;
@@ -293,10 +408,439 @@ type OpenClawNativeCommandResult = {
   result: unknown;
 };
 
+type DirectGatewaySocket = {
+  addEventListener: (
+    type: "open" | "message" | "close" | "error",
+    listener: (event: unknown) => void,
+    options?: { once?: boolean }
+  ) => void;
+  send: (data: string) => void;
+  close: (code?: number, reason?: string) => void;
+};
+
+type DirectGatewaySocketConstructor = new (url: string) => DirectGatewaySocket;
+
+export type DirectGatewayRpcClient = {
+  request: (method: string, params: Record<string, unknown>) => Promise<unknown>;
+  waitForChatFinal: (runId: string, timeoutMs: number) => Promise<unknown>;
+  close: () => void;
+};
+
+export type DirectGatewayRpcClientFactory = (options: {
+  gatewayUrl: string;
+  gatewayToken: string;
+  timeoutMs: number;
+  stateDir: string;
+  clientVersion: string;
+}) => Promise<DirectGatewayRpcClient>;
+
+type OpenClawValidationDeviceIdentity = {
+  deviceId: string;
+  publicKeyPem: string;
+  privateKeyPem: string;
+};
+
+const ED25519_SPKI_PREFIX = Buffer.from(
+  "302a300506032b6570032100",
+  "hex"
+);
+
+const deriveOpenClawPublicKeyRaw = (publicKeyPem: string): Buffer => {
+  const spki = createPublicKey(publicKeyPem).export({
+    type: "spki",
+    format: "der"
+  });
+  return spki.length === ED25519_SPKI_PREFIX.length + 32 &&
+    spki.subarray(0, ED25519_SPKI_PREFIX.length).equals(ED25519_SPKI_PREFIX)
+    ? spki.subarray(ED25519_SPKI_PREFIX.length)
+    : spki;
+};
+
+const deriveOpenClawDeviceId = (publicKeyPem: string): string =>
+  createHash("sha256")
+    .update(deriveOpenClawPublicKeyRaw(publicKeyPem))
+    .digest("hex");
+
+const loadOrCreateValidationDeviceIdentity = async (
+  stateDir: string
+): Promise<OpenClawValidationDeviceIdentity> => {
+  const identityPath = join(stateDir, "identity", "device.json");
+  try {
+    const parsed = JSON.parse(await readFile(identityPath, "utf8")) as {
+      version?: unknown;
+      deviceId?: unknown;
+      publicKeyPem?: unknown;
+      privateKeyPem?: unknown;
+    };
+    if (
+      parsed.version === 1 &&
+      typeof parsed.publicKeyPem === "string" &&
+      typeof parsed.privateKeyPem === "string"
+    ) {
+      const deviceId = deriveOpenClawDeviceId(parsed.publicKeyPem);
+      return {
+        deviceId,
+        publicKeyPem: parsed.publicKeyPem,
+        privateKeyPem: parsed.privateKeyPem
+      };
+    }
+  } catch {
+    // The isolated validation state may not have invoked an OpenClaw CLI yet.
+  }
+
+  const { publicKey, privateKey } = generateKeyPairSync("ed25519");
+  const publicKeyPem = publicKey.export({
+    type: "spki",
+    format: "pem"
+  }).toString();
+  const privateKeyPem = privateKey.export({
+    type: "pkcs8",
+    format: "pem"
+  }).toString();
+  const deviceId = deriveOpenClawDeviceId(publicKeyPem);
+  await mkdir(dirname(identityPath), { recursive: true });
+  await writeFile(identityPath, `${JSON.stringify({
+    version: 1,
+    deviceId,
+    publicKeyPem,
+    privateKeyPem,
+    createdAtMs: Date.now()
+  }, null, 2)}\n`, { encoding: "utf8", mode: 0o600 });
+  await chmod(identityPath, 0o600).catch(() => undefined);
+  return { deviceId, publicKeyPem, privateKeyPem };
+};
+
+const signOpenClawDeviceChallenge = (options: {
+  identity: OpenClawValidationDeviceIdentity;
+  clientId: string;
+  clientMode: string;
+  role: string;
+  scopes: string[];
+  signedAtMs: number;
+  token: string;
+  nonce: string;
+  platform: string;
+  deviceFamily?: string;
+}): { publicKey: string; signature: string } => {
+  const payload = [
+    "v3",
+    options.identity.deviceId,
+    options.clientId,
+    options.clientMode,
+    options.role,
+    options.scopes.join(","),
+    String(options.signedAtMs),
+    options.token,
+    options.nonce,
+    options.platform.trim(),
+    options.deviceFamily?.trim() ?? ""
+  ].join("|");
+  return {
+    publicKey: deriveOpenClawPublicKeyRaw(
+      options.identity.publicKeyPem
+    ).toString("base64url"),
+    signature: sign(
+      null,
+      Buffer.from(payload, "utf8"),
+      createPrivateKey(options.identity.privateKeyPem)
+    ).toString("base64url")
+  };
+};
+
 const asRecord = (value: unknown): Record<string, unknown> | null =>
   value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : null;
+
+const socketMessageText = async (event: unknown): Promise<string> => {
+  const data = asRecord(event)?.data;
+  if (typeof data === "string") {
+    return data;
+  }
+  if (Buffer.isBuffer(data)) {
+    return data.toString("utf8");
+  }
+  if (data instanceof ArrayBuffer) {
+    return Buffer.from(data).toString("utf8");
+  }
+  if (ArrayBuffer.isView(data)) {
+    return Buffer.from(
+      data.buffer,
+      data.byteOffset,
+      data.byteLength
+    ).toString("utf8");
+  }
+  const text = asRecord(data)?.text;
+  if (typeof text === "function") {
+    return String(await text.call(data));
+  }
+  return String(data ?? "");
+};
+
+const createDirectGatewayRpcClient = async (options: {
+  gatewayUrl: string;
+  gatewayToken: string;
+  timeoutMs: number;
+  stateDir: string;
+  clientVersion: string;
+}): Promise<DirectGatewayRpcClient> => {
+  const WebSocketConstructor = (
+    globalThis as typeof globalThis & {
+      WebSocket?: DirectGatewaySocketConstructor;
+    }
+  ).WebSocket;
+  if (!WebSocketConstructor) {
+    throw new PublishedRuntimeClosureError(
+      "EE_OPENCLAW_LIVE_HOST_NATIVE_COMMAND_INVALID",
+      "The current Node runtime does not provide a WebSocket client for direct Gateway validation."
+    );
+  }
+  const deviceIdentity = await loadOrCreateValidationDeviceIdentity(
+    options.stateDir
+  );
+  const socket = new WebSocketConstructor(options.gatewayUrl);
+  const closeSocket = (): void => {
+    try {
+      socket.close();
+    } catch {
+      // Undici rejects reserved close codes and may reject close-before-open.
+    }
+  };
+  const clientId = "cli";
+  const clientMode = "cli";
+  const role = "operator";
+  const scopes = [
+    "operator.admin",
+    "operator.read",
+    "operator.write",
+    "operator.approvals",
+    "operator.pairing"
+  ];
+  const pending = new Map<string, {
+    resolve: (value: unknown) => void;
+    reject: (error: Error) => void;
+    timer: NodeJS.Timeout;
+  }>();
+  const chatFinals = new Map<string, unknown>();
+  const chatWaiters = new Map<string, {
+    resolve: (value: unknown) => void;
+    reject: (error: Error) => void;
+    timer: NodeJS.Timeout;
+  }>();
+  let closed = false;
+  let connected = false;
+  let resolveConnected!: () => void;
+  let rejectConnected!: (error: Error) => void;
+  const connectedPromise = new Promise<void>((resolveConnection, rejectConnection) => {
+    resolveConnected = resolveConnection;
+    rejectConnected = rejectConnection;
+  });
+
+  const rejectAll = (error: Error): void => {
+    for (const entry of pending.values()) {
+      clearTimeout(entry.timer);
+      entry.reject(error);
+    }
+    pending.clear();
+    for (const waiter of chatWaiters.values()) {
+      clearTimeout(waiter.timer);
+      waiter.reject(error);
+    }
+    chatWaiters.clear();
+    if (!connected) {
+      rejectConnected(error);
+    }
+  };
+
+  const requestRaw = (
+    method: string,
+    params: Record<string, unknown>
+  ): Promise<unknown> => {
+    if (closed) {
+      return Promise.reject(new Error("Gateway WebSocket is closed."));
+    }
+    const id = randomUUID();
+    return new Promise((resolveRequest, rejectRequest) => {
+      const timer = setTimeout(() => {
+        pending.delete(id);
+        rejectRequest(new Error(`Gateway request timed out for ${method}.`));
+      }, options.timeoutMs);
+      timer.unref();
+      pending.set(id, {
+        resolve: resolveRequest,
+        reject: rejectRequest,
+        timer
+      });
+      socket.send(JSON.stringify({
+        type: "req",
+        id,
+        method,
+        params
+      }));
+    });
+  };
+
+  socket.addEventListener("message", (event) => {
+    void (async () => {
+      const raw = await socketMessageText(event);
+      let frame: Record<string, unknown> | null = null;
+      try {
+        frame = asRecord(JSON.parse(raw));
+      } catch {
+        return;
+      }
+      if (
+        frame?.type === "event" &&
+        frame.event === "connect.challenge"
+      ) {
+        const nonce = asRecord(frame.payload)?.nonce;
+        if (typeof nonce !== "string" || nonce.trim().length === 0) {
+          rejectAll(new Error("Gateway connect challenge did not include a nonce."));
+          closeSocket();
+          return;
+        }
+        try {
+          const signedAtMs = Date.now();
+          const deviceSignature = signOpenClawDeviceChallenge({
+            identity: deviceIdentity,
+            clientId,
+            clientMode,
+            role,
+            scopes,
+            signedAtMs,
+            token: options.gatewayToken,
+            nonce,
+            platform: process.platform
+          });
+          await requestRaw("connect", {
+            minProtocol: 3,
+            maxProtocol: 3,
+            client: {
+              id: clientId,
+              displayName: "ExperienceEngine validation",
+              version: options.clientVersion,
+              platform: process.platform,
+              mode: clientMode,
+              instanceId: randomUUID()
+            },
+            caps: [],
+            auth: { token: options.gatewayToken },
+            role,
+            scopes,
+            device: {
+              id: deviceIdentity.deviceId,
+              publicKey: deviceSignature.publicKey,
+              signature: deviceSignature.signature,
+              signedAt: signedAtMs,
+              nonce
+            }
+          });
+          connected = true;
+          resolveConnected();
+        } catch (error) {
+          rejectAll(error instanceof Error ? error : new Error(String(error)));
+          closeSocket();
+        }
+        return;
+      }
+      if (frame?.type === "event" && frame.event === "chat") {
+        const payload = asRecord(frame.payload);
+        const runId = payload?.runId;
+        if (
+          payload &&
+          typeof runId === "string" &&
+          (payload.state === "final" || payload.state === "error")
+        ) {
+          const waiter = chatWaiters.get(runId);
+          if (waiter) {
+            chatWaiters.delete(runId);
+            clearTimeout(waiter.timer);
+            waiter.resolve(payload);
+          } else {
+            chatFinals.set(runId, payload);
+          }
+        }
+        return;
+      }
+      if (frame?.type !== "res" || typeof frame.id !== "string") {
+        return;
+      }
+      const entry = pending.get(frame.id);
+      if (!entry) {
+        return;
+      }
+      pending.delete(frame.id);
+      clearTimeout(entry.timer);
+      if (frame.ok === true) {
+        entry.resolve(frame.payload);
+      } else {
+        const error = asRecord(frame.error);
+        entry.reject(new Error(
+          `Gateway request failed for ${String(error?.code ?? "unknown")}: ${String(
+            error?.message ?? "unknown error"
+          )}`
+        ));
+      }
+    })().catch((error) => {
+      rejectAll(error instanceof Error ? error : new Error(String(error)));
+    });
+  });
+  socket.addEventListener("close", () => {
+    closed = true;
+    rejectAll(new Error("Gateway WebSocket closed."));
+  });
+  socket.addEventListener("error", () => {
+    rejectAll(new Error("Gateway WebSocket failed."));
+  });
+
+  const connectTimer = setTimeout(() => {
+    rejectConnected(new Error("Gateway WebSocket connect timed out."));
+    closeSocket();
+  }, options.timeoutMs);
+  connectTimer.unref();
+  try {
+    await connectedPromise;
+  } catch (error) {
+    throw new PublishedRuntimeClosureError(
+      "EE_OPENCLAW_LIVE_HOST_NATIVE_COMMAND_FAILED",
+      `Direct OpenClaw Gateway connection failed: ${
+        error instanceof Error ? error.message : String(error)
+      }`
+    );
+  } finally {
+    clearTimeout(connectTimer);
+  }
+
+  return {
+    request: (method, params) => requestRaw(method, params),
+    waitForChatFinal: (runId, timeoutMs) => {
+      const existing = chatFinals.get(runId);
+      if (existing) {
+        chatFinals.delete(runId);
+        return Promise.resolve(existing);
+      }
+      return new Promise((resolveFinal, rejectFinal) => {
+        const timer = setTimeout(() => {
+          chatWaiters.delete(runId);
+          rejectFinal(new Error(
+            `Gateway chat final timed out for run ${runId}.`
+          ));
+        }, timeoutMs);
+        timer.unref();
+        chatWaiters.set(runId, {
+          resolve: resolveFinal,
+          reject: rejectFinal,
+          timer
+        });
+      });
+    },
+    close: () => {
+      closed = true;
+      rejectAll(new Error("Gateway WebSocket closed by validator."));
+      closeSocket();
+    }
+  };
+};
 
 const parseJsonCommandOutput = (options: {
   stdout: string;
@@ -372,6 +916,10 @@ const readChatHistory = async (options: {
   gatewayToken: string;
   sessionKey: string;
 }): Promise<unknown[]> => {
+  const commandTimeoutMs = boundedOpenClawCliTimeout(
+    options.timeoutMs,
+    20_000
+  );
   const output = await runCommand({
     runner: options.runner,
     executable: options.executable,
@@ -391,11 +939,11 @@ const readChatHistory = async (options: {
       options.gatewayToken,
       "--json",
       "--timeout",
-      String(Math.min(options.timeoutMs, 15_000))
+      String(commandTimeoutMs)
     ],
     env: options.env,
     cwd: options.cwd,
-    timeoutMs: Math.min(options.timeoutMs, 20_000)
+    timeoutMs: commandTimeoutMs
   });
   const response = asRecord(parseJsonCommandOutput({
     stdout: output.stdout,
@@ -410,6 +958,96 @@ const readChatHistory = async (options: {
   return response.messages;
 };
 
+const runNativeRuntimeCommandDirect = async (options: {
+  timeoutMs: number;
+  gatewayUrl: string;
+  gatewayToken: string;
+  stateDir: string;
+  clientVersion: string;
+  sessionKey: string;
+  operation: string;
+  payload?: Record<string, unknown>;
+  directGatewayRpcClientFactory?: DirectGatewayRpcClientFactory;
+}): Promise<OpenClawNativeCommandResult> => {
+  const client = await (
+    options.directGatewayRpcClientFactory ?? createDirectGatewayRpcClient
+  )({
+    gatewayUrl: options.gatewayUrl,
+    gatewayToken: options.gatewayToken,
+    timeoutMs: options.timeoutMs,
+    stateDir: options.stateDir,
+    clientVersion: options.clientVersion
+  });
+  try {
+    const message = `/${"experienceengine_"}${options.operation}${
+      options.payload ? ` ${JSON.stringify(options.payload)}` : ""
+    }`;
+    const sendResult = asRecord(await client.request("chat.send", {
+      sessionKey: options.sessionKey,
+      message,
+      timeoutMs: options.timeoutMs,
+      idempotencyKey: `ee-native-${options.operation}-${
+        randomBytes(12).toString("hex")
+      }`
+    }));
+    const runId = sendResult?.runId;
+    if (typeof runId !== "string" || runId.trim().length === 0) {
+      throw new PublishedRuntimeClosureError(
+        "EE_OPENCLAW_LIVE_HOST_NATIVE_COMMAND_INVALID",
+        `OpenClaw ${options.operation} chat.send returned no runId.`
+      );
+    }
+    const final = asRecord(await client.waitForChatFinal(
+      runId,
+      options.timeoutMs
+    ));
+    if (final?.state === "error") {
+      throw new PublishedRuntimeClosureError(
+        "EE_OPENCLAW_LIVE_HOST_NATIVE_COMMAND_FAILED",
+        `OpenClaw ${options.operation} chat event failed: ${String(
+          final.errorMessage ?? "unknown error"
+        )}`
+      );
+    }
+    if (final?.state !== "final") {
+      throw new PublishedRuntimeClosureError(
+        "EE_OPENCLAW_LIVE_HOST_NATIVE_COMMAND_INVALID",
+        `OpenClaw ${options.operation} returned no final chat event.`
+      );
+    }
+    const observedTexts = extractHistoryMessageTexts(final.message);
+    let parsed: OpenClawNativeCommandResult | null = null;
+    for (const text of observedTexts) {
+      try {
+        parsed = parseNativeCommandText({
+          text,
+          expectedOperation: options.operation
+        });
+        break;
+      } catch {
+        // A final assistant message may contain multiple visible text blocks.
+      }
+    }
+    if (!parsed) {
+      throw new PublishedRuntimeClosureError(
+        "EE_OPENCLAW_LIVE_HOST_NATIVE_COMMAND_INVALID",
+        `OpenClaw ${options.operation} command returned no exact plugin command JSON result through the direct Gateway chat event. Observed: ${JSON.stringify(
+          observedTexts.slice(-4).map((text) => text.slice(0, 1_000))
+        )}`
+      );
+    }
+    if (!parsed.ok) {
+      throw new PublishedRuntimeClosureError(
+        "EE_OPENCLAW_LIVE_HOST_NATIVE_COMMAND_FAILED",
+        `OpenClaw ${options.operation} command failed with ${parsed.code}.`
+      );
+    }
+    return parsed;
+  } finally {
+    client.close();
+  }
+};
+
 const runNativeRuntimeCommand = async (options: {
   runner: OpenClawHostCommandRunner;
   executable: string;
@@ -418,14 +1056,25 @@ const runNativeRuntimeCommand = async (options: {
   timeoutMs: number;
   gatewayUrl: string;
   gatewayToken: string;
+  stateDir: string;
+  clientVersion: string;
   sessionKey: string;
   operation: string;
   payload?: Record<string, unknown>;
+  transport?: "cli" | "direct_gateway";
+  directGatewayRpcClientFactory?: DirectGatewayRpcClientFactory;
 }): Promise<OpenClawNativeCommandResult> => {
+  if (options.transport === "direct_gateway") {
+    return runNativeRuntimeCommandDirect(options);
+  }
   const message = `/${"experienceengine_"}${options.operation}${
     options.payload ? ` ${JSON.stringify(options.payload)}` : ""
   }`;
   const historyBefore = await readChatHistory(options);
+  const commandTimeoutMs = boundedOpenClawCliTimeout(
+    options.timeoutMs,
+    20_000
+  );
   await runCommand({
     runner: options.runner,
     executable: options.executable,
@@ -448,11 +1097,11 @@ const runNativeRuntimeCommand = async (options: {
       options.gatewayToken,
       "--json",
       "--timeout",
-      String(Math.min(options.timeoutMs, 15_000))
+      String(commandTimeoutMs)
     ],
     env: options.env,
     cwd: options.cwd,
-    timeoutMs: Math.min(options.timeoutMs, 20_000)
+    timeoutMs: commandTimeoutMs
   });
   const deadline = Date.now() + options.timeoutMs;
   let observedTexts: string[] = [];
@@ -500,6 +1149,20 @@ const sameInitializationSnapshot = (
   right: OpenClawHostInitializationSnapshot
 ): boolean => JSON.stringify(left) === JSON.stringify(right);
 
+const resolveReportedOpenClawPath = (
+  value: string,
+  homeDirectory: string
+): string => {
+  const trimmed = value.trim();
+  if (trimmed === "~") {
+    return resolve(homeDirectory);
+  }
+  if (trimmed.startsWith("~/") || trimmed.startsWith("~\\")) {
+    return resolve(homeDirectory, trimmed.slice(2));
+  }
+  return resolve(trimmed);
+};
+
 const waitForGatewayHealth = async (options: {
   runner: OpenClawHostCommandRunner;
   executable: string;
@@ -508,29 +1171,53 @@ const waitForGatewayHealth = async (options: {
   timeoutMs: number;
   gatewayUrl: string;
   gatewayToken: string;
+  stateDir: string;
+  clientVersion: string;
+  transport: "cli" | "direct_gateway";
+  directGatewayRpcClientFactory?: DirectGatewayRpcClientFactory;
 }): Promise<void> => {
   const deadline = Date.now() + options.timeoutMs;
+  const probeTimeoutMs = boundedOpenClawCliTimeout(
+    options.timeoutMs,
+    10_000
+  );
   let lastError: unknown;
   while (Date.now() < deadline) {
+    let directClient: DirectGatewayRpcClient | null = null;
     try {
-      await runCommand({
-        ...options,
-        args: [
-          "gateway",
-          "call",
-          "health",
-          "--url",
-          options.gatewayUrl,
-          "--token",
-          options.gatewayToken,
-          "--json"
-        ],
-        timeoutMs: 10_000
-      });
+      if (options.transport === "direct_gateway") {
+        directClient = await (
+          options.directGatewayRpcClientFactory ?? createDirectGatewayRpcClient
+        )({
+          gatewayUrl: options.gatewayUrl,
+          gatewayToken: options.gatewayToken,
+          timeoutMs: Math.min(options.timeoutMs, 10_000),
+          stateDir: options.stateDir,
+          clientVersion: options.clientVersion
+        });
+        await directClient.request("health", {});
+      } else {
+        await runCommand({
+          ...options,
+          args: [
+            "gateway",
+            "call",
+            "health",
+            "--url",
+            options.gatewayUrl,
+            "--token",
+            options.gatewayToken,
+            "--json"
+          ],
+          timeoutMs: probeTimeoutMs
+        });
+      }
       return;
     } catch (error) {
       lastError = error;
       await sleep(250);
+    } finally {
+      directClient?.close();
     }
   }
   throw new PublishedRuntimeClosureError(
@@ -550,6 +1237,10 @@ const waitForGatewayReady = async (options: {
   timeoutMs: number;
   gatewayUrl: string;
   gatewayToken: string;
+  stateDir: string;
+  clientVersion: string;
+  transport: "cli" | "direct_gateway";
+  directGatewayRpcClientFactory?: DirectGatewayRpcClientFactory;
 }): Promise<void> => {
   try {
     await Promise.race([
@@ -647,11 +1338,13 @@ const installExactArtifact = async (options: {
   cwd?: string;
   approveHostSecurityScan: boolean;
   timeoutMs: number;
+  onProgress?: (stage: string) => void;
 }): Promise<{
   security_scan_status: OpenClawLiveHostEnvironment["security_scan_status"];
   security_scan_summary_digest: string | null;
 }> => {
   try {
+    options.onProgress?.("host_security_scan_started");
     await runCommand({
       ...options,
       args: ["plugins", "install", options.artifactPath],
@@ -665,6 +1358,7 @@ const installExactArtifact = async (options: {
     if (!isOpenClawSecurityApprovalRequired(error)) {
       throw error;
     }
+    options.onProgress?.("host_security_scan_rejected");
     const digest = digestOpenClawSecurityScanSummary(error);
     if (!options.approveHostSecurityScan) {
       throw new PublishedRuntimeClosureError(
@@ -672,6 +1366,7 @@ const installExactArtifact = async (options: {
         `OpenClaw security approval is required for this exact artifact (scan ${digest}).`
       );
     }
+    options.onProgress?.("approved_artifact_install_started");
     await runCommand({
       ...options,
       args: [
@@ -682,6 +1377,7 @@ const installExactArtifact = async (options: {
       ],
       timeoutMs: options.timeoutMs
     });
+    options.onProgress?.("approved_artifact_install_completed");
     return {
       security_scan_status: "approved",
       security_scan_summary_digest: digest
@@ -778,14 +1474,33 @@ export const runOpenClawHostValidation = async (options: {
     openclawVersion: string;
   }) => Promise<{ packageGenerationId: string }>;
   cleanupRuntimeFixture?: () => Promise<void>;
+  hostHomeDir?: string;
+  nativeCommandTransport?: "cli" | "direct_gateway";
+  directGatewayRpcClientFactory?: DirectGatewayRpcClientFactory;
+  onProgress?: (stage: string) => void;
   env?: NodeJS.ProcessEnv;
   timeoutMs?: number;
   now?: () => Date;
 }): Promise<PublishedLiveActivationEvidence> => {
+  const progress = (stage: string): void => {
+    options.onProgress?.(stage);
+  };
   const validationRoot = resolve(options.validationRoot);
   const stateDir = join(validationRoot, "openclaw-state");
   const configPath = join(stateDir, "openclaw.json");
+  const installInputDir = join(validationRoot, "install-input");
+  const installArtifactPath = join(
+    installInputDir,
+    "experienceengine-candidate.tgz"
+  );
   await mkdir(stateDir, { recursive: true });
+  await mkdir(installInputDir, { recursive: true });
+  await copyFile(
+    resolve(options.artifact.artifact_path),
+    installArtifactPath
+  );
+  await access(installArtifactPath);
+  progress("artifact_materialized");
   if (options.seedConfigPath) {
     await copyFile(options.seedConfigPath, configPath);
   }
@@ -811,19 +1526,27 @@ export const runOpenClawHostValidation = async (options: {
   };
   const runner = options.commandRunner ?? defaultCommandRunner;
   const spawner = options.gatewaySpawner ?? defaultGatewaySpawner;
-  const timeoutMs = options.timeoutMs ?? 180_000;
+  const timeoutMs = options.timeoutMs ?? (
+    process.platform === "win32" ? 600_000 : 180_000
+  );
+  const nativeCommandTransport = options.nativeCommandTransport ?? (
+    process.platform === "win32" ? "direct_gateway" : "cli"
+  );
   const executable = resolve(options.openclawExecutable);
   const cwd = validationRoot;
   const openclawVersion = await readVersion({ runner, executable, env, cwd });
+  progress("openclaw_version_resolved");
   const security = await installExactArtifact({
     runner,
     executable,
-    artifactPath: resolve(options.artifact.artifact_path),
+    artifactPath: installArtifactPath,
     env,
     cwd,
     approveHostSecurityScan: options.approveHostSecurityScan === true,
-    timeoutMs
+    timeoutMs,
+    onProgress: progress
   });
+  progress("artifact_installed");
   await runCommand({
     runner,
     executable,
@@ -899,10 +1622,14 @@ export const runOpenClawHostValidation = async (options: {
       "OpenClaw did not report the installed ExperienceEngine package root."
     );
   }
-  const installedRoot = resolve(pluginInfo.installPath);
+  const installedRoot = resolveReportedOpenClawPath(
+    pluginInfo.installPath,
+    options.hostHomeDir ?? homedir()
+  );
   const verifiedPackage = await (
     options.installedPackageVerifier ?? defaultInstalledPackageVerifier
   )(installedRoot);
+  progress("installed_package_verified");
   const now = options.now ?? (() => new Date());
   await (
     options.publishedAttestationIssuer ?? defaultPublishedAttestationIssuer
@@ -926,6 +1653,7 @@ export const runOpenClawHostValidation = async (options: {
     artifact: options.artifact,
     openclawVersion
   });
+  progress("runtime_authority_prepared");
 
   const gatewayArgs = [
     "gateway",
@@ -941,7 +1669,9 @@ export const runOpenClawHostValidation = async (options: {
     String(gatewayPort),
     "--verbose"
   ];
+  progress("gateway_spawn_started");
   let gateway = await spawner({ executable, args: gatewayArgs, env, cwd });
+  progress("gateway_spawned");
   try {
     await waitForGatewayReady({
       gateway,
@@ -951,8 +1681,13 @@ export const runOpenClawHostValidation = async (options: {
       cwd,
       timeoutMs,
       gatewayUrl,
-      gatewayToken
+      gatewayToken,
+      stateDir,
+      clientVersion: options.artifact.package_version,
+      transport: nativeCommandTransport,
+      directGatewayRpcClientFactory: options.directGatewayRpcClientFactory
     });
+    progress("gateway_ready");
     const loadedInfo = parseOpenClawPluginInfo((await runCommand({
       runner,
       executable,
@@ -967,6 +1702,7 @@ export const runOpenClawHostValidation = async (options: {
         `OpenClaw plugin status is ${loadedInfo.status ?? "unknown"}, not loaded.`
       );
     }
+    progress("plugin_loaded");
     const initializationBefore =
       await options.authorityCollector.captureInitializationSnapshot({
         sqlitePath: options.sqlitePath,
@@ -983,9 +1719,14 @@ export const runOpenClawHostValidation = async (options: {
       timeoutMs,
       gatewayUrl,
       gatewayToken,
+      stateDir,
+      clientVersion: options.artifact.package_version,
       sessionKey: nativeCommandSessionKey,
-      operation: "prepare_package_activation"
+      operation: "prepare_package_activation",
+      transport: nativeCommandTransport,
+      directGatewayRpcClientFactory: options.directGatewayRpcClientFactory
     });
+    progress("native_activation_prepared");
     if (prepared.code !== "package_activation_request_prepared") {
       throw new PublishedRuntimeClosureError(
         "EE_OPENCLAW_LIVE_HOST_NATIVE_COMMAND_FAILED",
@@ -1044,10 +1785,15 @@ export const runOpenClawHostValidation = async (options: {
       timeoutMs,
       gatewayUrl,
       gatewayToken,
+      stateDir,
+      clientVersion: options.artifact.package_version,
       sessionKey: nativeCommandSessionKey,
       operation: "initialize_package_activation",
-      payload: initializationPayload
+      payload: initializationPayload,
+      transport: nativeCommandTransport,
+      directGatewayRpcClientFactory: options.directGatewayRpcClientFactory
     });
+    progress("native_activation_initialized");
     const initializedPayload = asRecord(initialized.result);
     if (
       initialized.code !== "package_activation_initialized" ||
@@ -1067,10 +1813,15 @@ export const runOpenClawHostValidation = async (options: {
       timeoutMs,
       gatewayUrl,
       gatewayToken,
+      stateDir,
+      clientVersion: options.artifact.package_version,
       sessionKey: nativeCommandSessionKey,
       operation: "initialize_package_activation",
-      payload: initializationPayload
+      payload: initializationPayload,
+      transport: nativeCommandTransport,
+      directGatewayRpcClientFactory: options.directGatewayRpcClientFactory
     });
+    progress("native_activation_replayed");
     const replayedPayload = asRecord(replayed.result);
     if (
       replayed.code !== "package_activation_initialized" ||
@@ -1120,17 +1871,20 @@ export const runOpenClawHostValidation = async (options: {
         "OpenClaw real agent turn returned no result."
       );
     }
+    progress("agent_turn_completed");
     const active = await options.authorityCollector.captureActiveEvidence({
       sqlitePath: options.sqlitePath,
       runtimeHome: options.runtimeHome,
       timeoutMs
     });
+    progress("runtime_evidence_captured");
     await gateway.stop();
     await options.authorityCollector.captureShutdownEvidence({
       sqlitePath: options.sqlitePath,
       runtimeHome: options.runtimeHome,
       timeoutMs
     });
+    progress("first_shutdown_captured");
     gateway = await spawner({ executable, args: gatewayArgs, env, cwd });
     await waitForGatewayReady({
       gateway,
@@ -1140,20 +1894,28 @@ export const runOpenClawHostValidation = async (options: {
       cwd,
       timeoutMs,
       gatewayUrl,
-      gatewayToken
+      gatewayToken,
+      stateDir,
+      clientVersion: options.artifact.package_version,
+      transport: nativeCommandTransport,
+      directGatewayRpcClientFactory: options.directGatewayRpcClientFactory
     });
+    progress("gateway_restart_ready");
     await options.authorityCollector.verifyRestartRecovery({
       sqlitePath: options.sqlitePath,
       runtimeHome: options.runtimeHome,
       prior: active,
       timeoutMs
     });
+    progress("restart_recovered");
     await gateway.stop();
     const shutdown = await options.authorityCollector.captureShutdownEvidence({
       sqlitePath: options.sqlitePath,
       runtimeHome: options.runtimeHome,
       timeoutMs
     });
+    progress("final_shutdown_captured");
+    progress("complete");
     return {
       evidence_schema_version: LIVE_ACTIVATION_EVIDENCE_VERSION,
       evidence_class: "live_host",
@@ -1186,9 +1948,11 @@ export const runOpenClawHostValidation = async (options: {
       verified_at: now().toISOString()
     };
   } finally {
+    progress("cleanup_started");
     await gateway.stop().catch(() => undefined);
     await options.cleanupRuntimeFixture?.().catch(() => undefined);
     await rm(join(validationRoot, "gateway.pid"), { force: true }).catch(() => undefined);
+    progress("cleanup_completed");
   }
 };
 
@@ -1209,5 +1973,7 @@ export const OPENCLAW_HOST_VALIDATION_RUNNER_CONTRACT = Object.freeze({
   native_activation_initialize_replay_required: true,
   gateway_lifecycle_stop_drives_runtime_drain: true,
   windows_batch_shim_uses_validated_node_entrypoint: true,
+  windows_gateway_health_uses_direct_gateway_rpc: true,
+  windows_native_commands_use_direct_gateway_rpc: true,
   shell_true_allowed: false
 });

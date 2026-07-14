@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -6,8 +6,10 @@ import type {
   MaterializedPublishedArtifact
 } from "../../src/runtime/distribution/artifact-materializer.js";
 import {
+  buildOpenClawGatewaySpawnPlan,
   OPENCLAW_HOST_VALIDATION_RUNNER_CONTRACT,
   runOpenClawHostValidation,
+  type DirectGatewayRpcClientFactory,
   type OpenClawGatewayProcess,
   type OpenClawHostActiveEvidence,
   type OpenClawHostAuthorityCollector,
@@ -94,12 +96,123 @@ const initializationSnapshot: OpenClawHostInitializationSnapshot = {
 };
 
 describe("OpenClaw real-host validation runner", () => {
+  it("bridges Windows Gateway shutdown through the OpenClaw SIGINT lifecycle", () => {
+    const plan = buildOpenClawGatewaySpawnPlan({
+      invocation: {
+        file: "node.exe",
+        args: [
+          "C:/openclaw/openclaw.mjs",
+          "gateway",
+          "run",
+          "--port",
+          "19171"
+        ]
+      },
+      platform: "win32"
+    });
+
+    expect(plan.file).toBe("node.exe");
+    expect(plan.gracefulStopViaStdin).toBe(true);
+    expect(plan.args.slice(0, 3)).toEqual([
+      "--disable-warning=ExperimentalWarning",
+      "--input-type=module",
+      "-e"
+    ]);
+    expect(plan.args[3]).toContain("process.emit(\"SIGINT\")");
+    expect(plan.args.slice(4)).toEqual([
+      "C:/openclaw/openclaw.mjs",
+      "gateway",
+      "run",
+      "--port",
+      "19171"
+    ]);
+  });
+
   it("requires real install, Gateway, agent turn, restart, authoritative evidence, and shutdown", async () => {
     const root = await makeRoot();
+    const sourceArtifactPath = join(root, "source-artifact.tgz");
+    await writeFile(sourceArtifactPath, "artifact-fixture", "utf8");
+    const testArtifact: MaterializedPublishedArtifact = {
+      ...artifact,
+      artifact_path: sourceArtifactPath
+    };
     const installedRoot = join(root, "openclaw-state", "extensions", "experienceengine");
     const commands: OpenClawHostCommand[] = [];
     let initializationCalls = 0;
     const chatMessages: Array<Record<string, unknown>> = [];
+    const directGatewayRequests: Array<{
+      method: string;
+      params: Record<string, unknown>;
+    }> = [];
+    const directGatewayFinals = new Map<string, unknown>();
+    const directGatewayRpcClientFactory: DirectGatewayRpcClientFactory =
+      vi.fn(async () => ({
+        request: async (
+          method: string,
+          params: Record<string, unknown>
+        ) => {
+          directGatewayRequests.push({ method, params });
+          if (method === "health") {
+            return { status: "ok" };
+          }
+          if (method !== "chat.send") {
+            throw new Error(`Unexpected direct Gateway method ${method}.`);
+          }
+          const message = String(params.message ?? "");
+          let commandResult: Record<string, unknown>;
+          if (message === "/experienceengine_prepare_package_activation") {
+            commandResult = {
+              ok: true,
+              operation: "prepare_package_activation",
+              code: "package_activation_request_prepared",
+              result: {
+                operation: "initialize_package_activation",
+                package_generation_id: "package-host-fixture",
+                expected_projection_revision: 0,
+                expected_launch_revision: 0,
+                control_request_id: "control-host-initialize",
+                authorization_id: "authorization-host-initialize",
+                mutates_authority: false
+              }
+            };
+          } else if (message.startsWith(
+            "/experienceengine_initialize_package_activation "
+          )) {
+            initializationCalls += 1;
+            commandResult = {
+              ok: true,
+              operation: "initialize_package_activation",
+              code: "package_activation_initialized",
+              result: {
+                replayed: initializationCalls > 1,
+                projection_revision: 1
+              }
+            };
+          } else {
+            throw new Error(`Unexpected direct Gateway message ${message}.`);
+          }
+          const runId = `direct-native-run-${directGatewayFinals.size + 1}`;
+          directGatewayFinals.set(runId, {
+            state: "final",
+            message: {
+              role: "assistant",
+              content: [{
+                type: "text",
+                text: JSON.stringify(commandResult)
+              }]
+            }
+          });
+          return { runId, status: "started" };
+        },
+        waitForChatFinal: async (runId: string) => {
+          const result = directGatewayFinals.get(runId);
+          if (!result) {
+            throw new Error(`Missing direct Gateway final for ${runId}.`);
+          }
+          return result;
+        },
+        close: vi.fn()
+      }));
     const commandRunner = vi.fn(async (command: OpenClawHostCommand) => {
       commands.push(command);
       if (command.args[0] === "--version") {
@@ -113,7 +226,7 @@ describe("OpenClaw real-host validation runner", () => {
             "id: experienceengine",
             "Status: loaded",
             "Version: 0.4.9",
-            `Install path: ${installedRoot}`
+            "Install path: ~/openclaw-state/extensions/experienceengine"
           ].join("\n"),
           stderr: ""
         };
@@ -228,7 +341,7 @@ describe("OpenClaw real-host validation runner", () => {
     }));
     const publishedAttestationIssuer = vi.fn(async () => undefined);
     const evidence = await runOpenClawHostValidation({
-      artifact,
+      artifact: testArtifact,
       openclawExecutable: join(root, "bin", "openclaw"),
       validationRoot: root,
       runtimeHome: join(root, "runtime-home"),
@@ -243,6 +356,9 @@ describe("OpenClaw real-host validation runner", () => {
       gatewaySpawner,
       installedPackageVerifier,
       publishedAttestationIssuer,
+      hostHomeDir: root,
+      nativeCommandTransport: "direct_gateway",
+      directGatewayRpcClientFactory,
       prepareRuntimeAuthority: vi.fn(async () => ({
         packageGenerationId: "package-host-fixture"
       })),
@@ -250,8 +366,8 @@ describe("OpenClaw real-host validation runner", () => {
     });
     expect(evidence).toMatchObject({
       evidence_class: "live_host",
-      artifact_integrity: artifact.artifact_integrity,
-      registry_record_identity: artifact.registry_record_identity,
+      artifact_integrity: testArtifact.artifact_integrity,
+      registry_record_identity: testArtifact.registry_record_identity,
       host_environment: {
         openclaw_version: "OpenClaw 2026.4.1 (fixture)",
         install_method: "openclaw_plugins_install",
@@ -268,18 +384,34 @@ describe("OpenClaw real-host validation runner", () => {
       production_learning_ready: false
     });
     expect(commands.some((command) => command.args[0] === "plugins" && command.args[1] === "install")).toBe(true);
+    expect(commands.find((command) =>
+      command.args[0] === "plugins" && command.args[1] === "install"
+    )?.args[2]).toBe(join(root, "install-input", "experienceengine-candidate.tgz"));
     expect(commands.filter((command) => command.args[0] === "agent")).toHaveLength(1);
     expect(commands.filter((command) =>
       command.args[0] === "gateway" &&
       command.args[1] === "call" &&
       command.args[2] === "chat.send"
-    )).toHaveLength(3);
-    expect(commands.some((command) => command.args.some((argument) =>
-      argument.includes("experienceengine_prepare_package_activation")
-    ))).toBe(true);
-    expect(commands.filter((command) => command.args.some((argument) =>
-      argument.includes("experienceengine_initialize_package_activation")
+    )).toHaveLength(0);
+    expect(commands.filter((command) =>
+      command.args[0] === "gateway" &&
+      command.args[1] === "call" &&
+      command.args[2] === "health"
+    )).toHaveLength(0);
+    expect(directGatewayRequests.filter((request) =>
+      request.method === "health"
+    )).toHaveLength(2);
+    const directMessages = directGatewayRequests
+      .filter((request) => request.method === "chat.send")
+      .map((request) => String(request.params.message ?? ""));
+    expect(directMessages).toHaveLength(3);
+    expect(directMessages).toContain(
+      "/experienceengine_prepare_package_activation"
+    );
+    expect(directMessages.filter((message) => message.startsWith(
+      "/experienceengine_initialize_package_activation "
     ))).toHaveLength(2);
+    expect(directGatewayRpcClientFactory).toHaveBeenCalledTimes(5);
     expect(gatewaySpawner).toHaveBeenCalledTimes(2);
     expect(stopped).toEqual([1001, 1002, 1002]);
     expect(collector.captureActiveEvidence).toHaveBeenCalledOnce();
@@ -315,6 +447,8 @@ describe("OpenClaw real-host validation runner", () => {
       native_activation_initialize_replay_required: true,
       gateway_lifecycle_stop_drives_runtime_drain: true,
       windows_batch_shim_uses_validated_node_entrypoint: true,
+      windows_gateway_health_uses_direct_gateway_rpc: true,
+      windows_native_commands_use_direct_gateway_rpc: true,
       shell_true_allowed: false
     });
   });

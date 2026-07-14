@@ -61,7 +61,7 @@
 - [x] 5.1 Run local packed-artifact closure tests as a preflight, not as final published evidence.
 - [ ] 5.2 Run actual published npm validation.
 - [ ] 5.3 Run actual published ClawHub validation.
-- [ ] 5.4 Run required live OpenClaw and Windows validation paths.
+- [x] 5.4 Run required live OpenClaw and Windows validation paths.
 - [x] 5.5 Run TypeScript typecheck, full tests, build, and packaging checks.
 - [x] 5.6 Run `pnpm exec openspec validate validate-published-runtime-closure --strict`.
 
@@ -100,12 +100,20 @@
 - The exact local tarball passed manifest-driven staging and final-archive validation with closure digest `41882a3c00f16f313abd306f9ad48c4cc5e09aa21a5f3c88995e4c81b53a8ef0` and package build id `build_e73ef017486b8f5bb8d9ff83995ebc6b3c371123ba531449a9ea4120333e3dbd`.
 - OpenClaw's default security scan blocked the package on explicit runtime/network/process patterns. The validator normalized the scan, recorded digest `b9b919519513927b1a9f94714b676a5fe08e3f3a58ee853dc3517b5748655760`, and retried only after explicit approval.
 - The first Gateway service start preserved the empty package activation state and returned `package_activation_initialization_required`; it did not create launch authority implicitly.
-- The validator sent `/experienceengine_prepare_package_activation` through the real authorized `chat.send` user-command path, read the exact plugin JSON back through `chat.history`, and proved the complete activation/process authority snapshot was unchanged.
+- The validator sent `/experienceengine_prepare_package_activation` through the real authorized `chat.send` user-command path, read the exact plugin JSON from the final Gateway chat event, and proved the complete activation/process authority snapshot was unchanged.
 - The validator then sent `/experienceengine_initialize_package_activation` with the exact returned package generation, projection revision, launch revision, control request id, and authorization id. Replaying the identical command payload returned the original result and left exactly one control request and one launch authorization.
 - The same isolated Gateway then completed a real agent turn, established current production activation, completed one fenced semantic job, rejected stale output after configuration authority changed, recorded interruption without content retry, restarted with fresh process authority, and terminalized worker/supervisor state on shutdown.
 - The run exited successfully with `interaction_active = true`, `learning_runtime_active = true`, `production_learning_ready = false`, `artifact_runtime_validated = false`, and `support_claim_allowed = false` because this was local-pack preflight rather than npm/ClawHub published evidence.
 
+### Native Windows Local-Pack Real-Host Evidence
+
+- The native Windows preflight used OpenClaw `2026.4.1 (da64a97)` on `win32-x64` with Node `v24.3.0` and the same manifest-driven local tarball closure digest `41882a3c00f16f313abd306f9ad48c4cc5e09aa21a5f3c88995e4c81b53a8ef0`.
+- Windows `.cmd` resolution selected the validated Node/OpenClaw entrypoint without shell concatenation. Gateway health and authorized activation commands used authenticated direct Gateway RPC because the Windows CLI call path is not used as lifecycle authority.
+- The Windows run independently proved fail-closed security scanning, explicit approval, empty-control-plane preparation, exact-revision initialization, idempotent replay, a real agent turn, fenced semantic completion, stale-output rejection, interruption recovery without content retry, and fresh authority after Gateway restart.
+- A Windows-only stdin bridge triggered OpenClaw's existing `SIGINT` Gateway lifecycle in the same process. Both Gateway stops reached plugin-service shutdown and produced authoritative `worker = stopped`, `supervisor = stopped`, `graceful_release`, and `supervisor_graceful_release` database evidence instead of force-terminating the process tree.
+- The native Windows report remained correctly bounded to `local_pack_live_host_preflight`: `production_learning_ready = false`, `artifact_runtime_validated = false`, and `support_claim_allowed = false`.
+
 ### Remaining Publication Gates
 
 - Tasks 2.1–2.5, 5.2, and 5.3 remain incomplete until a new exact npm and ClawHub version containing the current closure is published and independently passes all eight ordered steps.
-- Task 5.4 remains incomplete until the required native Windows live-host path passes in addition to the completed Linux/WSL real-host preflight and bounded Windows resolver tests.
+- Task 5.4 is complete for the frozen OpenClaw `2026.4.1` local-pack host matrix on Linux/WSL and native Windows. This does not substitute for exact npm or ClawHub published-artifact validation.

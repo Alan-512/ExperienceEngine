@@ -16,12 +16,12 @@ This matrix separates routine plugin interaction, package-local runtime executio
 | --- | --- | --- |
 | Source/runtime closure | Passed | Generated manifest, package-local dependency closure, schema/migrations, profile registry, compatibility metadata. |
 | Installed-artifact smoke | Implemented and tested | Direct isolated execution of exact installed package entrypoints; never substitutes for a real Gateway. |
-| Local-pack real-host preflight | Passed | OpenClaw `2026.4.1`, Linux x64 under WSL, real `plugins install`, explicit security approval, empty-control-plane prepare/initialize commands through `chat.send`, exact-revision idempotent replay, Gateway service, agent turn, production queue, stale-output rejection, restart recovery, and shutdown. |
+| Local-pack real-host preflight | Passed | OpenClaw `2026.4.1` passed independently on Linux x64 under WSL and native `win32-x64`: real `plugins install`, explicit security approval, empty-control-plane prepare/initialize commands through `chat.send`, exact-revision idempotent replay, Gateway service, agent turn, production queue, stale-output rejection, restart recovery, and authoritative shutdown. |
 | Published npm `0.4.8` | Failed at step 1 | Exact registry artifact predates the embedded runtime closure manifest. |
 | Published ClawHub `0.4.8` | Failed at step 1 | Exact ClawHub artifact predates the embedded runtime closure manifest. |
 | New published npm candidate | Pending | Requires a new release containing the current closure and runtime implementation. |
 | New published ClawHub candidate | Pending | Requires independent channel publication and validation. |
-| Native Windows live host | Pending | Bounded `.exe`/`.cmd`/`.bat` resolution and quoting are tested, but an actual Windows OpenClaw host run is still required. |
+| Native Windows live host | Passed for local-pack preflight | OpenClaw `2026.4.1`, Node `v24.3.0`, validated `.cmd` entrypoint resolution, authenticated direct Gateway RPC, real activation commands and agent turn, fenced queue semantics, restart recovery, and OpenClaw-owned graceful Gateway shutdown through the Windows stdin-to-`SIGINT` lifecycle bridge. This is not published-artifact evidence. |
 
 ## Support conclusions
 

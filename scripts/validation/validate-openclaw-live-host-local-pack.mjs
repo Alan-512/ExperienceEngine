@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
+import { appendFileSync, mkdirSync } from "node:fs";
 import { mkdir, mkdtemp, readFile, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
   createOpenClawInstallTarball
@@ -34,6 +35,31 @@ const openclawExecutable =
   process.env.EXPERIENCE_ENGINE_OPENCLAW_EXECUTABLE?.trim();
 const seedConfigPath =
   process.env.EXPERIENCE_ENGINE_OPENCLAW_SEED_CONFIG?.trim();
+const traceEnabled =
+  process.env.EXPERIENCE_ENGINE_VALIDATION_TRACE === "true";
+const tracePath =
+  process.env.EXPERIENCE_ENGINE_VALIDATION_TRACE_PATH?.trim() || null;
+const redactedErrorMessage = (error) => (
+  error instanceof Error ? error.message : String(error)
+)
+  .replace(/\b[a-f0-9]{64}\b/giu, "<redacted-64-hex>")
+  .slice(0, 8_000);
+const trace = (stage, detail = undefined) => {
+  const record = {
+    event: "experienceengine.validation_trace",
+    stage,
+    observed_at: new Date().toISOString(),
+    ...(detail === undefined ? {} : { detail })
+  };
+  const line = `${JSON.stringify(record)}\n`;
+  if (traceEnabled) {
+    console.error(line.trimEnd());
+  }
+  if (tracePath) {
+    mkdirSync(dirname(resolve(tracePath)), { recursive: true });
+    appendFileSync(resolve(tracePath), line, "utf8");
+  }
+};
 
 if (!openclawExecutable) {
   throw new Error(
@@ -59,13 +85,19 @@ const paths = resolveExperienceEnginePaths({
   }
 });
 
+let validationFailure = null;
 try {
+  trace("script_started");
   await mkdir(paths.dataDir, { recursive: true });
   await mkdir(paths.captureDir, { recursive: true });
   await mkdir(join(runtimeHome, "adapters", "openclaw"), { recursive: true });
   await mkdir(join(runtimeHome, "sqlite"), { recursive: true });
+  trace("runtime_directories_ready");
+  trace("tarball_build_started");
   const tarballPath = createOpenClawInstallTarball(packageRoot, paths);
+  trace("tarball_build_completed");
   const tarballBytes = await readFile(tarballPath);
+  trace("tarball_read_completed");
   const artifactIntegrity = `sha256:${createHash("sha256")
     .update(tarballBytes)
     .digest("hex")}`;
@@ -165,8 +197,10 @@ try {
       });
     },
     prepareRuntimeAuthority: fixture.prepareRuntimeAuthority,
-    cleanupRuntimeFixture: fixture.cleanup
+    cleanupRuntimeFixture: fixture.cleanup,
+    onProgress: trace
   });
+  trace("host_validation_completed");
 
   console.log(JSON.stringify({
     ok: true,
@@ -188,6 +222,39 @@ try {
     limitation:
       "This is a local-pack real-host preflight. It is not npm or ClawHub published evidence."
   }));
+  trace("result_emitted");
+} catch (error) {
+  validationFailure = error;
+  trace("script_failed", {
+    name: error instanceof Error ? error.name : "UnknownError",
+    code: error && typeof error === "object" && "code" in error
+      ? String(error.code)
+      : null,
+    message: redactedErrorMessage(error)
+  });
+  console.error(error);
+  process.exitCode = 1;
 } finally {
-  await rm(validationRoot, { recursive: true, force: true });
+  trace("validation_root_cleanup_started");
+  try {
+    await rm(validationRoot, {
+      recursive: true,
+      force: true,
+      maxRetries: process.platform === "win32" ? 40 : 3,
+      retryDelay: 250
+    });
+    trace("validation_root_cleanup_completed");
+  } catch (error) {
+    trace("validation_root_cleanup_failed", {
+      name: error instanceof Error ? error.name : "UnknownError",
+      code: error && typeof error === "object" && "code" in error
+        ? String(error.code)
+        : null,
+      message: redactedErrorMessage(error)
+    });
+    console.error(error);
+    if (!validationFailure) {
+      process.exitCode = 1;
+    }
+  }
 }
