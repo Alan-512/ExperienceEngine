@@ -83,6 +83,7 @@ describe("published runtime closure contract", () => {
       "local_pack",
       "published_npm",
       "published_clawhub",
+      "installed_artifact",
       "live_host"
     ]);
     expect(ACTUAL_DOWNLOADED_ARTIFACT_VALIDATION_STEPS).toHaveLength(8);
@@ -100,7 +101,9 @@ describe("published runtime closure contract", () => {
     expect(PUBLISHED_RUNTIME_CLOSURE_CONTRACT_FIXTURE).toMatchObject({
       canonical_activation_requires_global_ee: false,
       canonical_activation_invokes_global_openclaw: false,
-      npm_and_clawhub_evidence_interchangeable: false
+      npm_and_clawhub_evidence_interchangeable: false,
+      installed_artifact_evidence_satisfies_live_host: false,
+      artifact_runtime_validated_separate_from_support_claim: true
     });
   });
 

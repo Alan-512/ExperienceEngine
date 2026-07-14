@@ -8,6 +8,7 @@ import {
   mkdtempSync,
   readdirSync,
   readFileSync,
+  renameSync,
   rmSync,
   statSync,
   writeFileSync
@@ -49,6 +50,20 @@ import {
   type PersistedOpenClawInstallState
 } from "../plugin/openclaw-install-state.js";
 import { getOpenClawRuntimeDefaults } from "../plugin/openclaw-runtime-defaults.js";
+import type { RuntimeClosureManifest } from "../runtime/identity/types.js";
+import type {
+  RuntimeInstallOrigin,
+  RuntimeInstallSecurityApproval
+} from "../runtime/identity/types.js";
+import {
+  RUNTIME_CLOSURE_MANIFEST_RELATIVE_PATH,
+  validateRuntimeClosureManifest
+} from "../runtime/package/closure-manifest.js";
+import {
+  digestOpenClawSecurityScanSummary,
+  isOpenClawSecurityApprovalRequired,
+  normalizeOpenClawSecurityScanSummary
+} from "./openclaw-security-approval.js";
 
 export type OpenClawInstallReport = {
   adapter: "openclaw";
@@ -57,6 +72,8 @@ export type OpenClawInstallReport = {
   packageRoot: string;
   installSource: string;
   installedVersion: string;
+  installOrigin: RuntimeInstallOrigin;
+  securityApproval: RuntimeInstallSecurityApproval;
   hostWiring: {
     wired: boolean;
     commands: OpenClawCommand[];
@@ -80,12 +97,34 @@ export type OpenClawInstallReport = {
   };
 };
 
-type InstallerOptions = {
+export type InstallerOptions = {
   env?: NodeJS.ProcessEnv;
   homeDir?: string;
   runner?: OpenClawCommandRunner;
   packageSourceBuilder?: (packageRoot: string, paths: ResolvedPathInfo) => string;
+  approveHostSecurityScan?: boolean;
+  installOrigin?: RuntimeInstallOrigin;
+  artifactIntegrity?: string;
+  registryRecordIdentity?: string | null;
+  openClawVersion?: string | null;
+  postInstallVerifier?: (input: {
+    installPath: string;
+    expectedVersion: string;
+    runner?: OpenClawCommandRunner;
+  }) => void;
+  now?: () => Date;
 };
+
+export class OpenClawInstallError extends Error {
+  constructor(
+    readonly code: string,
+    message: string,
+    readonly detail?: Record<string, unknown>
+  ) {
+    super(message);
+    this.name = "OpenClawInstallError";
+  }
+}
 
 const readExplicitBooleanEnv = (env: NodeJS.ProcessEnv, key: string): boolean | undefined =>
   env[key] !== undefined ? env[key] === "true" : undefined;
@@ -263,27 +302,14 @@ const OPENCLAW_PLUGIN_CONFIG_KEYS = [
 
 type OpenClawComparableConfig = Partial<Record<(typeof OPENCLAW_PLUGIN_CONFIG_KEYS)[number], unknown>>;
 
-const OPENCLAW_PLUGIN_ENTRYPOINT = "plugin/openclaw-plugin.js";
-const OPENCLAW_REQUIRED_DIST_ASSETS = ["store/sqlite/schema.sql"] as const;
 const OPENCLAW_RELATIVE_IMPORT_PATTERN =
   /\b(?:import|export)\s+(?:[^"'()]*?\s+from\s+)?["'](\.[^"']+)["']/g;
 const OPENCLAW_DYNAMIC_IMPORT_PATTERN = /\bimport\(\s*["'](\.[^"']+)["']\s*\)/g;
-const OPENCLAW_EXCLUDED_RUNTIME_PATHS = new Set([
-  "analyzer/llm-learning-gate.js",
-  "distillation/queue-worker.js",
-  "install/openclaw-installer.js",
-  "install/openclaw-cli.js",
-  "store/vector/api-embedding-provider.js",
-  "store/vector/local-provider.js"
-]);
 
 const normalizeOpenClawPackagedRuntimePath = (value: string): string => value.replaceAll("\\", "/");
 
 const isOpenClawPackagedRuntimeFile = (relativePath: string): boolean =>
   relativePath.endsWith(".js") || relativePath.endsWith(".json");
-
-const isOpenClawExcludedRuntimePath = (relativePath: string): boolean =>
-  OPENCLAW_EXCLUDED_RUNTIME_PATHS.has(normalizeOpenClawPackagedRuntimePath(relativePath));
 
 const resolveOpenClawPackagedRuntimeImport = (fromFile: string, specifier: string): string | null => {
   const normalizedFromFile = normalizeOpenClawPackagedRuntimePath(fromFile);
@@ -293,64 +319,108 @@ const resolveOpenClawPackagedRuntimeImport = (fromFile: string, specifier: strin
   return isOpenClawPackagedRuntimeFile(relativePath) ? relativePath : null;
 };
 
-const collectOpenClawRuntimeClosure = (packageRoot: string): string[] => {
-  const distRoot = join(packageRoot, "dist");
-  const pending = [OPENCLAW_PLUGIN_ENTRYPOINT];
-  const collected = new Set<string>();
+const readOpenClawRuntimeClosureManifest = (packageRoot: string): RuntimeClosureManifest => {
+  const manifestPath = join(
+    packageRoot,
+    ...RUNTIME_CLOSURE_MANIFEST_RELATIVE_PATH.split("/")
+  );
+  if (!existsSync(manifestPath)) {
+    throw new Error(
+      `EE_RUNTIME_CLOSURE_INVALID: generated runtime manifest is missing at ${RUNTIME_CLOSURE_MANIFEST_RELATIVE_PATH}`
+    );
+  }
+  return JSON.parse(readFileSync(manifestPath, "utf8")) as RuntimeClosureManifest;
+};
 
-  while (pending.length > 0) {
-    const next = pending.pop();
-    if (!next || collected.has(next) || isOpenClawExcludedRuntimePath(next)) {
-      continue;
-    }
+const runtimeClosureAssetPaths = (manifest: RuntimeClosureManifest): string[] =>
+  Array.from(new Set([
+    ...manifest.required_entrypoints,
+    ...manifest.required_runtime_files,
+    ...manifest.required_schema_and_migrations
+  ].map((asset) => normalizeOpenClawPackagedRuntimePath(asset.path)))).sort();
 
-    const sourcePath = join(distRoot, next);
+const copyOpenClawRuntimeClosure = (
+  packageRoot: string,
+  stageDir: string,
+  manifest: RuntimeClosureManifest
+): void => {
+  for (const relativePath of [
+    ...runtimeClosureAssetPaths(manifest),
+    RUNTIME_CLOSURE_MANIFEST_RELATIVE_PATH
+  ]) {
+    const sourcePath = join(packageRoot, ...relativePath.split("/"));
     if (!existsSync(sourcePath)) {
-      continue;
+      throw new Error(`EE_RUNTIME_CLOSURE_INVALID: declared runtime asset is missing: ${relativePath}`);
     }
+    const destinationPath = join(stageDir, ...relativePath.split("/"));
+    mkdirSync(dirname(destinationPath), { recursive: true });
+    cpSync(sourcePath, destinationPath);
+  }
+};
 
-    collected.add(next);
-    if (!next.endsWith(".js")) {
-      continue;
-    }
-
+const assertOpenClawRuntimeImportsDeclared = (
+  packageRoot: string,
+  manifest: RuntimeClosureManifest
+): void => {
+  const declared = new Set(runtimeClosureAssetPaths(manifest));
+  for (const currentPath of [...declared].filter((path) => path.endsWith(".js"))) {
+    const sourcePath = join(packageRoot, ...currentPath.split("/"));
     const source = readFileSync(sourcePath, "utf8");
     for (const pattern of [OPENCLAW_RELATIVE_IMPORT_PATTERN, OPENCLAW_DYNAMIC_IMPORT_PATTERN]) {
+      pattern.lastIndex = 0;
       for (const match of source.matchAll(pattern)) {
         const specifier = match[1];
         if (!specifier) {
           continue;
         }
-
-        const resolvedImport = resolveOpenClawPackagedRuntimeImport(next, specifier);
-        if (!resolvedImport || collected.has(resolvedImport) || isOpenClawExcludedRuntimePath(resolvedImport)) {
-          continue;
+        const distRelativeFrom = currentPath.startsWith("dist/")
+          ? currentPath.slice("dist/".length)
+          : currentPath;
+        const resolved = resolveOpenClawPackagedRuntimeImport(distRelativeFrom, specifier);
+        if (!resolved) {
+          throw new Error(
+            `EE_OPENCLAW_RUNTIME_IMPORT_UNRESOLVED: ${currentPath} imports ${specifier}`
+          );
         }
-
-        pending.push(resolvedImport);
+        const packageRelative = `dist/${resolved}`;
+        if (!declared.has(packageRelative)) {
+          throw new Error(
+            `EE_OPENCLAW_RUNTIME_IMPORT_UNDECLARED: ${currentPath} imports ${packageRelative}`
+          );
+        }
       }
     }
   }
-
-  for (const requiredAsset of OPENCLAW_REQUIRED_DIST_ASSETS) {
-    if (existsSync(join(distRoot, requiredAsset))) {
-      collected.add(requiredAsset);
-    }
-  }
-
-  return [...collected].sort();
 };
 
-const copyOpenClawRuntimeClosure = (packageRoot: string, stageDir: string): void => {
-  const distRoot = join(packageRoot, "dist");
-  const stageDistRoot = join(stageDir, "dist");
-
-  for (const relativePath of collectOpenClawRuntimeClosure(packageRoot)) {
-    const sourcePath = join(distRoot, relativePath);
-    const destinationPath = join(stageDistRoot, relativePath);
-    mkdirSync(dirname(destinationPath), { recursive: true });
-    cpSync(sourcePath, destinationPath);
+const assertOpenClawPackageClosure = (
+  packageRoot: string,
+  manifest?: RuntimeClosureManifest
+): void => {
+  const validation = validateRuntimeClosureManifest(packageRoot);
+  if (!validation.valid) {
+    throw new Error(
+      `EE_RUNTIME_CLOSURE_INVALID: ${validation.issues.join(", ")}`
+    );
   }
+  assertOpenClawRuntimeImportsDeclared(
+    packageRoot,
+    manifest ?? readOpenClawRuntimeClosureManifest(packageRoot)
+  );
+};
+
+const validateOpenClawTarballClosure = (
+  tarballPath: string,
+  tempRoot: string
+): void => {
+  const unpackRoot = join(tempRoot, "final-artifact-validation");
+  mkdirSync(unpackRoot, { recursive: true });
+  execFileSync("tar", ["-xzf", tarballPath, "-C", unpackRoot], {
+    stdio: "pipe",
+    encoding: "utf8"
+  });
+  const packageRoot = join(unpackRoot, "package");
+  assertOpenClawPackageClosure(packageRoot);
 };
 
 const protectOpenClawReinstallPath = (installPath: string, packageRoot: string, homeDir?: string): void => {
@@ -410,7 +480,8 @@ export const createOpenClawInstallTarball = (packageRoot: string, paths: Resolve
   const stageDir = join(tempRoot, "experienceengine-openclaw");
   mkdirSync(stageDir, { recursive: true });
 
-  copyOpenClawRuntimeClosure(packageRoot, stageDir);
+  const runtimeManifest = readOpenClawRuntimeClosureManifest(packageRoot);
+  copyOpenClawRuntimeClosure(packageRoot, stageDir, runtimeManifest);
 
   const rawPackageJson = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8")) as Record<string, unknown>;
   const packagedManifest = {
@@ -438,16 +509,19 @@ export const createOpenClawInstallTarball = (packageRoot: string, paths: Resolve
     }
   }
 
+  assertOpenClawPackageClosure(stageDir, runtimeManifest);
+
   const archiveRoot = join(tempRoot, "package");
   const tarballPath = join(tempRoot, "experienceengine-openclaw.tgz");
 
+  let finalTarballPath: string;
   try {
     cpSync(stageDir, archiveRoot, { recursive: true });
     execFileSync("tar", ["-czf", tarballPath, "-C", tempRoot, "package"], {
       stdio: "pipe",
       encoding: "utf8"
     });
-    return tarballPath;
+    finalTarballPath = tarballPath;
   } catch {
     const output = execFileSync("npm", ["pack", stageDir, "--pack-destination", tempRoot], {
       stdio: "pipe",
@@ -457,9 +531,10 @@ export const createOpenClawInstallTarball = (packageRoot: string, paths: Resolve
     if (!tarballName) {
       throw new Error("npm pack did not return an OpenClaw install artifact");
     }
-
-    return join(tempRoot, tarballName);
+    finalTarballPath = join(tempRoot, tarballName);
   }
+  validateOpenClawTarballClosure(finalTarballPath, tempRoot);
+  return finalTarballPath;
 };
 
 export type OpenClawInspection = ReturnType<typeof inspectOpenClawInstall>;
@@ -641,6 +716,185 @@ const readOpenClawPluginEntryConfig = (runner?: OpenClawCommandRunner) => {
   }
 };
 
+type OpenClawFileSnapshot = {
+  path: string;
+  existed: boolean;
+  content: Buffer | null;
+};
+
+const captureFileSnapshot = (path: string): OpenClawFileSnapshot => ({
+  path,
+  existed: existsSync(path),
+  content: existsSync(path) ? readFileSync(path) : null
+});
+
+const restoreFileSnapshot = (snapshot: OpenClawFileSnapshot): void => {
+  if (!snapshot.existed) {
+    rmSync(snapshot.path, { force: true });
+    return;
+  }
+  mkdirSync(dirname(snapshot.path), { recursive: true });
+  writeFileSync(snapshot.path, snapshot.content ?? Buffer.alloc(0));
+};
+
+type OpenClawInstallDirectoryBackup = {
+  installPath: string;
+  backupPath: string | null;
+  mode: "none" | "copied" | "moved";
+};
+
+const backupOpenClawInstallDirectory = (options: {
+  installPath: string;
+  packageRoot: string;
+  transactionRoot: string;
+  installAction: OpenClawInstallAction;
+  homeDir?: string;
+}): OpenClawInstallDirectoryBackup => {
+  const installPath = resolve(expandHomePath(options.installPath, options.homeDir));
+  if (!existsSync(installPath)) {
+    return { installPath, backupPath: null, mode: "none" };
+  }
+  protectOpenClawReinstallPath(installPath, options.packageRoot, options.homeDir);
+  const backupPath = join(options.transactionRoot, "previous-plugin");
+  if (options.installAction === "update") {
+    cpSync(installPath, backupPath, { recursive: true });
+    return { installPath, backupPath, mode: "copied" };
+  }
+  renameSync(installPath, backupPath);
+  return { installPath, backupPath, mode: "moved" };
+};
+
+const restoreOpenClawInstallDirectory = (
+  backup: OpenClawInstallDirectoryBackup
+): void => {
+  if (!backup.backupPath || backup.mode === "none") {
+    rmSync(backup.installPath, { recursive: true, force: true });
+    return;
+  }
+  rmSync(backup.installPath, { recursive: true, force: true });
+  mkdirSync(dirname(backup.installPath), { recursive: true });
+  if (backup.mode === "moved") {
+    renameSync(backup.backupPath, backup.installPath);
+  } else {
+    cpSync(backup.backupPath, backup.installPath, { recursive: true });
+  }
+};
+
+const discardOpenClawInstallDirectoryBackup = (
+  backup: OpenClawInstallDirectoryBackup
+): void => {
+  if (backup.backupPath) {
+    rmSync(backup.backupPath, { recursive: true, force: true });
+  }
+};
+
+const defaultPostInstallVerifier = (input: {
+  installPath: string;
+  expectedVersion: string;
+  runner?: OpenClawCommandRunner;
+}): void => {
+  const info = parseOpenClawPluginInfo(
+    runOpenClawCommand(buildOpenClawInfoCommand("experienceengine"), input.runner)
+  );
+  if (info.version && info.version !== input.expectedVersion) {
+    throw new OpenClawInstallError(
+      "EE_OPENCLAW_INSTALLED_VERSION_MISMATCH",
+      `OpenClaw installed version ${info.version}, expected ${input.expectedVersion}.`
+    );
+  }
+  const installPath = info.installPath
+    ? resolve(expandHomePath(info.installPath))
+    : resolve(input.installPath);
+  if (!existsSync(installPath)) {
+    throw new OpenClawInstallError(
+      "EE_OPENCLAW_INSTALLED_CLOSURE_INVALID",
+      "OpenClaw did not expose an installed ExperienceEngine directory after installation."
+    );
+  }
+  assertOpenClawPackageClosure(installPath);
+};
+
+const probeOpenClawVersion = (
+  runner?: OpenClawCommandRunner
+): string | null => {
+  try {
+    const output = runOpenClawCommand({
+      bin: "openclaw",
+      args: ["--version"],
+      description: "Read the exact OpenClaw version for install evidence"
+    }, runner).trim();
+    return output || null;
+  } catch {
+    return null;
+  }
+};
+
+const runOpenClawInstallTransactionCommands = (options: {
+  installSource: string;
+  installAction: OpenClawInstallAction;
+  pluginConfig: OpenClawInstallReport["pluginConfig"];
+  approveHostSecurityScan: boolean;
+  runner?: OpenClawCommandRunner;
+  now: () => Date;
+}): {
+  commands: OpenClawCommand[];
+  securityApproval: RuntimeInstallSecurityApproval;
+} => {
+  const baseCommands = buildOpenClawInstallCommands(
+    options.installSource,
+    "experienceengine",
+    options.installAction,
+    options.pluginConfig
+  );
+  let scanDigest: string | null = null;
+  try {
+    runOpenClawCommand(baseCommands[0], options.runner);
+  } catch (error) {
+    if (!isOpenClawSecurityApprovalRequired(error)) {
+      throw error;
+    }
+    scanDigest = digestOpenClawSecurityScanSummary(error);
+    if (!options.approveHostSecurityScan) {
+      throw new OpenClawInstallError(
+        "EE_OPENCLAW_SECURITY_APPROVAL_REQUIRED",
+        "OpenClaw requires explicit approval for the candidate security scan. Re-run with --approve-host-security-scan after reviewing the host findings.",
+        {
+          scan_summary_digest: scanDigest,
+          scan_summary: normalizeOpenClawSecurityScanSummary(error)
+        }
+      );
+    }
+    const approvedCommands = buildOpenClawInstallCommands(
+      options.installSource,
+      "experienceengine",
+      options.installAction,
+      options.pluginConfig,
+      { approveHostSecurityScan: true }
+    );
+    runOpenClawCommand(approvedCommands[0], options.runner);
+    baseCommands[0] = approvedCommands[0];
+  }
+  for (const command of baseCommands.slice(1)) {
+    runOpenClawCommand(command, options.runner);
+  }
+  return {
+    commands: baseCommands,
+    securityApproval: scanDigest
+      ? {
+          scan_status: "approved",
+          scan_summary_digest: scanDigest,
+          approval_method: "explicit_cli",
+          approved_at: options.now().toISOString()
+        }
+      : {
+          scan_status: "not_required",
+          scan_summary_digest: null,
+          approval_method: null,
+          approved_at: null
+        }
+  };
+};
+
 export const installOpenClawAdapter = (options: InstallerOptions = {}): OpenClawInstallReport => {
   const env = options.env ?? (options.homeDir ? isolatePathEnvForHomeDir(process.env) : process.env);
   const resolvedConfig = loadConfig({}, { env, homeDir: options.homeDir });
@@ -712,51 +966,110 @@ export const installOpenClawAdapter = (options: InstallerOptions = {}): OpenClaw
     existingPluginsConfig?.installs?.experienceengine?.installPath ??
     join(dirname(paths.compatibilityHome), "extensions", "experienceengine");
   const installAction = inferOpenClawInstallAction(existingPluginsConfig, packageRoot, expectedInstallPath);
-  if (installAction === "reinstall") {
-    protectOpenClawReinstallPath(expectedInstallPath, packageRoot, options.homeDir);
-    removeOpenClawPluginFromAllowList(existingPluginsConfig, "experienceengine", options.homeDir, options.runner);
-    removeOpenClawReinstallPath(expectedInstallPath, options.homeDir);
-  }
   const installSource = (options.packageSourceBuilder ?? createOpenClawInstallTarball)(packageRoot, paths);
-  const commands = buildOpenClawInstallCommands(installSource, "experienceengine", installAction, pluginConfig);
-  runOpenClawCommands(commands, options.runner);
-  cleanupOpenClawWarningSources(existingPluginsConfig, expectedInstallPath, options.runner);
-
-  const payload = {
-    adapter: "openclaw",
-    installedAt: new Date().toISOString(),
-    installedVersion,
+  const runtimeManifest = readOpenClawRuntimeClosureManifest(packageRoot);
+  const installOrigin = options.installOrigin ?? "local_pack";
+  const registryRecordIdentity = options.registryRecordIdentity ?? null;
+  if (
+    (installOrigin === "published_npm_attested" ||
+      installOrigin === "published_clawhub_attested") &&
+    (!options.artifactIntegrity || !registryRecordIdentity)
+  ) {
+    throw new OpenClawInstallError(
+      "EE_OPENCLAW_PUBLISHED_ATTESTATION_REQUIRED",
+      "Published install origin requires exact artifact integrity and registry identity."
+    );
+  }
+  const artifactIntegrity = options.artifactIntegrity ??
+    `sha256:${runtimeManifest.closure_manifest_digest}`;
+  const now = options.now ?? (() => new Date());
+  const transactionRoot = mkdtempSync(join(
+    resolveProductStateDir(paths),
+    "openclaw-install-transaction-"
+  ));
+  const configSnapshot = captureFileSnapshot(resolveOpenClawConfigPath(options.homeDir));
+  const installStateSnapshot = captureFileSnapshot(paths.installStatePath);
+  const installDirectoryBackup = backupOpenClawInstallDirectory({
+    installPath: expectedInstallPath,
     packageRoot,
-    installSource,
-    installMode:
-      installAction === "update"
-        ? "updated-plugin"
-        : installAction === "reinstall"
-          ? "reinstalled-packaged-plugin"
-          : "packaged-plugin",
-    hostWiring: {
-      wired: true,
-      restartRecommended: true
-    },
-    ...pluginConfig
-  };
+    transactionRoot,
+    installAction,
+    homeDir: options.homeDir
+  });
+  try {
+    const transaction = runOpenClawInstallTransactionCommands({
+      installSource,
+      installAction,
+      pluginConfig,
+      approveHostSecurityScan: options.approveHostSecurityScan === true,
+      runner: options.runner,
+      now
+    });
+    const verifier = options.postInstallVerifier ??
+      (options.runner ? undefined : defaultPostInstallVerifier);
+    verifier?.({
+      installPath: expectedInstallPath,
+      expectedVersion: installedVersion,
+      runner: options.runner
+    });
+    cleanupOpenClawWarningSources(existingPluginsConfig, expectedInstallPath, options.runner);
 
-  writeFileSync(paths.installStatePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+    const payload: PersistedOpenClawInstallState = {
+      adapter: "openclaw",
+      installedAt: now().toISOString(),
+      installedVersion,
+      packageRoot,
+      installSource,
+      installMode:
+        installAction === "update"
+          ? "updated-plugin"
+          : installAction === "reinstall"
+            ? "reinstalled-packaged-plugin"
+            : "packaged-plugin",
+      installOrigin,
+      artifactIntegrity,
+      registryRecordIdentity,
+      openClawVersion: options.openClawVersion ??
+        (options.runner ? null : probeOpenClawVersion(options.runner)),
+      securityApproval: transaction.securityApproval,
+      hostWiring: {
+        wired: true,
+        restartRecommended: true
+      },
+      ...pluginConfig
+    };
 
-  return {
-    adapter: "openclaw",
-    installed: true,
-    paths,
-    packageRoot,
-    installSource,
-    installedVersion,
-    hostWiring: {
-      wired: true,
-      commands,
-      restartRecommended: true
-    },
-    pluginConfig
-  };
+    mkdirSync(dirname(paths.installStatePath), { recursive: true });
+    writeFileSync(paths.installStatePath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+    discardOpenClawInstallDirectoryBackup(installDirectoryBackup);
+    rmSync(transactionRoot, { recursive: true, force: true });
+
+    return {
+      adapter: "openclaw",
+      installed: true,
+      paths,
+      packageRoot,
+      installSource,
+      installedVersion,
+      installOrigin,
+      securityApproval: transaction.securityApproval,
+      hostWiring: {
+        wired: true,
+        commands: transaction.commands,
+        restartRecommended: true
+      },
+      pluginConfig
+    };
+  } catch (error) {
+    try {
+      restoreOpenClawInstallDirectory(installDirectoryBackup);
+      restoreFileSnapshot(configSnapshot);
+      restoreFileSnapshot(installStateSnapshot);
+    } finally {
+      rmSync(transactionRoot, { recursive: true, force: true });
+    }
+    throw error;
+  }
 };
 
 const isLiveConfigValueMissingButDefault = <K extends keyof OpenClawComparableConfig>(
@@ -881,6 +1194,15 @@ export const inspectOpenClawInstall = (options: InstallerOptions = {}) => {
     packageRoot: state?.packageRoot,
     installSource: state?.installSource,
     installMode: state?.installMode,
+    installEvidence: {
+      origin: state?.installOrigin ?? null,
+      artifactIntegrity: state?.artifactIntegrity ?? null,
+      registryRecordIdentity: state?.registryRecordIdentity ?? null,
+      openClawVersion: state?.openClawVersion ?? null,
+      securityScanStatus: state?.securityApproval?.scan_status ?? null,
+      securityScanSummaryDigest:
+        state?.securityApproval?.scan_summary_digest ?? null
+    },
     hostWiring: {
       wired: state?.hostWiring?.wired ?? false,
       restartRecommended: Boolean(state?.hostWiring?.restartRecommended) && !hostRestartSatisfied

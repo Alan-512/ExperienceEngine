@@ -47,7 +47,7 @@ describe("OpenClaw runtime service registration", () => {
     };
     await registration.start();
     expect(warn).toHaveBeenCalledWith(
-      "experienceengine.runtime_service_inactive",
+      "experienceengine.runtime_service_inactive code=runtime_service_unavailable",
       expect.objectContaining({
         ok: false,
         code: "runtime_service_unavailable"

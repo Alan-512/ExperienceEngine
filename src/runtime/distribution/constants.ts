@@ -7,6 +7,8 @@ export const PUBLISHED_RUNTIME_VALIDATION_REPORT_VERSION =
   "published-runtime-validation-report-v1" as const;
 export const LIVE_ACTIVATION_EVIDENCE_VERSION =
   "published-live-activation-evidence-v1" as const;
+export const INSTALLED_ARTIFACT_RUNTIME_EVIDENCE_VERSION =
+  "installed-artifact-runtime-evidence-v1" as const;
 export const DOCUMENTATION_EVIDENCE_MATRIX_VERSION =
   "documentation-evidence-matrix-v1" as const;
 
@@ -22,6 +24,7 @@ export const PUBLISHED_RUNTIME_EVIDENCE_CLASSES = [
   "local_pack",
   "published_npm",
   "published_clawhub",
+  "installed_artifact",
   "live_host"
 ] as const;
 export type PublishedRuntimeEvidenceClass =
@@ -176,6 +179,35 @@ export const LIVE_ACTIVATION_EVIDENCE_FIELDS = [
   "verified_at"
 ] as const;
 
+export const INSTALLED_ARTIFACT_RUNTIME_EVIDENCE_FIELDS = [
+  "evidence_schema_version",
+  "evidence_class",
+  "published_channel",
+  "package_name",
+  "package_version",
+  "artifact_integrity",
+  "registry_record_identity",
+  "activation",
+  "queue",
+  "runtime_shutdown",
+  "interaction_active",
+  "learning_runtime_active",
+  "production_learning_ready",
+  "verified_at"
+] as const;
+
+export const LIVE_HOST_ENVIRONMENT_FIELDS = [
+  "openclaw_version",
+  "node_version",
+  "platform",
+  "install_method",
+  "security_scan_status",
+  "security_scan_summary_digest",
+  "plugin_service_registered",
+  "real_agent_turn_observed",
+  "gateway_restart_recovered"
+] as const;
+
 export const DOCUMENTATION_EVIDENCE_TIERS = [
   "source_validated",
   "packed_artifact_validated",
@@ -208,7 +240,10 @@ export const PUBLISHED_RUNTIME_VALIDATION_REPORT_FIELDS = [
   "registry_record_identity",
   "distribution_attestation",
   "validation_steps",
+  "installed_artifact_runtime_evidence",
   "live_activation_evidence",
+  "installed_artifact_runtime_smoke_passed",
+  "artifact_runtime_validated",
   "support_claim_allowed",
   "failure_codes",
   "created_at"
@@ -229,10 +264,14 @@ export const PUBLISHED_RUNTIME_CLOSURE_CONTRACT_FIXTURE = Object.freeze({
   protected_queue_evidence_fields: PROTECTED_QUEUE_EVIDENCE_FIELDS,
   shutdown_evidence_fields: SHUTDOWN_EVIDENCE_FIELDS,
   live_activation_evidence_fields: LIVE_ACTIVATION_EVIDENCE_FIELDS,
+  installed_artifact_runtime_evidence_fields: INSTALLED_ARTIFACT_RUNTIME_EVIDENCE_FIELDS,
+  live_host_environment_fields: LIVE_HOST_ENVIRONMENT_FIELDS,
   documentation_evidence_tiers: DOCUMENTATION_EVIDENCE_TIERS,
   documentation_evidence_entry_fields: DOCUMENTATION_EVIDENCE_ENTRY_FIELDS,
   validation_report_fields: PUBLISHED_RUNTIME_VALIDATION_REPORT_FIELDS,
   canonical_activation_requires_global_ee: false,
   canonical_activation_invokes_global_openclaw: false,
-  npm_and_clawhub_evidence_interchangeable: false
+  npm_and_clawhub_evidence_interchangeable: false,
+  installed_artifact_evidence_satisfies_live_host: false,
+  artifact_runtime_validated_separate_from_support_claim: true
 } as const);

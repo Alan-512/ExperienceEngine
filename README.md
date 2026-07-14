@@ -257,7 +257,7 @@ Manual feedback is mainly for correcting the automatic judgment, not for grading
 | ------------------ | ----------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------ |
 | Codex              | `ee install codex`                                                | hooks + MCP                            | supported                                                    |
 | Claude Code        | marketplace plugin, with `ee install claude-code` fallback        | MCP + plugin hooks                     | supported                                                    |
-| OpenClaw           | native plugin install                                             | host-native plugin/runtime integration | most complete host-native path today                         |
+| OpenClaw           | native plugin install or `ee install openclaw` fallback           | host-native routine interaction        | interaction supported; production background runtime pending published/live-host validation |
 | Google Antigravity | `ee install antigravity`, `ee agy exec -C <project>` for CLI runs | MCP + user-level plugin/hooks wiring   | supported through Agent Desktop / `agy` / observed IDE hooks |
 
 Different hosts expose different hook surfaces, so the integration path and maturity are not identical.
@@ -333,7 +333,17 @@ openclaw gateway restart
 ee init
 ```
 
-OpenClaw currently has the deepest host-native plugin integration.
+The native install currently proves host-native routine interaction, not full background-learning readiness. A loaded plugin can have `interaction_active = true` while `learning_runtime_active` or `production_learning_ready` remains false.
+
+The operator fallback is:
+
+```bash
+ee install openclaw
+openclaw gateway restart
+ee verify openclaw-production
+```
+
+If OpenClaw requests security approval, review its findings and explicitly rerun with `--approve-host-security-scan`. ExperienceEngine does not add the unsafe-install flag by default.
 
 #### Google Antigravity
 
@@ -679,11 +689,18 @@ ee repair codex
 ee repair antigravity
 ```
 
-OpenClaw uses host-native plugin installation:
+OpenClaw host-native routine interaction uses:
 
 ```bash
 openclaw plugins install @alan512/experienceengine
 openclaw gateway restart
+```
+
+For the operator-managed fallback and strict runtime verification:
+
+```bash
+ee install openclaw
+ee verify openclaw-production
 ```
 
 Backup and recovery:
@@ -755,12 +772,24 @@ Start a fresh Claude Code session after installation.
 
 ### OpenClaw
 
-OpenClaw uses plugin/runtime integration rather than the generic adapter path.
+OpenClaw exposes host-native plugin interaction and a package-local runtime architecture. Current public artifacts must still pass the independent installed-artifact, real-Gateway, restart, repair/upgrade, npm, and ClawHub gates before full background learning is called supported.
 
 ```bash
 openclaw plugins install @alan512/experienceengine
 openclaw gateway restart
 ```
+
+These three states are intentionally separate:
+
+```text
+interaction_active
+learning_runtime_active
+production_learning_ready
+```
+
+Plugin load or successful routine interaction satisfies only the first state. Use `ee verify openclaw-production` for a strict non-zero automation gate; `ee status` remains informational.
+
+`artifact_runtime_validated` is also separate from `support_claim_allowed`: an exact artifact can pass runtime execution while the channel/platform/quality publication gates remain pending.
 
 If OpenClaw reports only a global workspace, ExperienceEngine isolates that session rather than reusing unrelated global-workspace experience.
 

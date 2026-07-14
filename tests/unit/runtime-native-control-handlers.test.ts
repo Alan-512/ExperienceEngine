@@ -53,6 +53,60 @@ const UPGRADE_CLOSURE = {
 };
 
 describe("runtime native control handlers", () => {
+  it("prepares an exact package activation request without mutating authority", async () => {
+    const db = createRuntimeProductionActivationDatabase();
+    try {
+      seedActivationGatewayHeartbeat(db);
+      const before = db.prepare(
+        "SELECT * FROM package_activation_state WHERE home_id = ?"
+      ).get(ACTIVATION_FIXTURE_HOME_ID);
+      const launchBefore = db.prepare(
+        "SELECT * FROM supervisor_launch_state WHERE home_id = ?"
+      ).get(ACTIVATION_FIXTURE_HOME_ID);
+      let nextId = 0;
+      const service = new OpenClawRuntimeNativeService({
+        handlers: createRuntimeNativeControlHandlers({
+          db,
+          homeId: ACTIVATION_FIXTURE_HOME_ID,
+          gatewayInstanceId: ACTIVATION_FIXTURE_GATEWAY_ID,
+          gatewayProcessStartToken: ACTIVATION_FIXTURE_GATEWAY_START,
+          currentPluginPackageGenerationId: ACTIVATION_FIXTURE_PACKAGE_ID,
+          resolvePackageGeneration: (generationId) => generationId ===
+            ACTIVATION_FIXTURE_PACKAGE_ID
+            ? {
+                packageRoot: process.cwd(),
+                packageClosure: ACTIVATION_FIXTURE_PACKAGE_CLOSURE
+              }
+            : undefined,
+          initializeOrResume: () => ({ ok: true, code: "not_used" }),
+          idFactory: () => `prepared-id-${++nextId}`,
+          clock: createFixedProcessAuthorityClock(ACTIVATION_FIXTURE_NOW)
+        })
+      });
+      await expect(service.execute({
+        operation: "prepare_package_activation"
+      })).resolves.toMatchObject({
+        ok: true,
+        code: "package_activation_request_prepared",
+        result: {
+          operation: "initialize_package_activation",
+          package_generation_id: ACTIVATION_FIXTURE_PACKAGE_ID,
+          control_request_id: "prepared-id-1",
+          authorization_id: "prepared-id-2",
+          mutates_authority: false
+        }
+      });
+      expect(db.prepare(
+        "SELECT * FROM package_activation_state WHERE home_id = ?"
+      ).get(ACTIVATION_FIXTURE_HOME_ID)).toEqual(before);
+      expect(db.prepare(
+        "SELECT * FROM supervisor_launch_state WHERE home_id = ?"
+      ).get(ACTIVATION_FIXTURE_HOME_ID)).toEqual(launchBefore);
+    } finally {
+      db.close();
+    }
+  });
+
   it("pauses and resumes the exact active worker without changing package identity or fence", async () => {
     const fixture = createRuntimeProductionLifecycleFixture();
     try {

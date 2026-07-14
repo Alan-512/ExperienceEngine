@@ -80,6 +80,43 @@ export type PublishedShutdownEvidence = {
   launch_attempt_terminal_code: string;
 };
 
+export type InstalledArtifactRuntimeShutdownEvidence = {
+  package_runtime_stop_observed: true;
+  worker_terminal_state: "stopped";
+  supervisor_terminal_state: "stopped";
+  supervisor_terminal_reason: string;
+  launch_attempt_terminal_code: string;
+};
+
+export type InstalledArtifactRuntimeEvidence = {
+  evidence_schema_version: string;
+  evidence_class: "installed_artifact";
+  published_channel: PublishedDistributionChannel;
+  package_name: string;
+  package_version: string;
+  artifact_integrity: string;
+  registry_record_identity: string;
+  activation: PublishedLiveActivationBinding;
+  queue: PublishedProtectedQueueEvidence;
+  runtime_shutdown: InstalledArtifactRuntimeShutdownEvidence;
+  interaction_active: true;
+  learning_runtime_active: true;
+  production_learning_ready: boolean;
+  verified_at: string;
+};
+
+export type OpenClawLiveHostEnvironment = {
+  openclaw_version: string;
+  node_version: string;
+  platform: string;
+  install_method: "openclaw_plugins_install";
+  security_scan_status: "not_required" | "approved";
+  security_scan_summary_digest: string | null;
+  plugin_service_registered: true;
+  real_agent_turn_observed: true;
+  gateway_restart_recovered: true;
+};
+
 export type PublishedLiveActivationEvidence = {
   evidence_schema_version: string;
   evidence_class: "live_host";
@@ -88,6 +125,7 @@ export type PublishedLiveActivationEvidence = {
   package_version: string;
   artifact_integrity: string;
   registry_record_identity: string;
+  host_environment: OpenClawLiveHostEnvironment;
   activation: PublishedLiveActivationBinding;
   queue: PublishedProtectedQueueEvidence;
   shutdown: PublishedShutdownEvidence;
@@ -127,14 +165,17 @@ export type PublishedRuntimeValidationReport = {
   registry_record_identity: string;
   distribution_attestation: RuntimeDistributionAttestation;
   validation_steps: ArtifactValidationStepRecord[];
+  installed_artifact_runtime_evidence: InstalledArtifactRuntimeEvidence | null;
   live_activation_evidence: PublishedLiveActivationEvidence | null;
+  installed_artifact_runtime_smoke_passed: boolean;
+  artifact_runtime_validated: boolean;
   support_claim_allowed: boolean;
   failure_codes: string[];
   created_at: string;
 };
 
 export type PublishedArtifactClosureObservation = {
-  evidence_class: Exclude<PublishedRuntimeEvidenceClass, "live_host">;
+  evidence_class: Exclude<PublishedRuntimeEvidenceClass, "live_host" | "installed_artifact">;
   published_channel: PublishedDistributionChannel | null;
   embedded_manifest: RuntimeClosureManifest;
   distribution_attestation: RuntimeDistributionAttestation | null;

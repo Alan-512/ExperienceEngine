@@ -76,10 +76,11 @@ describe("default installed OpenClaw production runtime binding", () => {
   it("freezes conservative local evidence semantics", () => {
     expect(OPENCLAW_INSTALLED_PRODUCTION_BINDING_CONTRACT).toEqual({
       requires_verified_closure: true,
-      requires_persisted_install_record: true,
+      mutable_install_state_is_runtime_authority: false,
+      host_native_signed_attestation_bootstrap: true,
       requires_host_state_dir: true,
       canonical_database_path_required: true,
-      published_channel_without_registry_evidence: "local_test",
+      install_origin_without_registry_evidence: "host_native_unattested",
       default_quality_projection: "not_production_ready",
       handshake_request_requires_verified_route_authority: true,
       default_current_configuration_recovery: true,

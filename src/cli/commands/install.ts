@@ -71,7 +71,9 @@ export const runInstallCommand = async (
   const deps = Array.isArray(argsOrDeps) ? maybeDeps : argsOrDeps;
   const registryHealth = (deps.readRegistryHealth ?? readRegistryHealth)();
   if (target === "openclaw") {
-    const report = (deps.installOpenClawAdapter ?? installOpenClawAdapter)();
+    const report = (deps.installOpenClawAdapter ?? installOpenClawAdapter)({
+      approveHostSecurityScan: args.includes("--approve-host-security-scan")
+    });
     console.log(`Installed ${report.adapter} adapter.`);
     console.log(`Installed version: ${report.installedVersion}`);
     console.log(`Linked package root: ${report.packageRoot}`);
@@ -156,5 +158,5 @@ export const runInstallCommand = async (
     return;
   }
 
-  console.log("Usage: ee install openclaw|claude-code|codex|antigravity [--runtime-target posix|windows] [--mcp-only] [--hooks]");
+  console.log("Usage: ee install openclaw|claude-code|codex|antigravity [--approve-host-security-scan] [--runtime-target posix|windows] [--mcp-only] [--hooks]");
 };

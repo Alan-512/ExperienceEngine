@@ -194,6 +194,7 @@ export const PACKAGE_LOCAL_PRODUCTION_SERVICE_CONTRACT = Object.freeze({
   lifecycle_owner: "package_local_supervisor",
   read_only_operations: Object.freeze([
     "status",
+    "prepare_package_activation",
     "repair_explanation"
   ] as const satisfies typeof READ_ONLY_OPENCLAW_NATIVE_OPERATIONS),
   unavailable_defaults_fail_closed: true
@@ -201,6 +202,7 @@ export const PACKAGE_LOCAL_PRODUCTION_SERVICE_CONTRACT = Object.freeze({
 
 export const PRODUCTION_NATIVE_OPERATION_BINDINGS = Object.freeze({
   status: "status_projection",
+  prepare_package_activation: "read_only_exact_revision_request",
   pause_learning: "package_control_idempotency",
   resume_learning: "package_control_idempotency",
   retry_blocked_system_work: "s5_queue_control_idempotency",

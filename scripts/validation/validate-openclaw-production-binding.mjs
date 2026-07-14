@@ -5,8 +5,7 @@ import { dirname, join, resolve } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { fileURLToPath } from "node:url";
 import {
-  bindInstalledOpenClawProductionRuntime,
-  deriveOpenClawInstallRecordIdentity
+  bindInstalledOpenClawProductionRuntime
 } from "../../dist/plugin/openclaw-production-runtime.js";
 import { defaultConfig } from "../../dist/config/default-config.js";
 import {
@@ -45,6 +44,10 @@ import {
 import {
   createRuntimePackageGenerationIdentity
 } from "../../dist/runtime/package/package-generation.js";
+import {
+  createOrAdoptRuntimeInstallAttestation,
+  fingerprintRuntimeInstallPath
+} from "../../dist/runtime/package/install-attestation.js";
 import {
   RUNTIME_SUPERVISOR_PROTOCOL_VERSION,
   RUNTIME_WORKER_PROTOCOL_VERSION
@@ -86,8 +89,38 @@ const installStatePath = join(
 );
 const originalProductHome = process.env.EXPERIENCE_ENGINE_HOME;
 const waitTimeoutMs = 45_000;
+const evidenceClass = (() => {
+  const requested = process.env.EXPERIENCE_ENGINE_VALIDATION_EVIDENCE_CLASS?.trim() ||
+    "local_pack";
+  if (!["local_pack", "published_npm", "published_clawhub"].includes(requested)) {
+    throw new Error("Unsupported runtime validation evidence class.");
+  }
+  return requested;
+})();
+const publishedChannel = evidenceClass === "published_npm"
+  ? "npm"
+  : evidenceClass === "published_clawhub"
+    ? "clawhub"
+    : "local_test";
+const installOrigin = evidenceClass === "published_npm"
+  ? "published_npm_attested"
+  : evidenceClass === "published_clawhub"
+    ? "published_clawhub_attested"
+    : "local_pack";
+const registryArtifactIntegrity =
+  process.env.EXPERIENCE_ENGINE_VALIDATION_ARTIFACT_INTEGRITY?.trim() || null;
+const registryRecordIdentity =
+  process.env.EXPERIENCE_ENGINE_VALIDATION_REGISTRY_RECORD_IDENTITY?.trim() || null;
 
 let distillationRequestCount = 0;
+let releaseCompletionDistillation;
+let observeCompletionDistillation;
+const completionDistillationObserved = new Promise((resolveObserved) => {
+  observeCompletionDistillation = resolveObserved;
+});
+const completionDistillationRelease = new Promise((resolveRelease) => {
+  releaseCompletionDistillation = resolveRelease;
+});
 let releaseDelayedDistillation;
 let observeDelayedDistillation;
 const delayedDistillationObserved = new Promise((resolveObserved) => {
@@ -104,6 +137,10 @@ const providerServer = createServer(async (request, response) => {
   );
   if (requestUrl.pathname === "/distillation/v1/chat/completions") {
     distillationRequestCount += 1;
+    if (distillationRequestCount === 1) {
+      observeCompletionDistillation();
+      await completionDistillationRelease;
+    }
     if (distillationRequestCount === 2) {
       observeDelayedDistillation();
       await delayedDistillationRelease;
@@ -254,17 +291,50 @@ const publishCurrentConfiguration = async ({
     "package build id"
   );
   const manifest = createRuntimeClosureManifest(packageRoot);
+  const artifactIntegrity =
+    registryArtifactIntegrity ?? `sha256:${closureManifestDigest}`;
+  if (
+    (installOrigin === "published_npm_attested" ||
+      installOrigin === "published_clawhub_attested") &&
+    !registryRecordIdentity
+  ) {
+    throw new Error("Published installed-artifact smoke requires registry identity.");
+  }
+  const installAttestation = await createOrAdoptRuntimeInstallAttestation({
+    canonicalHome: initialized.resolution.resolvedHome,
+    integrityKey: initialized.integrityKey,
+    content: {
+      install_origin: installOrigin,
+      package_name: manifest.package_name,
+      package_version: manifest.package_version,
+      package_build_id: packageBuildId,
+      closure_manifest_digest: closureManifestDigest,
+      installed_root_fingerprint: fingerprintRuntimeInstallPath(packageRoot),
+      host_state_dir_fingerprint: fingerprintRuntimeInstallPath(stateDir),
+      home_id: initialized.homeIdentity.home_id,
+      database_path_fingerprint: fingerprintRuntimeInstallPath(sqlitePath),
+      openclaw_version: null,
+      node_version: process.version,
+      artifact_integrity: artifactIntegrity,
+      registry_record_identity: registryRecordIdentity,
+      security_approval: {
+        scan_status: "not_run",
+        scan_summary_digest: null,
+        approval_method: null,
+        approved_at: null
+      },
+      issued_by: installOrigin === "local_pack"
+        ? "ee_installer"
+        : "published_validator",
+      issued_at: observedAt
+    }
+  });
   const packageIdentity = createRuntimePackageGenerationIdentity({
     manifest,
-    artifactIntegrity: `sha256:${closureManifestDigest}`,
-    installRecordIdentity: deriveOpenClawInstallRecordIdentity({
-      installState,
-      packageRoot,
-      stateDir,
-      closureManifestDigest,
-      packageBuildId
-    }),
-    publishedChannel: "local_test",
+    artifactIntegrity,
+    installRecordIdentity: installAttestation.attestation_identity,
+    installOrigin,
+    publishedChannel,
     compatibility: {
       supervisor_protocol_version: RUNTIME_SUPERVISOR_PROTOCOL_VERSION,
       worker_protocol_version: RUNTIME_WORKER_PROTOCOL_VERSION,
@@ -554,7 +624,20 @@ try {
     installedVersion: packageJson.version,
     packageRoot,
     installSource: packageRoot,
-    installMode: "local-pack-validation",
+    installMode: `${evidenceClass}-validation`,
+    installOrigin,
+    artifactIntegrity:
+      registryArtifactIntegrity ?? `sha256:${
+        assertRuntimeClosureManifest(packageRoot).closureManifestDigest
+      }`,
+    registryRecordIdentity,
+    openClawVersion: null,
+    securityApproval: {
+      scan_status: "not_run",
+      scan_summary_digest: null,
+      approval_method: null,
+      approved_at: null
+    },
     hostWiring: {
       wired: true,
       restartRecommended: false
@@ -641,6 +724,26 @@ try {
     (row) => row.state === "active" && row.worker_mode === "production",
     "package-local production worker fence"
   );
+  await Promise.race([
+    completionDistillationObserved,
+    sleep(waitTimeoutMs).then(() => {
+      throw new Error("Timed out waiting for semantic completion provider work.");
+    })
+  ]);
+  const claimedSemanticJob = await waitForRow(
+    inspectionDb,
+    (db) => db.prepare(
+      `SELECT status, claim_id, claim_owner_id, claim_fencing_token
+       FROM distillation_jobs
+       WHERE id = 'job-local-pack-complete'`
+    ).get(),
+    (row) => row.status === "processing" &&
+      Boolean(row.claim_id) &&
+      Boolean(row.claim_owner_id) &&
+      Number.isSafeInteger(row.claim_fencing_token),
+    "package-local fenced semantic claim"
+  );
+  releaseCompletionDistillation();
   const completedSemanticJob = await waitForRow(
     inspectionDb,
     (db) => db.prepare(
@@ -679,7 +782,7 @@ try {
     throw new Error("Package-local semantic completion did not persist its node.");
   }
   const completeHandshakes = inspectionDb.prepare(
-    `SELECT handshake_purpose, status, worker_fencing_token,
+    `SELECT activation_id, handshake_purpose, status, worker_fencing_token,
             configuration_generation_id, effective_route_set_id
      FROM activation_handshakes
      WHERE status = 'complete'
@@ -844,12 +947,28 @@ try {
     activeLease.owner_process_id,
     "package-local supervisor"
   );
+  const productionHandshake = completeHandshakes.find((row) =>
+    row.handshake_purpose === "production_activation"
+  );
+  if (!productionHandshake) {
+    throw new Error("Production activation handshake evidence is missing.");
+  }
   console.log(JSON.stringify({
     ok: true,
     validation: "openclaw_package_local_configured_production_activation",
     start_code: started.code,
     package_activation_state: activeActivation.activation_state,
     package_activation_revision: activeActivation.activation_revision,
+    home_id: configured.homeId,
+    gateway_instance_id: status.result.gateway_instance_id,
+    active_package_generation_id: configured.packageGenerationId,
+    production_activation_id: productionHandshake.activation_id,
+    schema_version: status.result.schema_version,
+    package_name: packageJson.name,
+    package_version: packageJson.version,
+    artifact_integrity:
+      registryArtifactIntegrity ?? configured.packageIdentity.artifact_integrity,
+    registry_record_identity: registryRecordIdentity,
     configuration_generation_id: configured.generationId,
     effective_route_set_id: configured.effectiveRouteSetId,
     supervisor_owner_id: activeLease.owner_id,
@@ -863,6 +982,13 @@ try {
       row.handshake_purpose
     ),
     semantic_completion_job_status: completedSemanticJob.status,
+    semantic_completion_job_id: "job-local-pack-complete",
+    semantic_completion_candidate_id: "candidate-local-pack-complete",
+    semantic_completion_claim_id: claimedSemanticJob.claim_id,
+    semantic_completion_claim_owner_id: claimedSemanticJob.claim_owner_id,
+    semantic_completion_claim_fencing_token:
+      claimedSemanticJob.claim_fencing_token,
+    semantic_completion_node_id: completedCandidate.distilled_node_id,
     semantic_completion_distillation_source:
       completedSemanticJob.distillation_source,
     stale_output_job_status: interruptedSemanticJob.status,
@@ -875,13 +1001,16 @@ try {
       replacementConfiguration.generationId,
     learning_runtime_active: status.result.learning_runtime_active,
     production_learning_ready: status.result.production_learning_ready,
+    interaction_active: status.result.interaction_active,
     worker_terminal_state: releasedWorker.state,
+    supervisor_terminal_state: releasedLease.state,
     stop_code: stopped.code,
     terminal_reason: releasedLease.lease_terminal_reason,
     attempt_terminal_code: attempt.terminal_code,
-    evidence_class: "local_pack"
+    evidence_class: evidenceClass
   }));
 } finally {
+  releaseCompletionDistillation?.();
   releaseDelayedDistillation?.();
   inspectionDb?.close();
   if (binding && !stoppedCleanly) {

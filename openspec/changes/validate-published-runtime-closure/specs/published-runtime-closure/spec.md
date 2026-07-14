@@ -61,6 +61,53 @@ ExperienceEngine SHALL inspect the downloaded artifact and verify every required
 - **WHEN** an entrypoint or dependency succeeds in the repository but fails in an isolated downloaded-artifact environment
 - **THEN** published closure validation SHALL fail
 
+### Requirement: Runtime closure is the sole OpenClaw packaging authority
+
+ExperienceEngine SHALL package the OpenClaw production runtime from the already-generated embedded runtime closure manifest rather than from a second hard-coded asset list or import traversal.
+
+#### Scenario: OpenClaw staging package is created
+
+- **WHEN** the installer builds an OpenClaw candidate tarball
+- **THEN** it SHALL copy every manifest-declared entrypoint, runtime file, schema/migration, the manifest itself, and required package/plugin metadata
+- **AND** it SHALL validate the staging root before archive creation
+- **AND** it SHALL unpack and validate the final archive before returning it
+
+#### Scenario: Runtime imports an undeclared relative module
+
+- **WHEN** import scanning discovers a package-relative runtime dependency absent from the manifest
+- **THEN** packaging SHALL fail as an undeclared runtime dependency
+- **AND** the scanner SHALL NOT silently add the file or become an alternative packaging authority
+
+#### Scenario: Distribution tooling exists in the npm package
+
+- **WHEN** npm/ClawHub downloaders, validators, or host-validation runners are shipped for operator/release use
+- **THEN** they SHALL NOT be required members of the OpenClaw production runtime closure unless a production entrypoint actually depends on them
+
+### Requirement: Installed-artifact and live-host evidence are distinct
+
+ExperienceEngine SHALL record direct package-local runtime execution separately from real OpenClaw host execution.
+
+#### Scenario: Direct Node runtime smoke passes
+
+- **WHEN** an isolated installed package imports its own entrypoints and completes the deterministic S1-S6 queue/fencing fixture without OpenClaw
+- **THEN** it MAY record `installed_artifact` evidence and `artifact_runtime_smoke_passed`
+- **AND** it SHALL NOT record `live_host` or complete the real-host validation step
+
+#### Scenario: Real OpenClaw validation passes
+
+- **WHEN** the exact artifact is installed by OpenClaw, a real Gateway starts the plugin service, a real agent turn reaches the plugin, authoritative runtime/queue evidence is observed, restart recovery succeeds, and shutdown is terminalized
+- **THEN** the validator MAY record `live_host` evidence for the exact host, Node, channel, artifact, and package generation
+
+### Requirement: Artifact runtime validation and support claims are separate
+
+ExperienceEngine SHALL expose an `artifact_runtime_validated` conclusion independently from `support_claim_allowed`.
+
+#### Scenario: Runtime works but quality publication gate is pending
+
+- **WHEN** closure, install, live-host activation, protected queue work, recovery, and shutdown pass but S8 benchmark/quality or required platform gates remain incomplete
+- **THEN** `artifact_runtime_validated` MAY be true
+- **AND** `support_claim_allowed` SHALL remain false
+
 ### Requirement: Canonical OpenClaw activation does not require global EE CLI installation
 
 ExperienceEngine SHALL launch and control the package-local supervisor and worker from the installed package closure without requiring a globally available `ee` binary.

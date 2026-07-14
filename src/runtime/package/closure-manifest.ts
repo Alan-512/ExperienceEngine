@@ -1,10 +1,11 @@
 import { createHash } from "node:crypto";
 import {
+  existsSync,
   mkdirSync,
   readFileSync,
   writeFileSync
 } from "node:fs";
-import { dirname, posix, resolve, sep, win32 } from "node:path";
+import { dirname, extname, posix, resolve, sep, win32 } from "node:path";
 import {
   FIXED_CONTROL_PLANE_DDL
 } from "../identity/control-plane-contract.js";
@@ -140,6 +141,113 @@ export const RUNTIME_CLOSURE_REQUIRED_SCHEMA_AND_MIGRATIONS: Array<Omit<RuntimeC
 
 const sha256Bytes = (value: Buffer): string => createHash("sha256").update(value).digest("hex");
 
+const RUNTIME_RELATIVE_IMPORT_PATTERNS = [
+  /\b(?:import|export)\s+(?:[^"'()]*?\s+from\s+)?["'](\.[^"']+)["']/gu,
+  /\bimport\(\s*["'](\.[^"']+)["']\s*\)/gu
+] as const;
+
+const normalizePackageRelativePath = (value: string): string =>
+  value.replaceAll("\\", "/");
+
+const resolveDeclaredRuntimeImport = (
+  packageRoot: string,
+  fromPath: string,
+  specifier: string
+): string | null => {
+  const normalizedFrom = normalizePackageRelativePath(fromPath);
+  const resolvedBase = normalizePackageRelativePath(posix.resolve(
+    "/",
+    posix.dirname(normalizedFrom),
+    specifier
+  )).replace(/^\//u, "");
+  const candidates = extname(resolvedBase)
+    ? [resolvedBase]
+    : [`${resolvedBase}.js`, `${resolvedBase}.json`, `${resolvedBase}/index.js`];
+  for (const candidate of candidates) {
+    if (!candidate.startsWith("dist/")) {
+      continue;
+    }
+    try {
+      if (existsSync(resolvePackageAsset(packageRoot, candidate))) {
+        return candidate;
+      }
+    } catch {
+      continue;
+    }
+  }
+  return null;
+};
+
+export const deriveRuntimeClosureDeclarations = (packageRoot: string): {
+  entrypoints: Array<Omit<RuntimeClosureAsset, "sha256">>;
+  runtimeFiles: Array<Omit<RuntimeClosureAsset, "sha256">>;
+  schemaAndMigrations: Array<Omit<RuntimeClosureAsset, "sha256">>;
+} => {
+  const entrypoints = [...RUNTIME_CLOSURE_REQUIRED_ENTRYPOINTS];
+  const schemaAndMigrations = [...RUNTIME_CLOSURE_REQUIRED_SCHEMA_AND_MIGRATIONS];
+  const explicitRuntimeFiles = [...RUNTIME_CLOSURE_REQUIRED_RUNTIME_FILES];
+  const declaredPaths = new Set([
+    ...entrypoints,
+    ...explicitRuntimeFiles,
+    ...schemaAndMigrations
+  ].map((asset) => normalizePackageRelativePath(asset.path)));
+  const pending = [
+    ...entrypoints,
+    ...explicitRuntimeFiles
+  ].map((asset) => normalizePackageRelativePath(asset.path))
+    .filter((path) => path.endsWith(".js"));
+  const scanned = new Set<string>();
+  const discovered: Array<Omit<RuntimeClosureAsset, "sha256">> = [];
+
+  while (pending.length > 0) {
+    const current = pending.pop();
+    if (!current || scanned.has(current)) {
+      continue;
+    }
+    scanned.add(current);
+    let source: string;
+    try {
+      source = readFileSync(resolvePackageAsset(packageRoot, current), "utf8");
+    } catch {
+      continue;
+    }
+    for (const pattern of RUNTIME_RELATIVE_IMPORT_PATTERNS) {
+      pattern.lastIndex = 0;
+      for (const match of source.matchAll(pattern)) {
+        const specifier = match[1];
+        if (!specifier) {
+          continue;
+        }
+        const resolvedImport = resolveDeclaredRuntimeImport(
+          packageRoot,
+          current,
+          specifier
+        );
+        if (!resolvedImport) {
+          continue;
+        }
+        if (!declaredPaths.has(resolvedImport)) {
+          declaredPaths.add(resolvedImport);
+          discovered.push({
+            role: `runtime_module:${resolvedImport}`,
+            path: resolvedImport
+          });
+        }
+        if (resolvedImport.endsWith(".js") && !scanned.has(resolvedImport)) {
+          pending.push(resolvedImport);
+        }
+      }
+    }
+  }
+
+  return {
+    entrypoints,
+    runtimeFiles: [...explicitRuntimeFiles, ...discovered]
+      .sort((left, right) => left.path.localeCompare(right.path)),
+    schemaAndMigrations
+  };
+};
+
 const readJson = <T>(path: string): T => JSON.parse(readFileSync(path, "utf8")) as T;
 
 const assertSafePackageRelativePath = (path: string): void => {
@@ -256,14 +364,15 @@ const createRuntimeBuildIdentity = (packageRoot: string): {
   metadataDigests: ReturnType<typeof digestSelectedPackageMetadata>;
 } => {
   const { packageJson, packageName, packageVersion } = readPackageIdentity(packageRoot);
-  const requiredEntrypoints = bindAssets(packageRoot, RUNTIME_CLOSURE_REQUIRED_ENTRYPOINTS);
+  const declarations = deriveRuntimeClosureDeclarations(packageRoot);
+  const requiredEntrypoints = bindAssets(packageRoot, declarations.entrypoints);
   const requiredRuntimeFiles = bindAssets(
     packageRoot,
-    RUNTIME_CLOSURE_REQUIRED_RUNTIME_FILES.filter((asset) => asset.role !== "profile_registry")
+    declarations.runtimeFiles.filter((asset) => asset.role !== "profile_registry")
   );
   const requiredSchemaAndMigrations = bindAssets(
     packageRoot,
-    RUNTIME_CLOSURE_REQUIRED_SCHEMA_AND_MIGRATIONS
+    declarations.schemaAndMigrations
   );
   const metadataDigests = digestSelectedPackageMetadata(packageJson);
   return {
@@ -284,9 +393,10 @@ const createRuntimeBuildIdentity = (packageRoot: string): {
 export const createRuntimeClosureManifest = (packageRoot: string): RuntimeClosureManifest => {
   const buildIdentity = createRuntimeBuildIdentity(packageRoot);
   const { packageName, packageVersion, packageBuildId, metadataDigests } = buildIdentity;
-  const requiredEntrypoints = bindAssets(packageRoot, RUNTIME_CLOSURE_REQUIRED_ENTRYPOINTS);
-  const requiredRuntimeFiles = bindAssets(packageRoot, RUNTIME_CLOSURE_REQUIRED_RUNTIME_FILES);
-  const requiredSchemaAndMigrations = bindAssets(packageRoot, RUNTIME_CLOSURE_REQUIRED_SCHEMA_AND_MIGRATIONS);
+  const declarations = deriveRuntimeClosureDeclarations(packageRoot);
+  const requiredEntrypoints = bindAssets(packageRoot, declarations.entrypoints);
+  const requiredRuntimeFiles = bindAssets(packageRoot, declarations.runtimeFiles);
+  const requiredSchemaAndMigrations = bindAssets(packageRoot, declarations.schemaAndMigrations);
   const profileRegistryAsset = requiredRuntimeFiles.find(
     (asset) => asset.role === "profile_registry"
   );
@@ -432,10 +542,23 @@ export const validateRuntimeClosureManifest = (packageRoot: string): RuntimeClos
     issues.push("closure_manifest_digest_mismatch");
   }
 
+  let expectedDeclarations: ReturnType<typeof deriveRuntimeClosureDeclarations>;
+  try {
+    expectedDeclarations = deriveRuntimeClosureDeclarations(packageRoot);
+  } catch (error) {
+    issues.push(
+      `runtime_declaration_derivation_failed:${error instanceof Error ? error.message : String(error)}`
+    );
+    expectedDeclarations = {
+      entrypoints: RUNTIME_CLOSURE_REQUIRED_ENTRYPOINTS,
+      runtimeFiles: RUNTIME_CLOSURE_REQUIRED_RUNTIME_FILES,
+      schemaAndMigrations: RUNTIME_CLOSURE_REQUIRED_SCHEMA_AND_MIGRATIONS
+    };
+  }
   const expectedRoles = new Map<string, string>([
-    ...RUNTIME_CLOSURE_REQUIRED_ENTRYPOINTS,
-    ...RUNTIME_CLOSURE_REQUIRED_RUNTIME_FILES,
-    ...RUNTIME_CLOSURE_REQUIRED_SCHEMA_AND_MIGRATIONS
+    ...expectedDeclarations.entrypoints,
+    ...expectedDeclarations.runtimeFiles,
+    ...expectedDeclarations.schemaAndMigrations
   ].map((asset) => [asset.role, asset.path]));
   const observedRoles = new Map<string, string>();
   const observedPaths = new Set<string>();

@@ -45,7 +45,9 @@ export const runUpgradeCommand = async (
     const inspect = deps.inspectOpenClawInstall ?? inspectOpenClawInstall;
     const install = deps.installOpenClawAdapter ?? installOpenClawAdapter;
     const before = inspect();
-    const report = install();
+    const report = install({
+      approveHostSecurityScan: args.includes("--approve-host-security-scan")
+    });
     console.log(`Upgraded ${report.adapter} adapter.`);
     console.log(`Version: ${before.versionStatus.recordedVersion ?? "unknown"} -> ${report.installedVersion}`);
     console.log(`Linked package root: ${report.packageRoot}`);
@@ -106,5 +108,5 @@ export const runUpgradeCommand = async (
     return;
   }
 
-  console.log("Usage: ee upgrade openclaw|claude-code|codex|antigravity [--runtime-target posix|windows] [--mcp-only] [--hooks]");
+  console.log("Usage: ee upgrade openclaw|claude-code|codex|antigravity [--approve-host-security-scan] [--runtime-target posix|windows] [--mcp-only] [--hooks]");
 };

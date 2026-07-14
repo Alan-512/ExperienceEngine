@@ -10,6 +10,45 @@ export type RuntimeHomeResolutionMode =
 
 export type RuntimePublishedChannel = "npm" | "clawhub" | "local_test";
 
+export type RuntimeInstallOrigin =
+  | "local_pack"
+  | "host_native_unattested"
+  | "published_npm_attested"
+  | "published_clawhub_attested";
+
+export type RuntimeInstallSecurityApproval = {
+  scan_status: "not_run" | "not_required" | "approval_required" | "approved";
+  scan_summary_digest: string | null;
+  approval_method: "explicit_cli" | "host_policy" | null;
+  approved_at: string | null;
+};
+
+export type RuntimeInstallAttestationContent = {
+  attestation_schema_version: "runtime-install-attestation-v1";
+  install_origin: RuntimeInstallOrigin;
+  package_name: string;
+  package_version: string;
+  package_build_id: string;
+  closure_manifest_digest: string;
+  installed_root_fingerprint: string;
+  host_state_dir_fingerprint: string;
+  home_id: string;
+  database_path_fingerprint: string;
+  openclaw_version: string | null;
+  node_version: string;
+  artifact_integrity: string;
+  registry_record_identity: string | null;
+  security_approval: RuntimeInstallSecurityApproval;
+  issued_by: "gateway_service_controller" | "ee_installer" | "published_validator";
+  issued_at: string;
+  integrity_key_id: string;
+};
+
+export type RuntimeInstallAttestation = RuntimeInstallAttestationContent & {
+  attestation_identity: string;
+  attestation_hmac: string;
+};
+
 export type CanonicalRuntimeHomeResolution = {
   contractId: string;
   resolutionMode: RuntimeHomeResolutionMode;
@@ -80,6 +119,7 @@ export type RuntimePackageGenerationIdentity = {
   min_write_schema_version: string;
   max_write_schema_version: string;
   target_schema_version: string;
+  install_origin: RuntimeInstallOrigin;
   published_channel: RuntimePublishedChannel;
 };
 

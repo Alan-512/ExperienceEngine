@@ -44,6 +44,7 @@ export const ACTIVATION_FIXTURE_PACKAGE_IDENTITY: RuntimePackageGenerationIdenti
   min_write_schema_version: "legacy-learning-v0",
   max_write_schema_version: "runtime-schema-v1",
   target_schema_version: "legacy-learning-v0",
+  install_origin: "local_pack",
   published_channel: "local_test"
 };
 

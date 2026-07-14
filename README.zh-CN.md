@@ -257,7 +257,7 @@ ee harmed
 | ------------------ | ----------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------ |
 | Codex              | `ee install codex`                                                | hooks + MCP                            | 已支持                                                    |
 | Claude Code        | 插件市场（marketplace）路径，保留 `ee install claude-code` 作为备用 | MCP + 插件 hooks                     | 已支持                                                    |
-| OpenClaw           | 原生插件安装                                             | 宿主原生插件/运行时集成 | 当前最完整的宿主原生路径                         |
+| OpenClaw           | 原生插件安装，或 `ee install openclaw` 回退路径          | 宿主原生日常交互       | 交互已支持；生产后台运行时仍等待 published/live-host 验证 |
 | Google Antigravity | `ee install antigravity`，CLI 运行使用 `ee agy exec -C <project>` | MCP + 用户级插件/hooks 连线   | 通过 Agent Desktop / `agy` / 已观察到的 IDE hook 支持 |
 
 不同的宿主暴露了不同的 hook 表面，因此集成路径和成熟度也有所不同。
@@ -333,7 +333,17 @@ openclaw gateway restart
 ee init
 ```
 
-OpenClaw 目前拥有最深度的宿主原生插件集成。
+原生安装当前证明的是宿主原生日常交互，并不等于完整后台学习已就绪。插件已加载时可以出现 `interaction_active = true`，但 `learning_runtime_active` 或 `production_learning_ready` 仍为 false。
+
+operator 回退路径为：
+
+```bash
+ee install openclaw
+openclaw gateway restart
+ee verify openclaw-production
+```
+
+如果 OpenClaw 要求安全扫描授权，请先查看命中项，再显式使用 `--approve-host-security-scan` 重试。ExperienceEngine 默认不会自动追加 unsafe-install 参数。
 
 #### Google Antigravity
 
@@ -669,11 +679,18 @@ ee repair codex
 ee repair antigravity
 ```
 
-OpenClaw 使用宿主原生的插件安装：
+OpenClaw 的宿主原生日常交互安装方式：
 
 ```bash
 openclaw plugins install @alan512/experienceengine
 openclaw gateway restart
+```
+
+operator 管理的回退路径和严格运行时验证：
+
+```bash
+ee install openclaw
+ee verify openclaw-production
 ```
 
 备份与恢复：
@@ -745,12 +762,24 @@ ee install claude-code
 
 ### OpenClaw
 
-OpenClaw 使用插件/运行时深度集成，而非通用的适配器（adapter）路径。
+OpenClaw 提供宿主原生插件交互和 package-local 运行时架构。当前公开发布物仍需分别通过 installed-artifact、真实 Gateway、重启恢复、repair/upgrade、npm 与 ClawHub 验证，之后才能把完整后台学习称为 supported。
 
 ```bash
 openclaw plugins install @alan512/experienceengine
 openclaw gateway restart
 ```
+
+下面三个状态必须分开理解：
+
+```text
+interaction_active
+learning_runtime_active
+production_learning_ready
+```
+
+插件加载或日常交互成功只满足第一层。`ee verify openclaw-production` 是严格的非零自动化 gate；`ee status` 仍是信息型命令。
+
+`artifact_runtime_validated` 也不同于 `support_claim_allowed`：某个精确发布物可以证明运行时可执行，但渠道、平台或质量发布门槛仍未完成。
 
 如果 OpenClaw 仅上报了全局工作空间，ExperienceEngine 将会隔离该会话，而不是错误地复用不相关的全局工作空间经验。
 

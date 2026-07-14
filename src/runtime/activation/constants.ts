@@ -83,6 +83,7 @@ export type GatewayPackageAuthorityOperation =
 
 export const OPENCLAW_NATIVE_OPERATIONS = [
   "status",
+  "prepare_package_activation",
   "pause_learning",
   "resume_learning",
   "retry_blocked_system_work",
@@ -99,6 +100,7 @@ export type OpenClawNativeOperation = typeof OPENCLAW_NATIVE_OPERATIONS[number];
 
 export const READ_ONLY_OPENCLAW_NATIVE_OPERATIONS = [
   "status",
+  "prepare_package_activation",
   "repair_explanation"
 ] as const satisfies readonly OpenClawNativeOperation[];
 

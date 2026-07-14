@@ -12,7 +12,7 @@ const CONFIG_COMMA_LIST_KEYS = new Set([
 ]);
 
 const usageText =
-  "Usage: ee <install openclaw|claude-code|codex|antigravity|upgrade openclaw|claude-code|codex|antigravity|repair [openclaw|codex|antigravity]|claude-hook|codex-hook|antigravity-hook|codex <exec ...>|agy <exec ...>|antigravity <activate-project ...>|codex-mcp-server|doctor [openclaw|claude-code|codex|antigravity]|status|stats|inspect|feedback|disable|enable|cool|retire>"
+  "Usage: ee <install openclaw|claude-code|codex|antigravity|upgrade openclaw|claude-code|codex|antigravity|repair [openclaw|codex|antigravity]|verify openclaw-production|claude-hook|codex-hook|antigravity-hook|codex <exec ...>|agy <exec ...>|antigravity <activate-project ...>|codex-mcp-server|doctor [openclaw|claude-code|codex|antigravity]|status|stats|inspect|feedback|disable|enable|cool|retire>"
   + " | helped|harmed"
   + " | backup|export|import <snapshot-path>|rollback <backup-id>"
   + " | maintenance embeddings-reset|embedding-smoke|governance drain|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
@@ -126,12 +126,17 @@ export const runCliCommand = async (command: string | undefined, args: string[])
     }
     case "repair": {
       const { runRepairCommand } = await import("./commands/repair.js");
-      await runRepairCommand(args[0]);
+      await runRepairCommand(args[0], args.slice(1));
       break;
     }
     case "status": {
       const { runStatusCommand } = await import("./commands/status.js");
       runStatusCommand({ verbose: args.includes("--verbose") || args.includes("-v") });
+      break;
+    }
+    case "verify": {
+      const { runVerifyCommand } = await import("./commands/verify.js");
+      runVerifyCommand(args[0]);
       break;
     }
     case "export": {

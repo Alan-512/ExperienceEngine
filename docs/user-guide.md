@@ -102,6 +102,12 @@ Install ExperienceEngine through the host setup flow for:
     - `openclaw plugins install @alan512/experienceengine`
   - after installing, restart the gateway before the first real task:
     - `openclaw gateway restart`
+  - this path currently proves host-native routine interaction; it does not by itself prove the production background runtime
+  - operator-managed fallback:
+    - `ee install openclaw`
+  - strict production-runtime gate:
+    - `ee verify openclaw-production`
+  - if OpenClaw requests security approval, review the scan and explicitly rerun the EE-managed command with `--approve-host-security-scan`; the unsafe flag is never added silently
 - `Codex`
   - EE-managed Codex setup:
     - `ee install codex`
@@ -618,10 +624,31 @@ ee install openclaw
 What happens:
 - ExperienceEngine installs as an OpenClaw plugin/runtime integration (not `src/adapters/`)
 - OpenClaw runtime events are used for intervention and persistence
-- OpenClaw uses the shared background learning loop by default
+- host-native routine interaction may become active before the production background runtime
+- package-local supervisor/worker activation is accepted only when closure, signed install attestation, configuration/route, activation handshake, lease, and fencing evidence are current
 - async hybrid posttask review stays disabled by default unless the runtime is explicitly overridden
 - management remains mostly through CLI fallback today
 - install ends with a short cold-start note so users know capture is active before the first formal hint appears
+
+Do not collapse these states:
+
+```text
+interaction_active
+learning_runtime_active
+production_learning_ready
+```
+
+Plugin load or a successful routine command can satisfy only `interaction_active`. `ee status` is informational; `ee verify openclaw-production` returns non-zero when current production authority is incomplete or stale.
+
+Published evidence is also split:
+
+```text
+installed_artifact_runtime_smoke_passed
+artifact_runtime_validated
+support_claim_allowed
+```
+
+The first is direct installed-package execution, the second additionally requires a real OpenClaw install/Gateway/agent-turn/restart path, and the final support claim remains gated by channel, platform, upgrade/repair, documentation, and quality/benchmark evidence.
 
 Local state changes:
 - OpenClaw plugin install state and config are updated through the OpenClaw CLI
@@ -633,6 +660,7 @@ Useful commands:
 ee doctor openclaw
 ee repair openclaw
 ee upgrade openclaw
+ee verify openclaw-production
 ```
 
 First validation:
@@ -645,7 +673,8 @@ openclaw plugins info experienceengine
 Success looks like:
 - doctor reports the adapter as installed
 - OpenClaw reports the plugin as loaded or enabled
-- a real task later produces ExperienceEngine runtime records under `~/.experienceengine`
+- `ee verify openclaw-production` reports current production authority when the background runtime is actually active
+- `production_learning_ready` may still remain false until the exact published channel and quality gates pass
 
 ### Claude Code Advanced Commands
 

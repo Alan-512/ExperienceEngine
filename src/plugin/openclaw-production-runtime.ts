@@ -84,6 +84,12 @@ import {
   sha256Text
 } from "../runtime/package/package-generation.js";
 import {
+  assertRuntimeInstallAttestationBinding,
+  createOrAdoptRuntimeInstallAttestation,
+  findRuntimeInstallAttestation,
+  fingerprintRuntimeInstallPath,
+} from "../runtime/package/install-attestation.js";
+import {
   readPersistedOpenClawInstallState,
   type PersistedOpenClawInstallState
 } from "./openclaw-install-state.js";
@@ -109,18 +115,15 @@ const assertNonEmpty = (value: string | undefined, code: string, field: string):
   return value;
 };
 
-const assertInstallRecord = (options: {
+const readMatchingInstallRecord = (options: {
   state: PersistedOpenClawInstallState | null;
   expectedVersion: string;
   expectedDataDir: string;
   expectedSqlitePath: string;
-}): PersistedOpenClawInstallState => {
+}): PersistedOpenClawInstallState | null => {
   const state = options.state;
   if (!state) {
-    throw new OpenClawProductionRuntimeBindingError(
-      "EE_OPENCLAW_INSTALL_RECORD_REQUIRED",
-      "The persisted OpenClaw install record is required before production runtime activation."
-    );
+    return null;
   }
   if (
     state.adapter !== "openclaw" ||
@@ -236,24 +239,104 @@ export const bindInstalledOpenClawProductionRuntime = async (options: {
       captureDir: options.config.captureDir
     }
   });
-  const installState = assertInstallRecord({
+  const observedAt = (options.now ?? (() => new Date()))().toISOString();
+  const home = await initializeRuntimeHomeIdentity({
+    writer: "gateway_service_controller",
+    explicitOpenClawHome: canonicalResolution.resolvedHome,
+    now: options.now
+  });
+  const installState = readMatchingInstallRecord({
     state: readPersistedOpenClawInstallState(paths.installStatePath),
     expectedVersion: manifest.package_version,
     expectedDataDir: canonicalResolution.resolvedHome,
     expectedSqlitePath: canonicalResolution.databasePath
   });
-  const observedAt = (options.now ?? (() => new Date()))().toISOString();
+  const requestedOrigin = installState?.installOrigin;
+  const existingAttestation = await findRuntimeInstallAttestation({
+    canonicalHome: home.resolution.resolvedHome,
+    integrityKey: home.integrityKey,
+    packageName: manifest.package_name,
+    packageVersion: manifest.package_version,
+    packageBuildId,
+    closureManifestDigest,
+    installedRoot: packageRoot,
+    hostStateDir: stateDir,
+    homeId: home.homeIdentity.home_id,
+    databasePath: canonicalResolution.databasePath,
+    installOrigin: requestedOrigin
+  });
+  if (
+    !existingAttestation &&
+    (requestedOrigin === "published_npm_attested" ||
+      requestedOrigin === "published_clawhub_attested")
+  ) {
+    throw new OpenClawProductionRuntimeBindingError(
+      "EE_OPENCLAW_PUBLISHED_ATTESTATION_REQUIRED",
+      "Published install origin requires a pre-issued signed registry attestation."
+    );
+  }
+  const installOrigin = existingAttestation?.install_origin ??
+    (requestedOrigin === "local_pack" ? "local_pack" : "host_native_unattested");
+  const securityApproval = installState?.securityApproval ?? {
+    scan_status: "not_run" as const,
+    scan_summary_digest: null,
+    approval_method: null,
+    approved_at: null
+  };
+  if (securityApproval.scan_status === "approval_required") {
+    throw new OpenClawProductionRuntimeBindingError(
+      "EE_OPENCLAW_SECURITY_APPROVAL_REQUIRED",
+      "OpenClaw host security approval is still required for this installed closure."
+    );
+  }
+  const installAttestation = existingAttestation ??
+    await createOrAdoptRuntimeInstallAttestation({
+      canonicalHome: home.resolution.resolvedHome,
+      integrityKey: home.integrityKey,
+      content: {
+        install_origin: installOrigin,
+        package_name: manifest.package_name,
+        package_version: manifest.package_version,
+        package_build_id: packageBuildId,
+        closure_manifest_digest: closureManifestDigest,
+        installed_root_fingerprint: fingerprintRuntimeInstallPath(packageRoot),
+        host_state_dir_fingerprint: fingerprintRuntimeInstallPath(stateDir),
+        home_id: home.homeIdentity.home_id,
+        database_path_fingerprint: fingerprintRuntimeInstallPath(
+          canonicalResolution.databasePath
+        ),
+        openclaw_version: installState?.openClawVersion ?? null,
+        node_version: process.version,
+        artifact_integrity: installState?.artifactIntegrity ??
+          `sha256:${closureManifestDigest}`,
+        registry_record_identity: null,
+        security_approval: securityApproval,
+        issued_by: "gateway_service_controller",
+        issued_at: observedAt
+      }
+    });
+  assertRuntimeInstallAttestationBinding({
+    attestation: installAttestation,
+    packageName: manifest.package_name,
+    packageVersion: manifest.package_version,
+    packageBuildId,
+    closureManifestDigest,
+    installedRoot: packageRoot,
+    hostStateDir: stateDir,
+    homeId: home.homeIdentity.home_id,
+    databasePath: canonicalResolution.databasePath
+  });
   const packageIdentity = createRuntimePackageGenerationIdentity({
     manifest,
-    artifactIntegrity: `sha256:${closureManifestDigest}`,
-    installRecordIdentity: deriveOpenClawInstallRecordIdentity({
-      installState,
-      packageRoot,
-      stateDir,
-      closureManifestDigest,
-      packageBuildId
-    }),
-    publishedChannel: "local_test",
+    artifactIntegrity: installAttestation.artifact_integrity,
+    installRecordIdentity: installAttestation.attestation_identity,
+    installOrigin: installAttestation.install_origin,
+    publishedChannel:
+      installAttestation.install_origin === "published_npm_attested"
+        ? "npm"
+        : installAttestation.install_origin === "published_clawhub_attested"
+          ? "clawhub"
+          : "local_test",
     compatibility: {
       supervisor_protocol_version: RUNTIME_SUPERVISOR_PROTOCOL_VERSION,
       worker_protocol_version: RUNTIME_WORKER_PROTOCOL_VERSION,
@@ -271,14 +354,14 @@ export const bindInstalledOpenClawProductionRuntime = async (options: {
     verified: true,
     package_identity: packageIdentity,
     closure_manifest_digest: closureManifestDigest,
-    evidence_class: "local_pack",
+    evidence_class:
+      installAttestation.install_origin === "published_npm_attested"
+        ? "published_npm"
+        : installAttestation.install_origin === "published_clawhub_attested"
+          ? "published_clawhub"
+          : "local_pack",
     verified_at: observedAt
   };
-  const home = await initializeRuntimeHomeIdentity({
-    writer: "gateway_service_controller",
-    explicitOpenClawHome: canonicalResolution.resolvedHome,
-    now: options.now
-  });
   const runtimeIdentityEnvelope = createGatewayRuntimeIdentityEnvelope({
     resolution: home.resolution,
     home: home.homeIdentity,
@@ -407,10 +490,11 @@ export const createDefaultInstalledOpenClawRuntimeService = (options: {
 
 export const OPENCLAW_INSTALLED_PRODUCTION_BINDING_CONTRACT = Object.freeze({
   requires_verified_closure: true,
-  requires_persisted_install_record: true,
+  mutable_install_state_is_runtime_authority: false,
+  host_native_signed_attestation_bootstrap: true,
   requires_host_state_dir: true,
   canonical_database_path_required: true,
-  published_channel_without_registry_evidence: "local_test",
+  install_origin_without_registry_evidence: "host_native_unattested",
   default_quality_projection: "not_production_ready",
   handshake_request_requires_verified_route_authority: true,
   default_current_configuration_recovery: true,

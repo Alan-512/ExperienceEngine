@@ -152,6 +152,38 @@ export const createRuntimeNativeControlHandlers = (options: {
       ? payload.authorization_id
       : idFactory();
 
+  const prepareInitialization: OpenClawNativeOperationHandler = async () => {
+    const descriptor = options.resolvePackageGeneration(
+      options.currentPluginPackageGenerationId
+    );
+    if (!descriptor) {
+      return {
+        ok: false,
+        operation: "prepare_package_activation",
+        code: "current_package_generation_not_resolvable",
+        result: null
+      };
+    }
+    const revisions = deriveCurrentRuntimeNativeRevisions({
+      db: options.db,
+      homeId: options.homeId
+    });
+    return {
+      ok: true,
+      operation: "prepare_package_activation",
+      code: "package_activation_request_prepared",
+      result: {
+        operation: "initialize_package_activation",
+        package_generation_id: options.currentPluginPackageGenerationId,
+        expected_projection_revision: revisions.projection_revision,
+        expected_launch_revision: revisions.launch_revision,
+        control_request_id: idFactory(),
+        authorization_id: idFactory(),
+        mutates_authority: false
+      }
+    };
+  };
+
   const initialize: OpenClawNativeOperationHandler = async (payload) => {
     const descriptor = options.resolvePackageGeneration(
       options.currentPluginPackageGenerationId
@@ -435,6 +467,7 @@ export const createRuntimeNativeControlHandlers = (options: {
   };
 
   const handlers: Partial<Record<OpenClawNativeOperationResult["operation"], OpenClawNativeOperationHandler>> = {
+    prepare_package_activation: prepareInitialization,
     pause_learning: pauseLearning,
     resume_learning: resumeLearning,
     initialize_package_activation: initialize,

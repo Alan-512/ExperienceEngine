@@ -19,3 +19,28 @@ ExperienceEngine SHALL describe the OpenClaw plugin as supporting the canonical 
 
 - **WHEN** one published channel passes but another has not been validated
 - **THEN** the passing channel's plugin support statement SHALL NOT be copied to the other channel
+
+### Requirement: Host-native lifecycle may bootstrap only constrained signed install evidence
+
+ExperienceEngine SHALL allow the OpenClaw Gateway service to create a host-native install attestation only after exact closure, lifecycle root/state, canonical home/database, package metadata, and machine-integrity checks pass.
+
+#### Scenario: No install attestation exists
+
+- **WHEN** the verified host lifecycle starts the exact installed closure and no attestation exists
+- **THEN** the allowed Gateway writer MAY atomically create `host_native_unattested` evidence signed by the machine integrity key
+- **AND** production binding SHALL derive package identity from that signed evidence
+
+#### Scenario: Conflicting attestation exists
+
+- **WHEN** package, root, home, state directory, build, closure, or origin conflicts with an existing attestation
+- **THEN** the Gateway SHALL fail closed and SHALL NOT overwrite or repair it implicitly
+
+### Requirement: Lifecycle failure is diagnosable without structured logger metadata
+
+ExperienceEngine SHALL place the stable runtime error code in the primary Gateway log message and persist safe runtime-health evidence.
+
+#### Scenario: Closure or install binding fails
+
+- **WHEN** the runtime service cannot bind
+- **THEN** the first log message SHALL include `experienceengine.runtime_service_inactive code=<stable-code>`
+- **AND** status/doctor SHALL expose the same code and a safe next action without requiring logger secondary metadata

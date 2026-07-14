@@ -63,7 +63,8 @@ const TEST_PACKAGE: RuntimePackageGenerationIdentity = {
   min_write_schema_version: "pending-s2",
   max_write_schema_version: "pending-s2",
   target_schema_version: "pending-s2",
-  published_channel: "local_test"
+      install_origin: "local_pack",
+      published_channel: "local_test"
 };
 
 describe("canonical runtime home identity", () => {

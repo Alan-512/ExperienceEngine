@@ -4,6 +4,7 @@ import {
 } from "../identity/constants.js";
 import type {
   RuntimeClosureManifest,
+  RuntimeInstallOrigin,
   RuntimePackageGenerationIdentity,
   RuntimePublishedChannel
 } from "../identity/types.js";
@@ -52,8 +53,16 @@ export const createRuntimePackageGenerationIdentity = (options: {
   artifactIntegrity: string;
   installRecordIdentity: string;
   publishedChannel: RuntimePublishedChannel;
+  installOrigin?: RuntimeInstallOrigin;
   compatibility: RuntimePackageCompatibility;
 }): RuntimePackageGenerationIdentity => {
+  const installOrigin = options.installOrigin ?? (
+    options.publishedChannel === "npm"
+      ? "published_npm_attested"
+      : options.publishedChannel === "clawhub"
+        ? "published_clawhub_attested"
+        : "local_pack"
+  );
   const identityWithoutGenerationId = {
     package_generation_schema_version: RUNTIME_PACKAGE_GENERATION_SCHEMA_VERSION,
     package_name: options.manifest.package_name,
@@ -65,6 +74,7 @@ export const createRuntimePackageGenerationIdentity = (options: {
     worker_entrypoint: requiredEntrypoint(options.manifest, "package_local_worker"),
     ...options.compatibility,
     profile_registry_digest: options.manifest.profile_registry_digest,
+    install_origin: installOrigin,
     published_channel: options.publishedChannel,
     closure_manifest_digest: options.manifest.closure_manifest_digest
   };
@@ -87,6 +97,7 @@ export const createRuntimePackageGenerationIdentity = (options: {
     min_write_schema_version: identityWithoutGenerationId.min_write_schema_version,
     max_write_schema_version: identityWithoutGenerationId.max_write_schema_version,
     target_schema_version: identityWithoutGenerationId.target_schema_version,
+    install_origin: identityWithoutGenerationId.install_origin,
     published_channel: identityWithoutGenerationId.published_channel
   };
 };

@@ -1,6 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import {
+  invokeResolvedWindowsOpenClaw,
+  resolveWindowsOpenClawExecutable
+} from "./windows-openclaw-resolver.js";
 
 export type OpenClawCommand = {
   bin: string;
@@ -73,15 +77,19 @@ export const buildOpenClawInstallCommands = (
   installSource: string,
   pluginId: string,
   installAction: OpenClawInstallAction,
-  pluginConfig: OpenClawConfigPayload
+  pluginConfig: OpenClawConfigPayload,
+  options: { approveHostSecurityScan?: boolean } = {}
 ): OpenClawCommand[] => {
+  const securityApprovalArgs = options.approveHostSecurityScan
+    ? ["--dangerously-force-unsafe-install"]
+    : [];
   const commands: OpenClawCommand[] = [
     {
       bin: "openclaw",
       args:
         installAction === "update"
-          ? ["plugins", "update", pluginId]
-          : ["plugins", "install", installSource],
+          ? ["plugins", "update", pluginId, ...securityApprovalArgs]
+          : ["plugins", "install", installSource, ...securityApprovalArgs],
       description:
         installAction === "update"
           ? "Update the existing ExperienceEngine plugin install in OpenClaw"
@@ -147,6 +155,19 @@ export const buildOpenClawAllowSetCommand = (pluginIds: string[]): OpenClawComma
 });
 
 export const defaultOpenClawCommandRunner: OpenClawCommandRunner = (command) => {
+  if (process.platform === "win32" && command.bin.toLowerCase() === "openclaw") {
+    const executable = resolveWindowsOpenClawExecutable({
+      operatorConfiguredPath:
+        process.env.EXPERIENCE_ENGINE_OPENCLAW_EXECUTABLE,
+      hostProvidedPath: isAbsolute(command.bin) ? command.bin : undefined,
+      env: process.env
+    });
+    return invokeResolvedWindowsOpenClaw({
+      executable,
+      args: command.args,
+      env: process.env
+    });
+  }
   return execFileSync(command.bin, command.args, {
     stdio: "pipe",
     encoding: "utf8"

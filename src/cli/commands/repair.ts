@@ -11,7 +11,10 @@ import {
 } from "../../install/codex-installer.js";
 import { buildCodexHookReviewGuidance } from "../../install/public-install.js";
 
-export const runRepairCommand = async (target?: string): Promise<void> => {
+export const runRepairCommand = async (
+  target?: string,
+  args: string[] = []
+): Promise<void> => {
   if (!target) {
     console.log("Repair summary:");
     console.log("- OpenClaw: automated repair is available with `ee repair openclaw` when doctor reports host drift.");
@@ -22,7 +25,7 @@ export const runRepairCommand = async (target?: string): Promise<void> => {
   }
 
   if (target !== "openclaw" && target !== "codex" && target !== "antigravity") {
-    console.log("Usage: ee repair [openclaw|codex|antigravity]");
+    console.log("Usage: ee repair [openclaw|codex|antigravity] [--approve-host-security-scan]");
     return;
   }
 
@@ -73,7 +76,9 @@ export const runRepairCommand = async (target?: string): Promise<void> => {
     return;
   }
 
-  const report = repairOpenClawAdapter();
+  const report = repairOpenClawAdapter({
+    approveHostSecurityScan: args.includes("--approve-host-security-scan")
+  });
   console.log(`Repaired ${report.adapter} adapter wiring.`);
   console.log(`Linked package root: ${report.packageRoot}`);
   console.log(`Install source: ${report.installSource}`);

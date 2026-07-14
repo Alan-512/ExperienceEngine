@@ -1,5 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolveExperienceEnginePaths } from "../config/path-resolver.js";
+import type {
+  RuntimeInstallOrigin,
+  RuntimeInstallSecurityApproval
+} from "../runtime/identity/types.js";
 
 type InstallerOptions = {
   env?: NodeJS.ProcessEnv;
@@ -13,6 +17,11 @@ export type PersistedOpenClawInstallState = {
   packageRoot?: string;
   installSource?: string;
   installMode?: string;
+  installOrigin?: RuntimeInstallOrigin;
+  artifactIntegrity?: string;
+  registryRecordIdentity?: string | null;
+  openClawVersion?: string | null;
+  securityApproval?: RuntimeInstallSecurityApproval;
   hostWiring?: {
     wired?: boolean;
     restartRecommended?: boolean;

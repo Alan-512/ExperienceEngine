@@ -195,6 +195,9 @@ describe("runtime package closure", () => {
       role: "runtime_identity_errors",
       path: "dist/runtime/identity/errors.js"
     }));
+    expect(first.required_runtime_files.some(
+      (asset) => asset.path.startsWith("dist/runtime/distribution/")
+    )).toBe(false);
     expect(first.required_schema_and_migrations).toHaveLength(3);
     expect(manifestText).not.toContain("machine-secrets/integrity-key.json");
     expect(manifestText).not.toContain("key_material");
@@ -442,6 +445,7 @@ describe("runtime package closure", () => {
       closure_manifest_digest: string;
       [key: string]: unknown;
     };
+    const tamperedRole = String(parsed.required_runtime_files[0].role);
     parsed.required_runtime_files[0].path = "C:\\escaped-runtime.js";
     const { closure_manifest_digest: _discardedDigest, ...content } = parsed;
     parsed.closure_manifest_digest = sha256Text(canonicalJson(content));
@@ -450,8 +454,8 @@ describe("runtime package closure", () => {
     expect(validateRuntimeClosureManifest(root)).toMatchObject({
       valid: false,
       issues: expect.arrayContaining([
-        expect.stringMatching(/^asset_missing:runtime_identity_constants:/u),
-        "required_role_mismatch:runtime_identity_constants"
+        expect.stringMatching(new RegExp(`^asset_missing:${tamperedRole}:`, "u")),
+        `required_role_mismatch:${tamperedRole}`
       ])
     });
   });

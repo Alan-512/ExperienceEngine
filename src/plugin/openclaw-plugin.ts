@@ -41,6 +41,9 @@ import {
 import {
   createDefaultInstalledOpenClawRuntimeService
 } from "./openclaw-production-runtime.js";
+import {
+  writeOpenClawRuntimeHealthEvidence
+} from "./openclaw-runtime-health.js";
 
 const loadOpenClawRoutineInteractionModule = () => import("./openclaw-routine-interaction.js");
 
@@ -164,19 +167,60 @@ class OpenClawExperiencePlugin implements ExperiencePlugin {
       start: async (context) => {
         const lifecycle = await this.nativeRuntimeService.start(context);
         if (!lifecycle.ok) {
+          try {
+            writeOpenClawRuntimeHealthEvidence({
+              canonicalHome: this.runtime.config.dataDir,
+              lifecycleState: "failed",
+              code: lifecycle.code,
+              detail: lifecycle.detail,
+              nextAction: "Run `ee verify openclaw-production` and inspect the stable runtime failure code."
+            });
+          } catch {
+            // Diagnostic persistence must not replace the authoritative lifecycle failure.
+          }
           (api.logger ?? api.log)?.warn?.(
-            "experienceengine.runtime_service_inactive",
+            `experienceengine.runtime_service_inactive code=${lifecycle.code}`,
             lifecycle
           );
+          return;
+        }
+        const status = await this.nativeRuntimeService.execute({
+          operation: "status"
+        });
+        try {
+          writeOpenClawRuntimeHealthEvidence({
+            canonicalHome: this.runtime.config.dataDir,
+            lifecycleState: "active",
+            code: status.code,
+            statusProjection: status.result,
+            nextAction: status.ok
+              ? "Use the three runtime readiness projections; plugin load alone is not production readiness."
+              : "Run `ee verify openclaw-production` and inspect the current activation authority."
+          });
+        } catch {
+          // Health evidence is diagnostic and cannot change runtime authority.
         }
       },
       stop: async (context) => {
         const lifecycle = await this.nativeRuntimeService.stop(context);
         if (!lifecycle.ok) {
           (api.logger ?? api.log)?.warn?.(
-            "experienceengine.runtime_service_stop_failed",
+            `experienceengine.runtime_service_stop_failed code=${lifecycle.code}`,
             lifecycle
           );
+        }
+        try {
+          writeOpenClawRuntimeHealthEvidence({
+            canonicalHome: this.runtime.config.dataDir,
+            lifecycleState: lifecycle.ok ? "inactive" : "failed",
+            code: lifecycle.code,
+            detail: lifecycle.detail,
+            nextAction: lifecycle.ok
+              ? "Start the OpenClaw Gateway to reactivate the package-local runtime."
+              : "Inspect the stable stop failure code before restarting the Gateway."
+          });
+        } catch {
+          // Diagnostic persistence must not alter stop behavior.
         }
       }
     });

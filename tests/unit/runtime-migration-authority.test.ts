@@ -48,6 +48,7 @@ const packageIdentity: RuntimePackageGenerationIdentity = {
   min_write_schema_version: "runtime-schema-v1",
   max_write_schema_version: "runtime-schema-v1",
   target_schema_version: "runtime-schema-v1",
+  install_origin: "local_pack",
   published_channel: "local_test"
 };
 

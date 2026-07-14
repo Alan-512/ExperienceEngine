@@ -957,6 +957,15 @@ export const runDoctorCommand = async (
       config_matches: status.hostState.configMatches,
       restart_recommended: status.hostWiring.restartRecommended,
       install_drift: status.hostState.driftDetected ?? false,
+      install_origin: status.installEvidence?.origin ?? "",
+      artifact_integrity: status.installEvidence?.artifactIntegrity ?? "",
+      registry_record_identity:
+        status.installEvidence?.registryRecordIdentity ?? "",
+      host_security_scan: status.installEvidence?.securityScanStatus ?? "",
+      host_security_scan_digest:
+        status.installEvidence?.securityScanSummaryDigest ?? "",
+      recorded_openclaw_version:
+        status.installEvidence?.openClawVersion ?? "",
       path_mode: status.pathMode,
       openclaw_workspace: status.workspace.path ?? "",
       openclaw_workspace_isolation: status.workspace.isolationBehavior,

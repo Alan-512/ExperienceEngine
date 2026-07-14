@@ -1,5 +1,12 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdtempSync,
+  mkdirSync,
+  readFileSync,
+  rmSync,
+  writeFileSync
+} from "node:fs";
 import { dirname, join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
@@ -371,7 +378,14 @@ Recorded version: 0.2.0`;
       "@modelcontextprotocol/sdk": "^1.27.1",
       zod: "^3.25.76"
     });
-  }, 15000);
+    expect(existsSync(join(
+      stageDir,
+      "dist",
+      "runtime",
+      "package",
+      "runtime-closure-manifest.json"
+    ))).toBe(true);
+  }, 30000);
 
   it("packages the OpenClaw compatibility metadata required by ClawHub publishing", () => {
     const { stageDir } = getCachedPackagedTarball();
@@ -406,22 +420,21 @@ Recorded version: 0.2.0`;
     expect(entries).toContain("package/dist/runtime/service.js");
     expect(entries).toContain("package/dist/store/sqlite/db.js");
     expect(entries).toContain("package/dist/store/sqlite/schema.sql");
+    expect(entries).toContain("package/dist/runtime/package/runtime-closure-manifest.json");
     expect(entries).toContain("package/dist/plugin/openclaw-install-state.js");
     expect(entries).toContain("package/dist/hybrid/capsule-builder.js");
     expect(entries).toContain("package/dist/hybrid/worker-client.js");
     expect(entries).toContain("package/dist/hybrid/postmortem-provider-client.js");
 
     expect(entries).not.toContain("package/dist/cli/index.js");
-    expect(entries).not.toContain("package/dist/analyzer/llm-learning-gate.js");
-    expect(entries).not.toContain("package/dist/distillation/queue-worker.js");
     expect(entries).not.toContain("package/dist/install/openclaw-installer.js");
     expect(entries).not.toContain("package/dist/install/openclaw-cli.js");
-    expect(entries).not.toContain("package/dist/store/vector/api-embedding-provider.js");
-    expect(entries).not.toContain("package/dist/store/vector/local-provider.js");
     expect(entries).not.toContain("package/dist/install/codex-installer.js");
     expect(entries).not.toContain("package/dist/evaluation/openclaw-scenarios.js");
     expect(entries).not.toContain("package/dist/maintenance/claude-validate-print.js");
     expect(entries).not.toContain("package/dist/adapters/codex/mcp-server.js");
+    expect(entries).not.toContain("package/dist/runtime/distribution/npm-artifact-validator.js");
+    expect(entries).not.toContain("package/dist/runtime/distribution/clawhub-artifact-validator.js");
   }, 15000);
 
   it("reports install status and resolved paths for doctor output", () => {
@@ -636,7 +649,7 @@ Recorded version: 0.2.0`;
     expect(payload.installMode).toBe("reinstalled-packaged-plugin");
   });
 
-  it("removes an existing safe reinstall directory before asking OpenClaw to install", () => {
+  it("moves an existing safe reinstall directory aside before asking OpenClaw to install", () => {
     const homeDir = makeTempDir();
     const commands: string[] = [];
     const installPath = join(homeDir, ".openclaw", "extensions", "experienceengine");
@@ -672,8 +685,8 @@ Recorded version: 0.2.0`;
       }
     });
 
-    expect(commands[2]).toBe("openclaw config set plugins.allow [] --json");
-    expect(commands[3]).toMatch(/^openclaw plugins install /);
+    expect(commands[2]).toMatch(/^openclaw plugins install /);
+    expect(commands).not.toContain("openclaw config set plugins.allow [] --json");
   });
 
   it("refuses to delete an install path that points at a live git working tree", () => {
@@ -708,5 +721,170 @@ Recorded version: 0.2.0`;
         }
       })
     ).toThrow(/refusing to delete.*git working tree/i);
+  });
+
+  it("returns approval-required and restores the old plugin when the host security scan blocks", () => {
+    const homeDir = makeTempDir();
+    const installPath = join(homeDir, ".openclaw", "extensions", "experienceengine");
+    const marker = join(installPath, "old-version.txt");
+    mkdirSync(installPath, { recursive: true });
+    writeFileSync(marker, "old-working-version", "utf8");
+
+    expect(() => installOpenClawAdapter({
+      homeDir,
+      packageSourceBuilder() {
+        return join(homeDir, "tmp", "candidate.tgz");
+      },
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        if (key === "openclaw config get plugins") {
+          return JSON.stringify({
+            allow: ["experienceengine"],
+            load: { paths: [] },
+            installs: {
+              experienceengine: {
+                source: "path",
+                sourcePath: "fixture-source",
+                installPath
+              }
+            }
+          });
+        }
+        if (key.startsWith("openclaw plugins install ")) {
+          throw new Error(
+            "security scan blocked install; use --dangerously-force-unsafe-install"
+          );
+        }
+        return "";
+      }
+    })).toThrow(expect.objectContaining({
+      code: "EE_OPENCLAW_SECURITY_APPROVAL_REQUIRED"
+    }));
+    expect(readFileSync(marker, "utf8")).toBe("old-working-version");
+    const paths = resolveExperienceEnginePaths({ adapter: "openclaw", homeDir });
+    expect(existsSync(paths.installStatePath)).toBe(false);
+  });
+
+  it("retries only the exact install command after explicit security approval", () => {
+    const homeDir = makeTempDir();
+    const commands: string[] = [];
+    let installAttempt = 0;
+    const report = installOpenClawAdapter({
+      homeDir,
+      approveHostSecurityScan: true,
+      now: () => new Date("2026-07-14T12:00:00.000Z"),
+      packageSourceBuilder() {
+        return join(homeDir, "tmp", "candidate.tgz");
+      },
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        commands.push(key);
+        if (key === "openclaw config get plugins") {
+          return JSON.stringify({ load: { paths: [] }, installs: {} });
+        }
+        if (key.startsWith("openclaw plugins install ")) {
+          installAttempt += 1;
+          if (installAttempt === 1) {
+            throw new Error(
+              "security scan blocked install; use --dangerously-force-unsafe-install"
+            );
+          }
+          expect(key).toContain("--dangerously-force-unsafe-install");
+        }
+        return "";
+      }
+    });
+    expect(installAttempt).toBe(2);
+    expect(report.securityApproval).toMatchObject({
+      scan_status: "approved",
+      approval_method: "explicit_cli",
+      approved_at: "2026-07-14T12:00:00.000Z"
+    });
+    expect(report.securityApproval.scan_summary_digest).toMatch(/^[a-f0-9]{64}$/u);
+    expect(commands.filter((command) =>
+      command.includes("dangerously-force-unsafe-install")
+    )).toHaveLength(1);
+  });
+
+  it("restores the old plugin and install state when post-install closure verification fails", () => {
+    const homeDir = makeTempDir();
+    const installPath = join(homeDir, ".openclaw", "extensions", "experienceengine");
+    const marker = join(installPath, "old-version.txt");
+    mkdirSync(installPath, { recursive: true });
+    writeFileSync(marker, "old-working-version", "utf8");
+    const paths = resolveExperienceEnginePaths({ adapter: "openclaw", homeDir });
+    mkdirSync(dirname(paths.installStatePath), { recursive: true });
+    writeFileSync(paths.installStatePath, "old-install-state", "utf8");
+
+    expect(() => installOpenClawAdapter({
+      homeDir,
+      packageSourceBuilder() {
+        return join(homeDir, "tmp", "candidate.tgz");
+      },
+      postInstallVerifier() {
+        throw new Error("installed closure mismatch");
+      },
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        if (key === "openclaw config get plugins") {
+          return JSON.stringify({
+            load: { paths: [] },
+            installs: {
+              experienceengine: {
+                source: "path",
+                sourcePath: "fixture-source",
+                installPath
+              }
+            }
+          });
+        }
+        return "";
+      }
+    })).toThrow("installed closure mismatch");
+    expect(readFileSync(marker, "utf8")).toBe("old-working-version");
+    expect(readFileSync(paths.installStatePath, "utf8")).toBe("old-install-state");
+  });
+
+  it("restores an existing npm plugin when upgrade is interrupted after candidate replacement", () => {
+    const homeDir = makeTempDir();
+    const installPath = join(homeDir, ".openclaw", "extensions", "experienceengine");
+    const marker = join(installPath, "version.txt");
+    mkdirSync(installPath, { recursive: true });
+    writeFileSync(marker, "old-working-version", "utf8");
+    const paths = resolveExperienceEnginePaths({ adapter: "openclaw", homeDir });
+    mkdirSync(dirname(paths.installStatePath), { recursive: true });
+    writeFileSync(paths.installStatePath, "old-upgrade-state", "utf8");
+
+    expect(() => installOpenClawAdapter({
+      homeDir,
+      packageSourceBuilder() {
+        return join(homeDir, "tmp", "candidate.tgz");
+      },
+      runner(command) {
+        const key = [command.bin, ...command.args].join(" ");
+        if (key === "openclaw config get plugins") {
+          return JSON.stringify({
+            load: { paths: [] },
+            installs: {
+              experienceengine: {
+                source: "npm",
+                spec: "@alan512/experienceengine",
+                installPath
+              }
+            }
+          });
+        }
+        if (key === "openclaw plugins update experienceengine") {
+          writeFileSync(marker, "partially-installed-candidate", "utf8");
+          return "updated";
+        }
+        if (key.startsWith("openclaw config set plugins.entries.experienceengine.config")) {
+          throw new Error("simulated interrupted upgrade");
+        }
+        return "";
+      }
+    })).toThrow("simulated interrupted upgrade");
+    expect(readFileSync(marker, "utf8")).toBe("old-working-version");
+    expect(readFileSync(paths.installStatePath, "utf8")).toBe("old-upgrade-state");
   });
 });
