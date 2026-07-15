@@ -35,6 +35,8 @@ const openclawExecutable =
   process.env.EXPERIENCE_ENGINE_OPENCLAW_EXECUTABLE?.trim();
 const seedConfigPath =
   process.env.EXPERIENCE_ENGINE_OPENCLAW_SEED_CONFIG?.trim();
+const requestedArtifactPath =
+  process.env.EXPERIENCE_ENGINE_LOCAL_PACK_ARTIFACT?.trim();
 const traceEnabled =
   process.env.EXPERIENCE_ENGINE_VALIDATION_TRACE === "true";
 const tracePath =
@@ -93,9 +95,17 @@ try {
   await mkdir(join(runtimeHome, "adapters", "openclaw"), { recursive: true });
   await mkdir(join(runtimeHome, "sqlite"), { recursive: true });
   trace("runtime_directories_ready");
-  trace("tarball_build_started");
-  const tarballPath = createOpenClawInstallTarball(packageRoot, paths);
-  trace("tarball_build_completed");
+  const tarballPath = requestedArtifactPath
+    ? resolve(requestedArtifactPath)
+    : (() => {
+        trace("tarball_build_started");
+        const builtArtifact = createOpenClawInstallTarball(packageRoot, paths);
+        trace("tarball_build_completed");
+        return builtArtifact;
+      })();
+  if (requestedArtifactPath) {
+    trace("provided_tarball_selected");
+  }
   const tarballBytes = await readFile(tarballPath);
   trace("tarball_read_completed");
   const artifactIntegrity = `sha256:${createHash("sha256")
