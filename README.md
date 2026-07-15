@@ -354,7 +354,7 @@ Then verify current authority from the operator CLI:
 ee verify openclaw-production
 ```
 
-The implementation has passed local-pack real-host preflight on WSL/Linux, native Windows, and OpenClaw `2026.7.1` under WSL. The final exact `v0.5.0` candidate must still be rebuilt after the current remediation changes, and exact npm and ClawHub artifacts require their own post-publication validation. The full support claim remains quality-gated.
+The implementation has passed local-pack real-host preflight on WSL/Linux, native Windows, and OpenClaw `2026.7.1` under WSL. The publishable `v0.5.0` artifact must be rebuilt from the committed release boundary and match the external candidate evidence; exact npm and ClawHub artifacts then require their own post-publication validation. The full support claim remains quality-gated.
 
 The operator fallback is:
 

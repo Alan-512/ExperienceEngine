@@ -742,7 +742,7 @@ Current prepublication evidence:
 - local-pack real-host preflight passed on OpenClaw `2026.4.1` under Linux/WSL and native Windows
 - local-pack real-host preflight also passed on OpenClaw `2026.7.1` under WSL with Node `24.18.0`
 - the previous tarball is superseded by later documentation and remediation changes and must not be published
-- the final exact `v0.5.0` candidate has not yet been rebuilt from the final committed release boundary
+- only an artifact rebuilt from the committed `v0.5.0` release boundary and matching the external candidate evidence may be published
 - exact npm and ClawHub `v0.5.0` artifacts still require independent post-publication validation
 - the matched-block benchmark/quality gate remains separate from runtime activation
 

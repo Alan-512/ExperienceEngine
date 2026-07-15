@@ -354,7 +354,7 @@ prepare 命令是只读的。将其 `result` 字段返回的精确 JSON 对象�
 ee verify openclaw-production
 ```
 
-当前实现已在 WSL/Linux、原生 Windows，以及 WSL 上的 OpenClaw `2026.7.1` 通过 local-pack 真实宿主 preflight。完成当前 remediation 修改后仍需重新构建最终精确的 `v0.5.0` 候选包；精确 npm 与 ClawHub 发布物也需要各自独立的发布后验证。完整支持声明仍受质量门槛约束。
+当前实现已在 WSL/Linux、原生 Windows，以及 WSL 上的 OpenClaw `2026.7.1` 通过 local-pack 真实宿主 preflight。可发布的 `v0.5.0` artifact 必须从已提交的 release boundary 重建并与外部候选证据一致；精确 npm 与 ClawHub 发布物随后仍需要各自独立的发布后验证。完整支持声明仍受质量门槛约束。
 
 operator 回退路径为：
 
