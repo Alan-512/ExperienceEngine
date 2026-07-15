@@ -102,7 +102,7 @@ Install ExperienceEngine through the host setup flow for:
     - `openclaw plugins install @alan512/experienceengine`
   - after installing, restart the gateway before the first real task:
     - `openclaw gateway restart`
-  - `v0.5.0` contains the package-local supervisor/worker runtime, but plugin load alone proves only routine interaction
+  - `v0.5.0` contains the package-local supervisor/worker runtime; exact npm validation passed, while ClawHub native installation currently fails before plugin import because runtime dependencies are omitted
   - use the authenticated package activation flow below when `learning_runtime_active` is not yet true
   - operator-managed fallback:
     - `ee install openclaw`
@@ -737,13 +737,13 @@ Success looks like:
 - `ee verify openclaw-production` reports current production authority when the background runtime is actually active
 - `production_learning_ready` may still remain false until the exact published channel and quality gates pass
 
-Current prepublication evidence:
+Current publication evidence:
 
 - local-pack real-host preflight passed on OpenClaw `2026.4.1` under Linux/WSL and native Windows
 - local-pack real-host preflight also passed on OpenClaw `2026.7.1` under WSL with Node `24.18.0`
-- the previous tarball is superseded by later documentation and remediation changes and must not be published
-- only an artifact rebuilt from the committed `v0.5.0` release boundary and matching the external candidate evidence may be published
-- exact npm and ClawHub `v0.5.0` artifacts still require independent post-publication validation
+- the superseded prepublication tarballs remain historical evidence and were not published
+- npm, GitHub Releases, and ClawHub received the exact evidence-bound `v0.5.0` artifact
+- exact npm `v0.5.0` published validation passed; ClawHub `v0.5.0` passed byte/closure checks but failed native runtime import because required dependencies were not installed
 - the matched-block benchmark/quality gate remains separate from runtime activation
 
 ### Claude Code Advanced Commands

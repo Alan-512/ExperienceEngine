@@ -41,6 +41,19 @@ const openclawExecutable =
   process.env.EXPERIENCE_ENGINE_OPENCLAW_EXECUTABLE?.trim() || null;
 const requireLiveHost =
   process.env.EXPERIENCE_ENGINE_REQUIRE_LIVE_HOST === "true";
+const requestedNativeCommandTransport =
+  process.env.EXPERIENCE_ENGINE_OPENCLAW_NATIVE_COMMAND_TRANSPORT?.trim() ||
+  null;
+if (
+  requestedNativeCommandTransport &&
+  !["cli", "direct_gateway"].includes(requestedNativeCommandTransport)
+) {
+  throw new Error(
+    "EXPERIENCE_ENGINE_OPENCLAW_NATIVE_COMMAND_TRANSPORT must be cli or direct_gateway."
+  );
+}
+const validationTraceEnabled =
+  process.env.EXPERIENCE_ENGINE_VALIDATION_TRACE === "true";
 
 if (requireLiveHost && !openclawExecutable) {
   throw new Error(
@@ -73,6 +86,9 @@ try {
           });
           return runOpenClawHostValidation({
             artifact,
+            installSource: `clawhub:${packageName}@${packageVersion}`,
+            acknowledgeClawHubRisk: true,
+            expectedInstalledPackageRoot: packageRoot,
             openclawExecutable,
             validationRoot: join(validationRoot, "real-host"),
             runtimeHome,
@@ -92,6 +108,17 @@ try {
             approveHostSecurityScan:
               process.env.EXPERIENCE_ENGINE_APPROVE_HOST_SECURITY_SCAN ===
               "true",
+            nativeCommandTransport:
+              requestedNativeCommandTransport || undefined,
+            onProgress: validationTraceEnabled
+              ? (stage) => process.stderr.write(
+                  `${JSON.stringify({
+                    event: "experienceengine.published_validation_progress",
+                    channel: "clawhub",
+                    stage
+                  })}\n`
+                )
+              : undefined,
             prepareRuntimeAuthority: fixture.prepareRuntimeAuthority,
             cleanupRuntimeFixture: fixture.cleanup
           });

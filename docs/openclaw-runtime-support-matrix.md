@@ -23,8 +23,8 @@ This matrix separates routine plugin interaction, package-local runtime executio
 | Previous local `v0.5.0` candidate | Superseded; must not be published | The earlier tarball passed its then-current prepublication checks, but later documentation and remediation changes altered the package contents. Its README bytes no longer match the working tree, so it is historical evidence only and cannot be used as the release artifact. |
 | Current remediation working tree | Gates passed; not a release artifact | Strict activation payload tests, PowerShell 7 inherited-module-path full tests, build, closure validation, production binding, OpenSpec strict validation, and a 1135-file npm dry-run passed. The projected archive is not a committed or publishable candidate. |
 | Final exact `v0.5.0` candidate | Evidence-bound publication artifact | The publishable artifact must be rebuilt from the committed remediation release boundary and match the externally recorded size, integrity, closure digest, build id, and packaged-document hashes. A differently built archive is a different candidate and must be revalidated. |
-| Published npm `0.5.0` | Pending | Requires publication, exact registry download, integrity verification, clean-home execution, and real-host validation for the downloaded artifact. |
-| Published ClawHub `0.5.0` | Pending | Requires independent channel publication, exact artifact download, closure validation, clean-home execution, and real-host validation. npm evidence cannot satisfy this row. |
+| Published npm `0.5.0` | Passed | The exact `1133532`-byte registry artifact passed integrity, closure, clean-home installed runtime, OpenClaw `2026.7.1` native activation, real agent turn, protected queue, restart recovery, and graceful shutdown validation. |
+| Published ClawHub `0.5.0` | Failed at live-host import | The independently downloaded artifact is byte-identical and its closure is valid, but the ClawHub native installer did not install declared runtime dependencies. Runtime inspection reports missing `@modelcontextprotocol/sdk` and `zod`; plugin import fails before native commands can register. |
 | Native Windows live host | Passed for local-pack preflight | OpenClaw `2026.4.1`, Node `v24.3.0`, validated `.cmd` entrypoint resolution, authenticated direct Gateway RPC, real activation commands and agent turn, fenced queue semantics, restart recovery, and OpenClaw-owned graceful Gateway shutdown through the Windows stdin-to-`SIGINT` lifecycle bridge. This is not published-artifact evidence. |
 
 ## Support conclusions
@@ -35,9 +35,9 @@ Current conclusion:
 
 ```text
 local_pack_live_host_preflight = passed
-published_npm_artifact_runtime_validated = false
+published_npm_artifact_runtime_validated = true
 published_clawhub_artifact_runtime_validated = false
 support_claim_allowed = false
 ```
 
-The package-local production runtime is implemented and has passed local-pack real-host validation. Public documentation must still keep the full production background-learning support claim gated on exact published npm/ClawHub evidence and the separate quality/benchmark publication gate.
+The package-local production runtime and exact npm channel are validated. ClawHub still requires a new immutable artifact that carries a link-free runtime dependency bundle, followed by independent published-channel validation. The separate quality/benchmark gate also remains open.

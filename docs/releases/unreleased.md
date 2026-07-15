@@ -1,6 +1,6 @@
 # ExperienceEngine — Unreleased
 
-Release candidate metadata is now prepared for `v0.5.0`. No npm package, ClawHub artifact, Git tag, or GitHub Release has been published for this candidate. See `docs/releases/v0.5.0.md` for the candidate release summary and remaining publication gates.
+`v0.5.0` is published to npm, GitHub Releases, and ClawHub from the evidence-bound artifact. Independent npm validation passed the complete OpenClaw `2026.7.1` live-host sequence. ClawHub byte/closure validation passed, but its native install path omitted required runtime dependencies and failed plugin import, so ClawHub published acceptance and the separate quality gate remain open.
 
 ## OpenClaw runtime closure remediation
 
@@ -30,6 +30,8 @@ Release candidate metadata is now prepared for `v0.5.0`. No npm package, ClawHub
 - Latest-stable WSL compatibility: OpenClaw `2026.7.1` with Node `24.18.0` passed the full local-pack real-host path, including a real model turn, production semantic completion, stale-authority rejection, restart recovery, and graceful shutdown evidence.
 - Published npm `0.4.8`: correctly rejected at closure step 1 because the old artifact lacks the embedded manifest.
 - Published ClawHub `0.4.8`: correctly rejected independently at closure step 1.
-- New npm/ClawHub publication and the separate quality/benchmark publication gate remain pending. Native Windows local-pack live-host validation is complete but does not satisfy either published channel.
+- Published npm `0.5.0`: exact registry bytes, installed closure binding, and the complete OpenClaw `2026.7.1` live-host gate passed.
+- Published ClawHub `0.5.0`: exact clean artifact bytes and closure passed; native install failed because OpenClaw installed the package without its declared runtime dependencies.
+- The ClawHub packaging remediation requires a new immutable patch release built from a clean npm staging root; the separate quality/benchmark publication gate also remains pending.
 
 See `docs/openclaw-runtime-support-matrix.md` for the exact evidence boundaries.

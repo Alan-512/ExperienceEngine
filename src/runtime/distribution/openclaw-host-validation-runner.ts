@@ -64,6 +64,11 @@ const execFileAsync = promisify(execFile);
 const WINDOWS_GATEWAY_GRACEFUL_STOP_COMMAND =
   "__experienceengine_openclaw_gateway_graceful_stop__";
 
+export const OPENCLAW_DIRECT_GATEWAY_PROTOCOL_RANGE = Object.freeze({
+  minProtocol: 3,
+  maxProtocol: 4
+});
+
 const WINDOWS_GATEWAY_WRAPPER_SOURCE = `
 import { pathToFileURL } from "node:url";
 
@@ -208,6 +213,26 @@ export type OpenClawInstalledPackageVerifier = (installedRoot: string) => Promis
   packageBuildId: string;
   closureManifestDigest: string;
 }>;
+
+type OpenClawInstalledPackageIdentity = Awaited<
+  ReturnType<OpenClawInstalledPackageVerifier>
+>;
+
+export const assertOpenClawInstalledPackageMatchesExpected = (
+  installedPackage: OpenClawInstalledPackageIdentity,
+  expectedPackage: OpenClawInstalledPackageIdentity
+): void => {
+  if (
+    installedPackage.packageBuildId !== expectedPackage.packageBuildId ||
+    installedPackage.closureManifestDigest !==
+      expectedPackage.closureManifestDigest
+  ) {
+    throw new PublishedRuntimeClosureError(
+      "EE_PUBLISHED_ARTIFACT_INSTALL_INVALID",
+      "OpenClaw installed package closure does not match the independently materialized published artifact."
+    );
+  }
+};
 
 export type OpenClawPublishedAttestationIssuer = (options: {
   installedRoot: string;
@@ -714,8 +739,7 @@ const createDirectGatewayRpcClient = async (options: {
             platform: process.platform
           });
           await requestRaw("connect", {
-            minProtocol: 3,
-            maxProtocol: 3,
+            ...OPENCLAW_DIRECT_GATEWAY_PROTOCOL_RANGE,
             client: {
               id: clientId,
               displayName: "ExperienceEngine validation",
@@ -1420,10 +1444,27 @@ const readVersion = async (options: {
   })
 ).stdout.trim();
 
-const installExactArtifact = async (options: {
+const buildOpenClawPluginInstallArgs = (options: {
+  installSource: string;
+  acknowledgeClawHubRisk: boolean;
+  approveUnsafeInstall: boolean;
+}): string[] => [
+  "plugins",
+  "install",
+  options.installSource,
+  ...(options.acknowledgeClawHubRisk
+    ? ["--acknowledge-clawhub-risk"]
+    : []),
+  ...(options.approveUnsafeInstall
+    ? ["--dangerously-force-unsafe-install"]
+    : [])
+];
+
+const installValidatedArtifact = async (options: {
   runner: OpenClawHostCommandRunner;
   executable: string;
-  artifactPath: string;
+  installSource: string;
+  acknowledgeClawHubRisk: boolean;
   env: NodeJS.ProcessEnv;
   cwd?: string;
   approveHostSecurityScan: boolean;
@@ -1437,7 +1478,11 @@ const installExactArtifact = async (options: {
     options.onProgress?.("host_security_scan_started");
     await runCommand({
       ...options,
-      args: ["plugins", "install", options.artifactPath],
+      args: buildOpenClawPluginInstallArgs({
+        installSource: options.installSource,
+        acknowledgeClawHubRisk: options.acknowledgeClawHubRisk,
+        approveUnsafeInstall: false
+      }),
       timeoutMs: options.timeoutMs
     });
     return {
@@ -1459,12 +1504,11 @@ const installExactArtifact = async (options: {
     options.onProgress?.("approved_artifact_install_started");
     await runCommand({
       ...options,
-      args: [
-        "plugins",
-        "install",
-        options.artifactPath,
-        "--dangerously-force-unsafe-install"
-      ],
+      args: buildOpenClawPluginInstallArgs({
+        installSource: options.installSource,
+        acknowledgeClawHubRisk: options.acknowledgeClawHubRisk,
+        approveUnsafeInstall: true
+      }),
       timeoutMs: options.timeoutMs
     });
     options.onProgress?.("approved_artifact_install_completed");
@@ -1547,6 +1591,9 @@ export const runOpenClawHostValidation = async (options: {
   authorityCollector: OpenClawHostAuthorityCollector;
   seedConfigPath?: string;
   seedAgentAuthPath?: string;
+  installSource?: string;
+  acknowledgeClawHubRisk?: boolean;
+  expectedInstalledPackageRoot?: string;
   agentId?: string;
   agentMessage?: string;
   gatewayPort?: number;
@@ -1642,10 +1689,11 @@ export const runOpenClawHostValidation = async (options: {
   }
   const openclawVersion = await readVersion({ runner, executable, env, cwd });
   progress("openclaw_version_resolved");
-  const security = await installExactArtifact({
+  const security = await installValidatedArtifact({
     runner,
     executable,
-    artifactPath: installArtifactPath,
+    installSource: options.installSource ?? installArtifactPath,
+    acknowledgeClawHubRisk: options.acknowledgeClawHubRisk === true,
     env,
     cwd,
     approveHostSecurityScan: options.approveHostSecurityScan === true,
@@ -1732,9 +1780,20 @@ export const runOpenClawHostValidation = async (options: {
     pluginInfo.installPath,
     options.hostHomeDir ?? homedir()
   );
-  const verifiedPackage = await (
+  let verifiedPackage = await (
     options.installedPackageVerifier ?? defaultInstalledPackageVerifier
   )(installedRoot);
+  if (options.expectedInstalledPackageRoot) {
+    const expectedPackage = await defaultInstalledPackageVerifier(
+      resolve(options.expectedInstalledPackageRoot)
+    );
+    const installedPackage = await defaultInstalledPackageVerifier(installedRoot);
+    assertOpenClawInstalledPackageMatchesExpected(
+      installedPackage,
+      expectedPackage
+    );
+    verifiedPackage = installedPackage;
+  }
   progress("installed_package_verified");
   const now = options.now ?? (() => new Date());
   await (
@@ -2098,5 +2157,7 @@ export const OPENCLAW_HOST_VALIDATION_RUNNER_CONTRACT = Object.freeze({
   windows_batch_shim_uses_validated_node_entrypoint: true,
   windows_gateway_health_uses_direct_gateway_rpc: true,
   windows_native_commands_use_direct_gateway_rpc: true,
+  direct_gateway_protocol_range_is_negotiated: true,
+  channel_native_install_closure_binding_required: true,
   shell_true_allowed: false
 });

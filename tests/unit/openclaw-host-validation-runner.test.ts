@@ -7,7 +7,9 @@ import type {
   MaterializedPublishedArtifact
 } from "../../src/runtime/distribution/artifact-materializer.js";
 import {
+  assertOpenClawInstalledPackageMatchesExpected,
   buildOpenClawGatewaySpawnPlan,
+  OPENCLAW_DIRECT_GATEWAY_PROTOCOL_RANGE,
   OPENCLAW_HOST_VALIDATION_RUNNER_CONTRACT,
   runOpenClawHostValidation,
   type DirectGatewayRpcClientFactory,
@@ -97,6 +99,30 @@ const initializationSnapshot: OpenClawHostInitializationSnapshot = {
 };
 
 describe("OpenClaw real-host validation runner", () => {
+  it("rejects a channel-native install whose closure differs from published bytes", () => {
+    expect(() => assertOpenClawInstalledPackageMatchesExpected(
+      {
+        packageBuildId: "build-installed",
+        closureManifestDigest: "closure-installed"
+      },
+      {
+        packageBuildId: "build-published",
+        closureManifestDigest: "closure-published"
+      }
+    )).toThrow(/does not match the independently materialized published artifact/u);
+
+    expect(() => assertOpenClawInstalledPackageMatchesExpected(
+      {
+        packageBuildId: "build-exact",
+        closureManifestDigest: "closure-exact"
+      },
+      {
+        packageBuildId: "build-exact",
+        closureManifestDigest: "closure-exact"
+      }
+    )).not.toThrow();
+  });
+
   it("bridges Windows Gateway shutdown through the OpenClaw SIGINT lifecycle", () => {
     const plan = buildOpenClawGatewaySpawnPlan({
       invocation: {
@@ -394,6 +420,7 @@ describe("OpenClaw real-host validation runner", () => {
     const publishedAttestationIssuer = vi.fn(async () => undefined);
     const evidence = await runOpenClawHostValidation({
       artifact: testArtifact,
+      installSource: "npm:@alan512/experienceengine@0.4.9",
       openclawExecutable: join(root, "bin", "openclaw"),
       validationRoot: root,
       runtimeHome: join(root, "runtime-home"),
@@ -440,7 +467,7 @@ describe("OpenClaw real-host validation runner", () => {
     expect(commands.some((command) => command.args[0] === "doctor")).toBe(true);
     expect(commands.find((command) =>
       command.args[0] === "plugins" && command.args[1] === "install"
-    )?.args[2]).toBe(join(root, "install-input", "experienceengine-candidate.tgz"));
+    )?.args[2]).toBe("npm:@alan512/experienceengine@0.4.9");
     expect(commands.filter((command) => command.args[0] === "agent")).toHaveLength(1);
     expect(commands.filter((command) =>
       command.args[0] === "gateway" &&
@@ -499,6 +526,10 @@ describe("OpenClaw real-host validation runner", () => {
   });
 
   it("freezes the real-host boundary", () => {
+    expect(OPENCLAW_DIRECT_GATEWAY_PROTOCOL_RANGE).toEqual({
+      minProtocol: 3,
+      maxProtocol: 4
+    });
     expect(OPENCLAW_HOST_VALIDATION_RUNNER_CONTRACT).toEqual({
       real_openclaw_install_required: true,
       real_gateway_required: true,
@@ -518,6 +549,8 @@ describe("OpenClaw real-host validation runner", () => {
       windows_batch_shim_uses_validated_node_entrypoint: true,
       windows_gateway_health_uses_direct_gateway_rpc: true,
       windows_native_commands_use_direct_gateway_rpc: true,
+      direct_gateway_protocol_range_is_negotiated: true,
+      channel_native_install_closure_binding_required: true,
       shell_true_allowed: false
     });
   });

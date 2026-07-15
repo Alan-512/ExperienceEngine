@@ -59,7 +59,7 @@
 ## 5. Validation
 
 - [x] 5.1 Run local packed-artifact closure tests as a preflight, not as final published evidence.
-- [ ] 5.2 Run actual published npm validation.
+- [x] 5.2 Run actual published npm validation.
 - [ ] 5.3 Run actual published ClawHub validation.
 - [x] 5.4 Run required live OpenClaw and Windows validation paths.
 - [x] 5.5 Run TypeScript typecheck, full tests, build, and packaging checks.
@@ -79,6 +79,13 @@
 - Packaged-document SHA-256 values match the committed source bytes exactly: `README.md` `537beeb69743aeacedd3771b3947678c0eed55e0608d74ce70d0580447d75dc2`; `README.zh-CN.md` `16d061afd48e7b3fff34c1442a455828e8deb04fbab383eebae530857f41d79a`; `docs/user-guide.md` `56b1fb0e11e0fc0ce6daae98958f83c82b1ac696a28bf8a26437fef77e98a551`; `docs/openclaw-runtime-support-matrix.md` `db35402b3aea4cb1a3d6906572a346c22a6940d1b59ef6b2a3d88b24309099f1`; `docs/releases/v0.5.0.md` `145d26cf63a74645b13055bc209fcfe15f341f33143d942c5f4341d454afda37`; `openclaw.plugin.json` `297f9f01f57b48f38d99b068cc2bfa41b758de2e3389bd8765faeb2ae9ae104e`; runtime closure manifest file `627b2c46652d040316919c2155dfde8bf48d16f1263e728f4e554e2c38852647`.
 - An isolated install of this exact tarball completed with lifecycle scripts disabled and an isolated npm cache. The installed OpenClaw plugin, package-local supervisor, and package-local worker entrypoints all imported successfully without inherited `NODE_PATH`.
 - This remains local prepublication evidence only. Tasks 2.1-2.5, 5.2, and 5.3 remain unchecked; exact published npm and ClawHub artifacts must be downloaded and validated independently, and `support_claim_allowed` remains false.
+
+### Actual Published v0.5.0 Evidence
+
+- npm, GitHub Release/tag, and ClawHub expose `@alan512/experienceengine@0.5.0` from the exact `1133532`-byte artifact. Independent downloads retain SHA-256 `07a93076c1ab196ffd790bb8c53885899ee33aca8415e4d5ed3242d082abac00`, npm SHA-1 `8371abd06ba88cf79f11d55883d5c7f6e4aafc2c`, npm integrity `sha512-rYEf7KxkCbx270hvkBIIUcD5Eqq6BrTDptoMrH2p1SsdfLiuANbSHtHZIHpUV5QO07upibOJ+hOzxCn41/wiWg==`, and closure digest `06bad602d9d06909035aa2cc6052d3daca06cf22c76d5d53c47b5d34ef933f63`. ClawHub scan disposition is clean.
+- The published npm validator independently materialized registry bytes, then installed the fixed version through `npm:@alan512/experienceengine@0.5.0` and bound the installed package build id and closure digest back to the materialized package root. On WSL OpenClaw `2026.7.1` / Node `24.18.0`, all eight ordered steps passed: native prepare/initialize/idempotent replay, real agent turn, semantic completion, stale-authority rejection, interruption recovery, Gateway restart, and graceful terminal authority. The result is `artifact_runtime_validated=true`, `learning_runtime_active=true`, `production_learning_ready=false`, and `support_claim_allowed=false`.
+- The independent ClawHub validator passed exact download integrity, closure, entrypoint import in its isolated npm-installed smoke root, and installed-artifact runtime smoke. Its channel-native `clawhub:@alan512/experienceengine@0.5.0` live-host install then failed before native command registration. OpenClaw runtime inspection proved the ClawHub install root had no `node_modules` and reported missing `@modelcontextprotocol/sdk` plus `zod`; import failed on `zod`.
+- Task 5.2 is complete. Task 5.3 and Tasks 2.1-2.5 remain open because npm evidence cannot satisfy ClawHub acceptance. The immutable `0.5.0` artifact cannot be repaired in place; a new patch artifact must carry a link-free runtime dependency bundle and pass the independent published ClawHub sequence. S8 remains unimplemented and `support_claim_allowed` remains false.
 
 ### Exact ClawHub Staging And WSL Retry Evidence
 

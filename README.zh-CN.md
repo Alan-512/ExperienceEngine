@@ -354,7 +354,7 @@ prepare 命令是只读的。将其 `result` 字段返回的精确 JSON 对象�
 ee verify openclaw-production
 ```
 
-当前实现已在 WSL/Linux、原生 Windows，以及 WSL 上的 OpenClaw `2026.7.1` 通过 local-pack 真实宿主 preflight。可发布的 `v0.5.0` artifact 必须从已提交的 release boundary 重建并与外部候选证据一致；精确 npm 与 ClawHub 发布物随后仍需要各自独立的发布后验证。完整支持声明仍受质量门槛约束。
+当前实现已在 WSL/Linux 和原生 Windows 通过 local-pack 真实宿主 preflight；精确发布的 npm `v0.5.0` 也已在 WSL 的 OpenClaw `2026.7.1` 通过完整真实宿主序列。字节相同的 ClawHub artifact 通过了闭包检查，但其原生安装遗漏运行时依赖，因此 ClawHub 验收和完整质量门控支持声明仍未完成。
 
 operator 回退路径为：
 
@@ -783,7 +783,7 @@ ee install claude-code
 
 ### OpenClaw
 
-OpenClaw 提供宿主原生插件交互和 package-local supervisor/worker 运行时。该运行时已经通过 local-pack installed-artifact 与真实宿主 preflight，包括 Gateway 重启、fenced queue 完成、旧 authority 输出拒绝和优雅停机。精确 npm 与 ClawHub 发布物仍需独立完成 published-channel 验证，完整支持声明仍受质量发布门槛约束。
+OpenClaw 提供宿主原生插件交互和 package-local supervisor/worker 运行时。该运行时已经通过 local-pack 真实宿主 preflight 和精确 npm 发布物验证，包括 Gateway 重启、fenced queue 完成、旧 authority 输出拒绝和优雅停机。ClawHub 发布物仍因安装后缺少运行时依赖而未通过，完整支持声明仍受质量发布门槛约束。
 
 ```bash
 openclaw plugins install @alan512/experienceengine

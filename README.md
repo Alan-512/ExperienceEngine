@@ -354,7 +354,7 @@ Then verify current authority from the operator CLI:
 ee verify openclaw-production
 ```
 
-The implementation has passed local-pack real-host preflight on WSL/Linux, native Windows, and OpenClaw `2026.7.1` under WSL. The publishable `v0.5.0` artifact must be rebuilt from the committed release boundary and match the external candidate evidence; exact npm and ClawHub artifacts then require their own post-publication validation. The full support claim remains quality-gated.
+The implementation has passed local-pack real-host preflight on WSL/Linux and native Windows. The exact published npm `v0.5.0` artifact also passed the full OpenClaw `2026.7.1` WSL live-host sequence. The byte-identical ClawHub artifact passed closure checks but its native install omitted runtime dependencies, so ClawHub acceptance and the full quality-gated support claim remain open.
 
 The operator fallback is:
 
@@ -793,7 +793,7 @@ Start a fresh Claude Code session after installation.
 
 ### OpenClaw
 
-OpenClaw exposes host-native plugin interaction and a package-local supervisor/worker runtime. The runtime has passed local-pack installed-artifact and real-host preflight, including Gateway restart, fenced queue completion, stale-output rejection, and graceful shutdown. Exact npm and ClawHub artifacts still require independent published-channel validation, and the full support claim remains subject to the quality publication gate.
+OpenClaw exposes host-native plugin interaction and a package-local supervisor/worker runtime. The runtime has passed local-pack real-host preflight and exact published npm validation, including Gateway restart, fenced queue completion, stale-output rejection, and graceful shutdown. Published ClawHub validation remains blocked by missing installed runtime dependencies, and the full support claim remains subject to the quality publication gate.
 
 ```bash
 openclaw plugins install @alan512/experienceengine
