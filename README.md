@@ -333,7 +333,7 @@ openclaw gateway restart
 ee init
 ```
 
-The `v0.5.0` package contains a package-local supervisor/worker runtime. Plugin load alone still proves only routine interaction: a loaded plugin can have `interaction_active = true` while `learning_runtime_active` or `production_learning_ready` remains false.
+The `v0.5.x` package line contains a package-local supervisor/worker runtime. Plugin load alone still proves only routine interaction: a loaded plugin can have `interaction_active = true` while `learning_runtime_active` or `production_learning_ready` remains false.
 
 Use the authenticated OpenClaw commands to inspect and, when required, initialize the exact installed package generation:
 
@@ -354,7 +354,7 @@ Then verify current authority from the operator CLI:
 ee verify openclaw-production
 ```
 
-The implementation has passed local-pack real-host preflight on WSL/Linux and native Windows. The exact published npm `v0.5.0` artifact also passed the full OpenClaw `2026.7.1` WSL live-host sequence. The byte-identical ClawHub artifact passed closure checks but its native install omitted runtime dependencies, so ClawHub acceptance and the full quality-gated support claim remain open.
+The implementation has passed local-pack real-host preflight on WSL/Linux and native Windows. The exact published npm `v0.5.0` artifact also passed the full OpenClaw `2026.7.1` WSL live-host sequence. Published ClawHub `v0.5.0` passed closure checks but its native install omitted runtime dependencies. The unpublished `v0.5.1` candidate repairs that channel with a clean, link-free dependency bundle; ClawHub published acceptance and the full quality-gated support claim remain open until the new published artifact passes independently.
 
 The operator fallback is:
 

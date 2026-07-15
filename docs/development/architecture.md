@@ -13,9 +13,9 @@
 | 字段 | 当前值 |
 | --- | --- |
 | 最近同步日期 | 2026-07-15 |
-| 最近同步范围 | `v0.5.0` 发布前工作树当前架构：OpenClaw package-local supervisor/worker、canonical home/package identity、SQLite migration authority、process fencing、immutable configuration/route authority、fenced semantic queue、production activation、published-artifact closure validation、OpenClaw 2026.7.1 startup/auth compatibility，以及既有 host trace/runtime service 边界 |
+| 最近同步范围 | `v0.5.1` 发布候选架构：OpenClaw package-local supervisor/worker、canonical home/package identity、SQLite migration authority、process fencing、immutable configuration/route authority、fenced semantic queue、production activation、published-artifact closure validation、OpenClaw 2026.7.1 startup/auth compatibility、ClawHub clean-stage bundled dependency closure，以及既有 host trace/runtime service 边界 |
 | 当前宿主基线 | OpenClaw、Claude Code、Codex、Antigravity |
-| 发布基线 | 当前仓库为 `v0.5.0` 发布前工作树；remediation 门禁已通过，但最终精确候选尚未从提交后的 release boundary 重建，也尚未发布、打 tag 或完成 npm/ClawHub published-artifact 验证；公开渠道基线仍是 `v0.4.8` |
+| 发布基线 | npm、GitHub Releases 与 ClawHub 已发布不可变的 `v0.5.0`；npm 完整真实宿主验收通过，ClawHub 因解包后缺少运行时依赖而失败。当前仓库准备未发布的 `v0.5.1` 修复候选；published ClawHub 验收与 S8 仍未完成。 |
 | Antigravity 状态 | 已记录用户级全局插件/MCP wiring、Agent Desktop、`agy` CLI、IDE hooks 观测、项目级 fallback 与 `ee agy exec -C <project>` 包装器 |
 | TraceCapsule 状态 | 已落地为 runtime trace 输入模型和诊断快照模型；normal mode 只持久化 `trace_provenance_json` / `trace_completeness` 摘要，不写 full trace capsule/events；诊断快照需显式开启并命中 host/scope allowlist |
 | 更新原则 | 记录当前真实架构；进行中的实现只在代码落地并验证后同步到正文架构图 |
@@ -279,9 +279,9 @@ Antigravity
 
 | 渠道 | 当前状态 |
 | --- | --- |
-| npm | 仓库记录的公开基线为 `@alan512/experienceengine@0.4.8`；`v0.5.0` 仅完成候选元数据，尚未发布或验证 |
-| GitHub | 仓库记录的公开基线为 `v0.4.8`；尚未创建 `v0.5.0` tag 或 GitHub Release |
-| ClawHub | 公开 `0.4.8` artifact 已知缺少当前 runtime closure；`v0.5.0` 尚未发布或执行独立 channel validation |
+| npm | `@alan512/experienceengine@0.5.0` 已发布并通过 OpenClaw `2026.7.1` 完整真实宿主验收；`v0.5.1` 尚未发布 |
+| GitHub | `v0.5.0` tag 与 Release 已发布；`v0.5.1` 尚未 tag 或创建 Release |
+| ClawHub | `0.5.0` 已发布且字节/闭包有效，但原生安装遗漏依赖并在 plugin import 失败；`v0.5.1` clean-stage bundle 修复尚未发布验收 |
 
 当前 trace capability 基线：
 
@@ -626,7 +626,8 @@ canonical home + package generation identity
 - Windows integrity-key ACL 的检查和收敛通过隔离的 Windows PowerShell 5.1 系统模块环境执行，不继承调用方 PowerShell 7 的 `PSModulePath`。
 - `interaction_active`、`learning_runtime_active`、`production_learning_ready` 是三个独立投影；插件加载不等于后台学习已就绪。
 - `artifact_runtime_validated` 需要 exact artifact 的 installed-artifact 与真实宿主证据；`support_claim_allowed` 还受 published channel、平台、repair/upgrade、文档和 S8 benchmark/quality gate 约束。
-- 当前 WSL 与原生 Windows 的 local-pack real-host preflight 已通过，但 npm/ClawHub `v0.5.0` published-artifact 验证尚未发生，因此完整 production background learning 仍不能称为 supported。
+- npm 发布完整包并由 OpenClaw npm locator 安装声明依赖；ClawHub 发布从同一提交边界生成的精简 OpenClaw closure，并在干净 npm stage 中把 SDK/Zod 物化为普通 bundled files。stage 与最终 tarball 都拒绝链接并重新验证 closure/import。
+- 当前 WSL 与原生 Windows 的 local-pack real-host preflight 已通过，npm `v0.5.0` published-artifact 验收通过；ClawHub `v0.5.0` 失败，`v0.5.1` 尚未完成发布后验收，因此完整 production background learning 仍不能称为 supported。
 - OpenClaw `2026.7.1` 会分别加载 startup plugin 与 command registry；插件通过共享 deferred package-local runtime 避免重复服务实例，并在隔离验证状态中按需完成 legacy JSON agent credential 到 SQLite auth store 的宿主迁移，再等待真实 service projection 后进入 activation。
 
 ---

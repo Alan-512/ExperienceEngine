@@ -163,6 +163,9 @@ describe("OpenClaw repair recommendation", () => {
 
     installOpenClawAdapter({
       homeDir,
+      packageSourceBuilder() {
+        return join(homeDir, "tmp", "experienceengine-openclaw.tgz");
+      },
       runner() {
         return "";
       }

@@ -308,7 +308,10 @@ const digestSelectedPackageMetadata = (packageJson: Record<string, unknown>): {
 } => ({
   dependencyRequirementsDigest: sha256Text(canonicalJson({
     engines: packageJson.engines ?? {},
-    dependencies: packageJson.dependencies ?? {}
+    dependencies: packageJson.dependencies ?? {},
+    optionalRuntimeDependencies:
+      (packageJson.experienceengine as { optionalRuntimeDependencies?: unknown } | undefined)
+        ?.optionalRuntimeDependencies ?? []
   })),
   compatibilityMetadataDigest: sha256Text(canonicalJson({
     openclaw: packageJson.openclaw ?? {},

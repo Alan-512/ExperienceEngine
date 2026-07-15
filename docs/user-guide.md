@@ -102,7 +102,7 @@ Install ExperienceEngine through the host setup flow for:
     - `openclaw plugins install @alan512/experienceengine`
   - after installing, restart the gateway before the first real task:
     - `openclaw gateway restart`
-  - `v0.5.0` contains the package-local supervisor/worker runtime; exact npm validation passed, while ClawHub native installation currently fails before plugin import because runtime dependencies are omitted
+  - the `v0.5.x` line contains the package-local supervisor/worker runtime; exact npm `v0.5.0` validation passed, while unpublished `v0.5.1` prepares a link-free bundled-dependency repair for the ClawHub-native path
   - use the authenticated package activation flow below when `learning_runtime_active` is not yet true
   - operator-managed fallback:
     - `ee install openclaw`
@@ -744,6 +744,7 @@ Current publication evidence:
 - the superseded prepublication tarballs remain historical evidence and were not published
 - npm, GitHub Releases, and ClawHub received the exact evidence-bound `v0.5.0` artifact
 - exact npm `v0.5.0` published validation passed; ClawHub `v0.5.0` passed byte/closure checks but failed native runtime import because required dependencies were not installed
+- `v0.5.1` is a release candidate only until its distinct npm and ClawHub artifacts are published, independently downloaded, and validated through their native channels
 - the matched-block benchmark/quality gate remains separate from runtime activation
 
 ### Claude Code Advanced Commands

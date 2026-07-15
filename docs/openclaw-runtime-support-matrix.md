@@ -25,6 +25,7 @@ This matrix separates routine plugin interaction, package-local runtime executio
 | Final exact `v0.5.0` candidate | Evidence-bound publication artifact | The publishable artifact must be rebuilt from the committed remediation release boundary and match the externally recorded size, integrity, closure digest, build id, and packaged-document hashes. A differently built archive is a different candidate and must be revalidated. |
 | Published npm `0.5.0` | Passed | The exact `1133532`-byte registry artifact passed integrity, closure, clean-home installed runtime, OpenClaw `2026.7.1` native activation, real agent turn, protected queue, restart recovery, and graceful shutdown validation. |
 | Published ClawHub `0.5.0` | Failed at live-host import | The independently downloaded artifact is byte-identical and its closure is valid, but the ClawHub native installer did not install declared runtime dependencies. Runtime inspection reports missing `@modelcontextprotocol/sdk` and `zod`; plugin import fails before native commands can register. |
+| `v0.5.1` release candidate | ClawHub-form local real-host gate passed; exact committed candidate pending | The reduced ClawHub stage installs required dependencies in a clean npm root, packs them as ordinary bundled files, rejects links, and validates external imports. Its archive passed the complete WSL OpenClaw `2026.7.1` local-candidate host sequence with Node `22.21.0`. This is still not published-channel evidence. |
 | Native Windows live host | Passed for local-pack preflight | OpenClaw `2026.4.1`, Node `v24.3.0`, validated `.cmd` entrypoint resolution, authenticated direct Gateway RPC, real activation commands and agent turn, fenced queue semantics, restart recovery, and OpenClaw-owned graceful Gateway shutdown through the Windows stdin-to-`SIGINT` lifecycle bridge. This is not published-artifact evidence. |
 
 ## Support conclusions
@@ -40,4 +41,4 @@ published_clawhub_artifact_runtime_validated = false
 support_claim_allowed = false
 ```
 
-The package-local production runtime and exact npm channel are validated. ClawHub still requires a new immutable artifact that carries a link-free runtime dependency bundle, followed by independent published-channel validation. The separate quality/benchmark gate also remains open.
+The package-local production runtime and exact npm `0.5.0` channel are validated. The `0.5.1` ClawHub repair still requires an exact immutable candidate, real-host prepublication evidence, publication, and independent published-channel validation. The separate quality/benchmark gate also remains open.

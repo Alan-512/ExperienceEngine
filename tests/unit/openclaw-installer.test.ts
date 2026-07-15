@@ -1,4 +1,6 @@
-import { execFileSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
+import { createRequire } from "node:module";
+import { promisify } from "node:util";
 import {
   existsSync,
   mkdtempSync,
@@ -12,7 +14,6 @@ import { tmpdir } from "node:os";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { resolveExperienceEnginePaths } from "../../src/config/path-resolver.js";
 import {
-  createOpenClawInstallTarball,
   inspectOpenClawInstall,
   installOpenClawAdapter
 } from "../../src/install/openclaw-installer.js";
@@ -26,6 +27,12 @@ let cachedPackagedTarball:
       stageDir: string;
     }
   | undefined;
+let cachedPackagedTarballPromise: Promise<{
+  tarballPath: string;
+  stageDir: string;
+}> | undefined;
+const execFileAsync = promisify(execFile);
+const requireFromTest = createRequire(import.meta.url);
 const originalHybridEnv = {
   EXPERIENCE_ENGINE_HYBRID_ENABLED: process.env.EXPERIENCE_ENGINE_HYBRID_ENABLED,
   EXPERIENCE_ENGINE_HYBRID_SYNC_EXPLAIN_ENABLED: process.env.EXPERIENCE_ENGINE_HYBRID_SYNC_EXPLAIN_ENABLED,
@@ -65,20 +72,30 @@ afterAll(() => {
   }
 });
 
-const getCachedPackagedTarball = (): { tarballPath: string; stageDir: string } => {
+const getCachedPackagedTarball = async (): Promise<{ tarballPath: string; stageDir: string }> => {
   if (cachedPackagedTarball) {
     return cachedPackagedTarball;
   }
-
-  const homeDir = mkdtempSync(join(tmpdir(), "experienceengine-packaged-openclaw-"));
-  const paths = resolveExperienceEnginePaths({ homeDir });
-  mkdirSync(join(paths.productHome, "adapters", "openclaw"), { recursive: true });
-  const tarballPath = createOpenClawInstallTarball(process.cwd(), paths);
-  cachedPackagedTarball = {
-    tarballPath,
-    stageDir: join(dirname(tarballPath), "experienceengine-openclaw")
-  };
-  return cachedPackagedTarball;
+  cachedPackagedTarballPromise ??= (async () => {
+    const homeDir = mkdtempSync(join(tmpdir(), "experienceengine-packaged-openclaw-"));
+    const helperPath = join(process.cwd(), "tests", "helpers", "build-openclaw-install-tarball.ts");
+    const tsxCliPath = requireFromTest.resolve("tsx/cli");
+    const { stdout } = await execFileAsync(
+      process.execPath,
+      [tsxCliPath, helperPath, process.cwd(), homeDir],
+      { cwd: process.cwd(), maxBuffer: 10 * 1024 * 1024 }
+    );
+    const tarballPath = stdout.trim().split(/\r?\n/).filter(Boolean).at(-1);
+    if (!tarballPath) {
+      throw new Error("OpenClaw tarball helper returned no artifact path");
+    }
+    cachedPackagedTarball = {
+      tarballPath,
+      stageDir: join(dirname(tarballPath), "experienceengine-openclaw")
+    };
+    return cachedPackagedTarball;
+  })();
+  return cachedPackagedTarballPromise;
 };
 
 describe("OpenClaw installer", () => {
@@ -367,17 +384,34 @@ Recorded version: 0.2.0`;
     expect(report.pluginConfig.hybridPostmortemModelProfileVersion).toBe("hybrid-postmortem-llm-v0");
   });
 
-  it("packages the runtime dependencies required by the OpenClaw plugin install", () => {
-    const { stageDir } = getCachedPackagedTarball();
+  it("packages the runtime dependencies required by the OpenClaw plugin install", async () => {
+    const { stageDir } = await getCachedPackagedTarball();
     const manifestPath = join(stageDir, "package.json");
     const packagedManifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
       dependencies: Record<string, string>;
+      bundledDependencies: string[];
+      experienceengine: { optionalRuntimeDependencies: string[] };
     };
 
     expect(packagedManifest.dependencies).toEqual({
       "@modelcontextprotocol/sdk": "^1.27.1",
       zod: "^3.25.76"
     });
+    expect(packagedManifest.bundledDependencies).toEqual([
+      "@modelcontextprotocol/sdk",
+      "zod"
+    ]);
+    expect(packagedManifest.experienceengine.optionalRuntimeDependencies).toEqual([
+      "@huggingface/transformers"
+    ]);
+    expect(existsSync(join(
+      stageDir,
+      "node_modules",
+      "@modelcontextprotocol",
+      "sdk",
+      "package.json"
+    ))).toBe(true);
+    expect(existsSync(join(stageDir, "node_modules", "zod", "package.json"))).toBe(true);
     expect(existsSync(join(
       stageDir,
       "dist",
@@ -385,10 +419,10 @@ Recorded version: 0.2.0`;
       "package",
       "runtime-closure-manifest.json"
     ))).toBe(true);
-  }, 30000);
+  }, 120000);
 
-  it("packages the OpenClaw compatibility metadata required by ClawHub publishing", () => {
-    const { stageDir } = getCachedPackagedTarball();
+  it("packages the OpenClaw compatibility metadata required by ClawHub publishing", async () => {
+    const { stageDir } = await getCachedPackagedTarball();
     const manifestPath = join(stageDir, "package.json");
     const packagedManifest = JSON.parse(readFileSync(manifestPath, "utf8")) as {
       version?: string;
@@ -408,10 +442,10 @@ Recorded version: 0.2.0`;
     expect(packagedManifest.openclaw?.compat?.minGatewayVersion).toBe("2026.4.1");
     expect(packagedManifest.openclaw?.build?.openclawVersion).toBe("2026.4.1");
     expect(packagedManifest.openclaw?.build?.pluginSdkVersion).toBe("2026.4.1");
-  }, 15000);
+  }, 120000);
 
-  it("packages only the OpenClaw hook runtime closure needed by the installed plugin", () => {
-    const { tarballPath } = getCachedPackagedTarball();
+  it("packages only the OpenClaw hook runtime closure needed by the installed plugin", async () => {
+    const { tarballPath } = await getCachedPackagedTarball();
     const entries = execFileSync("tar", ["-tzf", tarballPath], {
       encoding: "utf8"
     })
@@ -427,6 +461,8 @@ Recorded version: 0.2.0`;
     expect(entries).toContain("package/dist/hybrid/capsule-builder.js");
     expect(entries).toContain("package/dist/hybrid/worker-client.js");
     expect(entries).toContain("package/dist/hybrid/postmortem-provider-client.js");
+    expect(entries).toContain("package/node_modules/@modelcontextprotocol/sdk/package.json");
+    expect(entries).toContain("package/node_modules/zod/package.json");
 
     expect(entries).not.toContain("package/dist/cli/index.js");
     expect(entries).not.toContain("package/dist/install/openclaw-installer.js");
@@ -437,7 +473,7 @@ Recorded version: 0.2.0`;
     expect(entries).not.toContain("package/dist/adapters/codex/mcp-server.js");
     expect(entries).not.toContain("package/dist/runtime/distribution/npm-artifact-validator.js");
     expect(entries).not.toContain("package/dist/runtime/distribution/clawhub-artifact-validator.js");
-  }, 15000);
+  }, 120000);
 
   it("reports install status and resolved paths for doctor output", () => {
     const homeDir = makeTempDir();

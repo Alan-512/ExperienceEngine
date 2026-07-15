@@ -1,9 +1,11 @@
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
+import { createRequire, isBuiltin } from "node:module";
 import {
   chmodSync,
   cpSync,
   existsSync,
+  lstatSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -64,6 +66,7 @@ import {
   isOpenClawSecurityApprovalRequired,
   normalizeOpenClawSecurityScanSummary
 } from "./openclaw-security-approval.js";
+import { runNpmCli } from "./npm-cli.js";
 
 export type OpenClawInstallReport = {
   adapter: "openclaw";
@@ -303,8 +306,8 @@ const OPENCLAW_PLUGIN_CONFIG_KEYS = [
 type OpenClawComparableConfig = Partial<Record<(typeof OPENCLAW_PLUGIN_CONFIG_KEYS)[number], unknown>>;
 
 const OPENCLAW_RELATIVE_IMPORT_PATTERN =
-  /\b(?:import|export)\s+(?:[^"'()]*?\s+from\s+)?["'](\.[^"']+)["']/g;
-const OPENCLAW_DYNAMIC_IMPORT_PATTERN = /\bimport\(\s*["'](\.[^"']+)["']\s*\)/g;
+  /\b(?:import|export)\s+(?:[^"'()]*?\s+from\s+)?["']([^"']+)["']/g;
+const OPENCLAW_DYNAMIC_IMPORT_PATTERN = /\bimport\(\s*["']([^"']+)["']\s*\)/g;
 
 const normalizeOpenClawPackagedRuntimePath = (value: string): string => value.replaceAll("\\", "/");
 
@@ -339,6 +342,32 @@ const runtimeClosureAssetPaths = (manifest: RuntimeClosureManifest): string[] =>
     ...manifest.required_schema_and_migrations
   ].map((asset) => normalizeOpenClawPackagedRuntimePath(asset.path)))).sort();
 
+type OpenClawRuntimeImport = {
+  fromFile: string;
+  specifier: string;
+};
+
+const readOpenClawRuntimeImports = (
+  packageRoot: string,
+  manifest: RuntimeClosureManifest
+): OpenClawRuntimeImport[] => {
+  const imports: OpenClawRuntimeImport[] = [];
+  for (const currentPath of runtimeClosureAssetPaths(manifest).filter((path) => path.endsWith(".js"))) {
+    const sourcePath = join(packageRoot, ...currentPath.split("/"));
+    const source = readFileSync(sourcePath, "utf8");
+    for (const pattern of [OPENCLAW_RELATIVE_IMPORT_PATTERN, OPENCLAW_DYNAMIC_IMPORT_PATTERN]) {
+      pattern.lastIndex = 0;
+      for (const match of source.matchAll(pattern)) {
+        const specifier = match[1];
+        if (specifier) {
+          imports.push({ fromFile: currentPath, specifier });
+        }
+      }
+    }
+  }
+  return imports;
+};
+
 const copyOpenClawRuntimeClosure = (
   packageRoot: string,
   stageDir: string,
@@ -363,32 +392,82 @@ const assertOpenClawRuntimeImportsDeclared = (
   manifest: RuntimeClosureManifest
 ): void => {
   const declared = new Set(runtimeClosureAssetPaths(manifest));
-  for (const currentPath of [...declared].filter((path) => path.endsWith(".js"))) {
-    const sourcePath = join(packageRoot, ...currentPath.split("/"));
-    const source = readFileSync(sourcePath, "utf8");
-    for (const pattern of [OPENCLAW_RELATIVE_IMPORT_PATTERN, OPENCLAW_DYNAMIC_IMPORT_PATTERN]) {
-      pattern.lastIndex = 0;
-      for (const match of source.matchAll(pattern)) {
-        const specifier = match[1];
-        if (!specifier) {
-          continue;
-        }
-        const distRelativeFrom = currentPath.startsWith("dist/")
-          ? currentPath.slice("dist/".length)
-          : currentPath;
-        const resolved = resolveOpenClawPackagedRuntimeImport(distRelativeFrom, specifier);
-        if (!resolved) {
-          throw new Error(
-            `EE_OPENCLAW_RUNTIME_IMPORT_UNRESOLVED: ${currentPath} imports ${specifier}`
-          );
-        }
-        const packageRelative = `dist/${resolved}`;
-        if (!declared.has(packageRelative)) {
-          throw new Error(
-            `EE_OPENCLAW_RUNTIME_IMPORT_UNDECLARED: ${currentPath} imports ${packageRelative}`
-          );
-        }
-      }
+  for (const runtimeImport of readOpenClawRuntimeImports(packageRoot, manifest)) {
+    if (!runtimeImport.specifier.startsWith(".")) {
+      continue;
+    }
+    const distRelativeFrom = runtimeImport.fromFile.startsWith("dist/")
+      ? runtimeImport.fromFile.slice("dist/".length)
+      : runtimeImport.fromFile;
+    const resolved = resolveOpenClawPackagedRuntimeImport(distRelativeFrom, runtimeImport.specifier);
+    if (!resolved) {
+      throw new Error(
+        `EE_OPENCLAW_RUNTIME_IMPORT_UNRESOLVED: ${runtimeImport.fromFile} imports ${runtimeImport.specifier}`
+      );
+    }
+    const packageRelative = `dist/${resolved}`;
+    if (!declared.has(packageRelative)) {
+      throw new Error(
+        `EE_OPENCLAW_RUNTIME_IMPORT_UNDECLARED: ${runtimeImport.fromFile} imports ${packageRelative}`
+      );
+    }
+  }
+};
+
+const assertOpenClawPackageContainsNoLinks = (packageRoot: string): void => {
+  for (const entry of readdirSync(packageRoot, { withFileTypes: true })) {
+    const entryPath = join(packageRoot, entry.name);
+    const entryStat = lstatSync(entryPath);
+    if (entryStat.isSymbolicLink()) {
+      throw new Error(`EE_OPENCLAW_PACKAGE_LINK_REJECTED: ${entryPath}`);
+    }
+    if (entryStat.isDirectory()) {
+      assertOpenClawPackageContainsNoLinks(entryPath);
+    }
+  }
+};
+
+const assertOpenClawPackagedDependencies = (
+  packageRoot: string,
+  manifest: RuntimeClosureManifest
+): void => {
+  const packageManifest = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8")) as {
+    dependencies?: Record<string, string>;
+    bundledDependencies?: string[];
+    experienceengine?: { optionalRuntimeDependencies?: string[] };
+  };
+  const declaredDependencies = packageManifest.dependencies ?? {};
+  const bundledDependencies = new Set(packageManifest.bundledDependencies ?? []);
+  const optionalRuntimeDependencies = new Set(
+    packageManifest.experienceengine?.optionalRuntimeDependencies ?? []
+  );
+  for (const dependencyName of Object.keys(declaredDependencies)) {
+    if (!bundledDependencies.has(dependencyName)) {
+      throw new Error(`EE_OPENCLAW_DEPENDENCY_NOT_BUNDLED: ${dependencyName}`);
+    }
+    const dependencyManifestPath = join(packageRoot, "node_modules", ...dependencyName.split("/"), "package.json");
+    if (!existsSync(dependencyManifestPath)) {
+      throw new Error(`EE_OPENCLAW_DEPENDENCY_MISSING: ${dependencyName}`);
+    }
+  }
+
+  const requireFromPackage = createRequire(join(packageRoot, "package.json"));
+  for (const runtimeImport of readOpenClawRuntimeImports(packageRoot, manifest)) {
+    if (runtimeImport.specifier.startsWith(".") || isBuiltin(runtimeImport.specifier)) {
+      continue;
+    }
+    const dependencyName = runtimeImport.specifier.startsWith("@")
+      ? runtimeImport.specifier.split("/").slice(0, 2).join("/")
+      : runtimeImport.specifier.split("/")[0];
+    if (dependencyName && optionalRuntimeDependencies.has(dependencyName)) {
+      continue;
+    }
+    try {
+      requireFromPackage.resolve(runtimeImport.specifier);
+    } catch {
+      throw new Error(
+        `EE_OPENCLAW_RUNTIME_DEPENDENCY_UNRESOLVED: ${runtimeImport.fromFile} imports ${runtimeImport.specifier}`
+      );
     }
   }
 };
@@ -413,6 +492,14 @@ const validateOpenClawTarballClosure = (
   tarballPath: string,
   tempRoot: string
 ): void => {
+  const verboseEntries = execFileSync("tar", ["-tvzf", tarballPath], {
+    stdio: "pipe",
+    encoding: "utf8"
+  });
+  const linkedEntry = verboseEntries.split(/\r?\n/).find((entry) => /^[lh]/.test(entry));
+  if (linkedEntry) {
+    throw new Error(`EE_OPENCLAW_PACKAGE_LINK_REJECTED: ${linkedEntry}`);
+  }
   const unpackRoot = join(tempRoot, "final-artifact-validation");
   mkdirSync(unpackRoot, { recursive: true });
   execFileSync("tar", ["-xzf", tarballPath, "-C", unpackRoot], {
@@ -420,7 +507,10 @@ const validateOpenClawTarballClosure = (
     encoding: "utf8"
   });
   const packageRoot = join(unpackRoot, "package");
-  assertOpenClawPackageClosure(packageRoot);
+  const runtimeManifest = readOpenClawRuntimeClosureManifest(packageRoot);
+  assertOpenClawPackageContainsNoLinks(packageRoot);
+  assertOpenClawPackageClosure(packageRoot, runtimeManifest);
+  assertOpenClawPackagedDependencies(packageRoot, runtimeManifest);
 };
 
 const protectOpenClawReinstallPath = (installPath: string, packageRoot: string, homeDir?: string): void => {
@@ -484,6 +574,7 @@ export const createOpenClawInstallTarball = (packageRoot: string, paths: Resolve
   copyOpenClawRuntimeClosure(packageRoot, stageDir, runtimeManifest);
 
   const rawPackageJson = JSON.parse(readFileSync(join(packageRoot, "package.json"), "utf8")) as Record<string, unknown>;
+  const packagedDependencies = buildOpenClawPackagedDependencies(rawPackageJson);
   const packagedManifest = {
     name: rawPackageJson.name,
     version: rawPackageJson.version,
@@ -491,7 +582,9 @@ export const createOpenClawInstallTarball = (packageRoot: string, paths: Resolve
     description: rawPackageJson.description,
     openclaw: rawPackageJson.openclaw,
     engines: rawPackageJson.engines,
-    dependencies: buildOpenClawPackagedDependencies(rawPackageJson)
+    dependencies: packagedDependencies,
+    bundledDependencies: Object.keys(packagedDependencies),
+    experienceengine: rawPackageJson.experienceengine
   };
   writeFileSync(join(stageDir, "package.json"), `${JSON.stringify(packagedManifest, null, 2)}\n`, "utf8");
 
@@ -510,29 +603,34 @@ export const createOpenClawInstallTarball = (packageRoot: string, paths: Resolve
   }
 
   assertOpenClawPackageClosure(stageDir, runtimeManifest);
+  runNpmCli([
+    "install",
+    "--omit=dev",
+    "--omit=peer",
+    "--ignore-scripts",
+    "--no-audit",
+    "--no-fund",
+    "--no-bin-links",
+    "--prefer-offline",
+    "--package-lock=false"
+  ], stageDir);
+  assertOpenClawPackageContainsNoLinks(stageDir);
+  assertOpenClawPackagedDependencies(stageDir, runtimeManifest);
 
-  const archiveRoot = join(tempRoot, "package");
-  const tarballPath = join(tempRoot, "experienceengine-openclaw.tgz");
-
-  let finalTarballPath: string;
-  try {
-    cpSync(stageDir, archiveRoot, { recursive: true });
-    execFileSync("tar", ["-czf", tarballPath, "-C", tempRoot, "package"], {
-      stdio: "pipe",
-      encoding: "utf8"
-    });
-    finalTarballPath = tarballPath;
-  } catch {
-    const output = execFileSync("npm", ["pack", stageDir, "--pack-destination", tempRoot], {
-      stdio: "pipe",
-      encoding: "utf8"
-    }).trim();
-    const tarballName = output.split(/\r?\n/).filter(Boolean).at(-1);
-    if (!tarballName) {
-      throw new Error("npm pack did not return an OpenClaw install artifact");
-    }
-    finalTarballPath = join(tempRoot, tarballName);
+  const output = runNpmCli([
+    "pack",
+    ".",
+    "--json",
+    "--ignore-scripts",
+    "--pack-destination",
+    tempRoot
+  ], stageDir);
+  const packResults = JSON.parse(output) as Array<{ filename?: string }>;
+  const tarballName = packResults[0]?.filename;
+  if (!tarballName) {
+    throw new Error("npm pack did not return an OpenClaw install artifact");
   }
+  const finalTarballPath = join(tempRoot, tarballName);
   validateOpenClawTarballClosure(finalTarballPath, tempRoot);
   return finalTarballPath;
 };

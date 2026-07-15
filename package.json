@@ -1,6 +1,6 @@
 {
   "name": "@alan512/experienceengine",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "type": "module",
   "description": "Experience governance for coding agents: learn from real task outcomes, inject reusable hints, and retire low-value guidance.",
   "license": "MIT",
@@ -20,6 +20,11 @@
       "openclawVersion": "2026.4.1",
       "pluginSdkVersion": "2026.4.1"
     }
+  },
+  "experienceengine": {
+    "optionalRuntimeDependencies": [
+      "@huggingface/transformers"
+    ]
   },
   "engines": {
     "node": ">=20.0.0"
@@ -56,6 +61,7 @@
     "runtime:validate-openclaw-live-host-local-pack": "node scripts/validation/validate-openclaw-live-host-local-pack.mjs",
     "runtime:validate-published-npm": "node scripts/validation/validate-published-npm-runtime.mjs",
     "runtime:validate-published-clawhub": "node scripts/validation/validate-published-clawhub-runtime.mjs",
+    "release:build-candidates": "node scripts/release/build-release-candidates.mjs",
     "prepack": "pnpm build",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",

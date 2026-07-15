@@ -333,7 +333,7 @@ openclaw gateway restart
 ee init
 ```
 
-`v0.5.0` 包已经包含 package-local supervisor/worker 运行时。但插件加载本身仍只证明日常交互：插件已加载时可以出现 `interaction_active = true`，而 `learning_runtime_active` 或 `production_learning_ready` 仍为 false。
+`v0.5.x` 版本线已经包含 package-local supervisor/worker 运行时。但插件加载本身仍只证明日常交互：插件已加载时可以出现 `interaction_active = true`，而 `learning_runtime_active` 或 `production_learning_ready` 仍为 false。
 
 使用 OpenClaw 中经过认证的命令检查状态，并在需要时初始化当前精确安装的 package generation：
 
@@ -354,7 +354,7 @@ prepare 命令是只读的。将其 `result` 字段返回的精确 JSON 对象�
 ee verify openclaw-production
 ```
 
-当前实现已在 WSL/Linux 和原生 Windows 通过 local-pack 真实宿主 preflight；精确发布的 npm `v0.5.0` 也已在 WSL 的 OpenClaw `2026.7.1` 通过完整真实宿主序列。字节相同的 ClawHub artifact 通过了闭包检查，但其原生安装遗漏运行时依赖，因此 ClawHub 验收和完整质量门控支持声明仍未完成。
+当前实现已在 WSL/Linux 和原生 Windows 通过 local-pack 真实宿主 preflight；精确发布的 npm `v0.5.0` 也已在 WSL 的 OpenClaw `2026.7.1` 通过完整真实宿主序列。已发布的 ClawHub `v0.5.0` 通过闭包检查，但其原生安装遗漏运行时依赖。尚未发布的 `v0.5.1` 候选通过干净、无链接的依赖 bundle 修复该渠道；在新发布物完成独立验收前，ClawHub 验收和完整质量门控支持声明仍未完成。
 
 operator 回退路径为：
 

@@ -1,6 +1,15 @@
 # ExperienceEngine — Unreleased
 
-`v0.5.0` is published to npm, GitHub Releases, and ClawHub from the evidence-bound artifact. Independent npm validation passed the complete OpenClaw `2026.7.1` live-host sequence. ClawHub byte/closure validation passed, but its native install path omitted required runtime dependencies and failed plugin import, so ClawHub published acceptance and the separate quality gate remain open.
+`v0.5.0` remains published and immutable. Independent npm validation passed the complete OpenClaw `2026.7.1` live-host sequence, while ClawHub native installation omitted required runtime dependencies and failed plugin import. `v0.5.1` is now the unpublished patch release candidate for that ClawHub packaging defect.
+
+## v0.5.1 ClawHub packaging repair
+
+- Builds ClawHub from the existing reduced OpenClaw runtime-closure stage rather than reusing the full npm tarball.
+- Installs required production dependencies in a clean npm stage with scripts, dev dependencies, peers, audit/funding calls, and binary links disabled.
+- Packs required dependencies as ordinary `bundledDependencies` files and rejects links before and after archive creation.
+- Revalidates the unpacked archive's generated closure, declared relative imports, and required external runtime imports.
+- Keeps the documented local-embedding backend as an explicit optional runtime dependency instead of adding its heavy model runtime to default installs.
+- Adds a generic dual-channel release-candidate builder that records exact artifact and source identities without publishing.
 
 ## OpenClaw runtime closure remediation
 
@@ -32,6 +41,7 @@
 - Published ClawHub `0.4.8`: correctly rejected independently at closure step 1.
 - Published npm `0.5.0`: exact registry bytes, installed closure binding, and the complete OpenClaw `2026.7.1` live-host gate passed.
 - Published ClawHub `0.5.0`: exact clean artifact bytes and closure passed; native install failed because OpenClaw installed the package without its declared runtime dependencies.
-- The ClawHub packaging remediation requires a new immutable patch release built from a clean npm staging root; the separate quality/benchmark publication gate also remains pending.
+- `v0.5.1` candidate: implementation is present; exact committed-boundary artifacts and final real-host prepublication evidence must be regenerated before publication.
+- The separate quality/benchmark publication gate remains pending.
 
 See `docs/openclaw-runtime-support-matrix.md` for the exact evidence boundaries.
