@@ -65,6 +65,15 @@
 - [x] 5.5 Run TypeScript typecheck, full tests, build, and packaging checks.
 - [x] 5.6 Run `pnpm exec openspec validate validate-published-runtime-closure --strict`.
 
+### Final v0.5.0 Prepublication Candidate Evidence
+
+- The exact local candidate is `.tmp/release-candidate-v0.5.0/alan512-experienceengine-0.5.0.tgz`: `1127516` bytes, `1135` package entries, SHA-256 `8d02000270b5cc80d508f5beaa0d3f994aa01a9606d4c1c76db89a27a2656cbe`, npm SHA-1 `934632c4c57dee231c8b92215ecd9368b5329564`, and npm integrity `sha512-WIMcqRyXPdQs3E+R+pxbENIhhr6fDSvw5ImbfBoUWJRwj/M+FBrSzL/ZOg2XEs/+WmBlo9ut4dYK4R5059dlsQ==`.
+- Its embedded runtime closure digest is `cb48c7ab7195aac7c01d5bf09157f4655d64898acc13ae370d6e34ced33765d5` and package build id is `build_12d88716bde4f6551865c99631fb54c9ab54f995166dac1301994fe455023006`.
+- An isolated install of this exact tarball completed with lifecycle scripts disabled and all three package-local production entrypoint imports (plugin, supervisor, and worker) passed closure validation.
+- ClawHub CLI `0.23.1` validated the extracted exact candidate with `0` breakages, warnings, deprecations, or issues. A no-upload `package publish --dry-run` against the same tarball resolved `@alan512/experienceengine@0.5.0` as a `code-plugin` with the expected `1135` files and `1127516` uploaded bytes.
+- Production build, TypeScript typecheck, the full test suite, runtime closure validation, OpenClaw production binding validation, strict OpenSpec validation, and npm dry-run packaging all passed. The package-worker semantic-route tests also leave zero `.tmp/package-worker-route-adapter-*` directories after success or initialization failure.
+- This evidence remains local prepublication evidence only. Tasks 2.1-2.5, 5.2, and 5.3 remain unchecked; `production_learning_ready` and `support_claim_allowed` remain false until the exact npm and ClawHub artifacts pass the published-artifact gates.
+
 ## 6. Real-Host Remediation Contract
 
 - [x] 6.1 Record the real-host review finding that S1-S6 remain valid while S7 delivery evidence is incomplete.

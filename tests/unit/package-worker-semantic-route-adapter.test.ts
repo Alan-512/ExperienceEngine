@@ -1,3 +1,4 @@
+import { rm } from "node:fs/promises";
 import { describe, expect, it, vi } from "vitest";
 import type {
   RuntimeCapabilityRouteAuthorityEvidence
@@ -18,28 +19,33 @@ import {
 } from "../fixtures/runtime-configuration-authority-fixture.js";
 
 const createVerifiedGeneration = async () => {
-  const home = await createRuntimeConfigurationHome(
-    `${process.cwd()}/.tmp/package-worker-route-adapter-${Date.now()}`
-  );
-  const fixture = createConfigurationFixtureCandidate({
-    homeId: home.homeId,
-    integrityKey: home.integrityKey
-  });
-  const generation = {
-    directoryPath: "fixture-generation",
-    settings: fixture.candidate.settings,
-    secrets: fixture.candidate.secrets,
-    validationState: fixture.candidate.validationState,
-    manifest: {
-      generation_id: fixture.candidate.generationId,
-      package_generation_id:
-        fixture.candidate.packageIdentity.package_generation_id
-    } as VerifiedRuntimeConfigurationGeneration["manifest"],
-    manifestDigest: "fixture-manifest-digest",
-    profileRegistry: fixture.registry,
-    profileSelectionContext: fixture.candidate.profileSelectionContext
-  } satisfies VerifiedRuntimeConfigurationGeneration;
-  return { home, fixture, generation };
+  const homePath =
+    `${process.cwd()}/.tmp/package-worker-route-adapter-${Date.now()}`;
+  try {
+    const home = await createRuntimeConfigurationHome(homePath);
+    const fixture = createConfigurationFixtureCandidate({
+      homeId: home.homeId,
+      integrityKey: home.integrityKey
+    });
+    const generation = {
+      directoryPath: "fixture-generation",
+      settings: fixture.candidate.settings,
+      secrets: fixture.candidate.secrets,
+      validationState: fixture.candidate.validationState,
+      manifest: {
+        generation_id: fixture.candidate.generationId,
+        package_generation_id:
+          fixture.candidate.packageIdentity.package_generation_id
+      } as VerifiedRuntimeConfigurationGeneration["manifest"],
+      manifestDigest: "fixture-manifest-digest",
+      profileRegistry: fixture.registry,
+      profileSelectionContext: fixture.candidate.profileSelectionContext
+    } satisfies VerifiedRuntimeConfigurationGeneration;
+    return { home, fixture, generation };
+  } catch (error) {
+    await rm(homePath, { recursive: true, force: true });
+    throw error;
+  }
 };
 
 const authority = (options: {
@@ -129,6 +135,7 @@ describe("package worker semantic route adapter", () => {
       );
     } finally {
       home.db.close();
+      await rm(home.canonicalHome, { recursive: true, force: true });
     }
   });
 
@@ -170,6 +177,7 @@ describe("package worker semantic route adapter", () => {
       })).toThrowError(/Unsupported production reasoning adapter/u);
     } finally {
       home.db.close();
+      await rm(home.canonicalHome, { recursive: true, force: true });
     }
   });
 });
