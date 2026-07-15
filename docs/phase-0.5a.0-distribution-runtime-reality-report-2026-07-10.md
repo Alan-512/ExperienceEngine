@@ -2,6 +2,8 @@
 
 Date: 2026-07-10  
 Release under test: ExperienceEngine v0.4.8  
+
+> Historical baseline update, `2026-07-15`: this report records the v0.4.8 distribution/runtime reality that motivated the Phase 0.5A architecture. The selected package-local runtime has since been implemented in the current `v0.5.0` prepublication working tree and passed local-pack WSL, latest-stable WSL, and native Windows real-host validation. The final exact candidate has not yet been rebuilt; exact published npm and ClawHub `v0.5.0` acceptance remains pending. The historical v0.4.8 findings below are intentionally preserved.
 Source commit: `67d67cdd8ddfcf3dd210c42a6efbc261e280620e`  
 OpenClaw under test: `2026.6.11`
 

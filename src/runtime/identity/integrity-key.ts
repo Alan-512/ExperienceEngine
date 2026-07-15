@@ -26,6 +26,35 @@ const execFileAsync = promisify(execFile);
 let windowsUserSidPromise: Promise<string> | undefined;
 const inFlightKeyAdoptions = new Map<string, Promise<MachineIntegrityKey>>();
 
+const buildWindowsPowerShellEnvironment = (
+  overrides: NodeJS.ProcessEnv
+): NodeJS.ProcessEnv => {
+  const systemRoot = process.env.SystemRoot ?? process.env.WINDIR;
+  if (!systemRoot) {
+    throw new RuntimeIdentityError(
+      "EE_INTEGRITY_KEY_INVALID",
+      "Unable to resolve the Windows system root for integrity-key ACL operations."
+    );
+  }
+  const env: NodeJS.ProcessEnv = {};
+  for (const [key, value] of Object.entries(process.env)) {
+    if (key.toLowerCase() !== "psmodulepath") {
+      env[key] = value;
+    }
+  }
+  env.PSModulePath = join(
+    systemRoot,
+    "System32",
+    "WindowsPowerShell",
+    "v1.0",
+    "Modules"
+  );
+  return {
+    ...env,
+    ...overrides
+  };
+};
+
 const isNodeError = (error: unknown): error is NodeJS.ErrnoException =>
   error instanceof Error;
 
@@ -91,10 +120,9 @@ const readWindowsAclReport = async (path: string): Promise<WindowsAclReport> => 
       {
         windowsHide: true,
         encoding: "utf8",
-        env: {
-          ...process.env,
+        env: buildWindowsPowerShellEnvironment({
           EE_INTEGRITY_ACL_PATH: path
-        }
+        })
       }
     );
     const parsed = JSON.parse(stdout.trim()) as {
@@ -163,12 +191,11 @@ const applyWindowsUserOnlyAcl = async (path: string, directory: boolean): Promis
       {
         windowsHide: true,
         encoding: "utf8",
-        env: {
-          ...process.env,
+        env: buildWindowsPowerShellEnvironment({
           EE_INTEGRITY_ACL_PATH: path,
           EE_INTEGRITY_ACL_SID: sid,
           EE_INTEGRITY_ACL_DIRECTORY: directory ? "true" : "false"
-        }
+        })
       }
     );
   } catch (error) {

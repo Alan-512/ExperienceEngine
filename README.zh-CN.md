@@ -257,7 +257,7 @@ ee harmed
 | ------------------ | ----------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------ |
 | Codex              | `ee install codex`                                                | hooks + MCP                            | 已支持                                                    |
 | Claude Code        | 插件市场（marketplace）路径，保留 `ee install claude-code` 作为备用 | MCP + 插件 hooks                     | 已支持                                                    |
-| OpenClaw           | 原生插件安装，或 `ee install openclaw` 回退路径          | 宿主原生日常交互       | 交互已支持；生产后台运行时仍等待 published/live-host 验证 |
+| OpenClaw           | 原生插件安装，或 `ee install openclaw` 回退路径          | 宿主原生交互 + package-local 运行时控制 | package-local 运行时已通过 local-pack 真实宿主验证；完整支持声明仍等待精确 published-channel 与质量门槛 |
 | Google Antigravity | `ee install antigravity`，CLI 运行使用 `ee agy exec -C <project>` | MCP + 用户级插件/hooks 连线   | 通过 Agent Desktop / `agy` / 已观察到的 IDE hook 支持 |
 
 不同的宿主暴露了不同的 hook 表面，因此集成路径和成熟度也有所不同。
@@ -333,7 +333,28 @@ openclaw gateway restart
 ee init
 ```
 
-原生安装当前证明的是宿主原生日常交互，并不等于完整后台学习已就绪。插件已加载时可以出现 `interaction_active = true`，但 `learning_runtime_active` 或 `production_learning_ready` 仍为 false。
+`v0.5.0` 包已经包含 package-local supervisor/worker 运行时。但插件加载本身仍只证明日常交互：插件已加载时可以出现 `interaction_active = true`，而 `learning_runtime_active` 或 `production_learning_ready` 仍为 false。
+
+使用 OpenClaw 中经过认证的命令检查状态，并在需要时初始化当前精确安装的 package generation：
+
+```text
+/experienceengine_status
+/experienceengine_prepare_package_activation
+```
+
+prepare 命令是只读的。将其 `result` 字段返回的精确 JSON 对象复制到：
+
+```text
+/experienceengine_initialize_package_activation <exact-result-json>
+```
+
+然后使用 operator CLI 验证当前 authority：
+
+```bash
+ee verify openclaw-production
+```
+
+当前实现已在 WSL/Linux、原生 Windows，以及 WSL 上的 OpenClaw `2026.7.1` 通过 local-pack 真实宿主 preflight。完成当前 remediation 修改后仍需重新构建最终精确的 `v0.5.0` 候选包；精确 npm 与 ClawHub 发布物也需要各自独立的发布后验证。完整支持声明仍受质量门槛约束。
 
 operator 回退路径为：
 
@@ -762,7 +783,7 @@ ee install claude-code
 
 ### OpenClaw
 
-OpenClaw 提供宿主原生插件交互和 package-local 运行时架构。当前公开发布物仍需分别通过 installed-artifact、真实 Gateway、重启恢复、repair/upgrade、npm 与 ClawHub 验证，之后才能把完整后台学习称为 supported。
+OpenClaw 提供宿主原生插件交互和 package-local supervisor/worker 运行时。该运行时已经通过 local-pack installed-artifact 与真实宿主 preflight，包括 Gateway 重启、fenced queue 完成、旧 authority 输出拒绝和优雅停机。精确 npm 与 ClawHub 发布物仍需独立完成 published-channel 验证，完整支持声明仍受质量发布门槛约束。
 
 ```bash
 openclaw plugins install @alan512/experienceengine
@@ -778,6 +799,16 @@ production_learning_ready
 ```
 
 插件加载或日常交互成功只满足第一层。`ee verify openclaw-production` 是严格的非零自动化 gate；`ee status` 仍是信息型命令。
+
+对于冷启动的 package generation，使用经过认证的宿主原生控制序列：
+
+```text
+/experienceengine_status
+/experienceengine_prepare_package_activation
+/experienceengine_initialize_package_activation <exact-result-json>
+```
+
+`prepare_package_activation` 是只读操作，会返回初始化命令所需的当前 package generation、projection revision、launch revision、control request id 和 authorization id。缺失或修改这些必需的 identity、revision 或 idempotency 字段都会被拒绝；不要复用已经过期的 payload。
 
 `artifact_runtime_validated` 也不同于 `support_claim_allowed`：某个精确发布物可以证明运行时可执行，但渠道、平台或质量发布门槛仍未完成。
 

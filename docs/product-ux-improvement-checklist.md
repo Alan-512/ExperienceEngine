@@ -7,7 +7,14 @@ This document tracks the highest-impact product and UX improvements for the curr
 Current follow-up design:
 
 - [Adoption, Quality, Evidence, And Distribution Design](./adoption-quality-evidence-design-2026-07-10.md)
-- Status: revised after architecture review; begin with the distribution/runtime reality baseline, not runtime implementation.
+- Current implementation status:
+  - Phase 0.5A.0 distribution/runtime reality baseline: complete
+  - S1-S6 runtime authority, configuration, queue, and production activation slices: complete
+  - S7 implementation, local-pack validation, WSL real-host validation, and native Windows real-host validation: complete
+  - S7 exact published npm/ClawHub acceptance: pending publication and channel-bound validation
+  - S8 matched-block benchmark implementation: not started
+
+The current release task is to review and commit the remediation boundary, rebuild and validate one exact `v0.5.0` candidate from that commit, and only then publish and independently validate the npm and ClawHub artifacts without overstating full production-learning support before the remaining publication and quality gates pass.
 
 It is intentionally execution-oriented:
 

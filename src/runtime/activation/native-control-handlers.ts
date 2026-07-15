@@ -34,13 +34,22 @@ import type {
   ActivationWriter
 } from "./types.js";
 
+class NativeControlArgumentError extends Error {
+  readonly code = "EE_NATIVE_COMMAND_ARGUMENT_INVALID";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "NativeControlArgumentError";
+  }
+}
+
 const requiredString = (
   payload: Record<string, unknown>,
   field: string
 ): string => {
   const value = payload[field];
   if (typeof value !== "string" || value.trim().length === 0) {
-    throw new Error(`${field} must be a non-empty string.`);
+    throw new NativeControlArgumentError(`${field} must be a non-empty string.`);
   }
   return value;
 };
@@ -51,7 +60,9 @@ const requiredRevision = (
 ): number => {
   const value = payload[field];
   if (!Number.isSafeInteger(value) || (value as number) < 0) {
-    throw new Error(`${field} must be a non-negative safe integer.`);
+    throw new NativeControlArgumentError(
+      `${field} must be a non-negative safe integer.`
+    );
   }
   return value as number;
 };
@@ -185,8 +196,33 @@ export const createRuntimeNativeControlHandlers = (options: {
   };
 
   const initialize: OpenClawNativeOperationHandler = async (payload) => {
+    const packageGenerationId = requiredString(
+      payload,
+      "package_generation_id"
+    );
+    const requestedControlRequestId = requiredString(
+      payload,
+      "control_request_id"
+    );
+    const requestedAuthorizationId = requiredString(
+      payload,
+      "authorization_id"
+    );
+    const expectedProjectionRevision = requiredRevision(
+      payload,
+      "expected_projection_revision"
+    );
+    const expectedLaunchRevision = requiredRevision(
+      payload,
+      "expected_launch_revision"
+    );
+    if (packageGenerationId !== options.currentPluginPackageGenerationId) {
+      throw new NativeControlArgumentError(
+        "package_generation_id must match the exact current plugin package generation."
+      );
+    }
     const descriptor = options.resolvePackageGeneration(
-      options.currentPluginPackageGenerationId
+      packageGenerationId
     );
     if (!descriptor) {
       return {
@@ -205,16 +241,10 @@ export const createRuntimeNativeControlHandlers = (options: {
       activationRepository.bootstrapPackageActivationAuthority();
     }
     const initialized = control.initializePackageActivation({
-        controlRequestId: controlRequestId(payload),
-        expectedProjectionRevision: requiredRevision(
-          payload,
-          "expected_projection_revision"
-        ),
-        expectedLaunchRevision: requiredRevision(
-          payload,
-          "expected_launch_revision"
-        ),
-        authorizationId: authorizationId(payload),
+        controlRequestId: requestedControlRequestId,
+        expectedProjectionRevision,
+        expectedLaunchRevision,
+        authorizationId: requestedAuthorizationId,
         packageClosure: descriptor.packageClosure,
         expectedGatewayInstanceId: options.gatewayInstanceId,
         writer: {

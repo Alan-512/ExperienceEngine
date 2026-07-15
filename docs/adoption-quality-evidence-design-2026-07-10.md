@@ -3,8 +3,10 @@
 Date: `2026-07-10`
 Protocol freeze approved: `2026-07-11`
 Status: Phase 0.5A.1 protocol frozen; eight-slice OpenSpec plan independently reviewed and approved
-Implementation status: Phase 0.5A.0 complete; Phase 0.5A.1 freeze and OpenSpec slicing approved; S1 implementation permitted but not started
+Implementation status: S1-S6 complete; S7 implementation and local-pack/real-host validation complete; S7 exact published npm/ClawHub acceptance pending; S8 not implemented
 Owner: ExperienceEngine
+
+> Implementation update, `2026-07-15`: this document remains the frozen design and protocol history. The package-local OpenClaw runtime, authority model, configuration/route validation, fenced semantic queue, and production activation defined by S1-S6 are now implemented. S7 has passed source, local-pack, WSL, latest-stable WSL, and native Windows real-host gates, but exact published npm and ClawHub acceptance remains pending. S8 matched-block benchmark work has not started. Historical sequencing language below records the implementation constraints that applied at freeze time; it is not the current task status.
 
 ## 1. Executive Decision
 
@@ -4324,7 +4326,7 @@ establish-runtime-package-home-identity
 -> add-matched-block-benchmark-evidence
 ```
 
-The coordination plan is recorded in `docs/phase-0.5a.1-openspec-slicing-plan-2026-07-11.md`, and the independent review is recorded in `docs/phase-0.5a.1-openspec-slicing-review-2026-07-11.md`. Review approval permits S1 implementation to begin, but it does not make any runtime capability implemented, validated, available, or supported.
+The coordination plan is recorded in `docs/phase-0.5a.1-openspec-slicing-plan-2026-07-11.md`, and the independent review is recorded in `docs/phase-0.5a.1-openspec-slicing-review-2026-07-11.md`. At freeze time, review approval permitted S1 implementation to begin without making any runtime capability implemented, validated, available, or supported. The implementation status at the top of this document now records the later S1-S7 progress.
 
 ## 17. Required Documentation Reconciliation
 
@@ -4417,7 +4419,7 @@ Mitigation:
 
 The product direction is approved.
 
-The target OpenClaw architecture is approved as a design decision but remains unimplemented and unsupported.
+The target OpenClaw architecture is implemented through the S1-S6 runtime and activation slices and has passed local-pack real-host validation. Exact published npm/ClawHub acceptance and the S8 quality gate remain incomplete, so this implementation status must not be translated into an unrestricted full-support claim.
 
 The ninth-review protocol shape was not approved. The final revised protocol closed its three remaining queue cross-contract, revision-zero re-initialization, and caller-dependent supervisor-freshness contradictions without changing the A0 architecture, and Phase 0.5A.1 protocol freeze was subsequently approved.
 
@@ -4435,18 +4437,18 @@ matched multi-arm product evidence
 independent release validation
 ```
 
-The immediate next task is:
+The historical immediate task at protocol freeze was:
 
 ```text
 S1 — establish-runtime-package-home-identity implementation
 ```
 
-S1 implementation is limited to package closure, canonical home resolution, create-once integrity key, physically complete fixed empty-home control-plane bootstrap schema, stable home identity, and their inspection/validation foundations.
+S1 was limited to package closure, canonical home resolution, create-once integrity key, physically complete fixed empty-home control-plane bootstrap schema, stable home identity, and their inspection/validation foundations.
 
-Until S1 passes its implementation gate:
+The following constraints applied until S1 passed its implementation gate:
 
 - do not begin S2 migration authority, S3 process authority, S4 configuration/route authority, S5 queue semantics, S6 activation controls, S7 published closure, or S8 benchmark implementation;
 - do not claim ClawHub or OpenClaw full background learning support;
 - do not publish the canonical activation path.
 
-Runtime support is declared only after the complete dependency chain, clean-home validation, actual published npm and ClawHub artifact validation, and live host activation all pass.
+Current next steps are exact `v0.5.0` npm and ClawHub publication, channel-bound artifact validation, completion of S7 published acceptance, and then S8 matched-block benchmark implementation and evidence collection. Runtime support is declared only at the level proven by the completed gates; unrestricted production-learning support remains blocked until the remaining published-channel and quality gates pass.

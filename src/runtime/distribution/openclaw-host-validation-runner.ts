@@ -1893,6 +1893,7 @@ export const runOpenClawHostValidation = async (options: {
       );
     }
     const initializationPayload = {
+      package_generation_id: preparedRuntimeAuthority.packageGenerationId,
       expected_projection_revision:
         preparedPayload.expected_projection_revision,
       expected_launch_revision: preparedPayload.expected_launch_revision,

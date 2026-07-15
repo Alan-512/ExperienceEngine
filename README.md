@@ -257,7 +257,7 @@ Manual feedback is mainly for correcting the automatic judgment, not for grading
 | ------------------ | ----------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------ |
 | Codex              | `ee install codex`                                                | hooks + MCP                            | supported                                                    |
 | Claude Code        | marketplace plugin, with `ee install claude-code` fallback        | MCP + plugin hooks                     | supported                                                    |
-| OpenClaw           | native plugin install or `ee install openclaw` fallback           | host-native routine interaction        | interaction supported; production background runtime pending published/live-host validation |
+| OpenClaw           | native plugin install or `ee install openclaw` fallback           | host-native interaction + package-local runtime controls | package-local runtime validated with local-pack real hosts; full support claim pending exact published-channel and quality gates |
 | Google Antigravity | `ee install antigravity`, `ee agy exec -C <project>` for CLI runs | MCP + user-level plugin/hooks wiring   | supported through Agent Desktop / `agy` / observed IDE hooks |
 
 Different hosts expose different hook surfaces, so the integration path and maturity are not identical.
@@ -333,7 +333,28 @@ openclaw gateway restart
 ee init
 ```
 
-The native install currently proves host-native routine interaction, not full background-learning readiness. A loaded plugin can have `interaction_active = true` while `learning_runtime_active` or `production_learning_ready` remains false.
+The `v0.5.0` package contains a package-local supervisor/worker runtime. Plugin load alone still proves only routine interaction: a loaded plugin can have `interaction_active = true` while `learning_runtime_active` or `production_learning_ready` remains false.
+
+Use the authenticated OpenClaw commands to inspect and, when required, initialize the exact installed package generation:
+
+```text
+/experienceengine_status
+/experienceengine_prepare_package_activation
+```
+
+The preparation command is read-only. Copy the exact JSON object returned in its `result` field into:
+
+```text
+/experienceengine_initialize_package_activation <exact-result-json>
+```
+
+Then verify current authority from the operator CLI:
+
+```bash
+ee verify openclaw-production
+```
+
+The implementation has passed local-pack real-host preflight on WSL/Linux, native Windows, and OpenClaw `2026.7.1` under WSL. The final exact `v0.5.0` candidate must still be rebuilt after the current remediation changes, and exact npm and ClawHub artifacts require their own post-publication validation. The full support claim remains quality-gated.
 
 The operator fallback is:
 
@@ -772,7 +793,7 @@ Start a fresh Claude Code session after installation.
 
 ### OpenClaw
 
-OpenClaw exposes host-native plugin interaction and a package-local runtime architecture. Current public artifacts must still pass the independent installed-artifact, real-Gateway, restart, repair/upgrade, npm, and ClawHub gates before full background learning is called supported.
+OpenClaw exposes host-native plugin interaction and a package-local supervisor/worker runtime. The runtime has passed local-pack installed-artifact and real-host preflight, including Gateway restart, fenced queue completion, stale-output rejection, and graceful shutdown. Exact npm and ClawHub artifacts still require independent published-channel validation, and the full support claim remains subject to the quality publication gate.
 
 ```bash
 openclaw plugins install @alan512/experienceengine
@@ -788,6 +809,16 @@ production_learning_ready
 ```
 
 Plugin load or successful routine interaction satisfies only the first state. Use `ee verify openclaw-production` for a strict non-zero automation gate; `ee status` remains informational.
+
+For a cold package generation, use the authenticated host-native control sequence:
+
+```text
+/experienceengine_status
+/experienceengine_prepare_package_activation
+/experienceengine_initialize_package_activation <exact-result-json>
+```
+
+`prepare_package_activation` is read-only and returns the exact current package generation, projection revision, launch revision, control request id, and authorization id required by the initialization command. Missing or changed required identity, revision, or idempotency fields are rejected; do not reuse a stale payload.
 
 `artifact_runtime_validated` is also separate from `support_claim_allowed`: an exact artifact can pass runtime execution while the channel/platform/quality publication gates remain pending.
 

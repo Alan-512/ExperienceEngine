@@ -6,6 +6,8 @@ Scope: the eight Phase 0.5A.1 OpenSpec changes only. Runtime implementation, pub
 
 Frozen contract id: `phase-0.5a.1-freeze-2026-07-11`
 
+> Post-review implementation update, `2026-07-15`: S1-S6 are complete. S7 implementation and local-pack/real-host validation are complete, while exact published npm and ClawHub acceptance remains pending. S8 matched-block benchmark implementation has not started. The review conclusions below remain the historical approval record for the slicing plan.
+
 ## Review Standard
 
 The review checks whether each change is independently reviewable and implementable while preserving the frozen writer, fencing, retry, activation, provenance, distribution, and benchmark invariants.

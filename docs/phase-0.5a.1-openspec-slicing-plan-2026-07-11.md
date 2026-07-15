@@ -2,7 +2,24 @@
 
 **Created:** `2026-07-11`
 
-**Status:** OpenSpec slicing and independent review approved; S1 implementation is now permitted but has not started.
+**Status:** Historical slicing plan approved. S1-S6 are complete; S7 implementation and local-pack/real-host validation are complete; S7 exact published npm/ClawHub acceptance is pending; S8 is not implemented.
+
+## Post-Implementation Status
+
+This document remains the historical dependency and ownership plan. Current progress is:
+
+| Slice | Current status |
+| --- | --- |
+| S1 `establish-runtime-package-home-identity` | Complete |
+| S2 `add-runtime-schema-migration-authority` | Complete |
+| S3 `add-runtime-process-authority` | Complete |
+| S4 `add-runtime-configuration-route-authority` | Complete |
+| S5 `add-fenced-learning-queue-semantics` | Complete |
+| S6 `add-openclaw-production-activation` | Complete |
+| S7 `validate-published-runtime-closure` | Implementation and local-pack/real-host validation complete; exact published npm/ClawHub acceptance pending |
+| S8 `add-matched-block-benchmark-evidence` | Not implemented |
+
+Historical statements below that say implementation has not started describe the state when the slicing plan was approved, not the current repository state.
 
 **Source of truth:** `docs/adoption-quality-evidence-design-2026-07-10.md`, with Phase 0.5A.1 protocol freeze approved after the final three-blocker closure confirmation.
 

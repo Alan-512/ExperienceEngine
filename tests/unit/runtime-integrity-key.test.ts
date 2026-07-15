@@ -65,6 +65,28 @@ describe("machine integrity key", () => {
     expect(readdirSync(join(home, "machine-secrets"))).toEqual(["integrity-key.json"]);
   }, OS_PERMISSION_TEST_TIMEOUT_MS);
 
+  it.skipIf(process.platform !== "win32")(
+    "isolates Windows PowerShell ACL commands from an inherited incompatible PSModulePath",
+    async () => {
+      const originalModulePath = process.env.PSModulePath;
+      process.env.PSModulePath = makeTempDir();
+      try {
+        const home = makeTempDir();
+        await expect(createOrAdoptMachineIntegrityKey(home)).resolves.toMatchObject({
+          key_schema_version: "machine-integrity-key-v1"
+        });
+        await expect(assertMachineIntegrityKeyPermissions(home)).resolves.toBe(true);
+      } finally {
+        if (originalModulePath === undefined) {
+          delete process.env.PSModulePath;
+        } else {
+          process.env.PSModulePath = originalModulePath;
+        }
+      }
+    },
+    OS_PERMISSION_TEST_TIMEOUT_MS
+  );
+
   it("uses exact zero-separated HMAC domains and never reuses a cross-domain output", async () => {
     const key = await createOrAdoptMachineIntegrityKey(makeTempDir());
     const value = "same-input";

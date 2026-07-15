@@ -17,10 +17,14 @@ This matrix separates routine plugin interaction, package-local runtime executio
 | Source/runtime closure | Passed | Generated manifest, package-local dependency closure, schema/migrations, profile registry, compatibility metadata. |
 | Installed-artifact smoke | Implemented and tested | Direct isolated execution of exact installed package entrypoints; never substitutes for a real Gateway. |
 | Local-pack real-host preflight | Passed | OpenClaw `2026.4.1` passed independently on Linux x64 under WSL and native `win32-x64`: real `plugins install`, explicit security approval, empty-control-plane prepare/initialize commands through `chat.send`, exact-revision idempotent replay, Gateway service, agent turn, production queue, stale-output rejection, restart recovery, and authoritative shutdown. |
+| Latest-stable WSL compatibility | Passed for local-pack preflight | OpenClaw `2026.7.1` with Node `24.18.0`: startup plugin and command registries share one deferred package-local runtime, legacy JSON agent credentials are migrated into the isolated host SQLite auth store only when required, and the run proves a real model turn, semantic queue completion, stale-authority rejection, restart recovery, and two graceful terminal shutdowns. |
 | Published npm `0.4.8` | Failed at step 1 | Exact registry artifact predates the embedded runtime closure manifest. |
 | Published ClawHub `0.4.8` | Failed at step 1 | Exact ClawHub artifact predates the embedded runtime closure manifest. |
-| New published npm candidate | Pending | Requires a new release containing the current closure and runtime implementation. |
-| New published ClawHub candidate | Pending | Requires independent channel publication and validation. |
+| Previous local `v0.5.0` candidate | Superseded; must not be published | The earlier tarball passed its then-current prepublication checks, but later documentation and remediation changes altered the package contents. Its README bytes no longer match the working tree, so it is historical evidence only and cannot be used as the release artifact. |
+| Current remediation working tree | Gates passed; not a release artifact | Strict activation payload tests, PowerShell 7 inherited-module-path full tests, build, closure validation, production binding, OpenSpec strict validation, and a 1135-file npm dry-run passed. The projected archive is not a committed or publishable candidate. |
+| Final exact `v0.5.0` candidate | Pending rebuild | Rebuild only after the activation-payload and Windows PowerShell remediations pass the standard environment gates and the release boundary is committed. Record the new size, integrity, closure digest, build id, and packaged-document hashes before publication. |
+| Published npm `0.5.0` | Pending | Requires publication, exact registry download, integrity verification, clean-home execution, and real-host validation for the downloaded artifact. |
+| Published ClawHub `0.5.0` | Pending | Requires independent channel publication, exact artifact download, closure validation, clean-home execution, and real-host validation. npm evidence cannot satisfy this row. |
 | Native Windows live host | Passed for local-pack preflight | OpenClaw `2026.4.1`, Node `v24.3.0`, validated `.cmd` entrypoint resolution, authenticated direct Gateway RPC, real activation commands and agent turn, fenced queue semantics, restart recovery, and OpenClaw-owned graceful Gateway shutdown through the Windows stdin-to-`SIGINT` lifecycle bridge. This is not published-artifact evidence. |
 
 ## Support conclusions
@@ -36,4 +40,4 @@ published_clawhub_artifact_runtime_validated = false
 support_claim_allowed = false
 ```
 
-The public documentation therefore describes OpenClaw routine interaction as available while keeping full production background learning pending published evidence.
+The package-local production runtime is implemented and has passed local-pack real-host validation. Public documentation must still keep the full production background-learning support claim gated on exact published npm/ClawHub evidence and the separate quality/benchmark publication gate.

@@ -32,5 +32,6 @@ USER.md
 typescript
 scripts/tmp-*
 .runtime-pack-validation/
+.tmp/
 AGENTS.md
 CODEX.md

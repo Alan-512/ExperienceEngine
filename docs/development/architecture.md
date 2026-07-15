@@ -12,10 +12,10 @@
 
 | 字段 | 当前值 |
 | --- | --- |
-| 最近同步日期 | 2026-07-14 |
-| 最近同步范围 | `v0.5.0` 发布候选当前架构：OpenClaw package-local supervisor/worker、canonical home/package identity、SQLite migration authority、process fencing、immutable configuration/route authority、fenced semantic queue、production activation、published-artifact closure validation，以及既有 host trace/runtime service 边界 |
+| 最近同步日期 | 2026-07-15 |
+| 最近同步范围 | `v0.5.0` 发布前工作树当前架构：OpenClaw package-local supervisor/worker、canonical home/package identity、SQLite migration authority、process fencing、immutable configuration/route authority、fenced semantic queue、production activation、published-artifact closure validation、OpenClaw 2026.7.1 startup/auth compatibility，以及既有 host trace/runtime service 边界 |
 | 当前宿主基线 | OpenClaw、Claude Code、Codex、Antigravity |
-| 发布基线 | 当前仓库版本已准备为 `v0.5.0` 发布候选，但尚未发布、打 tag 或完成 npm/ClawHub published-artifact 验证；公开渠道基线仍是 `v0.4.8` |
+| 发布基线 | 当前仓库为 `v0.5.0` 发布前工作树；remediation 门禁已通过，但最终精确候选尚未从提交后的 release boundary 重建，也尚未发布、打 tag 或完成 npm/ClawHub published-artifact 验证；公开渠道基线仍是 `v0.4.8` |
 | Antigravity 状态 | 已记录用户级全局插件/MCP wiring、Agent Desktop、`agy` CLI、IDE hooks 观测、项目级 fallback 与 `ee agy exec -C <project>` 包装器 |
 | TraceCapsule 状态 | 已落地为 runtime trace 输入模型和诊断快照模型；normal mode 只持久化 `trace_provenance_json` / `trace_completeness` 摘要，不写 full trace capsule/events；诊断快照需显式开启并命中 host/scope allowlist |
 | 更新原则 | 记录当前真实架构；进行中的实现只在代码落地并验证后同步到正文架构图 |
@@ -621,10 +621,13 @@ canonical home + package generation identity
 - Gateway/plugin 只通过冻结的 control whitelist 改变 package activation authority。
 - supervisor 是 migration、runtime route projection 和 worker lifecycle 的唯一协调者。
 - worker 只有在当前 package/configuration/route/activation handshake 和 fencing authority 全部有效时，才能执行受保护的语义写入。
+- 冷启动初始化只接受 `prepare_package_activation` 返回的当前 package generation、两项 revision、control request id 和 authorization id；缺字段、修改后的幂等输入、旧 revision 或跨 generation payload 均 fail closed。
 - authority 丢失只允许 interruption recovery，不能提交旧语义结果或消耗 content retry。
+- Windows integrity-key ACL 的检查和收敛通过隔离的 Windows PowerShell 5.1 系统模块环境执行，不继承调用方 PowerShell 7 的 `PSModulePath`。
 - `interaction_active`、`learning_runtime_active`、`production_learning_ready` 是三个独立投影；插件加载不等于后台学习已就绪。
 - `artifact_runtime_validated` 需要 exact artifact 的 installed-artifact 与真实宿主证据；`support_claim_allowed` 还受 published channel、平台、repair/upgrade、文档和 S8 benchmark/quality gate 约束。
 - 当前 WSL 与原生 Windows 的 local-pack real-host preflight 已通过，但 npm/ClawHub `v0.5.0` published-artifact 验证尚未发生，因此完整 production background learning 仍不能称为 supported。
+- OpenClaw `2026.7.1` 会分别加载 startup plugin 与 command registry；插件通过共享 deferred package-local runtime 避免重复服务实例，并在隔离验证状态中按需完成 legacy JSON agent credential 到 SQLite auth store 的宿主迁移，再等待真实 service projection 后进入 activation。
 
 ---
 

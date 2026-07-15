@@ -370,6 +370,7 @@ describe("runtime native control handlers", () => {
       const payload = {
         control_request_id: "control-native-initialize",
         authorization_id: "authorization-native-initialize",
+        package_generation_id: ACTIVATION_FIXTURE_PACKAGE_ID,
         expected_projection_revision: 0,
         expected_launch_revision: 0
       };
@@ -395,6 +396,16 @@ describe("runtime native control handlers", () => {
           projection_revision: 1
         }
       });
+      await expect(service.execute({
+        operation: "initialize_package_activation",
+        payload: {
+          ...payload,
+          authorization_id: "authorization-native-initialize-tampered"
+        }
+      })).resolves.toMatchObject({
+        ok: false,
+        code: "EE_CONTROL_REQUEST_CONFLICT"
+      });
       const activation = db.prepare(
         "SELECT activation_revision, launch_authorization_id FROM package_activation_state WHERE home_id = ?"
       ).get(ACTIVATION_FIXTURE_HOME_ID) as Record<string, unknown>;
@@ -410,6 +421,119 @@ describe("runtime native control handlers", () => {
       ) as { count: number };
       expect(Number(requests.count)).toBe(1);
       expect(initializeOrResume).toHaveBeenCalledOnce();
+    } finally {
+      db.close();
+    }
+  });
+
+  it("rejects missing initialization identity, revision, and idempotency fields before authority bootstrap", async () => {
+    const requiredFields = [
+      "package_generation_id",
+      "control_request_id",
+      "authorization_id",
+      "expected_projection_revision",
+      "expected_launch_revision"
+    ] as const;
+    for (const missingField of requiredFields) {
+      const db = createRuntimeProductionActivationDatabase();
+      seedActivationGatewayHeartbeat(db);
+      try {
+        const activationBefore = db.prepare(
+          "SELECT * FROM package_activation_state WHERE home_id = ?"
+        ).get(ACTIVATION_FIXTURE_HOME_ID);
+        const service = new OpenClawRuntimeNativeService({
+          handlers: createRuntimeNativeControlHandlers({
+            db,
+            homeId: ACTIVATION_FIXTURE_HOME_ID,
+            gatewayInstanceId: ACTIVATION_FIXTURE_GATEWAY_ID,
+            gatewayProcessStartToken: ACTIVATION_FIXTURE_GATEWAY_START,
+            currentPluginPackageGenerationId: ACTIVATION_FIXTURE_PACKAGE_ID,
+            resolvePackageGeneration: () => ({
+              packageRoot: process.cwd(),
+              packageClosure: ACTIVATION_FIXTURE_PACKAGE_CLOSURE
+            }),
+            initializeOrResume: () => ({ ok: true, code: "not_used" }),
+            clock: createFixedProcessAuthorityClock(ACTIVATION_FIXTURE_NOW)
+          })
+        });
+        const payload: Record<string, unknown> = {
+          package_generation_id: ACTIVATION_FIXTURE_PACKAGE_ID,
+          control_request_id: "control-native-required-fields",
+          authorization_id: "authorization-native-required-fields",
+          expected_projection_revision: 0,
+          expected_launch_revision: 0
+        };
+        delete payload[missingField];
+
+        await expect(service.execute({
+          operation: "initialize_package_activation",
+          payload
+        })).resolves.toMatchObject({
+          ok: false,
+          code: "EE_NATIVE_COMMAND_ARGUMENT_INVALID"
+        });
+        expect(db.prepare(
+          "SELECT * FROM package_activation_state WHERE home_id = ?"
+        ).get(ACTIVATION_FIXTURE_HOME_ID)).toEqual(activationBefore);
+        expect(db.prepare(
+          "SELECT COUNT(*) AS count FROM control_request_idempotency WHERE home_id = ?"
+        ).get(ACTIVATION_FIXTURE_HOME_ID)).toEqual({ count: 0 });
+      } finally {
+        db.close();
+      }
+    }
+  });
+
+  it("rejects a cross-generation initialization payload even when another generation is resolvable", async () => {
+    const db = createRuntimeProductionActivationDatabase();
+    seedActivationGatewayHeartbeat(db);
+    try {
+      const activationBefore = db.prepare(
+        "SELECT * FROM package_activation_state WHERE home_id = ?"
+      ).get(ACTIVATION_FIXTURE_HOME_ID);
+      const service = new OpenClawRuntimeNativeService({
+        handlers: createRuntimeNativeControlHandlers({
+          db,
+          homeId: ACTIVATION_FIXTURE_HOME_ID,
+          gatewayInstanceId: ACTIVATION_FIXTURE_GATEWAY_ID,
+          gatewayProcessStartToken: ACTIVATION_FIXTURE_GATEWAY_START,
+          currentPluginPackageGenerationId: ACTIVATION_FIXTURE_PACKAGE_ID,
+          resolvePackageGeneration: (generationId) => generationId ===
+            ACTIVATION_FIXTURE_PACKAGE_ID
+            ? {
+                packageRoot: process.cwd(),
+                packageClosure: ACTIVATION_FIXTURE_PACKAGE_CLOSURE
+              }
+            : generationId === UPGRADE_PACKAGE_ID
+              ? {
+                  packageRoot: process.cwd(),
+                  packageClosure: UPGRADE_CLOSURE
+                }
+              : undefined,
+          initializeOrResume: () => ({ ok: true, code: "not_used" }),
+          clock: createFixedProcessAuthorityClock(ACTIVATION_FIXTURE_NOW)
+        })
+      });
+
+      await expect(service.execute({
+        operation: "initialize_package_activation",
+        payload: {
+          package_generation_id: UPGRADE_PACKAGE_ID,
+          control_request_id: "control-native-cross-generation",
+          authorization_id: "authorization-native-cross-generation",
+          expected_projection_revision: 0,
+          expected_launch_revision: 0
+        }
+      })).resolves.toMatchObject({
+        ok: false,
+        code: "EE_NATIVE_COMMAND_ARGUMENT_INVALID"
+      });
+      expect(db.prepare(
+        "SELECT * FROM package_activation_state WHERE home_id = ?"
+      ).get(ACTIVATION_FIXTURE_HOME_ID)).toEqual(activationBefore);
+      expect(db.prepare(
+        "SELECT COUNT(*) AS count FROM control_request_idempotency WHERE home_id = ?"
+      ).get(ACTIVATION_FIXTURE_HOME_ID)).toEqual({ count: 0 });
     } finally {
       db.close();
     }

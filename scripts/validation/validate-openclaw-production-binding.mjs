@@ -696,6 +696,10 @@ try {
     preparedPayload.package_generation_id !== configured.packageGenerationId ||
     preparedPayload.expected_projection_revision !== 0 ||
     preparedPayload.expected_launch_revision !== 0 ||
+    typeof preparedPayload.control_request_id !== "string" ||
+    preparedPayload.control_request_id.length === 0 ||
+    typeof preparedPayload.authorization_id !== "string" ||
+    preparedPayload.authorization_id.length === 0 ||
     preparedPayload.mutates_authority !== false
   ) {
     throw new Error(
@@ -703,6 +707,7 @@ try {
     );
   }
   const initializationPayload = {
+    package_generation_id: preparedPayload.package_generation_id,
     expected_projection_revision:
       preparedPayload.expected_projection_revision,
     expected_launch_revision: preparedPayload.expected_launch_revision,

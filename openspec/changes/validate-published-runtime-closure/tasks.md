@@ -67,6 +67,10 @@
 
 ### Final v0.5.0 Prepublication Candidate Evidence
 
+> Superseded release-byte note, `2026-07-15`: the tarball recorded in this section remains historical prepublication evidence for the then-current tree. Subsequent documentation and remediation changes altered the package contents, so the recorded `1129301`-byte artifact must not be published. A new exact candidate must be rebuilt from the final committed release boundary and this evidence section must be updated before publication.
+
+> Remediation validation update, `2026-07-15`: strict activation payload validation and Windows PowerShell module-environment isolation are implemented. With the parent `PSModulePath` set to the PowerShell 7 module directory, typecheck, 228 test files / 1422 tests, build, runtime closure validation, production binding, and strict OpenSpec validation passed. The final working-tree npm dry-run reports 1135 files, projected size `1133518`, unpacked size `5927923`, SHA-1 `cf2393d71a7d7076c89c6878c86ffc0c04810451`, and npm integrity `sha512-dSlwb5Z9eaZFzojqza+LsUdjYWYwN5yEzXOv/N2KtZ7M8IXfWYsFvsGmQ1Od4esLVnt8U4Tl/nVAnYltjeJSGg==`. This remains non-candidate evidence until the release boundary is committed and a new exact tarball is built.
+
 - The exact local candidate is `.tmp/release-candidate-v0.5.0/alan512-experienceengine-0.5.0.tgz`: `1129301` bytes, `1135` package entries, SHA-256 `22ce4eb250c95b1393e4a907a8358ded981119007ad6fc88cc4df0f7eafdeda0`, npm SHA-1 `992d664df97408a5d179b719fa35e98f0356174b`, and npm integrity `sha512-X+wnbZRPHaP5gLlk7H/XhGUCVkmDWV6t9PB9Mb8NRaGrmGlqWP18JqaEBOBGUWmxi/bL+NaUbosng70JGcjDrQ==`.
 - Its embedded runtime closure digest is `cb48c7ab7195aac7c01d5bf09157f4655d64898acc13ae370d6e34ced33765d5` and package build id is `build_12d88716bde4f6551865c99631fb54c9ab54f995166dac1301994fe455023006`.
 - An isolated install of this exact tarball completed with lifecycle scripts disabled and all three package-local production entrypoint imports (plugin, supervisor, and worker) passed closure validation.

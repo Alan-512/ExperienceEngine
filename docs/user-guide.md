@@ -102,7 +102,8 @@ Install ExperienceEngine through the host setup flow for:
     - `openclaw plugins install @alan512/experienceengine`
   - after installing, restart the gateway before the first real task:
     - `openclaw gateway restart`
-  - this path currently proves host-native routine interaction; it does not by itself prove the production background runtime
+  - `v0.5.0` contains the package-local supervisor/worker runtime, but plugin load alone proves only routine interaction
+  - use the authenticated package activation flow below when `learning_runtime_active` is not yet true
   - operator-managed fallback:
     - `ee install openclaw`
   - strict production-runtime gate:
@@ -624,11 +625,71 @@ ee install openclaw
 What happens:
 - ExperienceEngine installs as an OpenClaw plugin/runtime integration (not `src/adapters/`)
 - OpenClaw runtime events are used for intervention and persistence
-- host-native routine interaction may become active before the production background runtime
+- host-native routine interaction may become active before the package-local production background runtime
 - package-local supervisor/worker activation is accepted only when closure, signed install attestation, configuration/route, activation handshake, lease, and fencing evidence are current
 - async hybrid posttask review stays disabled by default unless the runtime is explicitly overridden
 - management remains mostly through CLI fallback today
 - install ends with a short cold-start note so users know capture is active before the first formal hint appears
+
+#### Activate the exact installed package generation
+
+After plugin installation and Gateway restart, first initialize shared provider and embedding state:
+
+```bash
+ee init
+```
+
+Then ask the authenticated OpenClaw command surface for the current runtime projection:
+
+```text
+/experienceengine_status
+```
+
+If the result reports that package activation initialization is required, prepare an exact revision-bound request:
+
+```text
+/experienceengine_prepare_package_activation
+```
+
+This command is read-only. Its `result` field contains the exact values required for initialization:
+
+```text
+package_generation_id
+expected_projection_revision
+expected_launch_revision
+control_request_id
+authorization_id
+```
+
+Copy the complete `result` JSON object without editing it:
+
+```text
+/experienceengine_initialize_package_activation <exact-result-json>
+```
+
+The initialization command requires all five identity, revision, and idempotency fields above. It uses compare-and-swap revisions and exact package-generation matching. Missing fields, changed required fields, cross-generation payloads, and stale requests are rejected rather than being applied to a different package or runtime authority.
+
+Finally verify the operator projection:
+
+```bash
+ee verify openclaw-production
+```
+
+`ee verify openclaw-production` returns non-zero when package, configuration, route, activation handshake, supervisor, worker, schema, or fencing authority is missing or stale. It does not turn a local-pack run into published-channel evidence.
+
+#### Runtime control commands
+
+The package-local OpenClaw service also exposes authenticated controls:
+
+```text
+/experienceengine_pause_learning <json>
+/experienceengine_resume_learning <json>
+/experienceengine_retry_blocked_system_work <json>
+/experienceengine_request_drain <json>
+/experienceengine_repair_explanation
+```
+
+Mutating controls require the current revision-bound JSON fields returned by status or the corresponding preparation/repair flow. Prefer `repair_explanation` when the required next action or payload is unclear; do not guess revisions.
 
 Do not collapse these states:
 
@@ -675,6 +736,15 @@ Success looks like:
 - OpenClaw reports the plugin as loaded or enabled
 - `ee verify openclaw-production` reports current production authority when the background runtime is actually active
 - `production_learning_ready` may still remain false until the exact published channel and quality gates pass
+
+Current prepublication evidence:
+
+- local-pack real-host preflight passed on OpenClaw `2026.4.1` under Linux/WSL and native Windows
+- local-pack real-host preflight also passed on OpenClaw `2026.7.1` under WSL with Node `24.18.0`
+- the previous tarball is superseded by later documentation and remediation changes and must not be published
+- the final exact `v0.5.0` candidate has not yet been rebuilt from the final committed release boundary
+- exact npm and ClawHub `v0.5.0` artifacts still require independent post-publication validation
+- the matched-block benchmark/quality gate remains separate from runtime activation
 
 ### Claude Code Advanced Commands
 

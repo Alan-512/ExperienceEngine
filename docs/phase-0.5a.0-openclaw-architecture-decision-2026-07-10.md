@@ -1,8 +1,10 @@
 # Phase 0.5A.0 OpenClaw Learning Architecture Decision
 
 Date: 2026-07-10  
-Status: Accepted as target architecture; not implemented  
+Status: Accepted target architecture; implemented in the current `v0.5.0` prepublication working tree, with final candidate rebuild and exact published-channel acceptance still pending
 Scope: OpenClaw full-learning runtime placement, lifecycle ownership, control surface, and shared-state invariants
+
+> Implementation update, `2026-07-15`: the package-local companion, supervisor/worker lifecycle, authority model, OpenClaw-native controls, and shared-home invariants selected here are now implemented and have passed local-pack real-host validation. The original v0.4.8 reality statements below remain the historical basis for the decision. Exact npm and ClawHub `v0.5.0` validation and the separate quality gate remain incomplete.
 
 ## 1. Decision
 
@@ -15,7 +17,7 @@ control surface: openclaw_native
 shared state: one explicit ExperienceEngine home
 ```
 
-This is a target architecture decision, not a statement of current support.
+This was a target architecture decision when written. The implementation update above records later progress without converting local-pack evidence into a full public support claim.
 
 ExperienceEngine v0.4.8 does not implement the companion, supervisor, ownership lease, migration protocol, or OpenClaw-native controls described here.
 

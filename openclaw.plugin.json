@@ -2,7 +2,7 @@
   "id": "experienceengine",
   "name": "ExperienceEngine",
   "version": "0.5.0",
-  "description": "Context-aware experience intervention controller for coding and debugging tasks.",
+  "description": "Helps coding agents avoid repeating failed execution paths by learning from real task outcomes and governing when prior guidance should be reused.",
   "activation": {
     "onStartup": true
   },
@@ -34,11 +34,11 @@
       "distillerProvider": {
         "type": "string",
         "enum": ["openai", "anthropic", "gemini", "openrouter", "deepseek", "bedrock", "vertex_gemini", "groq", "openai_compatible"],
-        "description": "Distillation provider reused by phase 2 provider-backed explain."
+        "description": "Provider used for semantic learning and provider-backed decision explanation."
       },
       "distillerModel": {
         "type": "string",
-        "description": "Distillation model identifier reused by phase 2 provider-backed explain."
+        "description": "Model used for semantic learning and provider-backed decision explanation."
       },
       "maxHints": {
         "type": "integer",
@@ -66,29 +66,29 @@
       },
       "hybridAsyncPostmortemLlmEnabled": {
         "type": "boolean",
-        "description": "Enable provider-backed postmortem_review in phase 3."
+        "description": "Enable provider-backed posttask review for eligible completed runs."
       },
       "hybridExplainLlmEnabled": {
         "type": "boolean",
-        "description": "Enable provider-backed explain_decision in phase 2."
+        "description": "Enable provider-backed explanation for eligible intervention decisions."
       },
       "hybridExplainProviderMode": {
         "type": "string",
         "enum": ["shared_distiller"],
-        "description": "Provider resolution mode for phase 2 explain_decision."
+        "description": "Provider resolution mode for decision explanation."
       },
       "hybridExplainModelProfileVersion": {
         "type": "string",
-        "description": "Version label for the provider-backed explain_decision model profile."
+        "description": "Version label for the provider-backed decision-explanation model profile."
       },
       "hybridPostmortemProviderMode": {
         "type": "string",
         "enum": ["shared_distiller"],
-        "description": "Provider resolution mode for phase 3 postmortem_review."
+        "description": "Provider resolution mode for posttask review."
       },
       "hybridPostmortemModelProfileVersion": {
         "type": "string",
-        "description": "Version label for the provider-backed postmortem_review model profile."
+        "description": "Version label for the provider-backed posttask-review model profile."
       }
     }
   },
