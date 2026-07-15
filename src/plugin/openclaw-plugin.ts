@@ -49,6 +49,34 @@ const loadOpenClawRoutineInteractionModule = () => import("./openclaw-routine-in
 
 const OPENCLAW_RUNTIME_COMMAND_PREFIX = "experienceengine_" as const;
 
+const defaultInstalledRuntimeServices = new Map<
+  string,
+  OpenClawRuntimeNativeService
+>();
+
+const resolveDefaultInstalledRuntimeService = (options: {
+  packageRoot: string;
+  config: ExperienceEngineConfig;
+}): OpenClawRuntimeNativeService => {
+  const identity = JSON.stringify({
+    packageRoot: options.packageRoot,
+    dataDir: options.config.dataDir,
+    sqlitePath: options.config.sqlitePath,
+    captureDir: options.config.captureDir
+  });
+  const existing = defaultInstalledRuntimeServices.get(identity);
+  if (existing) {
+    return existing;
+  }
+  const created = createDefaultInstalledOpenClawRuntimeService({
+    packageRoot: options.packageRoot,
+    config: options.config,
+    interactionActive: true
+  });
+  defaultInstalledRuntimeServices.set(identity, created);
+  return created;
+};
+
 const parseRuntimeCommandPayload = (args: string | undefined): Record<string, unknown> => {
   const trimmed = args?.trim();
   if (!trimmed) {
@@ -125,10 +153,9 @@ class OpenClawExperiencePlugin implements ExperiencePlugin {
 
   register(api: OpenClawPluginApi): void {
     if (!this.nativeRuntimeServiceInjected && api.rootDir?.trim()) {
-      this.nativeRuntimeService = createDefaultInstalledOpenClawRuntimeService({
+      this.nativeRuntimeService = resolveDefaultInstalledRuntimeService({
         packageRoot: api.rootDir,
-        config: this.runtime.config,
-        interactionActive: true
+        config: this.runtime.config
       });
     }
     const completedFinalizations = new Map<string, number>();

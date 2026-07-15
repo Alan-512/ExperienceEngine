@@ -3,6 +3,9 @@
   "name": "ExperienceEngine",
   "version": "0.5.0",
   "description": "Context-aware experience intervention controller for coding and debugging tasks.",
+  "activation": {
+    "onStartup": true
+  },
   "configSchema": {
     "type": "object",
     "additionalProperties": false,

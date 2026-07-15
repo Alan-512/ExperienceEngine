@@ -67,10 +67,10 @@
 
 ### Final v0.5.0 Prepublication Candidate Evidence
 
-- The exact local candidate is `.tmp/release-candidate-v0.5.0/alan512-experienceengine-0.5.0.tgz`: `1127516` bytes, `1135` package entries, SHA-256 `8d02000270b5cc80d508f5beaa0d3f994aa01a9606d4c1c76db89a27a2656cbe`, npm SHA-1 `934632c4c57dee231c8b92215ecd9368b5329564`, and npm integrity `sha512-WIMcqRyXPdQs3E+R+pxbENIhhr6fDSvw5ImbfBoUWJRwj/M+FBrSzL/ZOg2XEs/+WmBlo9ut4dYK4R5059dlsQ==`.
+- The exact local candidate is `.tmp/release-candidate-v0.5.0/alan512-experienceengine-0.5.0.tgz`: `1129301` bytes, `1135` package entries, SHA-256 `22ce4eb250c95b1393e4a907a8358ded981119007ad6fc88cc4df0f7eafdeda0`, npm SHA-1 `992d664df97408a5d179b719fa35e98f0356174b`, and npm integrity `sha512-X+wnbZRPHaP5gLlk7H/XhGUCVkmDWV6t9PB9Mb8NRaGrmGlqWP18JqaEBOBGUWmxi/bL+NaUbosng70JGcjDrQ==`.
 - Its embedded runtime closure digest is `cb48c7ab7195aac7c01d5bf09157f4655d64898acc13ae370d6e34ced33765d5` and package build id is `build_12d88716bde4f6551865c99631fb54c9ab54f995166dac1301994fe455023006`.
 - An isolated install of this exact tarball completed with lifecycle scripts disabled and all three package-local production entrypoint imports (plugin, supervisor, and worker) passed closure validation.
-- ClawHub CLI `0.23.1` validated the extracted exact candidate with `0` breakages, warnings, deprecations, or issues. A no-upload `package publish --dry-run` against the same tarball resolved `@alan512/experienceengine@0.5.0` as a `code-plugin` with the expected `1135` files and `1127516` uploaded bytes.
+- ClawHub CLI `0.23.1` validated the extracted exact candidate with `0` breakages, warnings, deprecations, or issues. A no-upload `package publish --dry-run` against the same tarball resolved `@alan512/experienceengine@0.5.0` as a `code-plugin` with the expected `1135` files and `1129301` uploaded bytes.
 - Production build, TypeScript typecheck, the full test suite, runtime closure validation, OpenClaw production binding validation, strict OpenSpec validation, and npm dry-run packaging all passed. The package-worker semantic-route tests also leave zero `.tmp/package-worker-route-adapter-*` directories after success or initialization failure.
 - This evidence remains local prepublication evidence only. Tasks 2.1-2.5, 5.2, and 5.3 remain unchecked; `production_learning_ready` and `support_claim_allowed` remain false until the exact npm and ClawHub artifacts pass the published-artifact gates.
 
@@ -122,7 +122,14 @@
 - A Windows-only stdin bridge triggered OpenClaw's existing `SIGINT` Gateway lifecycle in the same process. Both Gateway stops reached plugin-service shutdown and produced authoritative `worker = stopped`, `supervisor = stopped`, `graceful_release`, and `supervisor_graceful_release` database evidence instead of force-terminating the process tree.
 - The native Windows report remained correctly bounded to `local_pack_live_host_preflight`: `production_learning_ready = false`, `artifact_runtime_validated = false`, and `support_claim_allowed = false`.
 
+### Latest Stable WSL OpenClaw Compatibility Evidence
+
+- The WSL host was upgraded from split OpenClaw `2026.3.8`/`2026.4.1` installations to one managed OpenClaw `2026.7.1 (2d2ddc4)` package and shell entrypoint using official Node `24.18.0`; Gateway readiness, deep status, RPC, and config audit passed before ExperienceEngine validation.
+- OpenClaw `2026.7.1` loads startup plugins and command registries independently and moves agent credentials toward `openclaw-agent.sqlite`. The plugin now shares one deferred package-local service across equivalent registry loads, while the validator waits for a non-unavailable runtime status and uses OpenClaw's own non-interactive doctor migration only inside temporary state when a legacy JSON auth store coexists with an empty SQLite store.
+- The exact local-pack run then passed real plugin installation, installed closure verification, read-only activation preparation, exact-revision initialization, idempotent replay, a real authenticated model turn, semantic queue completion, stale-authority rejection, interruption recovery, Gateway restart recovery, and two graceful terminal shutdowns.
+- The run used closure digest `5058539fc8ab04b8ef63ddd69366b23a27b7580d2870a6f10a82b87ae0f21a4a` and package build id `build_87addcfcacd4bc4bf34cd3cc8a97d8d9a61fd6c265a4d84d83c1c2ce1449fdcf`. It exited with `interaction_active = true`, `learning_runtime_active = true`, `production_learning_ready = false`, `artifact_runtime_validated = false`, and `support_claim_allowed = false` because the artifact was still local-pack evidence.
+
 ### Remaining Publication Gates
 
 - Tasks 2.1–2.5, 5.2, and 5.3 remain incomplete until a new exact npm and ClawHub version containing the current closure is published and independently passes all eight ordered steps.
-- Task 5.4 is complete for the frozen OpenClaw `2026.4.1` local-pack host matrix on Linux/WSL and native Windows. This does not substitute for exact npm or ClawHub published-artifact validation.
+- Task 5.4 is complete for the frozen OpenClaw `2026.4.1` local-pack host matrix on Linux/WSL and native Windows, plus latest-stable OpenClaw `2026.7.1` on WSL. This does not substitute for exact npm or ClawHub published-artifact validation.

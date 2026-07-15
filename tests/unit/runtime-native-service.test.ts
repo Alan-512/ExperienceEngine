@@ -122,4 +122,47 @@ describe("OpenClaw runtime native service", () => {
       code: "runtime_service_unavailable"
     });
   });
+
+  it("waits for an in-flight lifecycle binding before executing native commands", async () => {
+    let releaseBinding!: () => void;
+    const bindingGate = new Promise<void>((resolve) => {
+      releaseBinding = resolve;
+    });
+    const execute = vi.fn(async () => ({
+      ok: true,
+      operation: "status" as const,
+      code: "bound_after_startup_race",
+      result: null
+    }));
+    const bound = new OpenClawRuntimeNativeService({
+      lifecycle: {
+        start: async () => ({ ok: true, code: "started" }),
+        stop: async () => ({ ok: true, code: "stopped" })
+      }
+    });
+    bound.execute = execute;
+    const deferred = new DeferredOpenClawRuntimeNativeService(
+      async () => {
+        await bindingGate;
+        return { service: bound };
+      },
+      createUnavailableOpenClawRuntimeNativeService({
+        reason: "binding_in_progress",
+        interactionActive: true
+      })
+    );
+
+    const startPromise = deferred.start({ stateDir: "host-state" });
+    const executePromise = deferred.execute({ operation: "status" });
+    await Promise.resolve();
+    expect(execute).not.toHaveBeenCalled();
+
+    releaseBinding();
+    await expect(startPromise).resolves.toEqual({ ok: true, code: "started" });
+    await expect(executePromise).resolves.toMatchObject({
+      ok: true,
+      code: "bound_after_startup_race"
+    });
+    expect(execute).toHaveBeenCalledOnce();
+  });
 });

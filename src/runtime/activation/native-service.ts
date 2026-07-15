@@ -192,11 +192,22 @@ export class DeferredOpenClawRuntimeNativeService extends OpenClawRuntimeNativeS
     return this.bindingPromise;
   }
 
-  override execute(input: {
+  override async execute(input: {
     operation: string;
     payload?: Record<string, unknown>;
   }): Promise<OpenClawNativeOperationResult> {
-    return (this.binding?.service ?? this.unavailableService).execute(input);
+    if (this.binding) {
+      return this.binding.service.execute(input);
+    }
+    if (this.bindingPromise) {
+      try {
+        const binding = await this.bindingPromise;
+        return binding.service.execute(input);
+      } catch {
+        return this.unavailableService.execute(input);
+      }
+    }
+    return this.unavailableService.execute(input);
   }
 
   override async start(

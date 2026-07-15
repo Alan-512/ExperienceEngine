@@ -399,9 +399,11 @@ Recorded version: 0.2.0`;
     };
     const pluginManifest = JSON.parse(readFileSync(join(stageDir, "openclaw.plugin.json"), "utf8")) as {
       version?: string;
+      activation?: { onStartup?: boolean };
     };
 
     expect(pluginManifest.version).toBe(packagedManifest.version);
+    expect(pluginManifest.activation?.onStartup).toBe(true);
     expect(packagedManifest.openclaw?.compat?.pluginApi).toBe(">=2026.4.1");
     expect(packagedManifest.openclaw?.compat?.minGatewayVersion).toBe("2026.4.1");
     expect(packagedManifest.openclaw?.build?.openclawVersion).toBe("2026.4.1");

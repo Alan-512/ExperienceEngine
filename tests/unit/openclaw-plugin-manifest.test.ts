@@ -15,11 +15,13 @@ describe("OpenClaw plugin manifest", () => {
       id?: string;
       name?: string;
       version?: string;
+      activation?: { onStartup?: boolean };
     };
 
     expect(manifest.id).toBe("experienceengine");
     expect(manifest.name).toBe("ExperienceEngine");
     expect(manifest.version).toBe(packageJson.version);
+    expect(manifest.activation?.onStartup).toBe(true);
   });
 
   it("declares hybrid phase1, phase2, and phase3 config fields for OpenClaw runtime wiring", () => {

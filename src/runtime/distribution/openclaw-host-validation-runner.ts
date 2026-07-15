@@ -19,6 +19,7 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
+import { backup, DatabaseSync } from "node:sqlite";
 import { promisify } from "node:util";
 import type {
   MaterializedPublishedArtifact
@@ -967,6 +968,7 @@ const runNativeRuntimeCommandDirect = async (options: {
   sessionKey: string;
   operation: string;
   payload?: Record<string, unknown>;
+  acceptedFailureCodes?: readonly string[];
   directGatewayRpcClientFactory?: DirectGatewayRpcClientFactory;
 }): Promise<OpenClawNativeCommandResult> => {
   const client = await (
@@ -1036,7 +1038,10 @@ const runNativeRuntimeCommandDirect = async (options: {
         )}`
       );
     }
-    if (!parsed.ok) {
+    if (
+      !parsed.ok &&
+      !options.acceptedFailureCodes?.includes(parsed.code)
+    ) {
       throw new PublishedRuntimeClosureError(
         "EE_OPENCLAW_LIVE_HOST_NATIVE_COMMAND_FAILED",
         `OpenClaw ${options.operation} command failed with ${parsed.code}.`
@@ -1061,6 +1066,7 @@ const runNativeRuntimeCommand = async (options: {
   sessionKey: string;
   operation: string;
   payload?: Record<string, unknown>;
+  acceptedFailureCodes?: readonly string[];
   transport?: "cli" | "direct_gateway";
   directGatewayRpcClientFactory?: DirectGatewayRpcClientFactory;
 }): Promise<OpenClawNativeCommandResult> => {
@@ -1135,13 +1141,42 @@ const runNativeRuntimeCommand = async (options: {
       )}`
     );
   }
-  if (!parsed.ok) {
+  if (
+    !parsed.ok &&
+    !options.acceptedFailureCodes?.includes(parsed.code)
+  ) {
     throw new PublishedRuntimeClosureError(
       "EE_OPENCLAW_LIVE_HOST_NATIVE_COMMAND_FAILED",
       `OpenClaw ${options.operation} command failed with ${parsed.code}.`
     );
   }
   return parsed;
+};
+
+const waitForNativeRuntimeServiceReady = async (options: Parameters<
+  typeof runNativeRuntimeCommand
+>[0]): Promise<void> => {
+  const deadline = Date.now() + options.timeoutMs;
+  let lastCode = "EE_NATIVE_OPERATION_UNAVAILABLE";
+  while (Date.now() < deadline) {
+    const status = await runNativeRuntimeCommand({
+      ...options,
+      operation: "status",
+      acceptedFailureCodes: [
+        "EE_NATIVE_OPERATION_UNAVAILABLE",
+        "runtime_service_unavailable"
+      ]
+    });
+    if (status.ok && status.code !== "runtime_service_unavailable") {
+      return;
+    }
+    lastCode = status.code;
+    await sleep(100);
+  }
+  throw new PublishedRuntimeClosureError(
+    "EE_OPENCLAW_LIVE_HOST_NATIVE_COMMAND_FAILED",
+    `OpenClaw package-local runtime service did not become ready before timeout; last code ${lastCode}.`
+  );
 };
 
 const sameInitializationSnapshot = (
@@ -1286,35 +1321,90 @@ const copySeedAgentAuth = async (options: {
   seedAgentAuthPath?: string;
   stateDir: string;
   agentId: string;
-}): Promise<void> => {
-  const source = options.seedAgentAuthPath ?? (
-    options.seedConfigPath
-      ? join(
-          dirname(options.seedConfigPath),
-          "agents",
-          options.agentId,
-          "agent",
-          "auth-profiles.json"
-        )
-      : null
+}): Promise<{ migrationRequired: boolean }> => {
+  const agentDirectory = options.seedConfigPath
+    ? join(
+        dirname(options.seedConfigPath),
+        "agents",
+        options.agentId,
+        "agent"
+      )
+    : null;
+  const legacySource = options.seedAgentAuthPath ?? (
+    agentDirectory ? join(agentDirectory, "auth-profiles.json") : null
   );
-  if (!source) {
-    return;
+  const sqliteSource = agentDirectory
+    ? join(agentDirectory, "openclaw-agent.sqlite")
+    : null;
+  if (!legacySource && !sqliteSource) {
+    return { migrationRequired: false };
   }
-  try {
-    await access(source);
-  } catch {
-    return;
-  }
-  const destination = join(
+  const destinationDirectory = join(
     options.stateDir,
     "agents",
     options.agentId,
-    "agent",
-    "auth-profiles.json"
+    "agent"
   );
-  await mkdir(dirname(destination), { recursive: true });
-  await copyFile(source, destination);
+  await mkdir(destinationDirectory, { recursive: true });
+  let legacyAuthCopied = false;
+  let sqliteAuthCopied = false;
+  if (legacySource) {
+    try {
+      await access(legacySource);
+      await copyFile(
+        legacySource,
+        join(destinationDirectory, "auth-profiles.json")
+      );
+      legacyAuthCopied = true;
+    } catch (error) {
+      if (
+        !error ||
+        typeof error !== "object" ||
+        !("code" in error) ||
+        (error as { code?: unknown }).code !== "ENOENT"
+      ) {
+        throw error;
+      }
+      // Current OpenClaw hosts may use only the SQLite agent store.
+    }
+  }
+  if (sqliteSource) {
+    try {
+      await access(sqliteSource);
+      const sourceDatabase = new DatabaseSync(sqliteSource, {
+        readOnly: true
+      });
+      try {
+        const hasAuthProfileStore = sourceDatabase.prepare(
+          "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'auth_profile_store'"
+        ).get() !== undefined;
+        const hasStoredAuthProfiles = !hasAuthProfileStore ||
+          sourceDatabase.prepare(
+            "SELECT 1 FROM auth_profile_store LIMIT 1"
+          ).get() !== undefined;
+        if (!legacyAuthCopied || hasStoredAuthProfiles) {
+          await backup(
+            sourceDatabase,
+            join(destinationDirectory, "openclaw-agent.sqlite")
+          );
+          sqliteAuthCopied = true;
+        }
+      } finally {
+        sourceDatabase.close();
+      }
+    } catch (error) {
+      if (
+        error &&
+        typeof error === "object" &&
+        "code" in error &&
+        (error as { code?: unknown }).code === "ENOENT"
+      ) {
+        return { migrationRequired: legacyAuthCopied && !sqliteAuthCopied };
+      }
+      throw error;
+    }
+  }
+  return { migrationRequired: legacyAuthCopied && !sqliteAuthCopied };
 };
 
 const readVersion = async (options: {
@@ -1505,7 +1595,7 @@ export const runOpenClawHostValidation = async (options: {
     await copyFile(options.seedConfigPath, configPath);
   }
   const agentId = options.agentId ?? "main";
-  await copySeedAgentAuth({
+  const seedAgentAuth = await copySeedAgentAuth({
     seedConfigPath: options.seedConfigPath,
     seedAgentAuthPath: options.seedAgentAuthPath,
     stateDir,
@@ -1534,6 +1624,22 @@ export const runOpenClawHostValidation = async (options: {
   );
   const executable = resolve(options.openclawExecutable);
   const cwd = validationRoot;
+  if (seedAgentAuth.migrationRequired) {
+    await runCommand({
+      runner,
+      executable,
+      args: [
+        "doctor",
+        "--non-interactive",
+        "--yes",
+        "--no-workspace-suggestions"
+      ],
+      env,
+      cwd,
+      timeoutMs
+    });
+    progress("seed_agent_auth_migrated");
+  }
   const openclawVersion = await readVersion({ runner, executable, env, cwd });
   progress("openclaw_version_resolved");
   const security = await installExactArtifact({
@@ -1703,14 +1809,30 @@ export const runOpenClawHostValidation = async (options: {
       );
     }
     progress("plugin_loaded");
+    const nativeCommandSessionKey =
+      `agent:${agentId}:ee-native-activation-${Date.now()}`;
+    await waitForNativeRuntimeServiceReady({
+      runner,
+      executable,
+      env,
+      cwd,
+      timeoutMs,
+      gatewayUrl,
+      gatewayToken,
+      stateDir,
+      clientVersion: options.artifact.package_version,
+      sessionKey: nativeCommandSessionKey,
+      operation: "status",
+      transport: nativeCommandTransport,
+      directGatewayRpcClientFactory: options.directGatewayRpcClientFactory
+    });
+    progress("runtime_service_ready");
     const initializationBefore =
       await options.authorityCollector.captureInitializationSnapshot({
         sqlitePath: options.sqlitePath,
         runtimeHome: options.runtimeHome,
         timeoutMs
       });
-    const nativeCommandSessionKey =
-      `agent:${agentId}:ee-native-activation-${Date.now()}`;
     const prepared = await runNativeRuntimeCommand({
       runner,
       executable,

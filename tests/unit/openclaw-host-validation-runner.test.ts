@@ -1,6 +1,7 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   MaterializedPublishedArtifact
@@ -132,6 +133,24 @@ describe("OpenClaw real-host validation runner", () => {
     const root = await makeRoot();
     const sourceArtifactPath = join(root, "source-artifact.tgz");
     await writeFile(sourceArtifactPath, "artifact-fixture", "utf8");
+    const seedConfigPath = join(root, "seed", "openclaw.json");
+    const seedAgentDirectory = join(root, "seed", "agents", "main", "agent");
+    await mkdir(seedAgentDirectory, { recursive: true });
+    await writeFile(seedConfigPath, "{}", "utf8");
+    await writeFile(
+      join(seedAgentDirectory, "auth-profiles.json"),
+      JSON.stringify({ version: 1, profiles: { fixture: { provider: "fixture" } } }),
+      "utf8"
+    );
+    const seedAgentDatabasePath = join(
+      seedAgentDirectory,
+      "openclaw-agent.sqlite"
+    );
+    const seedAgentDatabase = new DatabaseSync(seedAgentDatabasePath);
+    seedAgentDatabase.exec(
+      "CREATE TABLE auth_profile_store (store_key TEXT PRIMARY KEY, store_json TEXT, updated_at INTEGER);"
+    );
+    seedAgentDatabase.close();
     const testArtifact: MaterializedPublishedArtifact = {
       ...artifact,
       artifact_path: sourceArtifactPath
@@ -145,6 +164,7 @@ describe("OpenClaw real-host validation runner", () => {
       params: Record<string, unknown>;
     }> = [];
     const directGatewayFinals = new Map<string, unknown>();
+    let runtimeStatusCalls = 0;
     const directGatewayRpcClientFactory: DirectGatewayRpcClientFactory =
       vi.fn(async () => ({
         request: async (
@@ -160,7 +180,22 @@ describe("OpenClaw real-host validation runner", () => {
           }
           const message = String(params.message ?? "");
           let commandResult: Record<string, unknown>;
-          if (message === "/experienceengine_prepare_package_activation") {
+          if (message === "/experienceengine_status") {
+            runtimeStatusCalls += 1;
+            commandResult = runtimeStatusCalls === 1
+              ? {
+                  ok: true,
+                  operation: "status",
+                  code: "runtime_service_unavailable",
+                  result: { learning_runtime_active: false }
+                }
+              : {
+                  ok: true,
+                  operation: "status",
+                  code: "runtime_status",
+                  result: { learning_runtime_active: true }
+                };
+          } else if (message === "/experienceengine_prepare_package_activation") {
             commandResult = {
               ok: true,
               operation: "prepare_package_activation",
@@ -217,6 +252,23 @@ describe("OpenClaw real-host validation runner", () => {
       commands.push(command);
       if (command.args[0] === "--version") {
         return { stdout: "OpenClaw 2026.4.1 (fixture)\n", stderr: "" };
+      }
+      if (command.args[0] === "doctor") {
+        const destination = join(
+          root,
+          "openclaw-state",
+          "agents",
+          "main",
+          "agent",
+          "openclaw-agent.sqlite"
+        );
+        const migrated = new DatabaseSync(destination);
+        migrated.exec(
+          "CREATE TABLE auth_seed (provider TEXT PRIMARY KEY);" +
+          "INSERT INTO auth_seed VALUES ('fixture-provider');"
+        );
+        migrated.close();
+        return { stdout: "Doctor complete.\n", stderr: "" };
       }
       if (command.args[0] === "plugins" && command.args[1] === "info") {
         return {
@@ -352,6 +404,7 @@ describe("OpenClaw real-host validation runner", () => {
         captureDir: join(root, "runtime-home", "captures")
       },
       authorityCollector: collector,
+      seedConfigPath,
       commandRunner,
       gatewaySpawner,
       installedPackageVerifier,
@@ -384,6 +437,7 @@ describe("OpenClaw real-host validation runner", () => {
       production_learning_ready: false
     });
     expect(commands.some((command) => command.args[0] === "plugins" && command.args[1] === "install")).toBe(true);
+    expect(commands.some((command) => command.args[0] === "doctor")).toBe(true);
     expect(commands.find((command) =>
       command.args[0] === "plugins" && command.args[1] === "install"
     )?.args[2]).toBe(join(root, "install-input", "experienceengine-candidate.tgz"));
@@ -404,14 +458,17 @@ describe("OpenClaw real-host validation runner", () => {
     const directMessages = directGatewayRequests
       .filter((request) => request.method === "chat.send")
       .map((request) => String(request.params.message ?? ""));
-    expect(directMessages).toHaveLength(3);
+    expect(directMessages).toHaveLength(5);
+    expect(directMessages.filter((message) =>
+      message === "/experienceengine_status"
+    )).toHaveLength(2);
     expect(directMessages).toContain(
       "/experienceengine_prepare_package_activation"
     );
     expect(directMessages.filter((message) => message.startsWith(
       "/experienceengine_initialize_package_activation "
     ))).toHaveLength(2);
-    expect(directGatewayRpcClientFactory).toHaveBeenCalledTimes(5);
+    expect(directGatewayRpcClientFactory).toHaveBeenCalledTimes(7);
     expect(gatewaySpawner).toHaveBeenCalledTimes(2);
     expect(stopped).toEqual([1001, 1002, 1002]);
     expect(collector.captureActiveEvidence).toHaveBeenCalledOnce();
@@ -427,6 +484,18 @@ describe("OpenClaw real-host validation runner", () => {
     expect(collector.captureShutdownEvidence).toHaveBeenCalledTimes(2);
     expect(installedPackageVerifier).toHaveBeenCalledWith(installedRoot);
     expect(publishedAttestationIssuer).toHaveBeenCalledOnce();
+    const isolatedAgentDatabase = new DatabaseSync(join(
+      root,
+      "openclaw-state",
+      "agents",
+      "main",
+      "agent",
+      "openclaw-agent.sqlite"
+    ), { readOnly: true });
+    expect(isolatedAgentDatabase.prepare(
+      "SELECT provider FROM auth_seed"
+    ).get()).toEqual({ provider: "fixture-provider" });
+    isolatedAgentDatabase.close();
   });
 
   it("freezes the real-host boundary", () => {
