@@ -93,10 +93,14 @@ const pilotVersion = args["pilot-version"];
 if (!/^[1-9][0-9]*$/.test(pilotVersion)) {
   throw new Error("--pilot-version must be a positive integer string.");
 }
+const repetitionsText = typeof args.repetitions === "string" ? args.repetitions : "1";
+if (!/^[1-9][0-9]*$/.test(repetitionsText)) {
+  throw new Error("--repetitions must be a positive integer string.");
+}
+const repetitions = Number.parseInt(repetitionsText, 10);
 const pilotId = `s8-openclaw-pilot-v${pilotVersion}`;
 const scenarioId = `s8-file-write-v${pilotVersion}`;
 const nodeId = `s8-pilot-node-v${pilotVersion}`;
-const blockSeed = `${pilotId}-seed`;
 const keepRuntime = args["keep-runtime"] === true;
 const runtimeRoot = args["runtime-root"]
   ? resolve(args["runtime-root"])
@@ -222,38 +226,59 @@ if (doctor.exitCode !== 0) {
   throw new Error(`OpenClaw auth migration failed: ${doctor.stderr || doctor.stdout}`);
 }
 
-const arms = deriveMatchedBlockArmOrder(blockSeed);
-const armRuntime = Object.fromEntries(arms.map((arm) => {
-  const root = join(runtimeRoot, arm);
-  const stateDir = join(root, "openclaw-state");
-  const workspace = join(root, "workspace");
-  const eeHome = join(root, "ee-home");
-  const artifactRoot = join(root, "artifacts");
-  cpSync(templateState, stateDir, { recursive: true });
-  mkdirSync(workspace, { recursive: true });
-  mkdirSync(artifactRoot, { recursive: true });
-  const configPath = join(stateDir, "openclaw.json");
-  const config = JSON.parse(readFileSync(configPath, "utf8"));
-  config.agents.defaults.workspace = workspace;
-  config.models = {
-    mode: "merge",
-    providers: { openrouter: { baseUrl: openrouterBaseUrl } }
+const blockRunContexts = Array.from({ length: repetitions }, (_, index) => {
+  const repetitionIndex = index + 1;
+  const blockId = repetitions === 1
+    ? `${pilotId}-block`
+    : `${pilotId}-block-${repetitionIndex}`;
+  const blockSeed = repetitions === 1
+    ? `${pilotId}-seed`
+    : `${blockId}-seed`;
+  const arms = deriveMatchedBlockArmOrder(blockSeed);
+  const blockRuntimeRoot = repetitions === 1
+    ? runtimeRoot
+    : join(runtimeRoot, `block-${repetitionIndex}`);
+  const armRuntime = Object.fromEntries(arms.map((arm) => {
+    const root = join(blockRuntimeRoot, arm);
+    const stateDir = join(root, "openclaw-state");
+    const workspace = join(root, "workspace");
+    const eeHome = join(root, "ee-home");
+    const artifactRoot = join(root, "artifacts");
+    cpSync(templateState, stateDir, { recursive: true });
+    mkdirSync(workspace, { recursive: true });
+    mkdirSync(artifactRoot, { recursive: true });
+    const configPath = join(stateDir, "openclaw.json");
+    const config = JSON.parse(readFileSync(configPath, "utf8"));
+    config.agents.defaults.workspace = workspace;
+    config.models = {
+      mode: "merge",
+      providers: { openrouter: { baseUrl: openrouterBaseUrl } }
+    };
+    if (arm === "no_ee") {
+      config.plugins = { allow: [], entries: {}, load: {} };
+    }
+    writeJson(configPath, config, 0o600);
+    return [arm, {
+      root,
+      stateDir,
+      configPath,
+      workspace,
+      eeHome,
+      artifactRoot,
+      sessionId: repetitions === 1
+        ? `s8-pilot-${arm}-session`
+        : `s8-pilot-r${repetitionIndex}-${arm}-session`,
+      installed: false
+    }];
+  }));
+  return {
+    repetitionIndex,
+    blockId,
+    blockSeed,
+    arms,
+    armRuntime
   };
-  if (arm === "no_ee") {
-    config.plugins = { allow: [], entries: {}, load: {} };
-  }
-  writeJson(configPath, config, 0o600);
-  return [arm, {
-    root,
-    stateDir,
-    configPath,
-    workspace,
-    eeHome,
-    artifactRoot,
-    sessionId: `s8-pilot-${arm}-session`,
-    installed: false
-  }];
-}));
+});
 
 const runtimeManifest = withDigest({
   runtime_manifest_schema_version: MATCHED_BLOCK_SCHEMA_VERSIONS.runtime,
@@ -386,7 +411,7 @@ const instrumentation = withDigest({
   created_at: createdAt,
   instrumentation_manifest_digest: ""
 }, "instrumentation_manifest_digest");
-const block = withDigest({
+const blocks = blockRunContexts.map((context) => withDigest({
   benchmark_manifest_schema_version: MATCHED_BLOCK_SCHEMA_VERSIONS.block,
   benchmark_protocol_version: MATCHED_BLOCK_BENCHMARK_PROTOCOL_VERSION,
   benchmark_campaign_id: campaign.benchmark_campaign_id,
@@ -400,12 +425,12 @@ const block = withDigest({
   ground_truth_id: groundTruth.ground_truth_id,
   runtime_manifest_id: runtimeManifest.runtime_manifest_id,
   instrumentation_manifest_id: instrumentation.instrumentation_manifest_id,
-  block_id: `${pilotId}-block`,
+  block_id: context.blockId,
   replacement_for_block_id: null,
   replacement_generation: 0,
-  repetition_index: 1,
-  randomization_seed: blockSeed,
-  planned_arm_order: arms,
+  repetition_index: context.repetitionIndex,
+  randomization_seed: context.blockSeed,
+  planned_arm_order: context.arms,
   repository_snapshot_digest: fixture.repository_snapshot_digest,
   task_input_digest: scenario.task_input_digest,
   candidate_corpus_digest: fixture.candidate_corpus_digest,
@@ -424,19 +449,22 @@ const block = withDigest({
   created_at: createdAt,
   sealed_at: createdAt,
   manifest_digest: ""
-}, "manifest_digest");
-const armPlans = arms.map((arm, index) => ({
-  arm_plan_schema_version: MATCHED_BLOCK_SCHEMA_VERSIONS.armPlan,
-  benchmark_campaign_id: campaign.benchmark_campaign_id,
-  block_id: block.block_id,
-  manifest_digest: block.manifest_digest,
-  arm,
-  planned_ordinal: index + 1,
-  workspace_isolation_id: `${block.block_id}-${arm}-workspace`,
-  ee_home_isolation_id: `${block.block_id}-${arm}-ee-home`,
-  host_session_isolation_id: `${block.block_id}-${arm}-session`,
-  arm_control_digest: computeMatchedBlockArmControlDigest(arm)
-}));
+}, "manifest_digest"));
+const armPlansByBlock = new Map(blocks.map((block, blockIndex) => [
+  block.block_id,
+  blockRunContexts[blockIndex].arms.map((arm, index) => ({
+    arm_plan_schema_version: MATCHED_BLOCK_SCHEMA_VERSIONS.armPlan,
+    benchmark_campaign_id: campaign.benchmark_campaign_id,
+    block_id: block.block_id,
+    manifest_digest: block.manifest_digest,
+    arm,
+    planned_ordinal: index + 1,
+    workspace_isolation_id: `${block.block_id}-${arm}-workspace`,
+    ee_home_isolation_id: `${block.block_id}-${arm}-ee-home`,
+    host_session_isolation_id: `${block.block_id}-${arm}-session`,
+    arm_control_digest: computeMatchedBlockArmControlDigest(arm)
+  }))
+]));
 const publicationPlan = withDigest({
   publication_plan_schema_version: MATCHED_BLOCK_SCHEMA_VERSIONS.publicationPlan,
   benchmark_campaign_id: campaign.benchmark_campaign_id,
@@ -464,9 +492,11 @@ store.insertFixtureManifest(fixture);
 store.insertRuntimeManifest(runtimeManifest);
 store.insertInstrumentationManifest(instrumentation);
 store.insertPublicationPlan(publicationPlan);
-store.insertSealedBlock(block, armPlans);
+for (const block of blocks) {
+  store.insertSealedBlock(block, armPlansByBlock.get(block.block_id));
+}
 
-const armEnv = (arm) => {
+const armEnv = (armRuntime, arm) => {
   const runtime = armRuntime[arm];
   return {
     ...commonEnv,
@@ -482,7 +512,7 @@ const armEnv = (arm) => {
   };
 };
 
-const patchArmConfig = (arm) => {
+const patchArmConfig = (armRuntime, arm) => {
   const runtime = armRuntime[arm];
   const config = JSON.parse(readFileSync(runtime.configPath, "utf8"));
   config.agents.defaults.workspace = runtime.workspace;
@@ -509,7 +539,7 @@ const patchArmConfig = (arm) => {
   writeJson(runtime.configPath, config, 0o600);
 };
 
-const seedEeFixture = (arm) => {
+const seedEeFixture = (armRuntime, arm) => {
   if (arm === "no_ee") {
     return {
       scope_id: null,
@@ -529,7 +559,7 @@ const seedEeFixture = (arm) => {
     holdoutRate: arm === "forced_holdout" ? 1 : 0,
     triggerThreshold: 0.05,
     maxHints: 1
-  }, { env: armEnv(arm) });
+  }, { env: armEnv(armRuntime, arm) });
   const db = openDatabase(config);
   try {
     bootstrapDatabase(db);
@@ -597,7 +627,7 @@ const parseAgentJson = (stdout) => {
   return null;
 };
 
-const readInjectionEvidence = (arm) => {
+const readInjectionEvidence = (armRuntime, arm) => {
   if (arm === "no_ee") return null;
   const runtime = armRuntime[arm];
   const sqlitePath = join(runtime.eeHome, "sqlite", "experienceengine.db");
@@ -607,7 +637,7 @@ const readInjectionEvidence = (arm) => {
     sqlitePath,
     captureDir: join(runtime.eeHome, "captures"),
     embeddingProvider: "legacy"
-  }, { env: armEnv(arm) });
+  }, { env: armEnv(armRuntime, arm) });
   const db = openDatabase(config);
   try {
     const injection = new InjectionRepository(db).getLatest() ?? null;
@@ -626,9 +656,10 @@ const readInjectionEvidence = (arm) => {
   }
 };
 
-const observerState = new Map();
 const observations = [];
-const driver = {
+const createDriver = ({ block, armRuntime }) => {
+  const observerState = new Map();
+  return {
   resolveIsolation: (_bundle, plan) => {
     const runtime = armRuntime[plan.arm];
     return {
@@ -648,18 +679,18 @@ const driver = {
     if (stage === "dependency_setup" && arm !== "no_ee" && !runtime.installed) {
       result = run(openclawExecutable, [
         "plugins", "install", artifactPath, "--acknowledge-clawhub-risk", "--force"
-      ], { env: armEnv(arm), timeoutMs: 600_000 });
+      ], { env: armEnv(armRuntime, arm), timeoutMs: 600_000 });
       if (result.exitCode === 0) {
         runtime.installed = true;
-        patchArmConfig(arm);
+        patchArmConfig(armRuntime, arm);
       }
     } else if (stage === "credential_validation") {
       result = run(openclawExecutable, ["models", "status", "--json"], {
-        env: armEnv(arm), timeoutMs: 120_000
+        env: armEnv(armRuntime, arm), timeoutMs: 120_000
       });
     } else if (stage === "host_startup") {
       result = run(openclawExecutable, ["plugins", "list", "--json"], {
-        env: armEnv(arm), timeoutMs: 120_000
+        env: armEnv(armRuntime, arm), timeoutMs: 120_000
       });
       if (result.exitCode === 0) {
         const hasEe = result.stdout.includes("experienceengine");
@@ -699,7 +730,7 @@ const driver = {
     const runtime = armRuntime[context.plan.arm];
     rmSync(runtime.workspace, { recursive: true, force: true });
     mkdirSync(runtime.workspace, { recursive: true });
-    const fixtureState = seedEeFixture(context.plan.arm);
+    const fixtureState = seedEeFixture(armRuntime, context.plan.arm);
     return {
       reset_contract_digest: executionContract.fixture_reset_policy_digest,
       evidence_digest: digest({
@@ -724,7 +755,7 @@ const driver = {
     const arm = context.plan.arm;
     const runtime = armRuntime[arm];
     const list = run(openclawExecutable, ["plugins", "list", "--json"], {
-      env: armEnv(arm), timeoutMs: 120_000
+      env: armEnv(armRuntime, arm), timeoutMs: 120_000
     });
     const hasEe = list.exitCode === 0 && list.stdout.includes("experienceengine");
     if ((arm === "no_ee" && hasEe) || (arm !== "no_ee" && !hasEe)) {
@@ -754,14 +785,14 @@ const driver = {
       "--model", primaryModel,
       "--thinking", "off",
       "--timeout", "600"
-    ], { cwd: runtime.workspace, env: armEnv(arm), timeoutMs: 620_000 });
+    ], { cwd: runtime.workspace, env: armEnv(armRuntime, arm), timeoutMs: 620_000 });
     writeFileSync(join(runtime.artifactRoot, "openclaw.stdout.jsonl"), result.stdout, "utf8");
     writeFileSync(join(runtime.artifactRoot, "openclaw.stderr.log"), result.stderr, "utf8");
     const agentJson = parseAgentJson(result.stdout);
     const resultPath = join(runtime.workspace, "result.txt");
     const taskSuccess = result.exitCode === 0 && existsSync(resultPath) &&
       readFileSync(resultPath).equals(Buffer.from(TASK_CONTENT));
-    const injection = readInjectionEvidence(arm);
+    const injection = readInjectionEvidence(armRuntime, arm);
     const wouldHaveDelivered = arm === "no_ee"
       ? null
       : Boolean(injection && injection.injected_node_ids.length > 0);
@@ -842,26 +873,41 @@ const driver = {
     };
   },
   cleanupArm: async () => {}
+  };
 };
 
-let harnessResult;
 let campaignReport;
+const blockResults = [];
 try {
-  harnessResult = await executeSealedMatchedBlock({
-    store,
-    blockId: block.block_id,
-    executionContract,
-    driver
-  });
-  if (harnessResult.status !== "completed") {
-    throw new Error(`Pilot preflight failed: ${JSON.stringify(harnessResult.failed_preflight)}`);
+  for (let index = 0; index < blocks.length; index += 1) {
+    const block = blocks[index];
+    const context = blockRunContexts[index];
+    const harnessResult = await executeSealedMatchedBlock({
+      store,
+      blockId: block.block_id,
+      executionContract,
+      driver: createDriver({ block, armRuntime: context.armRuntime })
+    });
+    if (harnessResult.status !== "completed") {
+      throw new Error(
+        `Matched-block preflight failed for ${block.block_id}: ${JSON.stringify(harnessResult.failed_preflight)}`
+      );
+    }
+    const disposition = appendMatchedBlockDisposition(
+      store,
+      block.block_id,
+      new Date().toISOString(),
+      "run-openclaw-matched-block-pilot"
+    );
+    blockResults.push({
+      block_id: block.block_id,
+      repetition_index: block.repetition_index,
+      planned_arm_order: block.planned_arm_order,
+      manifest_digest: block.manifest_digest,
+      harness_result: harnessResult,
+      block_disposition: disposition
+    });
   }
-  const disposition = appendMatchedBlockDisposition(
-    store,
-    block.block_id,
-    new Date().toISOString(),
-    "run-openclaw-matched-block-pilot"
-  );
   writeJson(observationsPath, observations);
   campaignReport = runMatchedBlockCampaignReport({
     campaignDatabasePath,
@@ -872,7 +918,9 @@ try {
     persistDecision: true
   });
   const evidence = {
-    evidence_type: `real_openclaw_matched_block_pilot_v${pilotVersion}`,
+    evidence_type: repetitions === 1
+      ? `real_openclaw_matched_block_pilot_v${pilotVersion}`
+      : `real_openclaw_matched_block_campaign_v${pilotVersion}`,
     artifact: {
       path_name: basename(artifactPath),
       size: statSync(artifactPath).size,
@@ -885,12 +933,24 @@ try {
     },
     campaign: {
       campaign_id: campaign.benchmark_campaign_id,
-      block_id: block.block_id,
-      planned_arm_order: arms,
-      manifest_digest: block.manifest_digest
+      repetition_count: repetitions,
+      blocks: blockResults.map((result) => ({
+        block_id: result.block_id,
+        repetition_index: result.repetition_index,
+        planned_arm_order: result.planned_arm_order,
+        manifest_digest: result.manifest_digest
+      })),
+      ...(repetitions === 1 ? {
+        block_id: blockResults[0].block_id,
+        planned_arm_order: blockResults[0].planned_arm_order,
+        manifest_digest: blockResults[0].manifest_digest
+      } : {})
     },
-    harness_result: harnessResult,
-    block_disposition: disposition,
+    block_results: blockResults,
+    ...(repetitions === 1 ? {
+      harness_result: blockResults[0].harness_result,
+      block_disposition: blockResults[0].block_disposition
+    } : {}),
     observations,
     campaign_report: campaignReport.report,
     support_claim_allowed: false,
@@ -899,11 +959,13 @@ try {
   };
   writeJson(evidencePath, evidence);
   process.stdout.write(`${JSON.stringify({
-    status: "pilot_completed",
+    status: repetitions === 1 ? "pilot_completed" : "campaign_completed",
     output_dir: outputDir,
     evidence_path: evidencePath,
+    repetitions,
     campaign_decision: campaignReport.report.result.publication_decision.decision,
     arm_outcomes: observations.map((observation) => ({
+      block_id: observation.block_id,
       arm: observation.arm,
       task_success: observation.task_success,
       delivered: observation.delivered_intervention_count,

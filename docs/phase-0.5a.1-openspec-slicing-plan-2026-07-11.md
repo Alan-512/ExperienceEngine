@@ -2,7 +2,9 @@
 
 **Created:** `2026-07-11`
 
-**Status:** Historical slicing plan approved. S1-S8 implementation and acceptance gates are complete. The accepted one-block S8 pilot is intentionally `not_publishable` under its sealed repetition threshold.
+**Status:** Historical slicing plan approved. S1-S8 implementation and acceptance gates are complete. The retained one-block v3 pilot remains `not_publishable`; the later five-block v4 campaign passed its sealed single-scenario publication gate with explicit limitations.
+
+**Repeated evidence:** [OpenClaw Matched-Block Campaign V4](./openclaw-matched-block-campaign-v4.md)
 
 ## Post-Implementation Status
 
@@ -17,7 +19,7 @@ This document remains the historical dependency and ownership plan. Current prog
 | S5 `add-fenced-learning-queue-semantics` | Complete |
 | S6 `add-openclaw-production-activation` | Complete |
 | S7 `validate-published-runtime-closure` | Complete, including exact published npm/ClawHub live-host acceptance |
-| S8 `add-matched-block-benchmark-evidence` | Complete: sealed three-arm harness, failure/replacement protocol, complete-block scoring, real OpenClaw pilot, deterministic recomputation, and fail-closed publication decision accepted; one-block pilot remains `not_publishable` |
+| S8 `add-matched-block-benchmark-evidence` | Complete: sealed three-arm harness, failure/replacement protocol, complete-block scoring, real OpenClaw v3/v4 evidence strata, deterministic recomputation, and fail-closed publication decisions accepted; v4 passed the sealed five-repetition single-scenario gate while support/readiness claims remain disabled |
 
 Historical statements below that say implementation has not started describe the state when the slicing plan was approved, not the current repository state.
 

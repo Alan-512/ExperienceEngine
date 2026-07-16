@@ -60,6 +60,11 @@ const pilotVersion = args["pilot-version"];
 if (!/^[1-9][0-9]*$/.test(pilotVersion)) {
   throw new Error("--pilot-version must be a positive integer string.");
 }
+const repetitionsText = typeof args.repetitions === "string" ? args.repetitions : "1";
+if (!/^[1-9][0-9]*$/.test(repetitionsText)) {
+  throw new Error("--repetitions must be a positive integer string.");
+}
+const repetitions = Number.parseInt(repetitionsText, 10);
 
 for (const path of [
   evidencePath,
@@ -96,7 +101,9 @@ const expectedNodeId = `s8-pilot-node-v${pilotVersion}`;
 const expectedArtifactSha256 = sha256File(expectedArtifactPath);
 
 assert(
-  evidence.evidence_type === `real_openclaw_matched_block_pilot_v${pilotVersion}`,
+  evidence.evidence_type === (repetitions === 1
+    ? `real_openclaw_matched_block_pilot_v${pilotVersion}`
+    : `real_openclaw_matched_block_campaign_v${pilotVersion}`),
   "PILOT_EVIDENCE_VERSION_MISMATCH",
   "Pilot evidence type does not match the requested protocol stratum."
 );
@@ -108,87 +115,133 @@ assert(
 );
 assert(evidence.support_claim_allowed === false, "PILOT_SUPPORT_BOUNDARY_INVALID", "Pilot must not enable support claims.");
 assert(evidence.production_learning_ready === false, "PILOT_SUPPORT_BOUNDARY_INVALID", "Pilot must not claim production learning readiness.");
-assert(evidence.harness_result?.status === "completed", "PILOT_HARNESS_INCOMPLETE", "Pilot harness did not complete.");
-assert(evidence.block_disposition?.disposition === "complete", "PILOT_BLOCK_INCOMPLETE", "Pilot block is not complete.");
 
 const campaignId = evidence.campaign?.campaign_id;
-const blockId = evidence.campaign?.block_id;
 assert(campaignId === `${expectedPilotId}-campaign`, "PILOT_CAMPAIGN_ID_MISMATCH", "Unexpected campaign id.");
-assert(blockId === `${expectedPilotId}-block`, "PILOT_BLOCK_ID_MISMATCH", "Unexpected block id.");
-assert(
-  canonicalJson(sorted(evidence.campaign?.planned_arm_order ?? [])) === canonicalJson(sorted(MATCHED_BLOCK_ARMS)),
-  "PILOT_ARM_SET_INVALID",
-  "Pilot did not seal exactly the required three arms."
-);
+const evidenceBlocks = Array.isArray(evidence.campaign?.blocks)
+  ? evidence.campaign.blocks
+  : [{
+      block_id: evidence.campaign?.block_id,
+      repetition_index: 1,
+      planned_arm_order: evidence.campaign?.planned_arm_order,
+      manifest_digest: evidence.campaign?.manifest_digest
+    }];
+const evidenceBlockResults = Array.isArray(evidence.block_results)
+  ? evidence.block_results
+  : [{
+      block_id: evidence.campaign?.block_id,
+      repetition_index: 1,
+      planned_arm_order: evidence.campaign?.planned_arm_order,
+      manifest_digest: evidence.campaign?.manifest_digest,
+      harness_result: evidence.harness_result,
+      block_disposition: evidence.block_disposition
+    }];
+assert(evidenceBlocks.length === repetitions, "PILOT_BLOCK_COUNT_INVALID", "Evidence block count does not match --repetitions.");
+assert(evidenceBlockResults.length === repetitions, "PILOT_BLOCK_RESULT_COUNT_INVALID", "Evidence block-result count does not match --repetitions.");
+for (const result of evidenceBlockResults) {
+  assert(result.harness_result?.status === "completed", "PILOT_HARNESS_INCOMPLETE", `${result.block_id} harness did not complete.`);
+  assert(result.block_disposition?.disposition === "complete", "PILOT_BLOCK_INCOMPLETE", `${result.block_id} is not complete.`);
+}
+for (const block of evidenceBlocks) {
+  assert(
+    canonicalJson(sorted(block.planned_arm_order ?? [])) === canonicalJson(sorted(MATCHED_BLOCK_ARMS)),
+    "PILOT_ARM_SET_INVALID",
+    `${block.block_id} did not seal exactly the required three arms.`
+  );
+}
 
 const store = new MatchedBlockBenchmarkStore(campaignDatabasePath);
-let block;
+let blocks;
 let scenario;
-let attempts;
-let disposition;
 let persistedDecision;
-let preflightRecords;
+const attemptsByBlock = new Map();
+const dispositionsByBlock = new Map();
+const preflightByBlock = new Map();
 try {
   store.assertOwnsOnlyBenchmarkTables();
-  const blocks = store.listBlockManifests(campaignId);
-  assert(blocks.length === 1, "PILOT_BLOCK_COUNT_INVALID", "Pilot campaign must contain one sealed block.");
-  [block] = blocks;
-  assert(block.block_id === blockId, "PILOT_BLOCK_REFERENCE_MISMATCH", "Stored block differs from evidence.");
-  scenario = store.getScenarioManifest(block.scenario_id, block.scenario_version);
-  assert(Boolean(scenario), "PILOT_SCENARIO_MISSING", "Stored scenario manifest is missing.");
-  const plans = store.listArmPlans(blockId);
-  assert(plans.length === 3, "PILOT_ARM_PLAN_INVALID", "Pilot must retain three arm plans.");
-  preflightRecords = MATCHED_BLOCK_ARMS.flatMap((arm) => store.listPreflightRecords(blockId, arm));
-  assert(preflightRecords.length === 15, "PILOT_PREFLIGHT_COUNT_INVALID", "Pilot must retain five preflight stages for every arm.");
-  assert(preflightRecords.every((record) => record.status === "passed"), "PILOT_PREFLIGHT_FAILED", "Every pilot preflight record must pass.");
-  attempts = store.listFormalAttempts(blockId);
-  assert(attempts.length === 3, "PILOT_ATTEMPT_COUNT_INVALID", "Pilot must retain exactly three formal attempts.");
+  blocks = store.listBlockManifests(campaignId)
+    .sort((left, right) => left.repetition_index - right.repetition_index);
+  assert(blocks.length === repetitions, "PILOT_BLOCK_COUNT_INVALID", "Stored campaign block count does not match --repetitions.");
   assert(
-    attempts.every((attempt) =>
-      attempt.attempt_state_revision === 2 &&
-      attempt.execution_status === "completed" &&
-      attempt.infrastructure_failure_code === null
-    ),
-    "PILOT_FORMAL_ATTEMPT_INVALID",
-    "Every pilot formal attempt must be a completed revision-two record without infrastructure failure."
+    canonicalJson(blocks.map((block) => block.block_id)) === canonicalJson(evidenceBlocks.map((block) => block.block_id)),
+    "PILOT_BLOCK_REFERENCE_MISMATCH",
+    "Stored blocks differ from evidence."
   );
-  disposition = store.getBlockDisposition(blockId);
-  assert(disposition?.disposition === "complete", "PILOT_DISPOSITION_INVALID", "Stored block disposition is not complete.");
+  for (const block of blocks) {
+    const storedScenario = store.getScenarioManifest(block.scenario_id, block.scenario_version);
+    assert(Boolean(storedScenario), "PILOT_SCENARIO_MISSING", `Stored scenario manifest is missing for ${block.block_id}.`);
+    scenario = scenario ?? storedScenario;
+    assert(
+      canonicalJson(storedScenario) === canonicalJson(scenario),
+      "PILOT_SCENARIO_MISMATCH",
+      "All repeated blocks must reference the same sealed scenario."
+    );
+    const plans = store.listArmPlans(block.block_id);
+    assert(plans.length === 3, "PILOT_ARM_PLAN_INVALID", `${block.block_id} must retain three arm plans.`);
+    const preflightRecords = MATCHED_BLOCK_ARMS.flatMap((arm) => store.listPreflightRecords(block.block_id, arm));
+    assert(preflightRecords.length === 15, "PILOT_PREFLIGHT_COUNT_INVALID", `${block.block_id} must retain five preflight stages for every arm.`);
+    assert(preflightRecords.every((record) => record.status === "passed"), "PILOT_PREFLIGHT_FAILED", `Every preflight record must pass for ${block.block_id}.`);
+    preflightByBlock.set(block.block_id, preflightRecords);
+    const attempts = store.listFormalAttempts(block.block_id);
+    assert(attempts.length === 3, "PILOT_ATTEMPT_COUNT_INVALID", `${block.block_id} must retain exactly three formal attempts.`);
+    assert(
+      attempts.every((attempt) =>
+        attempt.attempt_state_revision === 2 &&
+        attempt.execution_status === "completed" &&
+        attempt.infrastructure_failure_code === null
+      ),
+      "PILOT_FORMAL_ATTEMPT_INVALID",
+      `Every formal attempt must be a completed revision-two record without infrastructure failure for ${block.block_id}.`
+    );
+    attemptsByBlock.set(block.block_id, attempts);
+    const disposition = store.getBlockDisposition(block.block_id);
+    assert(disposition?.disposition === "complete", "PILOT_DISPOSITION_INVALID", `${block.block_id} disposition is not complete.`);
+    dispositionsByBlock.set(block.block_id, disposition);
+  }
   persistedDecision = store.getPublicationDecision(campaignId);
   assert(Boolean(persistedDecision), "PILOT_PUBLICATION_DECISION_MISSING", "Persisted publication decision is missing.");
 } finally {
   store.close();
 }
 
-const observationsByArm = new Map(observations.map((observation) => [observation.arm, observation]));
-assert(observationsByArm.size === 3, "PILOT_OBSERVATION_ARM_SET_INVALID", "Pilot must contain one observation per arm.");
-for (const arm of MATCHED_BLOCK_ARMS) {
-  assert(observationsByArm.has(arm), "PILOT_OBSERVATION_MISSING", `Pilot observation is missing for ${arm}.`);
-}
-
-const treatmentObservation = observationsByArm.get("treatment");
-const holdoutObservation = observationsByArm.get("forced_holdout");
-const noEeObservation = observationsByArm.get("no_ee");
-assert(
-  treatmentObservation.decision === "inject" && treatmentObservation.delivered_intervention_count === 1,
-  "PILOT_TREATMENT_DELIVERY_INVALID",
-  "Treatment must record one real delivered injection."
+const observationsByBlockArm = new Map(
+  observations.map((observation) => [`${observation.block_id}:${observation.arm}`, observation])
 );
-assert(
-  holdoutObservation.decision === "inject" && holdoutObservation.delivered_intervention_count === 0,
-  "PILOT_HOLDOUT_SUPPRESSION_INVALID",
-  "Forced holdout must preserve the inject decision while suppressing delivery."
-);
-assert(
-  noEeObservation.decision === "skip" && noEeObservation.delivered_intervention_count === 0,
-  "PILOT_NO_EE_OBSERVATION_INVALID",
-  "No-EE must contain no ExperienceEngine decision or delivery."
-);
-
-const attemptsByArm = new Map(attempts.map((attempt) => [attempt.arm, attempt]));
-const armEvidence = {};
-for (const arm of MATCHED_BLOCK_ARMS) {
-  const armRoot = join(runtimeRoot, arm);
+assert(observationsByBlockArm.size === repetitions * 3, "PILOT_OBSERVATION_ARM_SET_INVALID", "Campaign must contain one observation per block/arm.");
+const blockArmEvidence = {};
+for (const block of blocks) {
+  const observationsByArm = new Map(MATCHED_BLOCK_ARMS.map((arm) => [
+    arm,
+    observationsByBlockArm.get(`${block.block_id}:${arm}`)
+  ]));
+  for (const arm of MATCHED_BLOCK_ARMS) {
+    assert(observationsByArm.has(arm) && observationsByArm.get(arm), "PILOT_OBSERVATION_MISSING", `${block.block_id} observation is missing for ${arm}.`);
+  }
+  const treatmentObservation = observationsByArm.get("treatment");
+  const holdoutObservation = observationsByArm.get("forced_holdout");
+  const noEeObservation = observationsByArm.get("no_ee");
+  assert(
+    treatmentObservation.decision === "inject" && treatmentObservation.delivered_intervention_count === 1,
+    "PILOT_TREATMENT_DELIVERY_INVALID",
+    `${block.block_id} treatment must record one real delivered injection.`
+  );
+  assert(
+    holdoutObservation.decision === "inject" && holdoutObservation.delivered_intervention_count === 0,
+    "PILOT_HOLDOUT_SUPPRESSION_INVALID",
+    `${block.block_id} forced holdout must preserve the inject decision while suppressing delivery.`
+  );
+  assert(
+    noEeObservation.decision === "skip" && noEeObservation.delivered_intervention_count === 0,
+    "PILOT_NO_EE_OBSERVATION_INVALID",
+    `${block.block_id} no-EE must contain no ExperienceEngine decision or delivery.`
+  );
+  const attemptsByArm = new Map(attemptsByBlock.get(block.block_id).map((attempt) => [attempt.arm, attempt]));
+  const armEvidence = {};
+  const blockRuntimeRoot = repetitions === 1
+    ? runtimeRoot
+    : join(runtimeRoot, `block-${block.repetition_index}`);
+  for (const arm of MATCHED_BLOCK_ARMS) {
+  const armRoot = join(blockRuntimeRoot, arm);
   const stateDir = join(armRoot, "openclaw-state");
   const workspace = join(armRoot, "workspace");
   const artifactRoot = join(armRoot, "artifacts");
@@ -256,8 +309,11 @@ for (const arm of MATCHED_BLOCK_ARMS) {
     db.close();
   }
   const injectedNodeIds = JSON.parse(injection.injected_node_ids_json);
+  const expectedSessionSuffix = repetitions === 1
+    ? `s8-pilot-${arm}-session`
+    : `s8-pilot-r${block.repetition_index}-${arm}-session`;
   assert(
-    typeof injection.session_id === "string" && injection.session_id.endsWith(`s8-pilot-${arm}-session`),
+    typeof injection.session_id === "string" && injection.session_id.endsWith(expectedSessionSuffix),
     "PILOT_SESSION_BINDING_INVALID",
     `${arm} injection event is not bound to the sealed OpenClaw session.`
   );
@@ -289,6 +345,8 @@ for (const arm of MATCHED_BLOCK_ARMS) {
     task_success: observation.task_success,
     formal_release_after_start_ms: releaseDeltaMs
   };
+  }
+  blockArmEvidence[block.block_id] = armEvidence;
 }
 
 const recomputedOutputDir = join(dirname(outputPath), "recomputed-report");
@@ -326,15 +384,24 @@ const campaignScorecard = evidence.campaign_report.result.campaign_scorecard;
 const publicationDecision = evidence.campaign_report.result.publication_decision;
 assert(campaignScorecard.complete_block_coverage === 1, "PILOT_COVERAGE_INVALID", "Pilot complete-block coverage must equal 1.");
 assert(campaignScorecard.infrastructure_reliability === 1, "PILOT_RELIABILITY_INVALID", "Pilot infrastructure reliability must equal 1.");
-assert(publicationDecision.decision === "not_publishable", "PILOT_PUBLICATION_BOUNDARY_INVALID", "Single-block pilot must remain not publishable.");
 assert(
-  publicationDecision.threshold_results.minimum_repetitions_per_scenario === false,
+  publicationDecision.threshold_results.minimum_repetitions_per_scenario === (repetitions >= 5),
   "PILOT_PUBLICATION_BOUNDARY_INVALID",
-  "Single-block pilot must fail the sealed minimum repetition threshold."
+  "Publication decision does not match the sealed minimum repetition threshold."
 );
+if (repetitions === 1) {
+  assert(publicationDecision.decision === "not_publishable", "PILOT_PUBLICATION_BOUNDARY_INVALID", "Single-block pilot must remain not publishable.");
+}
+
+const totalPreflightPassed = [...preflightByBlock.values()]
+  .reduce((sum, records) => sum + records.length, 0);
+const totalFormalAttempts = [...attemptsByBlock.values()]
+  .reduce((sum, attempts) => sum + attempts.length, 0);
 
 const acceptance = {
-  status: "accepted_real_openclaw_matched_block_pilot",
+  status: repetitions === 1
+    ? "accepted_real_openclaw_matched_block_pilot"
+    : "accepted_real_openclaw_matched_block_campaign",
   evidence_type: evidence.evidence_type,
   artifact: {
     path_name: basename(expectedArtifactPath),
@@ -343,13 +410,19 @@ const acceptance = {
   },
   campaign: {
     campaign_id: campaignId,
-    block_id: blockId,
-    planned_arm_order: evidence.campaign.planned_arm_order,
-    preflight_passed: preflightRecords.length,
-    formal_attempts_completed: attempts.length,
-    disposition: disposition.disposition
+    repetition_count: repetitions,
+    blocks: blocks.map((block) => ({
+      block_id: block.block_id,
+      repetition_index: block.repetition_index,
+      planned_arm_order: block.planned_arm_order,
+      preflight_passed: preflightByBlock.get(block.block_id).length,
+      formal_attempts_completed: attemptsByBlock.get(block.block_id).length,
+      disposition: dispositionsByBlock.get(block.block_id).disposition
+    })),
+    total_preflight_passed: totalPreflightPassed,
+    total_formal_attempts_completed: totalFormalAttempts
   },
-  arms: armEvidence,
+  block_arms: blockArmEvidence,
   scorecard: {
     evidence_digest: campaignScorecard.evidence_digest,
     complete_block_coverage: campaignScorecard.complete_block_coverage,
@@ -362,7 +435,8 @@ const acceptance = {
   publication: {
     decision: publicationDecision.decision,
     threshold_results: publicationDecision.threshold_results,
-    minimum_repetitions_satisfied: false
+    minimum_repetitions_satisfied:
+      publicationDecision.threshold_results.minimum_repetitions_per_scenario
   },
   deterministic_recomputation_match: true,
   diagnostic_single_arm_reused: false,
@@ -378,9 +452,13 @@ process.stdout.write(`${JSON.stringify({
   status: acceptance.status,
   output: outputPath,
   decision: acceptance.publication.decision,
-  treatment_delivered: acceptance.arms.treatment.delivered,
-  forced_holdout_delivered: acceptance.arms.forced_holdout.delivered,
-  no_ee_plugin_present: acceptance.arms.no_ee.plugin_present,
+  repetitions,
+  treatment_delivered_blocks: Object.values(acceptance.block_arms)
+    .filter((arms) => arms.treatment.delivered === 1).length,
+  forced_holdout_suppressed_blocks: Object.values(acceptance.block_arms)
+    .filter((arms) => arms.forced_holdout.delivered === 0).length,
+  no_ee_clean_blocks: Object.values(acceptance.block_arms)
+    .filter((arms) => arms.no_ee.plugin_present === false).length,
   deterministic_recomputation_match: acceptance.deterministic_recomputation_match,
   support_claim_allowed: acceptance.support_claim_allowed
 }, null, 2)}\n`);

@@ -77,6 +77,13 @@
 - Deterministic fixtures retain post-start product failures as completed product outcomes and enforce atomic whole-block replacement. The real complete block was scored independently through both the API and actual `ee evaluate openclaw-matched-block` CLI with the same evidence digest `547e38f09e7c0ca732b3d9522116f33248fbf4fe6ce2fe8`.
 - Earlier v1/v2 pilot strata remain preserved as negative/defective protocol evidence and are not pooled with v3: v1 exposed scope-root drift; v2 exposed canonical OpenClaw session-key adapter drift.
 - The v3 scorecard has complete-block coverage `1.0` and infrastructure reliability `1.0`, but the sealed plan requires five complete repetitions per scenario. With one block, the immutable decision is correctly `not_publishable`; `support_claim_allowed=false` and `production_learning_ready=false` remain required.
+- Real OpenClaw campaign v4 created a new immutable protocol stratum rather than appending to v1-v3. It sealed all five block manifests and all fifteen arm plans before the first formal task release.
+- V4 passed `75/75` bounded preflight records, terminalized `15/15` formal attempts at revision two, and produced five `complete` block dispositions with no exclusion, replacement, or infrastructure failure.
+- Treatment delivered the seeded node in all five blocks. Forced holdout retained the same inject decision with zero delivery in all five blocks. No-EE remained free of ExperienceEngine plugin, extension, database, decision, and delivery evidence in all five blocks.
+- Independent validation verified every block/arm runtime artifact, formal-start boundary, session binding, injection record, and no-EE isolation, then deterministically recomputed the persisted campaign scorecard and publication decision.
+- The public `ee evaluate openclaw-matched-block` path remained fail closed without negative-result disclosure and reproduced the persisted `publishable` decision only with explicit `--negative-results-disclosed`. The common scorecard evidence digest is `17b60c1314e4d62e5ec7d5b420bc335b8fdb246133c135ebf2b5f4cb3f8c0d7c`.
+- All sealed v4 thresholds passed: complete-block coverage `1.0`, infrastructure reliability `1.0`, five repetitions, harmful rate `0`, infrastructure failure rate `0`, and negative-result disclosure present. Treatment-minus-no-EE task-success and repeated-old-mistake-avoidance deltas are both `0.4`.
+- V4 has one scenario cluster and unavailable confidence-interval bounds. Its `publishable` decision is therefore a disclosed directional single-scenario result, not a general cross-scenario efficacy, full-support, or production-readiness claim. `support_claim_allowed=false` and `production_learning_ready=false` remain mandatory.
 
 ## 5. Validation
 
@@ -89,9 +96,9 @@
 
 - Focused matched-block contract, harness, failure/replacement, scoring/publication, and CLI tests passed. The final full repository suite passed `232` test files and `1451` tests.
 - Both pilot scripts passed Node syntax validation. TypeScript typecheck and the production build passed.
-- The real OpenClaw v3 pilot ran against the independently downloaded ClawHub `0.5.1` artifact and passed the independent validator. Its accepted evidence is non-authoritative benchmark evidence only; it did not mutate runtime package/process/configuration/route/queue/activation or delivery-state authority.
-- The actual `ee evaluate openclaw-matched-block` CLI recomputed the same campaign scorecard evidence digest as the independent validator.
+- The real OpenClaw v3 pilot and repeated v4 campaign ran against the independently downloaded ClawHub `0.5.1` artifact and passed their independent validators. Their accepted evidence is non-authoritative benchmark evidence only; it did not mutate runtime package/process/configuration/route/queue/activation or delivery-state authority.
+- The actual `ee evaluate openclaw-matched-block` CLI recomputed the same v4 campaign scorecard evidence digest as the independent validator when negative-result disclosure was supplied explicitly.
 - Strict S8 OpenSpec validation and `git diff --check` passed.
 - Runtime closure validation passed with unchanged digest `3c7aab519faa57d38000090d6c5b5506b3ae8e0a231d2e38e5f17717dac1096f` and package build id `build_16df7fdd54be7801c2430c49a4fef2612144e559da5e2cb92bc99d319f559077`.
 - OpenClaw package-local production binding validation passed through activation, semantic completion, stale-output fencing rejection, and graceful supervisor/worker shutdown. It continued to report `production_learning_ready=false`.
-- S8 implementation and acceptance are complete. The retained one-block pilot publication decision is `not_publishable` because the sealed minimum repetition threshold was not met; `support_claim_allowed=false` remains mandatory.
+- S8 implementation and evidence acceptance are complete. The retained v3 one-block publication decision remains `not_publishable`; the new v4 five-block decision is `publishable` under its sealed single-scenario thresholds. The one-cluster limitation is disclosed, and `support_claim_allowed=false` plus `production_learning_ready=false` remain mandatory.
