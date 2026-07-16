@@ -3,11 +3,17 @@ import { prepareDiagnosticReviewDirectory } from "../../diagnostics/review-direc
 import { renderSafeDiagnosticSummary } from "../../diagnostics/render.js";
 import type { SafeDiagnosticManifest } from "../../diagnostics/contract.js";
 import type { PreparedDiagnosticReviewDirectory } from "../../diagnostics/review-directory.js";
+import {
+  createDiagnosticReviewArchive,
+  type CreatedDiagnosticArchive
+} from "../../diagnostics/archive.js";
 
 type DiagnoseFlags = {
   prepareBundle: boolean;
   includeModelId: boolean;
   outputDir?: string;
+  archiveReviewDirectory?: string;
+  outputPath?: string;
 };
 
 export type DiagnoseCommandDependencies = {
@@ -16,6 +22,10 @@ export type DiagnoseCommandDependencies = {
     manifest: SafeDiagnosticManifest;
     outputRoot?: string;
   }) => PreparedDiagnosticReviewDirectory;
+  archive?: (options: {
+    reviewDirectory: string;
+    outputPath?: string;
+  }) => Promise<CreatedDiagnosticArchive>;
   log?: (message: string) => void;
 };
 
@@ -38,13 +48,34 @@ const parseFlags = (args: string[]): DiagnoseFlags => {
       flags.outputDir = value;
       index += 1;
     } else if (token === "--archive") {
-      throw new Error("Diagnostic archive creation is not available until the review-archive slice is installed.");
+      const value = args[index + 1];
+      if (!value || value.startsWith("--")) {
+        throw new Error("--archive requires a review directory path.");
+      }
+      flags.archiveReviewDirectory = value;
+      index += 1;
+    } else if (token === "--output") {
+      const value = args[index + 1];
+      if (!value || value.startsWith("--")) {
+        throw new Error("--output requires an archive path.");
+      }
+      flags.outputPath = value;
+      index += 1;
     } else {
       throw new Error(`Unknown diagnose option: ${token}`);
     }
   }
   if (flags.outputDir && !flags.prepareBundle) {
     throw new Error("--output-dir requires --prepare-bundle.");
+  }
+  if (flags.outputPath && !flags.archiveReviewDirectory) {
+    throw new Error("--output requires --archive.");
+  }
+  if (flags.prepareBundle && flags.archiveReviewDirectory) {
+    throw new Error("--prepare-bundle and --archive are mutually exclusive.");
+  }
+  if (flags.includeModelId && flags.archiveReviewDirectory) {
+    throw new Error("--include-model-id applies only to diagnosis or bundle preparation.");
   }
   return flags;
 };
@@ -56,7 +87,21 @@ export const runDiagnoseCommand = async (
   const flags = parseFlags(args);
   const collect = dependencies.collect ?? collectSafeDiagnosticManifest;
   const prepare = dependencies.prepare ?? prepareDiagnosticReviewDirectory;
+  const archive = dependencies.archive ?? createDiagnosticReviewArchive;
   const log = dependencies.log ?? console.log;
+
+  if (flags.archiveReviewDirectory) {
+    const created = await archive({
+      reviewDirectory: flags.archiveReviewDirectory,
+      outputPath: flags.outputPath
+    });
+    log(`Diagnostic archive: ${created.archive_path}`);
+    log(`- SHA-256: ${created.archive_sha256}`);
+    log(`- Size: ${created.archive_size} bytes`);
+    log("- Upload: no files were uploaded or submitted.");
+    return;
+  }
+
   const manifest = await collect({
     includeModelId: flags.includeModelId
   });

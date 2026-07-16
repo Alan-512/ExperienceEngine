@@ -95,7 +95,7 @@ describe("CLI dispatch", () => {
     expect(output).toContain("Operator workflows:");
     expect(output).toContain("ee install|upgrade|repair <openclaw|claude-code|codex|antigravity>");
     expect(output).toContain("ee inspect review | ee inspect hygiene | ee inspect export-drafts | ee inspect repo");
-    expect(output).toContain("ee diagnose | ee diagnose --prepare-bundle");
+    expect(output).toContain("ee diagnose | ee diagnose --prepare-bundle | ee diagnose --archive <review-directory>");
     expect(output).toContain("Advanced / experimental workflows:");
     expect(output).toContain("Full command reference:");
     expect(output).toContain("Usage: ee <");

@@ -1508,9 +1508,12 @@ ee diagnose
   -> 只读收集严格白名单 manifest 并渲染本地摘要
 ee diagnose --prepare-bundle
   -> 创建只含 manifest.json 的新 review directory
+ee diagnose --archive <review-directory>
+  -> 严格复验 review directory 和 manifest
+  -> 原子创建只含 manifest.json 的确定性 tar.gz
 ```
 
-诊断 collector 使用 existing-file-only read-only SQLite，不调用普通 `openDatabase`、bootstrap、migration 或 state export。它不会复制 SQLite/settings/install-state，也不会写 runtime authority。显式 archive 仍属于后续 `diagnostic-review-archive` slice，在该 slice 完成前不声明完整分享流程 supported。
+诊断 collector 使用 existing-file-only read-only SQLite，不调用普通 `openDatabase`、bootstrap、migration 或 state export。它不会复制 SQLite/settings/install-state，也不会写 runtime authority。archive 路径拒绝额外文件、链接、未知 manifest 字段和覆盖写入；它只创建本地文件，不上传或自动提交 issue。完整公开反馈流程仍需后续 public-feedback slice 才能声明 supported。
 
 ---
 

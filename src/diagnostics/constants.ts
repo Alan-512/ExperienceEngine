@@ -2,6 +2,8 @@ export const DIAGNOSTIC_MANIFEST_SCHEMA_VERSION = "diagnostic-manifest-v1" as co
 export const DIAGNOSTIC_COLLECTION_POLICY_VERSION = "diagnostic-collection-policy-v1" as const;
 export const DIAGNOSTIC_ERROR_AGGREGATION_VERSION = "diagnostic-error-aggregation-v1" as const;
 export const DIAGNOSTIC_REVIEW_DIRECTORY_VERSION = "diagnostic-review-directory-v1" as const;
+export const DIAGNOSTIC_ARCHIVE_VERSION = "diagnostic-archive-v1" as const;
+export const DIAGNOSTIC_MANIFEST_MAX_BYTES = 1024 * 1024;
 
 export const DIAGNOSTIC_IDENTIFIER_PREFIX_LENGTH = 12;
 export const DIAGNOSTIC_HMAC_PREFIX_LENGTH = 16;

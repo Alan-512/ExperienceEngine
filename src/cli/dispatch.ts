@@ -12,7 +12,7 @@ const CONFIG_COMMA_LIST_KEYS = new Set([
 ]);
 
 const usageText =
-  "Usage: ee <install openclaw|claude-code|codex|antigravity|upgrade openclaw|claude-code|codex|antigravity|repair [openclaw|codex|antigravity]|verify openclaw-production|claude-hook|codex-hook|antigravity-hook|codex <exec ...>|agy <exec ...>|antigravity <activate-project ...>|codex-mcp-server|doctor [openclaw|claude-code|codex|antigravity]|diagnose [--prepare-bundle] [--output-dir PATH] [--include-model-id]|status|stats|inspect|feedback|disable|enable|cool|retire>"
+  "Usage: ee <install openclaw|claude-code|codex|antigravity|upgrade openclaw|claude-code|codex|antigravity|repair [openclaw|codex|antigravity]|verify openclaw-production|claude-hook|codex-hook|antigravity-hook|codex <exec ...>|agy <exec ...>|antigravity <activate-project ...>|codex-mcp-server|doctor [openclaw|claude-code|codex|antigravity]|diagnose [--prepare-bundle] [--output-dir PATH] [--include-model-id] [--archive REVIEW_DIR] [--output ARCHIVE_PATH]|status|stats|inspect|feedback|disable|enable|cool|retire>"
   + " | helped|harmed"
   + " | backup|export|import <snapshot-path>|rollback <backup-id>"
   + " | maintenance embeddings-reset|embedding-smoke|governance drain|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
@@ -40,7 +40,7 @@ export const printCliUsage = (): void => {
   console.log("- Host setup and repair: ee install|upgrade|repair <openclaw|claude-code|codex|antigravity>");
   console.log("- Antigravity CLI wrapper: ee agy exec -C <project> \"<prompt>\"");
   console.log("- Read-only review: ee inspect review | ee inspect hygiene | ee inspect export-drafts | ee inspect repo");
-  console.log("- Privacy-safe diagnosis: ee diagnose | ee diagnose --prepare-bundle");
+  console.log("- Privacy-safe diagnosis: ee diagnose | ee diagnose --prepare-bundle | ee diagnose --archive <review-directory>");
   console.log("- Managed state: ee backup | ee export | ee import <snapshot-path> | ee rollback <backup-id>");
   console.log(`${SURFACE_TIER_DEFINITIONS.advanced.label} workflows:`);
   console.log("- Maintenance, raw evaluation, Codex broker internals, and developer diagnostics are advanced/experimental.");

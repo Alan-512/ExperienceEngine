@@ -2,7 +2,7 @@
 
 **Created:** `2026-07-16`
 
-**Status:** Closed-scope plan and OpenSpec slicing approved. D1 safe diagnostic manifest is source-accepted; D2 archive and D3 public feedback remain open.
+**Status:** Closed-scope plan and OpenSpec slicing approved. D1 safe diagnostic manifest and D2 reviewed archive are local-pack accepted; D3 public feedback remains open.
 
 **Depends on:** Phase 0.5A S1-S8 and the published `0.5.1` acceptance boundary.
 
@@ -336,6 +336,14 @@ Owns:
 Held closed until:
 
 - D3 public templates and docs request only the reviewed artifact
+
+Current implementation status, `2026-07-16`:
+
+- exact review-directory validation and deterministic `.tar.gz` creation are implemented
+- archives contain only the strict reviewed `manifest.json`
+- source and clean local-pack prepare/archive flows passed
+- no upload or automatic issue creation exists
+- the public feedback workflow remains unsupported until D3 templates, contribution/security guidance, and public docs pass acceptance
 
 ### D3 — Public feedback infrastructure
 

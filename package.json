@@ -69,6 +69,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.27.1",
+    "tar": "^7.5.20",
     "zod": "^3.25.76"
   },
   "devDependencies": {

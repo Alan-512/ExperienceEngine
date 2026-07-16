@@ -99,9 +99,40 @@ describe("diagnose command", () => {
     expect(log.mock.calls.flat().join("\n")).toContain("No archive or upload was created");
   });
 
-  it("rejects archive usage before D2 is implemented", async () => {
-    await expect(runDiagnoseCommand(["--archive", "review-dir"], {
-      collect: vi.fn(async () => manifest())
-    })).rejects.toThrow("not available until the review-archive slice");
+  it("archives a reviewed directory without recollecting diagnostics", async () => {
+    const collect = vi.fn(async () => manifest());
+    const archive = vi.fn(async () => ({
+      diagnostic_archive_version: "diagnostic-archive-v1" as const,
+      archive_path: "review.tar.gz",
+      archive_sha256: "a".repeat(64),
+      archive_size: 123,
+      manifest_schema_version: "diagnostic-manifest-v1" as const,
+      uploaded: false as const
+    }));
+    const log = vi.fn();
+
+    await runDiagnoseCommand([
+      "--archive",
+      "review-dir",
+      "--output",
+      "review.tar.gz"
+    ], { collect, archive, log });
+
+    expect(collect).not.toHaveBeenCalled();
+    expect(archive).toHaveBeenCalledWith({
+      reviewDirectory: "review-dir",
+      outputPath: "review.tar.gz"
+    });
+    const output = log.mock.calls.flat().join("\n");
+    expect(output).toContain("review.tar.gz");
+    expect(output).toContain("no files were uploaded or submitted");
+  });
+
+  it("rejects conflicting preparation and archive flags", async () => {
+    await expect(runDiagnoseCommand([
+      "--prepare-bundle",
+      "--archive",
+      "review-dir"
+    ])).rejects.toThrow("mutually exclusive");
   });
 });
