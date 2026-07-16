@@ -14,11 +14,11 @@
 
 ## 2. Clean-Home Runtime Validation
 
-- [ ] 2.1 Run each artifact without an existing EE home and without a global `ee` command prerequisite.
-- [ ] 2.2 Validate canonical home resolution, schema bootstrap/migration ownership, configuration generation, supervisor/worker authority, and production handshake.
-- [ ] 2.3 Submit deterministic learning work and verify authoritative claim/completion evidence.
-- [ ] 2.4 Validate authority invalidation, interruption recovery, gateway stop, drain, and shutdown.
-- [ ] 2.5 Prove canonical activation uses only the plugin service lifecycle and package-local entrypoints without resolving or executing a global `openclaw` command.
+- [x] 2.1 Run each artifact without an existing EE home and without a global `ee` command prerequisite.
+- [x] 2.2 Validate canonical home resolution, schema bootstrap/migration ownership, configuration generation, supervisor/worker authority, and production handshake.
+- [x] 2.3 Submit deterministic learning work and verify authoritative claim/completion evidence.
+- [x] 2.4 Validate authority invalidation, interruption recovery, gateway stop, drain, and shutdown.
+- [x] 2.5 Prove canonical activation uses only the plugin service lifecycle and package-local entrypoints without resolving or executing a global `openclaw` command.
 
 ### Source/Local-Pack Clean-Home Preflight Evidence
 
@@ -60,7 +60,7 @@
 
 - [x] 5.1 Run local packed-artifact closure tests as a preflight, not as final published evidence.
 - [x] 5.2 Run actual published npm validation.
-- [ ] 5.3 Run actual published ClawHub validation.
+- [x] 5.3 Run actual published ClawHub validation.
 - [x] 5.4 Run required live OpenClaw and Windows validation paths.
 - [x] 5.5 Run TypeScript typecheck, full tests, build, and packaging checks.
 - [x] 5.6 Run `pnpm exec openspec validate validate-published-runtime-closure --strict`.
@@ -158,7 +158,14 @@
 - The exact local-pack run then passed real plugin installation, installed closure verification, read-only activation preparation, exact-revision initialization, idempotent replay, a real authenticated model turn, semantic queue completion, stale-authority rejection, interruption recovery, Gateway restart recovery, and two graceful terminal shutdowns.
 - The run used closure digest `5058539fc8ab04b8ef63ddd69366b23a27b7580d2870a6f10a82b87ae0f21a4a` and package build id `build_87addcfcacd4bc4bf34cd3cc8a97d8d9a61fd6c265a4d84d83c1c2ce1449fdcf`. It exited with `interaction_active = true`, `learning_runtime_active = true`, `production_learning_ready = false`, `artifact_runtime_validated = false`, and `support_claim_allowed = false` because the artifact was still local-pack evidence.
 
+### Actual Published v0.5.1 npm And ClawHub Evidence
+
+- npm and ClawHub independently resolved exact `@alan512/experienceengine@0.5.1` artifacts from their native channels. The npm artifact is `1138519` bytes with integrity `sha512-WGJhQRV97M4FQvdSEx2ViJhfi2c2CdghLJkn16ld0u+Pc1RVG15OVp7Gl/F6LJBCS9nXgNEkSZEkErUAb+8WsQ==`; the reduced ClawHub artifact is `3152331` bytes with SHA-256 `01f6f17005d2edb4db5a0358e284799818fd4cab977fb16604cc5ddaa5eed692`, integrity `sha512-6hvcxZ1ffH4pN7pS+EkIAY/5vcu6g4/1JnW36Awgp26XEXVfBzgmitwbQdEl/HEJtzcC1x0QorV4Wg5F22e5kw==`, and SHA-1 `037119d7c2ab637f22a59400e9a2412e8f1b08c6`.
+- Both channel-bound validators passed the exact eight-step sequence: embedded closure and external attestation integrity, declared entrypoints, clean-environment imports, runtime dependencies/schema/migrations, package-local supervisor and worker spawn, profile/compatibility digests, registry-record digest binding, and bounded real-host smoke.
+- Both OpenClaw `2026.7.1` live-host runs on Linux x64 / Node `22.21.0` proved native plugin installation, plugin service registration, read-only activation preparation, exact activation initialization, idempotent replay, a real model turn, fenced semantic completion, stale-authority rejection, interruption recovery without content retry, Gateway restart recovery, and graceful worker/supervisor terminal authority.
+- npm and ClawHub each report `artifact_runtime_validated = true`, `interaction_active = true`, and `learning_runtime_active = true`. The quality publication gate remains intentionally false, so `production_learning_ready = false` and `support_claim_allowed = false` remain unchanged.
+
 ### Remaining Publication Gates
 
-- Tasks 2.1–2.5, 5.2, and 5.3 remain incomplete until a new exact npm and ClawHub version containing the current closure is published and independently passes all eight ordered steps.
-- Task 5.4 is complete for the frozen OpenClaw `2026.4.1` local-pack host matrix on Linux/WSL and native Windows, plus latest-stable OpenClaw `2026.7.1` on WSL. This does not substitute for exact npm or ClawHub published-artifact validation.
+- Tasks 2.1–2.5, 5.2, 5.3, and 5.4 are complete. Exact npm and ClawHub `0.5.1` artifacts independently passed all eight ordered steps, while the frozen local-pack platform matrix remains separate supporting evidence.
+- The remaining product-level gate is the S8 matched-block quality/benchmark publication work. Until that gate is implemented and passed, `production_learning_ready=false` and `support_claim_allowed=false` remain mandatory.

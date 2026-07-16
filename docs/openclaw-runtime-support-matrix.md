@@ -25,7 +25,8 @@ This matrix separates routine plugin interaction, package-local runtime executio
 | Final exact `v0.5.0` candidate | Evidence-bound publication artifact | The publishable artifact must be rebuilt from the committed remediation release boundary and match the externally recorded size, integrity, closure digest, build id, and packaged-document hashes. A differently built archive is a different candidate and must be revalidated. |
 | Published npm `0.5.0` | Passed | The exact `1133532`-byte registry artifact passed integrity, closure, clean-home installed runtime, OpenClaw `2026.7.1` native activation, real agent turn, protected queue, restart recovery, and graceful shutdown validation. |
 | Published ClawHub `0.5.0` | Failed at live-host import | The independently downloaded artifact is byte-identical and its closure is valid, but the ClawHub native installer did not install declared runtime dependencies. Runtime inspection reports missing `@modelcontextprotocol/sdk` and `zod`; plugin import fails before native commands can register. |
-| `v0.5.1` release candidate | ClawHub-form local real-host gate passed; exact committed candidate pending | The reduced ClawHub stage installs required dependencies in a clean npm root, packs them as ordinary bundled files, rejects links, and validates external imports. Its archive passed the complete WSL OpenClaw `2026.7.1` local-candidate host sequence with Node `22.21.0`. This is still not published-channel evidence. |
+| Published npm `0.5.1` | Passed all eight ordered steps | The independently downloaded `1138519`-byte npm artifact passed exact registry integrity, closure, isolated install, package-local runtime smoke, native OpenClaw `2026.7.1` activation, a real model turn, protected queue semantics, restart recovery, and graceful shutdown. |
+| Published ClawHub `0.5.1` | Passed all eight ordered steps | The independently downloaded `3152331`-byte reduced ClawPack passed exact ClawHub metadata and digest checks, bundled dependency closure, ClawHub-native install, native activation, a real model turn, semantic completion, stale-authority rejection, interruption recovery, Gateway restart recovery, and two authoritative shutdowns. |
 | Native Windows live host | Passed for local-pack preflight | OpenClaw `2026.4.1`, Node `v24.3.0`, validated `.cmd` entrypoint resolution, authenticated direct Gateway RPC, real activation commands and agent turn, fenced queue semantics, restart recovery, and OpenClaw-owned graceful Gateway shutdown through the Windows stdin-to-`SIGINT` lifecycle bridge. This is not published-artifact evidence. |
 
 ## Support conclusions
@@ -37,8 +38,8 @@ Current conclusion:
 ```text
 local_pack_live_host_preflight = passed
 published_npm_artifact_runtime_validated = true
-published_clawhub_artifact_runtime_validated = false
+published_clawhub_artifact_runtime_validated = true
 support_claim_allowed = false
 ```
 
-The package-local production runtime and exact npm `0.5.0` channel are validated. The `0.5.1` ClawHub repair still requires an exact immutable candidate, real-host prepublication evidence, publication, and independent published-channel validation. The separate quality/benchmark gate also remains open.
+The package-local production runtime and exact npm/ClawHub `0.5.1` channels are runtime-validated. This closes the published artifact gate but not the separate quality/benchmark publication gate, so `production_learning_ready=false` and `support_claim_allowed=false` remain required.

@@ -257,7 +257,7 @@ ee harmed
 | ------------------ | ----------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------ |
 | Codex              | `ee install codex`                                                | hooks + MCP                            | 已支持                                                    |
 | Claude Code        | 插件市场（marketplace）路径，保留 `ee install claude-code` 作为备用 | MCP + 插件 hooks                     | 已支持                                                    |
-| OpenClaw           | 原生插件安装，或 `ee install openclaw` 回退路径          | 宿主原生交互 + package-local 运行时控制 | package-local 运行时已通过 local-pack 真实宿主验证；完整支持声明仍等待精确 published-channel 与质量门槛 |
+| OpenClaw           | 原生插件安装，或 `ee install openclaw` 回退路径          | 宿主原生交互 + package-local 运行时控制 | 精确 npm 与 ClawHub `0.5.1` artifact 已通过 published live-host 验证；完整支持声明仍受质量/基准发布证据门槛约束 |
 | Google Antigravity | `ee install antigravity`，CLI 运行使用 `ee agy exec -C <project>` | MCP + 用户级插件/hooks 连线   | 通过 Agent Desktop / `agy` / 已观察到的 IDE hook 支持 |
 
 不同的宿主暴露了不同的 hook 表面，因此集成路径和成熟度也有所不同。

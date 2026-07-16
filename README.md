@@ -257,7 +257,7 @@ Manual feedback is mainly for correcting the automatic judgment, not for grading
 | ------------------ | ----------------------------------------------------------------- | -------------------------------------- | ------------------------------------------------------------ |
 | Codex              | `ee install codex`                                                | hooks + MCP                            | supported                                                    |
 | Claude Code        | marketplace plugin, with `ee install claude-code` fallback        | MCP + plugin hooks                     | supported                                                    |
-| OpenClaw           | native plugin install or `ee install openclaw` fallback           | host-native interaction + package-local runtime controls | package-local runtime validated with local-pack real hosts; full support claim pending exact published-channel and quality gates |
+| OpenClaw           | native plugin install or `ee install openclaw` fallback           | host-native interaction + package-local runtime controls | exact npm and ClawHub `0.5.1` artifacts passed published live-host validation; full support claim remains gated on quality/benchmark publication evidence |
 | Google Antigravity | `ee install antigravity`, `ee agy exec -C <project>` for CLI runs | MCP + user-level plugin/hooks wiring   | supported through Agent Desktop / `agy` / observed IDE hooks |
 
 Different hosts expose different hook surfaces, so the integration path and maturity are not identical.
