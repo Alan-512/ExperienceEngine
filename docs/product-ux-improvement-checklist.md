@@ -8,12 +8,14 @@ Current follow-up design:
 
 - [Adoption, Quality, Evidence, And Distribution Design](./adoption-quality-evidence-design-2026-07-10.md)
 - [OpenClaw Matched-Block Campaign V4](./openclaw-matched-block-campaign-v4.md)
+- [Phase 0.5B Diagnostics And Public Feedback Plan](./phase-0.5b-diagnostics-public-feedback-plan-2026-07-16.md)
 - Current implementation status:
   - Phase 0.5A.0 distribution/runtime reality baseline: complete
   - S1-S6 runtime authority, configuration, queue, and production activation slices: complete
   - S7 implementation, local-pack validation, WSL real-host validation, and native Windows real-host validation: complete
   - S7 exact published npm/ClawHub acceptance: complete
   - S8 matched-block benchmark implementation and repeated evidence acceptance: complete; the five-block real campaign passed its sealed single-scenario publication gate
+  - Phase 0.5B D1 safe diagnostic manifest: source-accepted; review archive and public issue/security flow remain open
 
 The Phase 0.5A.1 S1-S8 implementation sequence is complete. Runtime publication and the matched-block benchmark machinery are validated. The retained v3 one-block pilot remains correctly `not_publishable`; the later v4 campaign completed five sealed three-arm blocks and passed every predeclared campaign threshold with deterministic scorecard recomputation. Its evidence is limited to one scenario cluster with unavailable confidence-interval bounds, so it supports a disclosed directional single-scenario result rather than a general full-support or cross-scenario efficacy claim. `support_claim_allowed=false` and `production_learning_ready=false` remain required.
 

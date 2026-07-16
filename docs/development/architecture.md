@@ -1466,6 +1466,7 @@ antigravity
 codex-mcp-server
 mcp-server
 doctor
+diagnose
 evaluate
 config
 models
@@ -1499,6 +1500,17 @@ ee inspect --trace <capsule-id>
 ```
 
 因此 operator 默认看到的是 distilled/summary 视图；完整 trace 只作为显式诊断入口暴露。
+
+privacy-safe diagnostic manifest 的当前边界：
+
+```text
+ee diagnose
+  -> 只读收集严格白名单 manifest 并渲染本地摘要
+ee diagnose --prepare-bundle
+  -> 创建只含 manifest.json 的新 review directory
+```
+
+诊断 collector 使用 existing-file-only read-only SQLite，不调用普通 `openDatabase`、bootstrap、migration 或 state export。它不会复制 SQLite/settings/install-state，也不会写 runtime authority。显式 archive 仍属于后续 `diagnostic-review-archive` slice，在该 slice 完成前不声明完整分享流程 supported。
 
 ---
 

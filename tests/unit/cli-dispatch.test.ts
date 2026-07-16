@@ -5,6 +5,7 @@ afterEach(() => {
   vi.unmock("../../src/cli/commands/claude-hook.js");
   vi.unmock("../../src/cli/commands/codex.js");
   vi.unmock("../../src/cli/commands/config.js");
+  vi.unmock("../../src/cli/commands/diagnose.js");
 });
 
 describe("CLI dispatch", () => {
@@ -60,6 +61,19 @@ describe("CLI dispatch", () => {
     );
   });
 
+  it("routes diagnose arguments to the privacy-safe handler", async () => {
+    const runDiagnoseCommand = vi.fn(async () => {});
+
+    vi.doMock("../../src/cli/commands/diagnose.js", () => ({
+      runDiagnoseCommand
+    }));
+
+    const { runCliCommand } = await import("../../src/cli/dispatch.js");
+    await runCliCommand("diagnose", ["--prepare-bundle", "--include-model-id"]);
+
+    expect(runDiagnoseCommand).toHaveBeenCalledWith(["--prepare-bundle", "--include-model-id"]);
+  });
+
   it("does not advertise the removed pack route in CLI usage", async () => {
     const consoleLog = vi.spyOn(console, "log").mockImplementation(() => {});
 
@@ -81,6 +95,7 @@ describe("CLI dispatch", () => {
     expect(output).toContain("Operator workflows:");
     expect(output).toContain("ee install|upgrade|repair <openclaw|claude-code|codex|antigravity>");
     expect(output).toContain("ee inspect review | ee inspect hygiene | ee inspect export-drafts | ee inspect repo");
+    expect(output).toContain("ee diagnose | ee diagnose --prepare-bundle");
     expect(output).toContain("Advanced / experimental workflows:");
     expect(output).toContain("Full command reference:");
     expect(output).toContain("Usage: ee <");
