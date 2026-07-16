@@ -354,7 +354,7 @@ prepare 命令是只读的。将其 `result` 字段返回的精确 JSON 对象�
 ee verify openclaw-production
 ```
 
-当前实现已在 WSL/Linux 和原生 Windows 通过 local-pack 真实宿主 preflight；精确发布的 npm 与 ClawHub `v0.5.1` artifact 也分别在 WSL 的 OpenClaw `2026.7.1` 通过完整真实宿主序列。matched-block 基准机制还通过了一次真实三臂 pilot：treatment 实际交付一个预封存经验，forced holdout 保留相同 inject 决策但交付为零，no-EE 不含 ExperienceEngine 插件或数据库，独立 scorecard 重算完全一致。封存发布计划要求每个场景至少五个完整重复；当前 pilot 只有一个，因此决定为 `not_publishable`，`support_claim_allowed` 仍为 false。
+当前实现已在 WSL/Linux 和原生 Windows 通过 local-pack 真实宿主 preflight；精确发布的 npm 与 ClawHub `v0.5.1` artifact 也分别在 WSL 的 OpenClaw `2026.7.1` 通过完整真实宿主序列。matched-block 基准随后针对一个场景完成了五个封存三臂重复：treatment 在 5/5 block 中交付，forced holdout 在 5/5 中保留相同 inject 决策但交付为零，no-EE 始终无污染，独立 scorecard 重算完全一致。该单场景 campaign 通过了自身封存发布门槛，但只有一个 scenario cluster，置信区间上下界不可用，因此它只是方向性证据，不是跨场景通用效果或完整支持声明；`support_claim_allowed` 与 `production_learning_ready` 仍为 false。
 
 operator 回退路径为：
 
@@ -495,6 +495,23 @@ ee harmed
 ```
 
 `ee status` 是简洁的日常进度视图。需要宿主 wiring 细节、模型配置、原始检索计数、second-opinion 计数和 learning-quality 诊断时，再使用 `ee status --verbose`。
+
+### 隐私安全的诊断报告
+
+只有在需要排查问题或准备 issue 时使用：
+
+```bash
+ee diagnose
+ee diagnose --prepare-bundle
+# 在本地检查生成的 manifest.json
+ee diagnose --archive <review-directory>
+```
+
+`ee diagnose` 是只读命令，不会为缺失的 ExperienceEngine home、machine key 或数据库执行初始化。prepare 只创建一个新的 review directory，其中只有 `manifest.json`；archive 会再次严格校验这个 manifest，并在本地创建只包含该文件的确定性 `.tar.gz`。
+
+系统不会自动上传文件或提交 issue。分享前必须先检查 manifest。不要附加原始 SQLite、settings、prompt、源码、路径、凭证、工具输出、provider 请求/响应或未经检查的日志。精确模型 ID 默认不包含，只有显式使用 `--include-model-id` 才会加入。
+
+安装问题、运行时 bug、有害 intervention 和功能建议请使用仓库 issue 模板；漏洞或隐私泄露请按照 [`SECURITY.md`](./SECURITY.md) 使用私密报告路径。
 
 ---
 
@@ -783,7 +800,7 @@ ee install claude-code
 
 ### OpenClaw
 
-OpenClaw 提供宿主原生插件交互和 package-local supervisor/worker 运行时。该运行时已经通过 local-pack 真实宿主 preflight 和精确 npm 发布物验证，包括 Gateway 重启、fenced queue 完成、旧 authority 输出拒绝和优雅停机。ClawHub 发布物仍因安装后缺少运行时依赖而未通过，完整支持声明仍受质量发布门槛约束。
+OpenClaw 提供宿主原生插件交互和 package-local supervisor/worker 运行时。该运行时已经通过 local-pack 真实宿主 preflight，以及精确 npm 与 ClawHub `0.5.1` 发布物验证，包括 Gateway 重启、fenced queue 完成、旧 authority 输出拒绝和优雅停机。公开披露的重复 matched-block campaign 已通过单场景封存门槛，但由于只有一个 scenario cluster，通用完整支持声明仍保持关闭，`production_learning_ready=false` 仍是权威状态。
 
 ```bash
 openclaw plugins install @alan512/experienceengine
@@ -907,6 +924,8 @@ ee doctor antigravity
 
 * [经验节点模型概述](./docs/development/experience-model.md)
 * [ExperienceEngine 用户手册](./docs/user-guide.md)
+* [贡献指南](./CONTRIBUTING.md)
+* [安全策略](./SECURITY.md)
 
 建议的未来文档：
 

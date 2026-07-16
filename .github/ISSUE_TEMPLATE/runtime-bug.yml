@@ -1,0 +1,55 @@
+name: Runtime bug
+description: Report incorrect runtime, queue, activation, retrieval, or governance behavior.
+title: "[Runtime]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Keep reports content-free. Use stable states/codes and reviewed diagnostics; do not paste private task content or raw runtime data.
+  - type: dropdown
+    id: host
+    attributes:
+      label: Host
+      options:
+        - Codex
+        - Claude Code
+        - OpenClaw
+        - Google Antigravity
+        - Host-independent CLI/runtime
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: ExperienceEngine version and install channel
+      placeholder: 0.5.1 via npm
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Sanitized reproduction
+      description: Describe the sequence with synthetic names and bounded state values.
+    validations:
+      required: true
+  - type: textarea
+    id: states
+    attributes:
+      label: Relevant stable states or error codes
+      placeholder: package_activation_state=blocked; EE_PACKAGE_ACTIVATION_STALE
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Reviewed diagnostic evidence
+      description: Optionally attach a locally reviewed diagnostic manifest/archive. No upload happens automatically.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy confirmation
+      options:
+        - label: I reviewed any diagnostic artifact before attaching it.
+          required: true
+        - label: I excluded raw databases, settings, paths, prompts, tool output, credentials, and provider requests/responses.
+          required: true

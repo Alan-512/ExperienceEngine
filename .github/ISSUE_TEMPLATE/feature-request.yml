@@ -1,0 +1,40 @@
+name: Feature request
+description: Propose a product, host, governance, or operator-flow improvement.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem to solve
+      description: Explain the repeated workflow or product gap. Do not include private repository content.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: Desired outcome
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+  - type: dropdown
+    id: area
+    attributes:
+      label: Product area
+      options:
+        - Learning and candidate capture
+        - Retrieval and intervention
+        - Governance and feedback
+        - Host integration
+        - Diagnostics and operator UX
+        - Distribution and installation
+        - Other
+    validations:
+      required: true
+  - type: markdown
+    attributes:
+      value: Diagnostic artifacts are optional for feature requests.

@@ -354,7 +354,7 @@ Then verify current authority from the operator CLI:
 ee verify openclaw-production
 ```
 
-The implementation has passed local-pack real-host preflight on WSL/Linux and native Windows. The exact published npm and ClawHub `v0.5.1` artifacts independently passed the full OpenClaw `2026.7.1` WSL live-host sequence. The matched-block benchmark machinery also passed one real three-arm pilot: treatment delivered one seeded experience, forced holdout recorded the same inject decision with zero delivery, no-EE contained no ExperienceEngine plugin or database, and independent scorecard recomputation matched. The sealed publication plan requires five complete repetitions per scenario; the accepted pilot has one, so its decision is `not_publishable` and `support_claim_allowed` remains false.
+The implementation has passed local-pack real-host preflight on WSL/Linux and native Windows. The exact published npm and ClawHub `v0.5.1` artifacts independently passed the full OpenClaw `2026.7.1` WSL live-host sequence. The matched-block benchmark machinery then completed five sealed three-arm repetitions for one scenario: treatment delivered in all five blocks, forced holdout retained the same inject decision with zero delivery in all five, no-EE remained uncontaminated, and independent scorecard recomputation matched. That disclosed single-scenario campaign passed its sealed publication thresholds, but it contains one scenario cluster with unavailable confidence-interval bounds. It is directional evidence, not a general cross-scenario efficacy or full-support claim; `support_claim_allowed` and `production_learning_ready` remain false.
 
 The operator fallback is:
 
@@ -505,6 +505,23 @@ ee harmed
 ```
 
 `ee status` is the concise daily progress view. Use `ee status --verbose` for host wiring details, model configuration, raw retrieval counters, second-opinion counters, and learning-quality diagnostics.
+
+### Privacy-safe diagnostic reports
+
+Use diagnostics only when you need to prepare a report for review or an issue:
+
+```bash
+ee diagnose
+ee diagnose --prepare-bundle
+# inspect the generated manifest.json locally
+ee diagnose --archive <review-directory>
+```
+
+`ee diagnose` is read-only and does not initialize a missing ExperienceEngine home, key, or database. Bundle preparation creates a new review directory containing only `manifest.json`. Archive creation revalidates that exact manifest and creates a local deterministic `.tar.gz` containing only that file.
+
+No upload or issue submission occurs automatically. Review the manifest before sharing. Do not attach raw SQLite files, settings, prompts, source code, paths, credentials, tool output, provider requests/responses, or unreviewed logs. Exact model identity is excluded unless you explicitly add `--include-model-id` during diagnosis or bundle preparation.
+
+Use the repository issue templates for installation problems, runtime bugs, harmful interventions, and feature requests. Use the private security-reporting guidance in [`SECURITY.md`](./SECURITY.md) for vulnerabilities or privacy leaks.
 
 ---
 
@@ -793,7 +810,7 @@ Start a fresh Claude Code session after installation.
 
 ### OpenClaw
 
-OpenClaw exposes host-native plugin interaction and a package-local supervisor/worker runtime. The runtime has passed local-pack real-host preflight and exact published npm validation, including Gateway restart, fenced queue completion, stale-output rejection, and graceful shutdown. Published ClawHub validation remains blocked by missing installed runtime dependencies, and the full support claim remains subject to the quality publication gate.
+OpenClaw exposes host-native plugin interaction and a package-local supervisor/worker runtime. The runtime has passed local-pack real-host preflight and exact published npm and ClawHub `0.5.1` validation, including Gateway restart, fenced queue completion, stale-output rejection, and graceful shutdown. The disclosed repeated matched-block campaign passed its sealed single-scenario thresholds, but the general full-support claim remains disabled because the evidence contains one scenario cluster and `production_learning_ready=false` remains authoritative.
 
 ```bash
 openclaw plugins install @alan512/experienceengine
@@ -917,6 +934,8 @@ Additional documentation:
 
 * [Experience Model Overview](./docs/development/experience-model.md)
 * [ExperienceEngine User Guide](./docs/user-guide.md)
+* [Contributing](./CONTRIBUTING.md)
+* [Security Policy](./SECURITY.md)
 
 Suggested future docs:
 

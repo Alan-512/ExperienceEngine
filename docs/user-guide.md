@@ -170,6 +170,7 @@ Use the `ee` CLI only when you need explicit validation, repair, or operator-sty
 ee init
 ee doctor <openclaw|claude-code|codex|antigravity>
 ee status
+ee diagnose
 ```
 
 Use `ee init` once to initialize ExperienceEngine's shared distillation, embedding, and secret state. New host installations should reuse that same shared EE state instead of asking you to re-enter the same API key per host window.
@@ -258,6 +259,9 @@ ExperienceEngine surfaces are grouped by workflow tier:
   - `ee inspect hygiene`
   - `ee inspect export-drafts`
   - managed backup/export/import/rollback
+  - `ee diagnose --prepare-bundle`
+  - review `manifest.json`
+  - `ee diagnose --archive <review-directory>`
 - `Advanced / experimental`
   - `ee maintenance ...`
   - raw evaluation commands
@@ -266,6 +270,29 @@ ExperienceEngine surfaces are grouped by workflow tier:
 Workflow tier is separate from mutation risk. Operator review, hygiene, and export drafts are operator-tier but read-only. Install, upgrade, import, and rollback are operator-tier and high-impact.
 
 `ee status` and `ee doctor` now also summarize recent retrieval health in product language. `ee status` defaults to a concise daily progress view; use `ee status --verbose` when you need host wiring details, model configuration, raw retrieval counters, second-opinion counters, and full learning-quality diagnostics.
+
+### Preparing a privacy-safe diagnostic report
+
+The diagnostic flow is local and review-first:
+
+```bash
+ee diagnose
+ee diagnose --prepare-bundle
+# inspect manifest.json and remove optional fields if desired
+ee diagnose --archive <review-directory>
+```
+
+The summary command is read-only. It does not initialize a missing product home, integrity key, database, runtime authority, or queue state. Preparation creates a fresh directory containing exactly `manifest.json`. Archive creation accepts only that one-file directory, strict-validates the edited manifest, and creates a deterministic local `.tar.gz` containing exactly the reviewed file.
+
+Default diagnostics include only allowlisted product/environment metadata, bounded identifiers, derived states/counts/time ranges, database health classification, and stable error codes. They exclude raw databases, settings, prompts, task/tool/provider content, source code, repository identity, absolute paths, credentials, endpoint URLs, and free-text errors.
+
+Exact model identity is excluded by default. Include it only when needed and explicitly consented:
+
+```bash
+ee diagnose --prepare-bundle --include-model-id
+```
+
+No upload or GitHub issue is created automatically. Review the exact manifest before attaching it. Use the repository's installation, runtime bug, harmful intervention, or feature request template. Security or privacy vulnerabilities must follow `SECURITY.md` and should not be disclosed in a public issue.
 
 Their roles are intentionally different:
 

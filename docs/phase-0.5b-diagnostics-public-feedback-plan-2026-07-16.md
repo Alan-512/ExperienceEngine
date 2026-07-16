@@ -2,7 +2,7 @@
 
 **Created:** `2026-07-16`
 
-**Status:** Closed-scope plan and OpenSpec slicing approved. D1 safe diagnostic manifest and D2 reviewed archive are local-pack accepted; D3 public feedback remains open.
+**Status:** D1-D3 source and clean local-pack acceptance complete. Exact published-package acceptance remains open for a future release.
 
 **Depends on:** Phase 0.5A S1-S8 and the published `0.5.1` acceptance boundary.
 
@@ -357,6 +357,14 @@ Owns:
 - root `SECURITY.md`
 - README/user-guide diagnostic workflow
 - final real operator acceptance and published-package gate
+
+Current implementation status, `2026-07-16`:
+
+- issue forms, contribution guidance, security policy, English/Chinese README, user guide, release notes, and CLI help are aligned
+- source and clean local-pack operator flows passed
+- full repository, strict OpenSpec, runtime closure, OpenClaw binding, and reduced-package identity gates passed
+- no automatic upload/submission exists
+- exact published-package acceptance is intentionally pending a future release; do not claim published support for diagnostics yet
 
 ## 9. Validation Strategy
 

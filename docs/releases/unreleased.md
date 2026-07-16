@@ -1,6 +1,15 @@
 # ExperienceEngine — Unreleased
 
-`v0.5.0` remains published and immutable. Independent npm validation passed the complete OpenClaw `2026.7.1` live-host sequence, while ClawHub native installation omitted required runtime dependencies and failed plugin import. `v0.5.1` is now the unpublished patch release candidate for that ClawHub packaging defect.
+`v0.5.1` is published and immutable. Its exact npm and ClawHub artifacts passed the complete OpenClaw `2026.7.1` live-host sequence. The changes below describe the next unreleased line and must not be presented as available from the published `0.5.1` package.
+
+## Privacy-safe diagnostics and public feedback
+
+- Adds read-only `ee diagnose` over a strict allowlisted manifest without initializing a missing home, key, database, or runtime authority.
+- Adds review-first `ee diagnose --prepare-bundle`, producing exactly one local `manifest.json`.
+- Adds explicit `ee diagnose --archive <review-directory>`, strict revalidation, deterministic one-file `.tar.gz`, atomic no-overwrite output, SHA-256, and byte-size reporting.
+- Excludes raw SQLite/settings, prompts, source, paths, credentials, tool/provider payloads, endpoint URLs, and free-text errors by default.
+- Adds installation, runtime bug, harmful intervention, and feature request templates plus contribution and private security-reporting guidance.
+- Does not add remote telemetry, automatic upload, or automatic issue submission.
 
 ## v0.5.1 ClawHub packaging repair
 
@@ -41,7 +50,8 @@
 - Published ClawHub `0.4.8`: correctly rejected independently at closure step 1.
 - Published npm `0.5.0`: exact registry bytes, installed closure binding, and the complete OpenClaw `2026.7.1` live-host gate passed.
 - Published ClawHub `0.5.0`: exact clean artifact bytes and closure passed; native install failed because OpenClaw installed the package without its declared runtime dependencies.
-- `v0.5.1` candidate: implementation is present; exact committed-boundary artifacts and final real-host prepublication evidence must be regenerated before publication.
-- The separate quality/benchmark publication gate remains pending.
+- Published npm and ClawHub `0.5.1`: exact artifact validation passed.
+- Repeated matched-block v4: five complete single-scenario blocks passed the sealed campaign thresholds, with one-cluster limitations disclosed; general support/readiness claims remain disabled.
+- Unreleased diagnostics: source and clean local-pack validation passed; exact published-package validation remains pending a future release.
 
 See `docs/openclaw-runtime-support-matrix.md` for the exact evidence boundaries.

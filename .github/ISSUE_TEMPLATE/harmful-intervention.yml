@@ -1,0 +1,61 @@
+name: Harmful intervention
+description: Report guidance that caused or encouraged a worse path.
+title: "[Harmful intervention]: "
+labels:
+  - harmful-intervention
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Do not paste the original private prompt, repository, source code, raw SQLite/databases, credentials, tool payload, or model response. Describe the failure pattern with synthetic details.
+  - type: dropdown
+    id: host
+    attributes:
+      label: Host
+      options:
+        - Codex
+        - Claude Code
+        - OpenClaw
+        - Google Antigravity
+    validations:
+      required: true
+  - type: textarea
+    id: intended
+    attributes:
+      label: Intended task pattern
+      description: Describe the task category and goal without private content.
+    validations:
+      required: true
+  - type: textarea
+    id: intervention
+    attributes:
+      label: Sanitized intervention pattern
+      description: Paraphrase the harmful guidance; do not paste private text.
+    validations:
+      required: true
+  - type: textarea
+    id: harm
+    attributes:
+      label: Observable harm or regression
+      description: Explain what became worse and how you detected it.
+    validations:
+      required: true
+  - type: textarea
+    id: mitigation
+    attributes:
+      label: Immediate mitigation
+      description: Note whether you marked the intervention harmful, cooled/retired a node, or disabled the scope.
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Reviewed diagnostic evidence
+      description: Optional reviewed manifest/archive only; never attach the raw task or database.
+  - type: checkboxes
+    id: privacy
+    attributes:
+      label: Privacy confirmation
+      options:
+        - label: I used synthetic/paraphrased reproduction details rather than private prompts or source code.
+          required: true
+        - label: I reviewed any diagnostic artifact and excluded raw SQLite/databases, credentials, private content, paths, and provider payloads.
+          required: true

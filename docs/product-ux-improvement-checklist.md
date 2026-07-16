@@ -16,6 +16,7 @@ Current follow-up design:
   - S7 exact published npm/ClawHub acceptance: complete
   - S8 matched-block benchmark implementation and repeated evidence acceptance: complete; the five-block real campaign passed its sealed single-scenario publication gate
   - Phase 0.5B D1-D2 safe diagnostic manifest and reviewed archive: clean local-pack accepted; public issue/security flow remains open
+  - Phase 0.5B D3 public feedback assets: source and clean local-pack accepted; exact published-package acceptance remains pending a future release
 
 The Phase 0.5A.1 S1-S8 implementation sequence is complete. Runtime publication and the matched-block benchmark machinery are validated. The retained v3 one-block pilot remains correctly `not_publishable`; the later v4 campaign completed five sealed three-arm blocks and passed every predeclared campaign threshold with deterministic scorecard recomputation. Its evidence is limited to one scenario cluster with unavailable confidence-interval bounds, so it supports a disclosed directional single-scenario result rather than a general full-support or cross-scenario efficacy claim. `support_claim_allowed=false` and `production_learning_ready=false` remain required.
 

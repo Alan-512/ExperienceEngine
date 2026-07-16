@@ -6,7 +6,7 @@ Scope: the eight Phase 0.5A.1 OpenSpec changes only. Runtime implementation, pub
 
 Frozen contract id: `phase-0.5a.1-freeze-2026-07-11`
 
-> Post-review implementation update, `2026-07-16`: S1-S8 implementation and acceptance gates are complete, including exact published npm/ClawHub live-host acceptance and one independently validated real OpenClaw matched three-arm pilot. S8 treatment delivered the seeded node, forced holdout preserved the inject decision with zero delivery, no-EE contained no ExperienceEngine runtime evidence, and deterministic scorecard recomputation matched. The sealed publication plan requires five complete repetitions per scenario; the accepted pilot has one and therefore remains `not_publishable`. The review conclusions below remain the historical approval record for the slicing plan and do not authorize public efficacy/support claims.
+> Post-review implementation update, `2026-07-16`: S1-S8 implementation and acceptance gates are complete, including exact published npm/ClawHub live-host acceptance. The independently validated v3 one-block matched pilot remains immutable and `not_publishable`. A later separately sealed v4 campaign completed five full three-arm blocks, passed its single-scenario publication thresholds, and reproduced the scorecard deterministically. Because v4 still has one scenario cluster with unavailable confidence-interval bounds, it does not authorize a general efficacy/full-support claim; `support_claim_allowed=false` and `production_learning_ready=false` remain unchanged. The review conclusions below remain the historical approval record for the slicing plan.
 
 ## Review Standard
 
