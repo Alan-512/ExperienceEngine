@@ -59,7 +59,8 @@ import type {
 } from "../runtime/identity/types.js";
 import {
   RUNTIME_CLOSURE_MANIFEST_RELATIVE_PATH,
-  validateRuntimeClosureManifest
+  validateRuntimeClosureManifest,
+  writeRuntimePackageIdentityAssets
 } from "../runtime/package/closure-manifest.js";
 import {
   digestOpenClawSecurityScanSummary,
@@ -602,7 +603,8 @@ export const createOpenClawInstallTarball = (packageRoot: string, paths: Resolve
     }
   }
 
-  assertOpenClawPackageClosure(stageDir, runtimeManifest);
+  const packagedRuntimeManifest = writeRuntimePackageIdentityAssets(stageDir);
+  assertOpenClawPackageClosure(stageDir, packagedRuntimeManifest);
   runNpmCli([
     "install",
     "--omit=dev",
@@ -615,7 +617,7 @@ export const createOpenClawInstallTarball = (packageRoot: string, paths: Resolve
     "--package-lock=false"
   ], stageDir);
   assertOpenClawPackageContainsNoLinks(stageDir);
-  assertOpenClawPackagedDependencies(stageDir, runtimeManifest);
+  assertOpenClawPackagedDependencies(stageDir, packagedRuntimeManifest);
 
   const output = runNpmCli([
     "pack",
