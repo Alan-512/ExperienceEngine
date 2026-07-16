@@ -11,10 +11,10 @@ Current follow-up design:
   - Phase 0.5A.0 distribution/runtime reality baseline: complete
   - S1-S6 runtime authority, configuration, queue, and production activation slices: complete
   - S7 implementation, local-pack validation, WSL real-host validation, and native Windows real-host validation: complete
-  - S7 exact published npm/ClawHub acceptance: pending publication and channel-bound validation
-  - S8 matched-block benchmark implementation: not started
+  - S7 exact published npm/ClawHub acceptance: complete
+  - S8 matched-block benchmark implementation and acceptance: complete; one-block real pilot correctly `not_publishable`
 
-The current release task is to review and commit the remediation boundary, rebuild and validate one exact `v0.5.0` candidate from that commit, and only then publish and independently validate the npm and ClawHub artifacts without overstating full production-learning support before the remaining publication and quality gates pass.
+The Phase 0.5A.1 S1-S8 implementation sequence is complete. Runtime publication and the matched-block benchmark machinery are validated, including a real three-arm OpenClaw pilot and deterministic scorecard recomputation. Public full-support or efficacy claims remain prohibited because the accepted pilot contains one complete block while the sealed publication plan requires five repetitions per scenario.
 
 It is intentionally execution-oriented:
 

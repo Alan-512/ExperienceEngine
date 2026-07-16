@@ -354,7 +354,7 @@ prepare 命令是只读的。将其 `result` 字段返回的精确 JSON 对象�
 ee verify openclaw-production
 ```
 
-当前实现已在 WSL/Linux 和原生 Windows 通过 local-pack 真实宿主 preflight；精确发布的 npm `v0.5.0` 也已在 WSL 的 OpenClaw `2026.7.1` 通过完整真实宿主序列。已发布的 ClawHub `v0.5.0` 通过闭包检查，但其原生安装遗漏运行时依赖。尚未发布的 `v0.5.1` 候选通过干净、无链接的依赖 bundle 修复该渠道；在新发布物完成独立验收前，ClawHub 验收和完整质量门控支持声明仍未完成。
+当前实现已在 WSL/Linux 和原生 Windows 通过 local-pack 真实宿主 preflight；精确发布的 npm 与 ClawHub `v0.5.1` artifact 也分别在 WSL 的 OpenClaw `2026.7.1` 通过完整真实宿主序列。matched-block 基准机制还通过了一次真实三臂 pilot：treatment 实际交付一个预封存经验，forced holdout 保留相同 inject 决策但交付为零，no-EE 不含 ExperienceEngine 插件或数据库，独立 scorecard 重算完全一致。封存发布计划要求每个场景至少五个完整重复；当前 pilot 只有一个，因此决定为 `not_publishable`，`support_claim_allowed` 仍为 false。
 
 operator 回退路径为：
 

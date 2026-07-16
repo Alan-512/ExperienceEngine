@@ -168,4 +168,4 @@
 ### Remaining Publication Gates
 
 - Tasks 2.1–2.5, 5.2, 5.3, and 5.4 are complete. Exact npm and ClawHub `0.5.1` artifacts independently passed all eight ordered steps, while the frozen local-pack platform matrix remains separate supporting evidence.
-- The remaining product-level gate is the S8 matched-block quality/benchmark publication work. Until that gate is implemented and passed, `production_learning_ready=false` and `support_claim_allowed=false` remain mandatory.
+- S8 matched-block implementation and acceptance are now complete, including one independently validated real OpenClaw three-arm pilot. Its sealed plan requires five complete repetitions per scenario and the accepted pilot has one, so the immutable benchmark decision is `not_publishable`; `production_learning_ready=false` and `support_claim_allowed=false` remain mandatory until a later campaign actually satisfies the publication threshold.

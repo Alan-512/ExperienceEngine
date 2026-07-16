@@ -6,7 +6,7 @@ Scope: the eight Phase 0.5A.1 OpenSpec changes only. Runtime implementation, pub
 
 Frozen contract id: `phase-0.5a.1-freeze-2026-07-11`
 
-> Post-review implementation update, `2026-07-15`: S1-S6 are complete. S7 implementation and local-pack/real-host validation are complete, while exact published npm and ClawHub acceptance remains pending. S8 matched-block benchmark implementation has not started. The review conclusions below remain the historical approval record for the slicing plan.
+> Post-review implementation update, `2026-07-16`: S1-S8 implementation and acceptance gates are complete, including exact published npm/ClawHub live-host acceptance and one independently validated real OpenClaw matched three-arm pilot. S8 treatment delivered the seeded node, forced holdout preserved the inject decision with zero delivery, no-EE contained no ExperienceEngine runtime evidence, and deterministic scorecard recomputation matched. The sealed publication plan requires five complete repetitions per scenario; the accepted pilot has one and therefore remains `not_publishable`. The review conclusions below remain the historical approval record for the slicing plan and do not authorize public efficacy/support claims.
 
 ## Review Standard
 
@@ -76,4 +76,4 @@ Runtime implementation completed: no
 Published support validated: no
 ```
 
-Implementation may now begin with S1 only. S2–S8 remain dependency-gated, and no target capability may be described as implemented, available, validated, or supported until its implementation and acceptance gates pass.
+This historical review authorized implementation to begin with S1. Current implementation status is recorded in the post-review update above: S1-S8 implementation gates are complete. The S8 benchmark machinery and real pilot are validated, but the pilot did not meet the sealed repetition threshold and must not be described as publishable efficacy evidence or as enabling support.

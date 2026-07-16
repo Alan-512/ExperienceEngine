@@ -18,6 +18,11 @@ import {
   runCodexLifecycleValidation,
   type CodexLifecycleValidationRunResult
 } from "../../evaluation/codex-lifecycle-validation.js";
+import {
+  renderMatchedBlockCampaignMarkdown,
+  runMatchedBlockCampaignReport,
+  type MatchedBlockCampaignReportRunResult
+} from "../../evaluation/matched-block/campaign-report.js";
 
 type EvaluateFlags = {
   lookbackHours?: number;
@@ -25,6 +30,11 @@ type EvaluateFlags = {
   pack?: "high-confidence";
   repoRoot?: string;
   dryRun?: boolean;
+  campaignDatabasePath?: string;
+  campaignId?: string;
+  observationsPath?: string;
+  negativeResultDisclosureIncluded?: boolean;
+  persistDecision?: boolean;
 };
 
 type MaybePromise<T> = T | Promise<T>;
@@ -72,6 +82,43 @@ const parseFlags = (args: string[]): EvaluateFlags => {
 
     if (token === "--dry-run") {
       flags.dryRun = true;
+      continue;
+    }
+
+    if (token === "--campaign-db") {
+      const next = args[index + 1];
+      if (next) {
+        flags.campaignDatabasePath = resolve(next);
+        index += 1;
+      }
+      continue;
+    }
+
+    if (token === "--campaign-id") {
+      const next = args[index + 1];
+      if (next) {
+        flags.campaignId = next;
+        index += 1;
+      }
+      continue;
+    }
+
+    if (token === "--observations") {
+      const next = args[index + 1];
+      if (next) {
+        flags.observationsPath = resolve(next);
+        index += 1;
+      }
+      continue;
+    }
+
+    if (token === "--negative-results-disclosed") {
+      flags.negativeResultDisclosureIncluded = true;
+      continue;
+    }
+
+    if (token === "--persist-decision") {
+      flags.persistDecision = true;
     }
   }
 
@@ -93,6 +140,14 @@ type EvaluateDependencies = {
     repoRoot?: string;
     outputDir?: string;
   }) => MaybePromise<CodexLifecycleValidationRunResult>;
+  runMatchedBlockCampaign?: (options: {
+    campaignDatabasePath: string;
+    campaignId: string;
+    observationsPath: string;
+    outputDir: string;
+    negativeResultDisclosureIncluded: boolean;
+    persistDecision?: boolean;
+  }) => MaybePromise<MatchedBlockCampaignReportRunResult>;
 };
 
 const formatRate = (value: number): string => value.toFixed(4);
@@ -187,16 +242,53 @@ export const runEvaluateCommand = async (
   args: string[] = [],
   deps: EvaluateDependencies = {}
 ): Promise<void> => {
-  if (!target || !["openclaw-baseline", "openclaw-scenarios", "codex-lifecycle"].includes(target)) {
+  if (!target || ![
+    "openclaw-baseline",
+    "openclaw-scenarios",
+    "openclaw-matched-block",
+    "codex-lifecycle"
+  ].includes(target)) {
     console.log(
       "Usage: ee evaluate openclaw-baseline [--lookback-hours N] [--output-dir PATH]"
       + " | openclaw-scenarios --pack high-confidence [--repo-root PATH] [--output-dir PATH] [--dry-run]"
+      + " | openclaw-matched-block --campaign-db PATH --campaign-id ID --observations PATH --output-dir PATH"
+      + " [--negative-results-disclosed] [--persist-decision]"
       + " | codex-lifecycle [--repo-root PATH] [--output-dir PATH]"
     );
     return;
   }
 
   const flags = parseFlags(args);
+  if (target === "openclaw-matched-block") {
+    if (
+      !flags.campaignDatabasePath ||
+      !flags.campaignId ||
+      !flags.observationsPath ||
+      !flags.outputDir
+    ) {
+      console.log(
+        "Usage: ee evaluate openclaw-matched-block --campaign-db PATH --campaign-id ID"
+        + " --observations PATH --output-dir PATH"
+        + " [--negative-results-disclosed] [--persist-decision]"
+      );
+      return;
+    }
+    const result = await (
+      deps.runMatchedBlockCampaign ?? runMatchedBlockCampaignReport
+    )({
+      campaignDatabasePath: flags.campaignDatabasePath,
+      campaignId: flags.campaignId,
+      observationsPath: flags.observationsPath,
+      outputDir: flags.outputDir,
+      negativeResultDisclosureIncluded: flags.negativeResultDisclosureIncluded ?? false,
+      persistDecision: flags.persistDecision
+    });
+    console.log(renderMatchedBlockCampaignMarkdown(result.report));
+    console.log(`Matched-block campaign directory: ${result.outputDir}`);
+    console.log(`JSON: ${result.jsonPath}`);
+    console.log(`Markdown: ${result.markdownPath}`);
+    return;
+  }
   if (target === "codex-lifecycle") {
     const result = await (deps.runCodexLifecycle ?? runCodexLifecycleValidation)({
       repoRoot: flags.repoRoot,

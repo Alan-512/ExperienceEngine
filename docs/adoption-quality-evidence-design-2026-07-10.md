@@ -3,10 +3,10 @@
 Date: `2026-07-10`
 Protocol freeze approved: `2026-07-11`
 Status: Phase 0.5A.1 protocol frozen; eight-slice OpenSpec plan independently reviewed and approved
-Implementation status: S1-S6 complete; S7 implementation and local-pack/real-host validation complete; S7 exact published npm/ClawHub acceptance pending; S8 not implemented
+Implementation status: S1-S8 implementation and acceptance gates complete; exact published npm/ClawHub acceptance passed; the accepted one-block S8 pilot is intentionally `not_publishable`
 Owner: ExperienceEngine
 
-> Implementation update, `2026-07-15`: this document remains the frozen design and protocol history. The package-local OpenClaw runtime, authority model, configuration/route validation, fenced semantic queue, and production activation defined by S1-S6 are now implemented. S7 has passed source, local-pack, WSL, latest-stable WSL, and native Windows real-host gates, but exact published npm and ClawHub acceptance remains pending. S8 matched-block benchmark work has not started. Historical sequencing language below records the implementation constraints that applied at freeze time; it is not the current task status.
+> Implementation update, `2026-07-16`: this document remains the frozen design and protocol history. S1-S7 are implemented and the exact npm/ClawHub `0.5.1` artifacts passed published live-host validation. S8 now implements the exhaustive contracts, dedicated append-only campaign store, sealed three-arm harness, failure/disposition/replacement protocol, complete-block scoring, publication gate, and separately labeled `openclaw-matched-block` CLI. A real OpenClaw v3 pilot passed all 15 preflight stages and completed treatment, forced-holdout, and no-EE attempts: treatment delivered the seeded node, forced holdout retained the inject decision with zero delivery, and no-EE had no ExperienceEngine runtime evidence. Independent recomputation matched the retained scorecard. The pilot contains one complete block while the sealed plan requires five repetitions per scenario, so its immutable decision is `not_publishable`; it does not authorize efficacy or support claims, and `support_claim_allowed=false` plus `production_learning_ready=false` remain unchanged. Historical sequencing language below records the constraints that applied at freeze time, not current task status.
 
 ## 1. Executive Decision
 
@@ -4451,4 +4451,4 @@ The following constraints applied until S1 passed its implementation gate:
 - do not claim ClawHub or OpenClaw full background learning support;
 - do not publish the canonical activation path.
 
-Current next steps are exact `v0.5.0` npm and ClawHub publication, channel-bound artifact validation, completion of S7 published acceptance, and then S8 matched-block benchmark implementation and evidence collection. Runtime support is declared only at the level proven by the completed gates; unrestricted production-learning support remains blocked until the remaining published-channel and quality gates pass.
+Phase 0.5A.1 S1-S8 implementation and acceptance are complete, including exact npm/ClawHub publication acceptance and the retained one-block matched three-arm pilot. Any future efficacy publication work must use a new sealed campaign with complete three-arm blocks and satisfy the predeclared repetition, coverage, reliability, disclosure, and quality thresholds. Runtime support remains declared only at the level proven by completed gates; unrestricted production-learning support remains blocked while the retained benchmark decision is `not_publishable`.

@@ -102,7 +102,7 @@ Install ExperienceEngine through the host setup flow for:
     - `openclaw plugins install @alan512/experienceengine`
   - after installing, restart the gateway before the first real task:
     - `openclaw gateway restart`
-  - the `v0.5.x` line contains the package-local supervisor/worker runtime; exact npm `v0.5.0` validation passed, while unpublished `v0.5.1` prepares a link-free bundled-dependency repair for the ClawHub-native path
+  - the `v0.5.x` line contains the package-local supervisor/worker runtime; the exact published npm and ClawHub `v0.5.1` artifacts independently passed native-channel and real-host validation
   - use the authenticated package activation flow below when `learning_runtime_active` is not yet true
   - operator-managed fallback:
     - `ee install openclaw`
@@ -742,10 +742,24 @@ Current publication evidence:
 - local-pack real-host preflight passed on OpenClaw `2026.4.1` under Linux/WSL and native Windows
 - local-pack real-host preflight also passed on OpenClaw `2026.7.1` under WSL with Node `24.18.0`
 - the superseded prepublication tarballs remain historical evidence and were not published
-- npm, GitHub Releases, and ClawHub received the exact evidence-bound `v0.5.0` artifact
-- exact npm `v0.5.0` published validation passed; ClawHub `v0.5.0` passed byte/closure checks but failed native runtime import because required dependencies were not installed
-- `v0.5.1` is a release candidate only until its distinct npm and ClawHub artifacts are published, independently downloaded, and validated through their native channels
+- npm, GitHub Releases, and ClawHub received the exact evidence-bound `v0.5.1` artifacts
+- exact npm and ClawHub `v0.5.1` published validation passed independently through their native channels and real OpenClaw host paths
 - the matched-block benchmark/quality gate remains separate from runtime activation
+- one real matched treatment/forced-holdout/no-EE pilot passed infrastructure and isolation acceptance, but its sealed publication decision is `not_publishable` because it has one complete repetition and the plan requires five per scenario
+- `support_claim_allowed` and `production_learning_ready` therefore remain false
+
+Maintainer-only matched-block reporting reads an already sealed campaign database and external observations; it does not run arms or mutate runtime authority:
+
+```bash
+ee evaluate openclaw-matched-block \
+  --campaign-db <campaign.sqlite> \
+  --campaign-id <campaign-id> \
+  --observations <observations.json> \
+  --output-dir <report-directory> \
+  --negative-results-disclosed
+```
+
+Historical `openclaw-scenarios` output remains diagnostic single-arm evidence and is never silently reused as matched-block efficacy evidence.
 
 ### Claude Code Advanced Commands
 

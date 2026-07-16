@@ -2,7 +2,7 @@
 
 **Created:** `2026-07-11`
 
-**Status:** Historical slicing plan approved. S1-S6 are complete; S7 implementation and local-pack/real-host validation are complete; S7 exact published npm/ClawHub acceptance is pending; S8 is not implemented.
+**Status:** Historical slicing plan approved. S1-S8 implementation and acceptance gates are complete. The accepted one-block S8 pilot is intentionally `not_publishable` under its sealed repetition threshold.
 
 ## Post-Implementation Status
 
@@ -16,8 +16,8 @@ This document remains the historical dependency and ownership plan. Current prog
 | S4 `add-runtime-configuration-route-authority` | Complete |
 | S5 `add-fenced-learning-queue-semantics` | Complete |
 | S6 `add-openclaw-production-activation` | Complete |
-| S7 `validate-published-runtime-closure` | Implementation and local-pack/real-host validation complete; exact published npm/ClawHub acceptance pending |
-| S8 `add-matched-block-benchmark-evidence` | Not implemented |
+| S7 `validate-published-runtime-closure` | Complete, including exact published npm/ClawHub live-host acceptance |
+| S8 `add-matched-block-benchmark-evidence` | Complete: sealed three-arm harness, failure/replacement protocol, complete-block scoring, real OpenClaw pilot, deterministic recomputation, and fail-closed publication decision accepted; one-block pilot remains `not_publishable` |
 
 Historical statements below that say implementation has not started describe the state when the slicing plan was approved, not the current repository state.
 
@@ -179,4 +179,4 @@ Their task lists remain unchecked until implementation begins. Creation and stri
 - `git diff --check` passed; the pre-existing LF-to-CRLF warning for `docs/product-ux-improvement-checklist.md` remains non-failing.
 - No runtime source, runtime tests, build output, public support claim, or published artifact was changed or validated in this slicing pass.
 - The independent slicing review initially found nine implementation-contract gaps and closed them through normative imports, ownership boundaries, physically complete bootstrap schema requirements, fail-closed dependency interfaces, exact mechanical tables, and existing-spec deltas. See `docs/phase-0.5a.1-openspec-slicing-review-2026-07-11.md`.
-- Independent review approval permits implementation to begin with S1 only. It does not mark any target runtime capability implemented, validated, available, or supported.
+- Historical review approval originally permitted implementation to begin with S1 only. Current progress is recorded in the status table above: S1-S8 implementation gates are complete. S8 completion proves the benchmark machinery and one real three-arm pilot, not publishable efficacy; the sealed five-repetition threshold was not met, so public benchmark/support claims remain prohibited.

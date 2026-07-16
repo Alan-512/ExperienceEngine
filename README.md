@@ -354,7 +354,7 @@ Then verify current authority from the operator CLI:
 ee verify openclaw-production
 ```
 
-The implementation has passed local-pack real-host preflight on WSL/Linux and native Windows. The exact published npm `v0.5.0` artifact also passed the full OpenClaw `2026.7.1` WSL live-host sequence. Published ClawHub `v0.5.0` passed closure checks but its native install omitted runtime dependencies. The unpublished `v0.5.1` candidate repairs that channel with a clean, link-free dependency bundle; ClawHub published acceptance and the full quality-gated support claim remain open until the new published artifact passes independently.
+The implementation has passed local-pack real-host preflight on WSL/Linux and native Windows. The exact published npm and ClawHub `v0.5.1` artifacts independently passed the full OpenClaw `2026.7.1` WSL live-host sequence. The matched-block benchmark machinery also passed one real three-arm pilot: treatment delivered one seeded experience, forced holdout recorded the same inject decision with zero delivery, no-EE contained no ExperienceEngine plugin or database, and independent scorecard recomputation matched. The sealed publication plan requires five complete repetitions per scenario; the accepted pilot has one, so its decision is `not_publishable` and `support_claim_allowed` remains false.
 
 The operator fallback is:
 

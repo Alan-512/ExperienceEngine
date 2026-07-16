@@ -18,6 +18,7 @@ const usageText =
   + " | maintenance embeddings-reset|embedding-smoke|governance drain|redistill-rule-nodes|claude-validate-print|merge-scope <sourceScopeId> <targetScopeId>"
   + " | evaluate openclaw-baseline [--lookback-hours N] [--output-dir PATH]"
   + " | evaluate openclaw-scenarios --pack high-confidence [--repo-root PATH] [--output-dir PATH] [--dry-run]"
+  + " | evaluate openclaw-matched-block --campaign-db PATH --campaign-id ID --observations PATH --output-dir PATH"
   + " | evaluate codex-lifecycle [--repo-root PATH] [--output-dir PATH]"
   + " | mcp-server"
   + " | init [distillation|embedding|secret|show]"

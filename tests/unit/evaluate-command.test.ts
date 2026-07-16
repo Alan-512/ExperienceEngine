@@ -19,7 +19,134 @@ describe("evaluate command", () => {
     expect(consoleLogSpy).toHaveBeenCalledWith(
       "Usage: ee evaluate openclaw-baseline [--lookback-hours N] [--output-dir PATH]"
       + " | openclaw-scenarios --pack high-confidence [--repo-root PATH] [--output-dir PATH] [--dry-run]"
+      + " | openclaw-matched-block --campaign-db PATH --campaign-id ID --observations PATH --output-dir PATH"
+      + " [--negative-results-disclosed] [--persist-decision]"
       + " | codex-lifecycle [--repo-root PATH] [--output-dir PATH]"
+    );
+  });
+
+  it("routes the separately labeled matched-block campaign target", async () => {
+    const runMatchedBlockCampaign = vi.fn(() => ({
+      outputDir: "/tmp/matched",
+      jsonPath: "/tmp/matched/matched-block-campaign.json",
+      markdownPath: "/tmp/matched/matched-block-campaign.md",
+      report: {
+        evidence_mode: "matched_block_campaign" as const,
+        diagnostic_single_arm_reused: false as const,
+        campaign_database_name: "campaign.sqlite",
+        observations_file_name: "observations.json",
+        generated_at: "2026-07-16T10:00:00.000Z",
+        result: {
+          campaign_scorecard: {
+            benchmark_campaign_id: "campaign-1",
+            scorecard: {
+              delivery_rate: 1,
+              net_helpful_intervention_rate: 1,
+              helpful_rate: 1,
+              harmful_rate: 0,
+              uncertain_rate: 0,
+              task_success_delta: 1,
+              repeated_old_mistake_avoidance_delta: 1,
+              correct_skip_rate: null,
+              false_positive_injection_rate: null,
+              provider_cost: 0.01,
+              experienceengine_token_overhead: 10,
+              wall_clock_latency_delta: 5,
+              tool_call_delta: -1,
+              infrastructure_failure_rate: 0
+            },
+            pairwise_deltas: {
+              task_success: {
+                treatment_minus_forced_holdout: 1,
+                treatment_minus_no_ee: 1,
+                forced_holdout_minus_no_ee: 0
+              },
+              repeated_old_mistake_avoidance: {
+                treatment_minus_forced_holdout: 1,
+                treatment_minus_no_ee: 1,
+                forced_holdout_minus_no_ee: 0
+              },
+              wall_clock_latency_ms: {
+                treatment_minus_forced_holdout: 0,
+                treatment_minus_no_ee: 5,
+                forced_holdout_minus_no_ee: 5
+              },
+              tool_calls: {
+                treatment_minus_forced_holdout: 0,
+                treatment_minus_no_ee: -1,
+                forced_holdout_minus_no_ee: -1
+              },
+              total_tokens: {
+                treatment_minus_forced_holdout: 0,
+                treatment_minus_no_ee: 10,
+                forced_holdout_minus_no_ee: 10
+              }
+            },
+            confidence_intervals: {
+              task_success_treatment_minus_no_ee: {
+                method: "scenario_cluster_normal_95_v1" as const,
+                point_estimate: 1,
+                lower_95: null,
+                upper_95: null,
+                cluster_count: 1
+              },
+              repeated_old_mistake_avoidance_treatment_minus_no_ee: {
+                method: "scenario_cluster_normal_95_v1" as const,
+                point_estimate: 1,
+                lower_95: null,
+                upper_95: null,
+                cluster_count: 1
+              }
+            },
+            confusion_matrix: { "inject:inject": 1 },
+            complete_block_ids: ["block-1"],
+            excluded_block_ids: [],
+            complete_block_coverage: 1,
+            infrastructure_reliability: 1,
+            attempted_arm_count: 3,
+            evidence_digest: "scorecard-digest"
+          },
+          publication_decision: {
+            publication_decision_schema_version: "benchmark-publication-decision-v1",
+            benchmark_campaign_id: "campaign-1",
+            publication_plan_digest: "plan-digest",
+            decision: "not_publishable" as const,
+            threshold_results: { minimum_repetitions_per_scenario: false },
+            complete_block_count: 1,
+            attempted_arm_count: 3,
+            evidence_digest: "decision-digest",
+            created_at: "2026-07-16T10:00:00.000Z"
+          }
+        }
+      }
+    }));
+
+    await runEvaluateCommand(
+      "openclaw-matched-block",
+      [
+        "--campaign-db", "/tmp/campaign.sqlite",
+        "--campaign-id", "campaign-1",
+        "--observations", "/tmp/observations.json",
+        "--output-dir", "/tmp/matched",
+        "--negative-results-disclosed",
+        "--persist-decision"
+      ],
+      { runMatchedBlockCampaign }
+    );
+
+    expect(runMatchedBlockCampaign).toHaveBeenCalledWith({
+      campaignDatabasePath: resolve("/tmp/campaign.sqlite"),
+      campaignId: "campaign-1",
+      observationsPath: resolve("/tmp/observations.json"),
+      outputDir: resolve("/tmp/matched"),
+      negativeResultDisclosureIncluded: true,
+      persistDecision: true
+    });
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      expect.stringContaining("Evidence mode: `matched_block_campaign`")
+    );
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      "Matched-block campaign directory: /tmp/matched"
     );
   });
 
