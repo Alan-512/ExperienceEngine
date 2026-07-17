@@ -1,6 +1,6 @@
 # ExperienceEngine — Unreleased
 
-`v0.5.1` is published and immutable. Its exact npm and ClawHub artifacts passed the complete OpenClaw `2026.7.1` live-host sequence. The changes below describe the next unreleased line and must not be presented as available from the published `0.5.1` package.
+`v0.5.1` is published and immutable. Its exact npm and ClawHub artifacts passed the complete OpenClaw `2026.7.1` live-host sequence. The changes below are assigned to the local `v0.5.2` release-candidate line but are not yet published and must not be presented as available from the published `0.5.1` package.
 
 ## Privacy-safe diagnostics and public feedback
 
@@ -53,5 +53,6 @@
 - Published npm and ClawHub `0.5.1`: exact artifact validation passed.
 - Repeated matched-block v4: five complete single-scenario blocks passed the sealed campaign thresholds, with one-cluster limitations disclosed; general support/readiness claims remain disabled.
 - Unreleased diagnostics: source and clean local-pack validation passed; exact published-package validation remains pending a future release.
+- Unreleased multi-scenario evidence: decision-opportunity and harm-recovery contracts, sealed OpenClaw adapters, exact-plan execution, independent validation, and current-source local-pack feedback recovery passed source gates. Exact published-artifact C3 execution remains pending the immutable `0.5.2` artifacts.
 
 See `docs/openclaw-runtime-support-matrix.md` for the exact evidence boundaries.

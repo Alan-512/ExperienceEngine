@@ -1,7 +1,7 @@
 {
   "id": "experienceengine",
   "name": "ExperienceEngine",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Helps coding agents avoid repeating failed execution paths by learning from real task outcomes and governing when prior guidance should be reused.",
   "activation": {
     "onStartup": true
