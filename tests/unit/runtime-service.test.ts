@@ -2387,6 +2387,54 @@ describe("ExperienceRuntimeService finalize transaction", () => {
       harmed_count: 1,
       consecutive_harmed_count: 1
     });
+
+    const evidenceDb = new DatabaseSync(sqlitePath);
+    const harmedAttribution = evidenceDb.prepare(
+      `SELECT id, injection_id, delivered, outcome, attribution_verdict, confidence, source
+       FROM attribution_records
+       WHERE node_id = 'priority-harm'
+       ORDER BY created_at DESC
+       LIMIT 1`
+    ).get() as {
+      id: string;
+      injection_id: string | null;
+      delivered: number;
+      outcome: string;
+      attribution_verdict: string;
+      confidence: string;
+      source: string;
+    };
+    const harmReview = evidenceDb.prepare(
+      `SELECT id, event_type, source
+       FROM review_events
+       WHERE node_id = 'priority-harm'
+       ORDER BY created_at DESC
+       LIMIT 1`
+    ).get() as { id: string; event_type: string; source: string };
+    expect(harmedAttribution).toMatchObject({
+      delivered: 1,
+      outcome: "failure",
+      attribution_verdict: "strong_harmed",
+      confidence: "high",
+      source: "automatic"
+    });
+    expect(harmedAttribution.injection_id).toBeTruthy();
+    expect(harmReview).toMatchObject({
+      event_type: "mark_harmed",
+      source: "automatic"
+    });
+
+    const recoveryPrompt = await service.beforePromptBuild({
+      sessionId: "priority-harm-recovery-session",
+      cwd: "/repo",
+      userMessage: "Fix the failing vitest auth test",
+      taskSummary: "Fix the failing vitest auth test"
+    });
+    expect(recoveryPrompt.mode).toBe("skip");
+    expect(recoveryPrompt.delivered).not.toBe(true);
+    expect(["no_candidate", "recent_harm_or_quarantined"]).toContain(
+      recoveryPrompt.scorecard?.skipReasonCode
+    );
   });
 
   it("schedules an async postmortem review and stores only a non-authoritative artifact", async () => {

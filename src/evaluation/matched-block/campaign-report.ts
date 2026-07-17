@@ -64,6 +64,26 @@ export const renderMatchedBlockCampaignMarkdown = (
   for (const [field, value] of Object.entries(scorecard.scorecard)) {
     lines.push(`- ${field}: \`${value === null ? "unavailable" : value}\``);
   }
+  if (scorecard.decision_opportunity_metrics) {
+    lines.push(
+      "",
+      "## Decision Opportunity Evidence",
+      "",
+      `- correct_skip_evidence_coverage: \`${
+        scorecard.decision_opportunity_metrics.correct_skip_evidence_coverage ?? "unavailable"
+      }\``
+    );
+  }
+  if (scorecard.harm_recovery_metrics) {
+    lines.push(
+      "",
+      "## Harm Recovery Evidence",
+      "",
+      `- opportunity_count: \`${scorecard.harm_recovery_metrics.opportunity_count}\``,
+      `- success_count: \`${scorecard.harm_recovery_metrics.success_count}\``,
+      `- recovery_rate: \`${scorecard.harm_recovery_metrics.recovery_rate ?? "unavailable"}\``
+    );
+  }
   lines.push(
     "",
     "## Publication Thresholds",

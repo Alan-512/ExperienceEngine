@@ -3,6 +3,7 @@ import { decideIntervention, selectInjectableNodes } from "../../src/controller/
 import { clearSelectiveSecondOpinionHooksForTests, setSelectiveSecondOpinionHooksForTests } from "../../src/controller/second-opinion-gate.js";
 import type { ExperienceInput, ExperienceNode, ScopeTaskStats } from "../../src/types/domain.js";
 import { clearEmbeddingProviderForTests, setEmbeddingProviderForTests } from "../../src/store/vector/embeddings.js";
+import { createOpenClawMultiScenarioAdapters } from "../../src/evaluation/matched-block/openclaw-scenario-adapter.js";
 
 const defaultDeliveryStateByState: Record<ExperienceNode["state"], NonNullable<ExperienceNode["delivery_state"]>> = {
   candidate: "shadow_only",
@@ -1262,6 +1263,54 @@ describe("decideIntervention", () => {
     expect(decision.text).toBeUndefined();
     expect(decision.diagnostics?.recordOnlyDiagnosticCandidateIds).toEqual([
       "diagnostic-custom-origin"
+    ]);
+  });
+
+  it("keeps the sealed C3 correct-skip candidate visible but record-only", async () => {
+    const adapter = createOpenClawMultiScenarioAdapters({
+      campaignVersion: "3",
+      createdAt: "2026-07-17T20:00:00.000Z"
+    }).find((entry) => entry.scenario_kind === "correct_skip")!;
+    const candidate = adapter.candidate_corpus[0]!;
+    const decision = await decideIntervention(
+      {
+        scope_id: "scope_1",
+        task_type: "general",
+        task_summary: adapter.opportunities[0]!.task_input,
+        tool_events: [],
+        outcome_signal: "unknown",
+        injected_node_ids: []
+      },
+      [
+        node({
+          id: candidate.node_id,
+          state: candidate.state,
+          delivery_state: candidate.delivery_state,
+          task_type: "general",
+          trigger_pattern: candidate.trigger_pattern,
+          compact_hint: candidate.compact_hint,
+          applicability_notes: candidate.applicability_notes,
+          retrieval_text: [
+            adapter.opportunities[0]!.task_input,
+            candidate.trigger_pattern,
+            candidate.compact_hint
+          ].join("\n"),
+          contains_unbenchmarked_origin: true,
+          effective_generation_assurance_floor: "unbenchmarked"
+        })
+      ],
+      {
+        ...stats,
+        task_type: "general"
+      },
+      0.05,
+      1
+    );
+
+    expect(decision.mode).toBe("skip");
+    expect(decision.selected).toEqual([]);
+    expect(decision.diagnostics?.recordOnlyDiagnosticCandidateIds).toEqual([
+      candidate.node_id
     ]);
   });
 

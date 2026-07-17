@@ -473,6 +473,7 @@ export class MatchedBlockBenchmarkStore {
       "Benchmark instrumentation manifest does not exist."
     );
     const referenceChecks: Array<[boolean, string]> = [
+      [campaign.benchmark_protocol_version === manifest.benchmark_protocol_version, "benchmark_protocol_version"],
       [campaign.scenario_set_digest === manifest.scenario_set_digest, "scenario_set_digest"],
       [campaign.analysis_plan_digest === manifest.analysis_plan_digest, "analysis_plan_digest"],
       [campaign.exclusion_policy_version === manifest.exclusion_policy_version, "exclusion_policy_version"],

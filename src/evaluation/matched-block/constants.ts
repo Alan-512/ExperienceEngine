@@ -1,11 +1,18 @@
 export const MATCHED_BLOCK_BENCHMARK_PROTOCOL_VERSION =
   "matched-block-benchmark-v1" as const;
+export const MATCHED_BLOCK_BENCHMARK_PROTOCOL_VERSION_V2 =
+  "matched-block-benchmark-v2" as const;
+export const MATCHED_BLOCK_BENCHMARK_PROTOCOL_VERSIONS = [
+  MATCHED_BLOCK_BENCHMARK_PROTOCOL_VERSION,
+  MATCHED_BLOCK_BENCHMARK_PROTOCOL_VERSION_V2
+] as const;
 
 export const MATCHED_BLOCK_SCHEMA_VERSIONS = {
   campaign: "benchmark-campaign-manifest-v1",
   scenario: "benchmark-scenario-manifest-v1",
   fixture: "benchmark-fixture-manifest-v1",
   groundTruth: "benchmark-ground-truth-v1",
+  groundTruthV2: "benchmark-ground-truth-v2",
   runtime: "benchmark-runtime-manifest-v1",
   instrumentation: "benchmark-instrumentation-manifest-v1",
   block: "matched-block-manifest-v1",
@@ -17,6 +24,71 @@ export const MATCHED_BLOCK_SCHEMA_VERSIONS = {
   publicationPlan: "benchmark-publication-plan-v1",
   publicationDecision: "benchmark-publication-decision-v1"
 } as const;
+
+export const BENCHMARK_ARM_SCORING_OBSERVATION_SCHEMA_V2 =
+  "benchmark-arm-scoring-observation-v2" as const;
+
+export const BENCHMARK_DECISION_OPPORTUNITY_GROUND_TRUTH_FIELDS = [
+  "opportunity_id",
+  "ordinal",
+  "expected_action",
+  "plausible_node_ids",
+  "plausible_candidate_ids",
+  "candidate_consideration_required",
+  "valid_skip_reason_codes",
+  "requires_prior_harm",
+  "known_old_mistake_path"
+] as const;
+
+export const BENCHMARK_DECISION_OPPORTUNITY_OBSERVATION_FIELDS = [
+  "opportunity_id",
+  "ordinal",
+  "decision",
+  "would_have_delivered",
+  "delivered_intervention_count",
+  "helped_intervention_count",
+  "harmed_intervention_count",
+  "uncertain_intervention_count",
+  "considered_candidate_ids",
+  "selected_candidate_ids",
+  "rejected_candidate_ids",
+  "governance_excluded_node_ids",
+  "skip_reason_code",
+  "task_success",
+  "skipped_guidance_required",
+  "authoritative_harm_evidence_id",
+  "governance_transition",
+  "evidence_digest"
+] as const;
+
+export const BENCHMARK_GOVERNANCE_TRANSITION_OBSERVATION_FIELDS = [
+  "node_id",
+  "before_delivery_state",
+  "after_delivery_state",
+  "authority_source",
+  "transition_evidence_id",
+  "evidence_digest"
+] as const;
+
+export const BENCHMARK_ARM_SCORING_OBSERVATION_V2_FIELDS = [
+  "observation_schema_version",
+  "block_id",
+  "arm",
+  "decision",
+  "decision_opportunity_count",
+  "delivered_intervention_count",
+  "helped_intervention_count",
+  "harmed_intervention_count",
+  "uncertain_intervention_count",
+  "task_success",
+  "repeated_old_mistake_avoided",
+  "provider_cost",
+  "total_token_count",
+  "wall_clock_duration_ms",
+  "tool_call_count",
+  "decision_opportunities",
+  "observation_digest"
+] as const;
 
 export const BENCHMARK_STATISTICAL_UNITS = [
   "decision_opportunity",
@@ -220,6 +292,11 @@ export const BENCHMARK_GROUND_TRUTH_FIELDS = [
   "known_old_mistake_path",
   "created_at",
   "ground_truth_digest"
+] as const;
+
+export const BENCHMARK_GROUND_TRUTH_V2_FIELDS = [
+  ...BENCHMARK_GROUND_TRUTH_FIELDS,
+  "decision_opportunities"
 ] as const;
 
 export const BENCHMARK_RUNTIME_MANIFEST_FIELDS = [

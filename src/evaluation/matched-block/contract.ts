@@ -7,7 +7,9 @@ import {
   BENCHMARK_EXPECTED_ACTIONS,
   BENCHMARK_FIXTURE_MANIFEST_FIELDS,
   BENCHMARK_FORMAL_ATTEMPT_FIELDS,
+  BENCHMARK_DECISION_OPPORTUNITY_GROUND_TRUTH_FIELDS,
   BENCHMARK_GROUND_TRUTH_FIELDS,
+  BENCHMARK_GROUND_TRUTH_V2_FIELDS,
   BENCHMARK_INFRASTRUCTURE_FAILURE_CODES,
   BENCHMARK_INSTRUMENTATION_MANIFEST_FIELDS,
   BENCHMARK_MINIMUM_PUBLIC_SCORECARD_FIELDS,
@@ -23,7 +25,7 @@ import {
   BENCHMARK_TASK_OUTCOMES,
   MATCHED_BLOCK_ARM_PLAN_FIELDS,
   MATCHED_BLOCK_ARMS,
-  MATCHED_BLOCK_BENCHMARK_PROTOCOL_VERSION,
+  MATCHED_BLOCK_BENCHMARK_PROTOCOL_VERSIONS,
   MATCHED_BLOCK_MANIFEST_FIELDS,
   MATCHED_BLOCK_SCHEMA_VERSIONS
 } from "./constants.js";
@@ -33,6 +35,7 @@ import type {
   BenchmarkFixtureManifest,
   BenchmarkFormalAttempt,
   BenchmarkGroundTruth,
+  BenchmarkDecisionOpportunityGroundTruth,
   BenchmarkInterventionEventEvidence,
   BenchmarkInterventionEventOutcome,
   BenchmarkInstrumentationManifest,
@@ -247,6 +250,55 @@ const assertStringFields = (
   }
 };
 
+const assertDecisionOpportunityGroundTruth = (
+  value: unknown,
+  index: number
+): BenchmarkDecisionOpportunityGroundTruth => {
+  const label = `decision_opportunities[${index}]`;
+  const record = assertRecord(value, label);
+  assertExactKeys(record, BENCHMARK_DECISION_OPPORTUNITY_GROUND_TRUTH_FIELDS, label);
+  assertNonEmptyString(record.opportunity_id, `${label}.opportunity_id`);
+  assertSafeInteger(record.ordinal, `${label}.ordinal`, 1);
+  assertEnum(record.expected_action, BENCHMARK_EXPECTED_ACTIONS, `${label}.expected_action`);
+  assertStringArray(record.plausible_node_ids, `${label}.plausible_node_ids`, {
+    allowEmpty: true,
+    unique: true
+  });
+  assertStringArray(record.plausible_candidate_ids, `${label}.plausible_candidate_ids`, {
+    allowEmpty: true,
+    unique: true
+  });
+  assertBoolean(
+    record.candidate_consideration_required,
+    `${label}.candidate_consideration_required`
+  );
+  assertStringArray(record.valid_skip_reason_codes, `${label}.valid_skip_reason_codes`, {
+    allowEmpty: true,
+    unique: true
+  });
+  assertBoolean(record.requires_prior_harm, `${label}.requires_prior_harm`);
+  assertNullableString(record.known_old_mistake_path, `${label}.known_old_mistake_path`);
+  if (
+    record.expected_action === "skip" &&
+    record.candidate_consideration_required === true &&
+    (record.plausible_node_ids as unknown[]).length +
+      (record.plausible_candidate_ids as unknown[]).length === 0
+  ) {
+    fail(`${label} requires at least one plausible id for an evidence-backed skip.`);
+  }
+  if (
+    record.expected_action === "skip" &&
+    record.candidate_consideration_required === true &&
+    (record.valid_skip_reason_codes as unknown[]).length === 0
+  ) {
+    fail(`${label} requires at least one valid stable skip reason code.`);
+  }
+  if (record.requires_prior_harm === true && record.ordinal === 1) {
+    fail(`${label} cannot require prior harm at ordinal one.`);
+  }
+  return record as unknown as BenchmarkDecisionOpportunityGroundTruth;
+};
+
 export const assertBenchmarkCampaignManifest = (
   value: unknown
 ): BenchmarkCampaignManifest => {
@@ -255,7 +307,9 @@ export const assertBenchmarkCampaignManifest = (
   if (record.campaign_manifest_schema_version !== MATCHED_BLOCK_SCHEMA_VERSIONS.campaign) {
     fail("Benchmark campaign manifest schema version is unsupported.");
   }
-  if (record.benchmark_protocol_version !== MATCHED_BLOCK_BENCHMARK_PROTOCOL_VERSION) {
+  if (!MATCHED_BLOCK_BENCHMARK_PROTOCOL_VERSIONS.includes(
+    record.benchmark_protocol_version as typeof MATCHED_BLOCK_BENCHMARK_PROTOCOL_VERSIONS[number]
+  )) {
     fail("Benchmark protocol version is unsupported.");
   }
   assertStringFields(record, [
@@ -323,8 +377,16 @@ export const assertBenchmarkGroundTruth = (
   value: unknown
 ): BenchmarkGroundTruth => {
   const record = assertRecord(value, "Benchmark ground truth");
-  assertExactKeys(record, BENCHMARK_GROUND_TRUTH_FIELDS, "Benchmark ground truth");
-  if (record.ground_truth_schema_version !== MATCHED_BLOCK_SCHEMA_VERSIONS.groundTruth) {
+  const isV2 = record.ground_truth_schema_version === MATCHED_BLOCK_SCHEMA_VERSIONS.groundTruthV2;
+  assertExactKeys(
+    record,
+    isV2 ? BENCHMARK_GROUND_TRUTH_V2_FIELDS : BENCHMARK_GROUND_TRUTH_FIELDS,
+    "Benchmark ground truth"
+  );
+  if (
+    record.ground_truth_schema_version !== MATCHED_BLOCK_SCHEMA_VERSIONS.groundTruth &&
+    !isV2
+  ) {
     fail("Benchmark ground-truth schema version is unsupported.");
   }
   assertStringFields(record, [
@@ -359,6 +421,43 @@ export const assertBenchmarkGroundTruth = (
   ].length;
   if (record.expected_action === "skip" && plausibleCount === 0) {
     fail("Skip ground truth requires at least one plausible candidate or distractor.");
+  }
+  if (isV2) {
+    if (!Array.isArray(record.decision_opportunities) || record.decision_opportunities.length === 0) {
+      fail("V2 benchmark ground truth requires at least one decision opportunity.");
+    }
+    const opportunities = (record.decision_opportunities as unknown[])
+      .map((opportunity, index) => assertDecisionOpportunityGroundTruth(opportunity, index));
+    const ids = new Set(opportunities.map((opportunity) => opportunity.opportunity_id));
+    const ordinals = new Set(opportunities.map((opportunity) => opportunity.ordinal));
+    if (ids.size !== opportunities.length || ordinals.size !== opportunities.length) {
+      fail("V2 benchmark ground-truth opportunity ids and ordinals must be unique.");
+    }
+    const ordered = [...opportunities].sort((left, right) => left.ordinal - right.ordinal);
+    if (ordered.some((opportunity, index) => opportunity.ordinal !== index + 1)) {
+      fail("V2 benchmark ground-truth opportunity ordinals must be contiguous from one.");
+    }
+    if (ordered.at(-1)?.expected_action !== record.expected_action) {
+      fail("V2 benchmark ground-truth expected_action must match the final opportunity.");
+    }
+    const declaredPlausibleIds = new Set([
+      ...(record.applicable_node_ids as string[]),
+      ...(record.applicable_candidate_ids as string[]),
+      ...(record.distractor_node_ids as string[]),
+      ...(record.distractor_candidate_ids as string[])
+    ]);
+    for (const opportunity of opportunities) {
+      for (const plausibleId of [
+        ...opportunity.plausible_node_ids,
+        ...opportunity.plausible_candidate_ids
+      ]) {
+        if (!declaredPlausibleIds.has(plausibleId)) {
+          fail(
+            `Decision opportunity ${opportunity.opportunity_id} references an undeclared plausible id.`
+          );
+        }
+      }
+    }
   }
   assertDigest(record, "ground_truth_digest", "Benchmark ground truth");
   return record as unknown as BenchmarkGroundTruth;
@@ -429,7 +528,9 @@ export const assertMatchedBlockManifest = (value: unknown): MatchedBlockManifest
   if (record.benchmark_manifest_schema_version !== MATCHED_BLOCK_SCHEMA_VERSIONS.block) {
     fail("Matched-block manifest schema version is unsupported.");
   }
-  if (record.benchmark_protocol_version !== MATCHED_BLOCK_BENCHMARK_PROTOCOL_VERSION) {
+  if (!MATCHED_BLOCK_BENCHMARK_PROTOCOL_VERSIONS.includes(
+    record.benchmark_protocol_version as typeof MATCHED_BLOCK_BENCHMARK_PROTOCOL_VERSIONS[number]
+  )) {
     fail("Matched-block protocol version is unsupported.");
   }
   const nullable = new Set(["replacement_for_block_id"]);

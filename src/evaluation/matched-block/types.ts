@@ -62,6 +62,19 @@ export type BenchmarkScenarioManifest = {
   created_at: string;
   scenario_digest: string;
 };
+
+export type BenchmarkDecisionOpportunityGroundTruth = {
+  opportunity_id: string;
+  ordinal: number;
+  expected_action: BenchmarkExpectedAction;
+  plausible_node_ids: string[];
+  plausible_candidate_ids: string[];
+  candidate_consideration_required: boolean;
+  valid_skip_reason_codes: string[];
+  requires_prior_harm: boolean;
+  known_old_mistake_path: string | null;
+};
+
 export type BenchmarkFixtureManifest = {
   fixture_manifest_schema_version: string;
   fixture_id: string;
@@ -75,7 +88,7 @@ export type BenchmarkFixtureManifest = {
   created_at: string;
   fixture_digest: string;
 };
-export type BenchmarkGroundTruth = {
+export type BenchmarkGroundTruthV1 = {
   ground_truth_schema_version: string;
   ground_truth_id: string;
   scenario_id: string;
@@ -95,6 +108,12 @@ export type BenchmarkGroundTruth = {
   created_at: string;
   ground_truth_digest: string;
 };
+
+export type BenchmarkGroundTruthV2 = BenchmarkGroundTruthV1 & {
+  decision_opportunities: BenchmarkDecisionOpportunityGroundTruth[];
+};
+
+export type BenchmarkGroundTruth = BenchmarkGroundTruthV1 | BenchmarkGroundTruthV2;
 
 export type BenchmarkRuntimeManifest = {
   runtime_manifest_schema_version: string;

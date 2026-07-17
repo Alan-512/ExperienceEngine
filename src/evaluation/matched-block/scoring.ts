@@ -1,10 +1,16 @@
 import { canonicalJson, sha256Text } from "../../runtime/package/package-generation.js";
 import {
+  BENCHMARK_ARM_SCORING_OBSERVATION_V2_FIELDS,
+  BENCHMARK_ARM_SCORING_OBSERVATION_SCHEMA_V2,
   BENCHMARK_CONFUSION_MATRIX_CELLS,
+  BENCHMARK_DECISION_OPPORTUNITY_OBSERVATION_FIELDS,
+  BENCHMARK_DECISIONS,
+  BENCHMARK_GOVERNANCE_TRANSITION_OBSERVATION_FIELDS,
   BENCHMARK_MINIMUM_PUBLIC_SCORECARD_FIELDS,
   MATCHED_BLOCK_ARMS,
   MATCHED_BLOCK_SCHEMA_VERSIONS
 } from "./constants.js";
+import { computeBenchmarkRecordDigest } from "./contract.js";
 import { MatchedBlockBenchmarkStore } from "./store.js";
 import type {
   BenchmarkDecision,
@@ -12,10 +18,43 @@ import type {
   BenchmarkMinimumPublicScorecard,
   BenchmarkPublicationDecision,
   BenchmarkPublicScorecardField,
+  BenchmarkDecisionOpportunityGroundTruth,
+  BenchmarkGroundTruth,
+  BenchmarkGroundTruthV2,
   MatchedBlockArm
 } from "./types.js";
 
-export type BenchmarkArmScoringObservation = {
+export type BenchmarkGovernanceTransitionObservation = {
+  node_id: string;
+  before_delivery_state: string;
+  after_delivery_state: string;
+  authority_source: "production_runtime";
+  transition_evidence_id: string;
+  evidence_digest: string;
+};
+
+export type BenchmarkDecisionOpportunityScoringObservation = {
+  opportunity_id: string;
+  ordinal: number;
+  decision: BenchmarkDecision;
+  would_have_delivered: boolean | null;
+  delivered_intervention_count: number;
+  helped_intervention_count: number;
+  harmed_intervention_count: number;
+  uncertain_intervention_count: number;
+  considered_candidate_ids: string[];
+  selected_candidate_ids: string[];
+  rejected_candidate_ids: string[];
+  governance_excluded_node_ids: string[];
+  skip_reason_code: string | null;
+  task_success: 0 | 1;
+  skipped_guidance_required: boolean | null;
+  authoritative_harm_evidence_id: string | null;
+  governance_transition: BenchmarkGovernanceTransitionObservation | null;
+  evidence_digest: string;
+};
+
+export type BenchmarkArmScoringObservationV1 = {
   block_id: string;
   arm: MatchedBlockArm;
   decision: BenchmarkDecision;
@@ -32,6 +71,19 @@ export type BenchmarkArmScoringObservation = {
   tool_call_count: number;
   observation_digest: string;
 };
+
+export type BenchmarkArmScoringObservationV2 = Omit<
+  BenchmarkArmScoringObservationV1,
+  "decision_opportunity_count"
+> & {
+  observation_schema_version: typeof BENCHMARK_ARM_SCORING_OBSERVATION_SCHEMA_V2;
+  decision_opportunity_count: number;
+  decision_opportunities: BenchmarkDecisionOpportunityScoringObservation[];
+};
+
+export type BenchmarkArmScoringObservation =
+  | BenchmarkArmScoringObservationV1
+  | BenchmarkArmScoringObservationV2;
 
 export type BenchmarkPairwiseDelta = {
   treatment_minus_forced_holdout: number | null;
@@ -67,6 +119,14 @@ export type BenchmarkCampaignScorecard = {
   complete_block_coverage: number;
   infrastructure_reliability: number;
   attempted_arm_count: number;
+  decision_opportunity_metrics?: {
+    correct_skip_evidence_coverage: number | null;
+  };
+  harm_recovery_metrics?: {
+    opportunity_count: number;
+    success_count: number;
+    recovery_rate: number | null;
+  };
   evidence_digest: string;
 };
 
@@ -110,11 +170,192 @@ const assertFiniteNonNegative = (value: number, field: string): void => {
   }
 };
 
-const validateObservation = (observation: BenchmarkArmScoringObservation): void => {
-  if (observation.decision_opportunity_count !== 1) {
+const isV2Observation = (
+  observation: BenchmarkArmScoringObservation
+): observation is BenchmarkArmScoringObservationV2 =>
+  "observation_schema_version" in observation;
+
+const isV2GroundTruth = (
+  groundTruth: BenchmarkGroundTruth
+): groundTruth is BenchmarkGroundTruthV2 =>
+  "decision_opportunities" in groundTruth;
+
+const isRecord = (value: unknown): value is Record<string, unknown> =>
+  typeof value === "object" && value !== null && !Array.isArray(value);
+
+const assertExactKeys = (
+  value: Record<string, unknown>,
+  expected: readonly string[],
+  field: string
+): void => {
+  const actual = Object.keys(value).sort();
+  const required = [...expected].sort();
+  if (canonicalJson(actual) !== canonicalJson(required)) {
     fail(
       "BENCHMARK_SCORING_INPUT_INVALID",
-      "Each formal task trial contributes exactly one decision opportunity."
+      `${field} has unexpected or missing fields.`
+    );
+  }
+};
+
+const assertUniqueStringArray = (value: string[], field: string): void => {
+  if (!Array.isArray(value) || value.some((entry) => typeof entry !== "string" || entry.length === 0)) {
+    fail("BENCHMARK_SCORING_INPUT_INVALID", `${field} must contain non-empty strings.`);
+  }
+  if (new Set(value).size !== value.length) {
+    fail("BENCHMARK_SCORING_INPUT_INVALID", `${field} must not contain duplicates.`);
+  }
+};
+
+const validateGovernanceTransition = (
+  value: BenchmarkGovernanceTransitionObservation | null,
+  field: string
+): void => {
+  if (value === null) return;
+  assertExactKeys(
+    value as unknown as Record<string, unknown>,
+    BENCHMARK_GOVERNANCE_TRANSITION_OBSERVATION_FIELDS,
+    field
+  );
+  for (const key of [
+    "node_id",
+    "before_delivery_state",
+    "after_delivery_state",
+    "transition_evidence_id",
+    "evidence_digest"
+  ] as const) {
+    if (typeof value[key] !== "string" || value[key].length === 0) {
+      fail("BENCHMARK_SCORING_INPUT_INVALID", `${field}.${key} must be non-empty.`);
+    }
+  }
+  if (value.authority_source !== "production_runtime") {
+    fail(
+      "BENCHMARK_SCORING_INPUT_INVALID",
+      `${field}.authority_source must be production_runtime.`
+    );
+  }
+  if (
+    value.evidence_digest !==
+    computeBenchmarkRecordDigest(
+      value as unknown as Record<string, unknown>,
+      "evidence_digest"
+    )
+  ) {
+    fail("BENCHMARK_SCORING_INPUT_INVALID", `${field}.evidence_digest does not match.`);
+  }
+};
+
+const validateDecisionOpportunityObservation = (
+  opportunity: BenchmarkDecisionOpportunityScoringObservation,
+  index: number
+): void => {
+  const label = `decision_opportunities[${index}]`;
+  assertExactKeys(
+    opportunity as unknown as Record<string, unknown>,
+    BENCHMARK_DECISION_OPPORTUNITY_OBSERVATION_FIELDS,
+    label
+  );
+  if (typeof opportunity.opportunity_id !== "string" || opportunity.opportunity_id.length === 0) {
+    fail("BENCHMARK_SCORING_INPUT_INVALID", `${label}.opportunity_id must be non-empty.`);
+  }
+  if (!Number.isSafeInteger(opportunity.ordinal) || opportunity.ordinal < 1) {
+    fail("BENCHMARK_SCORING_INPUT_INVALID", `${label}.ordinal must be a positive integer.`);
+  }
+  if (!BENCHMARK_DECISIONS.includes(opportunity.decision)) {
+    fail("BENCHMARK_SCORING_INPUT_INVALID", `${label}.decision is unsupported.`);
+  }
+  if (
+    opportunity.would_have_delivered !== null &&
+    typeof opportunity.would_have_delivered !== "boolean"
+  ) {
+    fail(
+      "BENCHMARK_SCORING_INPUT_INVALID",
+      `${label}.would_have_delivered must be boolean or null.`
+    );
+  }
+  for (const field of [
+    "delivered_intervention_count",
+    "helped_intervention_count",
+    "harmed_intervention_count",
+    "uncertain_intervention_count"
+  ] as const) {
+    assertFiniteNonNegative(opportunity[field], `${label}.${field}`);
+  }
+  if (opportunity.delivered_intervention_count > 1) {
+    fail(
+      "BENCHMARK_SCORING_INPUT_INVALID",
+      `${label}.delivered_intervention_count cannot exceed one intervention event.`
+    );
+  }
+  if (
+    opportunity.helped_intervention_count +
+      opportunity.harmed_intervention_count +
+      opportunity.uncertain_intervention_count !==
+    opportunity.delivered_intervention_count
+  ) {
+    fail(
+      "BENCHMARK_SCORING_INPUT_INVALID",
+      `${label} delivered outcomes must be exhaustive and mutually exclusive.`
+    );
+  }
+  for (const field of [
+    "considered_candidate_ids",
+    "selected_candidate_ids",
+    "rejected_candidate_ids",
+    "governance_excluded_node_ids"
+  ] as const) {
+    assertUniqueStringArray(opportunity[field], `${label}.${field}`);
+  }
+  if (opportunity.skip_reason_code !== null && (
+    typeof opportunity.skip_reason_code !== "string" || opportunity.skip_reason_code.length === 0
+  )) {
+    fail("BENCHMARK_SCORING_INPUT_INVALID", `${label}.skip_reason_code is invalid.`);
+  }
+  if (opportunity.task_success !== 0 && opportunity.task_success !== 1) {
+    fail("BENCHMARK_SCORING_INPUT_INVALID", `${label}.task_success must be zero or one.`);
+  }
+  if (
+    opportunity.skipped_guidance_required !== null &&
+    typeof opportunity.skipped_guidance_required !== "boolean"
+  ) {
+    fail(
+      "BENCHMARK_SCORING_INPUT_INVALID",
+      `${label}.skipped_guidance_required must be boolean or null.`
+    );
+  }
+  if (opportunity.authoritative_harm_evidence_id !== null && (
+    typeof opportunity.authoritative_harm_evidence_id !== "string" ||
+    opportunity.authoritative_harm_evidence_id.length === 0
+  )) {
+    fail(
+      "BENCHMARK_SCORING_INPUT_INVALID",
+      `${label}.authoritative_harm_evidence_id is invalid.`
+    );
+  }
+  validateGovernanceTransition(opportunity.governance_transition, `${label}.governance_transition`);
+  if (
+    opportunity.evidence_digest !==
+    computeBenchmarkRecordDigest(
+      opportunity as unknown as Record<string, unknown>,
+      "evidence_digest"
+    )
+  ) {
+    fail("BENCHMARK_SCORING_INPUT_INVALID", `${label}.evidence_digest does not match.`);
+  }
+};
+
+const validateObservation = (observation: BenchmarkArmScoringObservation): void => {
+  if (!Number.isSafeInteger(observation.decision_opportunity_count) ||
+    observation.decision_opportunity_count < 1) {
+    fail(
+      "BENCHMARK_SCORING_INPUT_INVALID",
+      "Each formal task trial must contain at least one decision opportunity."
+    );
+  }
+  if (!isV2Observation(observation) && observation.decision_opportunity_count !== 1) {
+    fail(
+      "BENCHMARK_SCORING_INPUT_INVALID",
+      "Legacy arm observations contribute exactly one decision opportunity."
     );
   }
   for (const field of [
@@ -148,6 +389,171 @@ const validateObservation = (observation: BenchmarkArmScoringObservation): void 
   }
   if (observation.observation_digest.trim().length === 0) {
     fail("BENCHMARK_SCORING_INPUT_INVALID", "observation_digest must be non-empty.");
+  }
+  if (isV2Observation(observation)) {
+    if (
+      observation.observation_schema_version !==
+      BENCHMARK_ARM_SCORING_OBSERVATION_SCHEMA_V2
+    ) {
+      fail("BENCHMARK_SCORING_INPUT_INVALID", "Arm observation schema version is unsupported.");
+    }
+    if (!Array.isArray(observation.decision_opportunities) ||
+      observation.decision_opportunities.length !== observation.decision_opportunity_count) {
+      fail(
+        "BENCHMARK_SCORING_INPUT_INVALID",
+        "Arm observation opportunity count does not match its opportunity array."
+      );
+    }
+    observation.decision_opportunities.forEach(validateDecisionOpportunityObservation);
+    const ids = new Set(observation.decision_opportunities.map((entry) => entry.opportunity_id));
+    const ordinals = new Set(observation.decision_opportunities.map((entry) => entry.ordinal));
+    if (ids.size !== observation.decision_opportunities.length ||
+      ordinals.size !== observation.decision_opportunities.length) {
+      fail(
+        "BENCHMARK_SCORING_INPUT_INVALID",
+        "Arm observation opportunity ids and ordinals must be unique."
+      );
+    }
+    const ordered = [...observation.decision_opportunities]
+      .sort((left, right) => left.ordinal - right.ordinal);
+    if (ordered.some((entry, index) => entry.ordinal !== index + 1)) {
+      fail(
+        "BENCHMARK_SCORING_INPUT_INVALID",
+        "Arm observation opportunity ordinals must be contiguous from one."
+      );
+    }
+    const sum = (field: keyof Pick<
+      BenchmarkDecisionOpportunityScoringObservation,
+      | "delivered_intervention_count"
+      | "helped_intervention_count"
+      | "harmed_intervention_count"
+      | "uncertain_intervention_count"
+    >): number => ordered.reduce((total, entry) => total + entry[field], 0);
+    for (const field of [
+      "delivered_intervention_count",
+      "helped_intervention_count",
+      "harmed_intervention_count",
+      "uncertain_intervention_count"
+    ] as const) {
+      if (observation[field] !== sum(field)) {
+        fail(
+          "BENCHMARK_SCORING_INPUT_INVALID",
+          `Arm observation ${field} does not match its opportunity records.`
+        );
+      }
+    }
+    if (observation.decision !== ordered.at(-1)?.decision) {
+      fail(
+        "BENCHMARK_SCORING_INPUT_INVALID",
+        "Arm observation decision must match the final opportunity decision."
+      );
+    }
+    if (
+      observation.observation_digest !==
+      computeBenchmarkRecordDigest(
+        observation as unknown as Record<string, unknown>,
+        "observation_digest"
+      )
+    ) {
+      fail("BENCHMARK_SCORING_INPUT_INVALID", "Arm observation digest does not match.");
+    }
+  }
+};
+
+export const assertBenchmarkArmScoringObservationV2 = (
+  value: unknown
+): BenchmarkArmScoringObservationV2 => {
+  if (!isRecord(value)) {
+    return fail(
+      "BENCHMARK_SCORING_INPUT_INVALID",
+      "V2 arm observation must be an object."
+    );
+  }
+  if (
+    value.observation_schema_version !== BENCHMARK_ARM_SCORING_OBSERVATION_SCHEMA_V2 ||
+    typeof value.block_id !== "string" ||
+    value.block_id.length === 0 ||
+    !MATCHED_BLOCK_ARMS.includes(value.arm as MatchedBlockArm) ||
+    !BENCHMARK_DECISIONS.includes(value.decision as BenchmarkDecision) ||
+    typeof value.observation_digest !== "string" ||
+    !Array.isArray(value.decision_opportunities)
+  ) {
+    return fail(
+      "BENCHMARK_SCORING_INPUT_INVALID",
+      "V2 arm observation identity or opportunity array is invalid."
+    );
+  }
+  assertExactKeys(
+    value,
+    BENCHMARK_ARM_SCORING_OBSERVATION_V2_FIELDS,
+    "V2 arm observation"
+  );
+  for (const [index, opportunityValue] of value.decision_opportunities.entries()) {
+    if (!isRecord(opportunityValue)) {
+      return fail(
+        "BENCHMARK_SCORING_INPUT_INVALID",
+        `decision_opportunities[${index}] must be an object.`
+      );
+    }
+    for (const field of [
+      "considered_candidate_ids",
+      "selected_candidate_ids",
+      "rejected_candidate_ids",
+      "governance_excluded_node_ids"
+    ] as const) {
+      if (!Array.isArray(opportunityValue[field])) {
+        return fail(
+          "BENCHMARK_SCORING_INPUT_INVALID",
+          `decision_opportunities[${index}].${field} must be an array.`
+        );
+      }
+    }
+    if (
+      opportunityValue.governance_transition !== null &&
+      !isRecord(opportunityValue.governance_transition)
+    ) {
+      return fail(
+        "BENCHMARK_SCORING_INPUT_INVALID",
+        `decision_opportunities[${index}].governance_transition must be an object or null.`
+      );
+    }
+  }
+  const observation = value as unknown as BenchmarkArmScoringObservationV2;
+  validateObservation(observation);
+  return observation;
+};
+
+const assertObservationMatchesGroundTruth = (
+  observation: BenchmarkArmScoringObservation,
+  groundTruth: BenchmarkGroundTruth
+): void => {
+  if (!isV2GroundTruth(groundTruth)) {
+    if (isV2Observation(observation)) {
+      fail(
+        "BENCHMARK_SCORING_INPUT_INVALID",
+        "V2 arm observations require V2 ground truth."
+      );
+    }
+    return;
+  }
+  if (!isV2Observation(observation)) {
+    return fail(
+      "BENCHMARK_SCORING_INPUT_INVALID",
+      "V2 ground truth requires V2 arm observations."
+    );
+  }
+  const expected = [...groundTruth.decision_opportunities]
+    .sort((left, right) => left.ordinal - right.ordinal);
+  const actual = [...observation.decision_opportunities]
+    .sort((left, right) => left.ordinal - right.ordinal);
+  if (expected.length !== actual.length || expected.some((entry, index) =>
+    entry.opportunity_id !== actual[index]?.opportunity_id ||
+    entry.ordinal !== actual[index]?.ordinal
+  )) {
+    fail(
+      "BENCHMARK_SCORING_INPUT_INVALID",
+      "Arm observation opportunity set does not match sealed ground truth."
+    );
   }
 };
 
@@ -232,6 +638,169 @@ const expectedDecisionCell = (
   decision: BenchmarkDecision
 ): string => `${expected}:${decision}`;
 
+type ScoredTreatmentOpportunity = {
+  block_id: string;
+  opportunity_id: string;
+  ordinal: number;
+  expected_action: BenchmarkExpectedAction;
+  decision: BenchmarkDecision;
+  delivered_intervention_count: number;
+  task_success: 0 | 1;
+  skipped_guidance_required: boolean | null;
+  plausible_candidate_ids: string[];
+  considered_candidate_ids: string[];
+  selected_candidate_ids: string[];
+  rejected_candidate_ids: string[];
+  governance_excluded_node_ids: string[];
+  candidate_consideration_required: boolean;
+  requires_prior_harm: boolean;
+  valid_skip_reason_codes: string[];
+  skip_reason_code: string | null;
+  harmed_intervention_count: number;
+  authoritative_harm_evidence_id: string | null;
+  governance_transition: BenchmarkGovernanceTransitionObservation | null;
+  legacy: boolean;
+};
+
+const buildTreatmentOpportunities = (
+  observation: BenchmarkArmScoringObservation,
+  groundTruth: BenchmarkGroundTruth,
+  blockId: string
+): ScoredTreatmentOpportunity[] => {
+  if (!isV2GroundTruth(groundTruth) || !isV2Observation(observation)) {
+    return [{
+      block_id: blockId,
+      opportunity_id: "legacy-opportunity",
+      ordinal: 1,
+      expected_action: groundTruth.expected_action,
+      decision: observation.decision,
+      delivered_intervention_count: observation.delivered_intervention_count,
+      task_success: observation.task_success,
+      skipped_guidance_required:
+        observation.repeated_old_mistake_avoided === 0 ? true : false,
+      plausible_candidate_ids: [
+        ...groundTruth.applicable_node_ids,
+        ...groundTruth.applicable_candidate_ids,
+        ...groundTruth.distractor_node_ids,
+        ...groundTruth.distractor_candidate_ids
+      ],
+      considered_candidate_ids: [],
+      selected_candidate_ids: [],
+      rejected_candidate_ids: [],
+      governance_excluded_node_ids: [],
+      candidate_consideration_required: false,
+      requires_prior_harm: false,
+      valid_skip_reason_codes: [],
+      skip_reason_code: null,
+      harmed_intervention_count: observation.harmed_intervention_count,
+      authoritative_harm_evidence_id: null,
+      governance_transition: null,
+      legacy: true
+    }];
+  }
+  const observationsById = new Map(
+    observation.decision_opportunities.map((entry) => [entry.opportunity_id, entry])
+  );
+  return [...groundTruth.decision_opportunities]
+    .sort((left, right) => left.ordinal - right.ordinal)
+    .map((expected) => {
+      const actual = observationsById.get(expected.opportunity_id)!;
+      return {
+        block_id: blockId,
+        opportunity_id: expected.opportunity_id,
+        ordinal: expected.ordinal,
+        expected_action: expected.expected_action,
+        decision: actual.decision,
+        delivered_intervention_count: actual.delivered_intervention_count,
+        task_success: actual.task_success,
+        skipped_guidance_required: actual.skipped_guidance_required,
+        plausible_candidate_ids: [
+          ...expected.plausible_node_ids,
+          ...expected.plausible_candidate_ids
+        ],
+        considered_candidate_ids: actual.considered_candidate_ids,
+        selected_candidate_ids: actual.selected_candidate_ids,
+        rejected_candidate_ids: actual.rejected_candidate_ids,
+        governance_excluded_node_ids: actual.governance_excluded_node_ids,
+        candidate_consideration_required: expected.candidate_consideration_required,
+        requires_prior_harm: expected.requires_prior_harm,
+        valid_skip_reason_codes: expected.valid_skip_reason_codes,
+        skip_reason_code: actual.skip_reason_code,
+        harmed_intervention_count: actual.harmed_intervention_count,
+        authoritative_harm_evidence_id: actual.authoritative_harm_evidence_id,
+        governance_transition: actual.governance_transition,
+        legacy: false
+      };
+    });
+};
+
+const hasPlausibleCandidateEvidence = (
+  opportunity: ScoredTreatmentOpportunity
+): boolean => {
+  const plausible = new Set(opportunity.plausible_candidate_ids);
+  return [
+    ...opportunity.considered_candidate_ids,
+    ...opportunity.selected_candidate_ids,
+    ...opportunity.rejected_candidate_ids
+  ].some((id) => plausible.has(id));
+};
+
+const hasValidSkipReason = (opportunity: ScoredTreatmentOpportunity): boolean =>
+  opportunity.skip_reason_code !== null &&
+  opportunity.valid_skip_reason_codes.includes(opportunity.skip_reason_code);
+
+const NON_LIVE_DELIVERY_STATES = new Set([
+  "shadow_only",
+  "quarantined",
+  "shadow_probe",
+  "retired"
+]);
+
+export type BenchmarkHarmRecoveryAssessment = {
+  opportunity_count: number;
+  success_count: number;
+  recovery_rate: number | null;
+  successful_opportunity_ids: string[];
+};
+
+export const assessBenchmarkHarmRecovery = (
+  opportunities: ScoredTreatmentOpportunity[]
+): BenchmarkHarmRecoveryAssessment => {
+  const recoveryOpportunities = opportunities.filter((opportunity) =>
+    opportunity.requires_prior_harm
+  );
+  const successfulOpportunityIds = recoveryOpportunities.flatMap((recovery) => {
+    const plausibleNodes = new Set(recovery.plausible_candidate_ids);
+    const exposure = opportunities
+      .filter((candidate) => candidate.ordinal < recovery.ordinal)
+      .find((candidate) => {
+        const transition = candidate.governance_transition;
+        return candidate.delivered_intervention_count > 0 &&
+          candidate.harmed_intervention_count > 0 &&
+          candidate.authoritative_harm_evidence_id !== null &&
+          transition !== null &&
+          transition.authority_source === "production_runtime" &&
+          NON_LIVE_DELIVERY_STATES.has(transition.after_delivery_state) &&
+          plausibleNodes.has(transition.node_id);
+      });
+    if (!exposure?.governance_transition) return [];
+    const transitionedNodeId = exposure.governance_transition.node_id;
+    const recovered = recovery.decision === "skip" &&
+      recovery.delivered_intervention_count === 0 &&
+      recovery.task_success === 1 &&
+      recovery.skipped_guidance_required === false &&
+      hasValidSkipReason(recovery) &&
+      recovery.governance_excluded_node_ids.includes(transitionedNodeId);
+    return recovered ? [recovery.opportunity_id] : [];
+  });
+  return {
+    opportunity_count: recoveryOpportunities.length,
+    success_count: successfulOpportunityIds.length,
+    recovery_rate: rate(successfulOpportunityIds.length, recoveryOpportunities.length),
+    successful_opportunity_ids: successfulOpportunityIds
+  };
+};
+
 export const scoreMatchedBlockCampaign = (
   options: ScoreBenchmarkCampaignOptions
 ): ScoreBenchmarkCampaignResult => {
@@ -279,6 +848,9 @@ export const scoreMatchedBlockCampaign = (
       fail("BENCHMARK_SCORING_INPUT_INVALID", "Complete block scenario is missing.");
     const groundTruth = options.store.getGroundTruth(block.ground_truth_id) ??
       fail("BENCHMARK_SCORING_INPUT_INVALID", "Complete block ground truth is missing.");
+    for (const observation of Object.values(byArm)) {
+      assertObservationMatchesGroundTruth(observation, groundTruth);
+    }
     return { block, byArm, scenario, groundTruth };
   });
 
@@ -325,16 +897,63 @@ export const scoreMatchedBlockCampaign = (
     (sum, observation) => sum + observation.uncertain_intervention_count,
     0
   );
-  const skipBlocks = blockObservations.filter(
-    ({ groundTruth }) => groundTruth.expected_action === "skip"
+  const treatmentOpportunityGroups = blockObservations.map(({ block, byArm, groundTruth }) => ({
+    block_id: block.block_id,
+    opportunities: buildTreatmentOpportunities(byArm.treatment, groundTruth, block.block_id)
+  }));
+  const treatmentOpportunities = treatmentOpportunityGroups.flatMap((group) => group.opportunities);
+  const harmRecoveryAssessments = treatmentOpportunityGroups.map((group) => ({
+    block_id: group.block_id,
+    assessment: assessBenchmarkHarmRecovery(group.opportunities)
+  }));
+  const successfulHarmRecoveryKeys = new Set(harmRecoveryAssessments.flatMap(({ block_id, assessment }) =>
+    assessment.successful_opportunity_ids.map((opportunityId) => `${block_id}:${opportunityId}`)
+  ));
+  const harmRecoveryOpportunityCount = harmRecoveryAssessments.reduce(
+    (sum, { assessment }) => sum + assessment.opportunity_count,
+    0
   );
-  const correctSkips = skipBlocks.filter(({ byArm }) =>
-    byArm.treatment.decision === "skip" &&
-    byArm.treatment.task_success === 1 &&
-    byArm.treatment.repeated_old_mistake_avoided !== 0
+  const harmRecoverySuccessCount = harmRecoveryAssessments.reduce(
+    (sum, { assessment }) => sum + assessment.success_count,
+    0
+  );
+  const skipOpportunities = treatmentOpportunities.filter(
+    (opportunity) => opportunity.expected_action === "skip"
+  );
+  const strictSkipEvidence = skipOpportunities.filter((opportunity) =>
+    !opportunity.legacy &&
+    (
+      (
+        opportunity.candidate_consideration_required &&
+        hasPlausibleCandidateEvidence(opportunity) &&
+        hasValidSkipReason(opportunity)
+      ) ||
+      (
+        opportunity.requires_prior_harm &&
+        successfulHarmRecoveryKeys.has(`${opportunity.block_id}:${opportunity.opportunity_id}`)
+      )
+    )
+  );
+  const correctSkips = skipOpportunities.filter((opportunity) =>
+    opportunity.decision === "skip" &&
+    opportunity.delivered_intervention_count === 0 &&
+    opportunity.task_success === 1 &&
+    opportunity.skipped_guidance_required === false &&
+    (
+      opportunity.legacy ||
+      (
+        opportunity.requires_prior_harm
+          ? successfulHarmRecoveryKeys.has(
+            `${opportunity.block_id}:${opportunity.opportunity_id}`
+          )
+          : opportunity.candidate_consideration_required &&
+            hasPlausibleCandidateEvidence(opportunity) &&
+            hasValidSkipReason(opportunity)
+      )
+    )
   ).length;
-  const falsePositiveInjections = skipBlocks.filter(
-    ({ byArm }) => byArm.treatment.delivered_intervention_count > 0
+  const falsePositiveInjections = skipOpportunities.filter(
+    (opportunity) => opportunity.delivered_intervention_count > 0
   ).length;
   const allTreatmentCosts = treatment.map((observation) => observation.provider_cost);
   const providerCost = allTreatmentCosts.every((value) => value !== null)
@@ -350,15 +969,18 @@ export const scoreMatchedBlockCampaign = (
   ).length;
   const infrastructureFailureRate = rate(infrastructureFailureCount, attempts.length) ?? 0;
   const scorecard: BenchmarkMinimumPublicScorecard = {
-    delivery_rate: rate(delivered, treatment.length),
+    delivery_rate: rate(
+      delivered,
+      treatment.reduce((sum, observation) => sum + observation.decision_opportunity_count, 0)
+    ),
     net_helpful_intervention_rate: delivered === 0 ? null : (helped - harmed) / delivered,
     helpful_rate: rate(helped, delivered),
     harmful_rate: rate(harmed, delivered),
     uncertain_rate: rate(uncertain, delivered),
     task_success_delta: taskPairwise.treatment_minus_no_ee,
     repeated_old_mistake_avoidance_delta: avoidancePairwise.treatment_minus_no_ee,
-    correct_skip_rate: rate(correctSkips, skipBlocks.length),
-    false_positive_injection_rate: rate(falsePositiveInjections, skipBlocks.length),
+    correct_skip_rate: rate(correctSkips, skipOpportunities.length),
+    false_positive_injection_rate: rate(falsePositiveInjections, skipOpportunities.length),
     provider_cost: providerCost,
     experienceengine_token_overhead: tokenPairwise.treatment_minus_no_ee,
     wall_clock_latency_delta: latencyPairwise.treatment_minus_no_ee,
@@ -368,8 +990,8 @@ export const scoreMatchedBlockCampaign = (
   const confusionMatrix = Object.fromEntries(
     BENCHMARK_CONFUSION_MATRIX_CELLS.map((cell) => [cell, 0])
   ) as Record<string, number>;
-  for (const { byArm, groundTruth } of blockObservations) {
-    confusionMatrix[expectedDecisionCell(groundTruth.expected_action, byArm.treatment.decision)] += 1;
+  for (const opportunity of treatmentOpportunities) {
+    confusionMatrix[expectedDecisionCell(opportunity.expected_action, opportunity.decision)] += 1;
   }
 
   const scenarioTaskDeltas = new Map<string, number[]>();
@@ -390,6 +1012,7 @@ export const scoreMatchedBlockCampaign = (
   });
   const completeBlockCoverage = rate(completeBlocks.length, blocks.length) ?? 0;
   const infrastructureReliability = 1 - infrastructureFailureRate;
+  const hasV2Evidence = treatment.some(isV2Observation);
   const scorecardWithoutDigest = {
     benchmark_campaign_id: options.campaignId,
     scorecard,
@@ -413,7 +1036,20 @@ export const scoreMatchedBlockCampaign = (
     excluded_block_ids: excludedBlocks.map((block) => block.block_id),
     complete_block_coverage: completeBlockCoverage,
     infrastructure_reliability: infrastructureReliability,
-    attempted_arm_count: attempts.length
+    attempted_arm_count: attempts.length,
+    ...(hasV2Evidence ? {
+      decision_opportunity_metrics: {
+        correct_skip_evidence_coverage: rate(
+          strictSkipEvidence.length,
+          skipOpportunities.filter((opportunity) => !opportunity.legacy).length
+        )
+      },
+      harm_recovery_metrics: {
+        opportunity_count: harmRecoveryOpportunityCount,
+        success_count: harmRecoverySuccessCount,
+        recovery_rate: rate(harmRecoverySuccessCount, harmRecoveryOpportunityCount)
+      }
+    } : {})
   };
   const campaignScorecard: BenchmarkCampaignScorecard = {
     ...scorecardWithoutDigest,

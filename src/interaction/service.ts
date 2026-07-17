@@ -1770,14 +1770,21 @@ export class ExperienceInteractionService {
     const record = scope
       ? this.inputRepo.getLatestInjectedByScope(scope.scope_id) ?? this.inputRepo.getLatestInjected()
       : this.inputRepo.getLatestInjected();
-    if (!record) {
+    const deliveredInjection = record
+      ? undefined
+      : scope
+        ? this.injectionRepo.getLatestDeliveredByScope(scope.scope_id)
+          ?? this.injectionRepo.getLatestDelivered()
+        : this.injectionRepo.getLatestDelivered();
+    if (!record && !deliveredInjection) {
       return {
         status: "not_found",
         reason: "last_injected_missing"
       };
     }
 
-    const nodes = this.nodeRepo.listByIds(record.injected_node_ids);
+    const injectedNodeIds = record?.injected_node_ids ?? deliveredInjection?.injected_node_ids ?? [];
+    const nodes = this.nodeRepo.listByIds(injectedNodeIds);
     if (!nodes.length) {
       return {
         status: "not_found",
@@ -1785,15 +1792,16 @@ export class ExperienceInteractionService {
       };
     }
 
-    const taskRunId = record.session_id
-      ? this.taskRunRepo.getLatestBySessionId(record.session_id)?.id
+    const sessionId = record?.session_id ?? deliveredInjection?.session_id;
+    const taskRunId = sessionId
+      ? this.taskRunRepo.getLatestBySessionId(sessionId)?.id
       : undefined;
-    const episodeId = record.episode_id;
-    const injectionEvent = record.session_id
-      ? this.injectionRepo.getLatestBySessionId(record.session_id)
-      : undefined;
+    const episodeId = record?.episode_id ?? deliveredInjection?.episode_id;
+    const injectionEvent = deliveredInjection ?? (sessionId
+      ? this.injectionRepo.getLatestBySessionId(sessionId)
+      : undefined);
     const evidenceRefs = [
-      record.record_id,
+      record?.record_id,
       taskRunId,
       injectionEvent?.injection_id
     ].filter((value): value is string => Boolean(value));

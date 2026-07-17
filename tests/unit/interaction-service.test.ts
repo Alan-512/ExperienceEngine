@@ -760,6 +760,114 @@ describe("ExperienceInteractionService", () => {
     ]);
   });
 
+  it("falls back to the latest delivered injection when a real-host turn has no input record", () => {
+    const homeDir = makeTempDir();
+    const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const scope = resolveScope("/repo");
+    const nodeRepo = new NodeRepository(db);
+    const injectionRepo = new InjectionRepository(db);
+    const attributionRepo = new AttributionRecordRepository(db);
+    const reviewRepo = new ReviewEventRepository(db);
+    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_real_host_feedback");
+    nodeRepo.upsert({
+      ...nodeRepo.getById("node_real_host_feedback")!,
+      state: "priority_candidate",
+      delivery_state: "conservative_only",
+      support_count: 1,
+      usage_count: 0,
+      helped_count: 0,
+      harmed_count: 0,
+      consecutive_harmed_count: 0
+    });
+    injectionRepo.upsert({
+      injection_id: "inject_real_host_feedback",
+      session_id: "agent:main:explicit:real-host-feedback-session",
+      scope_id: scope.scope_id,
+      task_type: "test_debug",
+      task_summary: "Run the focused auth test once.",
+      mode: "inject_conservative",
+      delivery_mode: "live",
+      delivered: true,
+      injected_node_ids: ["node_real_host_feedback"],
+      injection_count: 1,
+      scorecard: undefined,
+      was_successful: null,
+      harm_observed: null,
+      attribution_reason: undefined,
+      created_at: nowIso(),
+      resolved_at: undefined
+    });
+
+    const service = new ExperienceInteractionService(config);
+    expect(service.feedbackLast("harmed", "/repo")).toEqual({
+      status: "updated",
+      feedback: "harmed",
+      nodeIds: ["node_real_host_feedback"]
+    });
+    expect(attributionRepo.listByInjectionId("inject_real_host_feedback")).toEqual([
+      expect.objectContaining({
+        node_id: "node_real_host_feedback",
+        delivered: true,
+        source: "manual_override",
+        user_override: "harmed",
+        attribution_verdict: "strong_harmed",
+        confidence: "high"
+      })
+    ]);
+    expect(reviewRepo.listByNodeId("node_real_host_feedback")).toEqual([
+      expect.objectContaining({
+        event_type: "mark_harmed",
+        source: "user"
+      })
+    ]);
+    expect(nodeRepo.getById("node_real_host_feedback")).toMatchObject({
+      delivery_state: "quarantined",
+      harmed_count: 1,
+      consecutive_harmed_count: 1
+    });
+  });
+
+  it("does not use an undelivered injection as feedback fallback evidence", () => {
+    const homeDir = makeTempDir();
+    const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });
+    const db = openDatabase(config);
+    bootstrapDatabase(db);
+    const scope = resolveScope("/repo");
+    const nodeRepo = new NodeRepository(db);
+    const injectionRepo = new InjectionRepository(db);
+    seedStrategyNode(nodeRepo, "/repo", nowIso(), "node_undelivered_feedback");
+    injectionRepo.upsert({
+      injection_id: "inject_undelivered_feedback",
+      session_id: "agent:main:explicit:undelivered-feedback-session",
+      scope_id: scope.scope_id,
+      task_type: "test_debug",
+      task_summary: "Do not deliver this candidate.",
+      mode: "inject_conservative",
+      delivery_mode: "holdout",
+      delivered: false,
+      injected_node_ids: ["node_undelivered_feedback"],
+      injection_count: 1,
+      scorecard: undefined,
+      was_successful: null,
+      harm_observed: null,
+      attribution_reason: undefined,
+      created_at: nowIso(),
+      resolved_at: undefined
+    });
+
+    const service = new ExperienceInteractionService(config);
+    expect(service.feedbackLast("harmed", "/repo")).toEqual({
+      status: "not_found",
+      reason: "last_injected_missing"
+    });
+    expect(nodeRepo.getById("node_undelivered_feedback")).toMatchObject({
+      delivery_state: "eligible",
+      harmed_count: 0
+    });
+  });
+
   it("toggles scope state and reports whether the state changed", () => {
     const homeDir = makeTempDir();
     const config = loadConfig({ dataDir: join(homeDir, ".experienceengine") });

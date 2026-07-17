@@ -15,6 +15,7 @@ import {
   BENCHMARK_TABLE_NAMES,
   MATCHED_BLOCK_ARMS,
   MATCHED_BLOCK_BENCHMARK_PROTOCOL_VERSION,
+  MATCHED_BLOCK_BENCHMARK_PROTOCOL_VERSION_V2,
   MATCHED_BLOCK_MANIFEST_FIELDS,
   MATCHED_BLOCK_SCHEMA_VERSIONS
 } from "../../src/evaluation/matched-block/constants.js";
@@ -38,6 +39,7 @@ import type {
   BenchmarkFixtureManifest,
   BenchmarkFormalAttempt,
   BenchmarkGroundTruth,
+  BenchmarkGroundTruthV2,
   BenchmarkInstrumentationManifest,
   BenchmarkPreflightRecord,
   BenchmarkPublicationDecision,
@@ -89,6 +91,41 @@ const buildGroundTruth = (overrides: Partial<BenchmarkGroundTruth> = {}): Benchm
     ground_truth_digest: "",
     ...overrides
   } satisfies BenchmarkGroundTruth, "ground_truth_digest");
+
+const buildGroundTruthV2 = (
+  overrides: Partial<BenchmarkGroundTruthV2> = {}
+): BenchmarkGroundTruthV2 => withDigest({
+  ground_truth_schema_version: MATCHED_BLOCK_SCHEMA_VERSIONS.groundTruthV2,
+  ground_truth_id: "ground-truth-v2-1",
+  scenario_id: "scenario-v2-1",
+  scenario_version: "2",
+  expected_action: "skip",
+  applicable_node_ids: [],
+  applicable_candidate_ids: [],
+  distractor_node_ids: ["node-distractor"],
+  distractor_candidate_ids: [],
+  scope_validity: {
+    valid: true,
+    reason_code: "scope_matches"
+  },
+  safety_constraints: ["read_only"],
+  deterministic_success_checks: ["command_exit_zero"],
+  known_old_mistake_path: null,
+  created_at: createdAt,
+  decision_opportunities: [{
+    opportunity_id: "skip-check",
+    ordinal: 1,
+    expected_action: "skip",
+    plausible_node_ids: ["node-distractor"],
+    plausible_candidate_ids: [],
+    candidate_consideration_required: true,
+    valid_skip_reason_codes: ["applicability_mismatch"],
+    requires_prior_harm: false,
+    known_old_mistake_path: null
+  }],
+  ground_truth_digest: "",
+  ...overrides
+} satisfies BenchmarkGroundTruthV2, "ground_truth_digest");
 
 const buildCampaign = (): BenchmarkCampaignManifest => withDigest({
   campaign_manifest_schema_version: MATCHED_BLOCK_SCHEMA_VERSIONS.campaign,
@@ -393,6 +430,47 @@ describe("matched-block benchmark contract", () => {
     expect(() => assertBenchmarkGroundTruth(invalid)).toThrowError(
       expect.objectContaining({ code: "BENCHMARK_CONTRACT_INVALID" })
     );
+  });
+
+  it("accepts a sealed v2 decision-opportunity sequence", () => {
+    const groundTruth = buildGroundTruthV2();
+    expect(assertBenchmarkGroundTruth(groundTruth)).toEqual(groundTruth);
+    const campaign = withDigest({
+      ...buildCampaign(),
+      benchmark_protocol_version: MATCHED_BLOCK_BENCHMARK_PROTOCOL_VERSION_V2,
+      campaign_manifest_digest: ""
+    }, "campaign_manifest_digest");
+    expect(campaign.benchmark_protocol_version).toBe(MATCHED_BLOCK_BENCHMARK_PROTOCOL_VERSION_V2);
+  });
+
+  it("rejects duplicate, non-contiguous, and undeclared v2 opportunities", () => {
+    const duplicate = buildGroundTruthV2({
+      expected_action: "skip",
+      decision_opportunities: [
+        buildGroundTruthV2().decision_opportunities[0]!,
+        {
+          ...buildGroundTruthV2().decision_opportunities[0]!,
+          ordinal: 2
+        }
+      ]
+    });
+    expect(() => assertBenchmarkGroundTruth(duplicate)).toThrow("ids and ordinals must be unique");
+
+    const nonContiguous = buildGroundTruthV2({
+      decision_opportunities: [{
+        ...buildGroundTruthV2().decision_opportunities[0]!,
+        ordinal: 2
+      }]
+    });
+    expect(() => assertBenchmarkGroundTruth(nonContiguous)).toThrow("contiguous from one");
+
+    const undeclared = buildGroundTruthV2({
+      decision_opportunities: [{
+        ...buildGroundTruthV2().decision_opportunities[0]!,
+        plausible_node_ids: ["node-not-declared"]
+      }]
+    });
+    expect(() => assertBenchmarkGroundTruth(undeclared)).toThrow("undeclared plausible id");
   });
 
   it("aggregates intervention events harm-first and keeps weak evidence uncertain", () => {

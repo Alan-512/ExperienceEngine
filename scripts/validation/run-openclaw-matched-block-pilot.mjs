@@ -1,7 +1,4 @@
-import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
 import {
-  cpSync,
   existsSync,
   mkdirSync,
   readFileSync,
@@ -9,7 +6,7 @@ import {
   statSync,
   writeFileSync
 } from "node:fs";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, join, resolve } from "node:path";
 import { canonicalJson, sha256Text } from "../../dist/runtime/package/package-generation.js";
 import {
   MATCHED_BLOCK_BENCHMARK_PROTOCOL_VERSION,
@@ -40,6 +37,18 @@ import { ScopeRepository } from "../../dist/store/sqlite/repositories/scope-repo
 import { NodeRepository } from "../../dist/store/sqlite/repositories/node-repo.js";
 import { InjectionRepository } from "../../dist/store/sqlite/repositories/injection-repo.js";
 import { resolveScope } from "../../dist/input/scope-resolver.js";
+import {
+  createOpenClawArmEnv,
+  createOpenClawArmRuntimeSet,
+  digest,
+  findProjectMarkerAncestor,
+  parseOpenClawAgentJson,
+  patchOpenClawArmConfig,
+  prepareOpenClawHostTemplate,
+  runOpenClawCommand,
+  sha256File,
+  writeJson
+} from "./lib/openclaw-matched-block-host.mjs";
 
 const TASK_CONTENT = "S8_PILOT_OK\n";
 const TASK_INPUT = [
@@ -121,110 +130,23 @@ for (const path of [openclawExecutable, artifactPath, sourceConfigPath, sourceAu
 mkdirSync(outputDir, { recursive: true });
 mkdirSync(runtimeRoot, { recursive: true });
 
-const sha256File = (path) => createHash("sha256").update(readFileSync(path)).digest("hex");
-const digest = (value) => sha256Text(canonicalJson(value));
 const withDigest = (value, field) => {
   const next = { ...value };
   next[field] = computeBenchmarkRecordDigest(next, field);
   return next;
 };
-const writeJson = (path, value, mode) => {
-  mkdirSync(dirname(path), { recursive: true });
-  writeFileSync(path, `${JSON.stringify(value, null, 2)}\n`, { encoding: "utf8", mode });
-};
-
-const findProjectMarkerAncestor = (startPath) => {
-  let current = resolve(startPath);
-  while (true) {
-    for (const marker of [".git", "AGENTS.md", "package.json", "openspec"]) {
-      if (existsSync(join(current, marker))) {
-        return { directory: current, marker };
-      }
-    }
-    const parent = dirname(current);
-    if (parent === current) return null;
-    current = parent;
-  }
-};
-
-const run = (command, commandArgs, options = {}) => {
-  const started = Date.now();
-  const result = spawnSync(command, commandArgs, {
-    cwd: options.cwd,
-    env: options.env,
-    encoding: "utf8",
-    timeout: options.timeoutMs ?? 600_000,
-    maxBuffer: 16 * 1024 * 1024,
-    windowsHide: true
-  });
-  return {
-    exitCode: result.status ?? (result.error?.code === "ETIMEDOUT" ? 124 : 1),
-    stdout: result.stdout ?? "",
-    stderr: result.stderr ?? (result.error ? `${result.error.name}: ${result.error.message}` : ""),
-    durationMs: Date.now() - started,
-    timedOut: result.error?.code === "ETIMEDOUT"
-  };
-};
-
-const sourceConfig = JSON.parse(readFileSync(sourceConfigPath, "utf8"));
-const primaryModel = sourceConfig?.agents?.defaults?.model?.primary;
-if (typeof primaryModel !== "string" || primaryModel.length === 0) {
-  throw new Error("Source OpenClaw config does not declare agents.defaults.model.primary.");
-}
-
-const templateState = join(runtimeRoot, "template-state");
-const templateAgentDir = join(templateState, "agents", "main", "agent");
-mkdirSync(templateAgentDir, { recursive: true });
-const templateConfig = {
-  agents: {
-    defaults: {
-      model: {
-        primary: primaryModel
-      },
-      workspace: join(runtimeRoot, "template-workspace")
-    }
-  },
-  session: sourceConfig.session ?? {},
-  tools: sourceConfig.tools ?? {},
-  models: {
-    mode: "merge",
-    providers: {
-      openrouter: {
-        baseUrl: openrouterBaseUrl
-      }
-    }
-  },
-  plugins: {
-    allow: [],
-    entries: {},
-    load: {}
-  }
-};
-mkdirSync(templateConfig.agents.defaults.workspace, { recursive: true });
-const templateConfigPath = join(templateState, "openclaw.json");
-writeJson(templateConfigPath, templateConfig, 0o600);
-cpSync(sourceAuthPath, join(templateAgentDir, "auth-profiles.json"));
-
-const commonEnv = {
-  ...process.env,
-  npm_config_registry: npmRegistry,
-  NPM_CONFIG_REGISTRY: npmRegistry,
-  NO_COLOR: "1"
-};
-const templateEnv = {
-  ...commonEnv,
-  OPENCLAW_STATE_DIR: templateState,
-  OPENCLAW_CONFIG_PATH: templateConfigPath
-};
-const doctor = run(openclawExecutable, [
-  "doctor",
-  "--non-interactive",
-  "--yes",
-  "--no-workspace-suggestions"
-], { env: templateEnv, timeoutMs: 180_000 });
-if (doctor.exitCode !== 0) {
-  throw new Error(`OpenClaw auth migration failed: ${doctor.stderr || doctor.stdout}`);
-}
+const {
+  primaryModel,
+  templateState,
+  commonEnv
+} = prepareOpenClawHostTemplate({
+  runtimeRoot,
+  sourceConfigPath,
+  sourceAuthPath,
+  openrouterBaseUrl,
+  npmRegistry,
+  openclawExecutable
+});
 
 const blockRunContexts = Array.from({ length: repetitions }, (_, index) => {
   const repetitionIndex = index + 1;
@@ -238,39 +160,15 @@ const blockRunContexts = Array.from({ length: repetitions }, (_, index) => {
   const blockRuntimeRoot = repetitions === 1
     ? runtimeRoot
     : join(runtimeRoot, `block-${repetitionIndex}`);
-  const armRuntime = Object.fromEntries(arms.map((arm) => {
-    const root = join(blockRuntimeRoot, arm);
-    const stateDir = join(root, "openclaw-state");
-    const workspace = join(root, "workspace");
-    const eeHome = join(root, "ee-home");
-    const artifactRoot = join(root, "artifacts");
-    cpSync(templateState, stateDir, { recursive: true });
-    mkdirSync(workspace, { recursive: true });
-    mkdirSync(artifactRoot, { recursive: true });
-    const configPath = join(stateDir, "openclaw.json");
-    const config = JSON.parse(readFileSync(configPath, "utf8"));
-    config.agents.defaults.workspace = workspace;
-    config.models = {
-      mode: "merge",
-      providers: { openrouter: { baseUrl: openrouterBaseUrl } }
-    };
-    if (arm === "no_ee") {
-      config.plugins = { allow: [], entries: {}, load: {} };
-    }
-    writeJson(configPath, config, 0o600);
-    return [arm, {
-      root,
-      stateDir,
-      configPath,
-      workspace,
-      eeHome,
-      artifactRoot,
-      sessionId: repetitions === 1
-        ? `s8-pilot-${arm}-session`
-        : `s8-pilot-r${repetitionIndex}-${arm}-session`,
-      installed: false
-    }];
-  }));
+  const armRuntime = createOpenClawArmRuntimeSet({
+    templateState,
+    blockRuntimeRoot,
+    arms,
+    openrouterBaseUrl,
+    sessionIdForArm: (arm) => repetitions === 1
+      ? `s8-pilot-${arm}-session`
+      : `s8-pilot-r${repetitionIndex}-${arm}-session`
+  });
   return {
     repetitionIndex,
     blockId,
@@ -496,48 +394,15 @@ for (const block of blocks) {
   store.insertSealedBlock(block, armPlansByBlock.get(block.block_id));
 }
 
-const armEnv = (armRuntime, arm) => {
-  const runtime = armRuntime[arm];
-  return {
-    ...commonEnv,
-    OPENCLAW_STATE_DIR: runtime.stateDir,
-    OPENCLAW_CONFIG_PATH: runtime.configPath,
-    EXPERIENCE_ENGINE_EVALUATION_MODE: arm === "forced_holdout" ? "holdout" : "live",
-    EXPERIENCE_ENGINE_HOLDOUT_RATE: arm === "forced_holdout" ? "1" : "0",
-    EXPERIENCE_ENGINE_EMBEDDING_PROVIDER: "legacy",
-    EXPERIENCE_ENGINE_TRIGGER_THRESHOLD: "0.05",
-    EXPERIENCE_ENGINE_MAX_HINTS: "1",
-    EXPERIENCE_ENGINE_INLINE_NOTICES: "false",
-    EXPERIENCE_ENGINE_LOG_LEVEL: "error"
-  };
-};
+const armEnv = (armRuntime, arm) => createOpenClawArmEnv({
+  armRuntime,
+  arm,
+  commonEnv,
+  triggerThreshold: 0.05,
+  maxHints: 1
+});
 
-const patchArmConfig = (armRuntime, arm) => {
-  const runtime = armRuntime[arm];
-  const config = JSON.parse(readFileSync(runtime.configPath, "utf8"));
-  config.agents.defaults.workspace = runtime.workspace;
-  if (arm !== "no_ee") {
-    const entry = config.plugins?.entries?.experienceengine ?? {};
-    config.plugins = config.plugins ?? {};
-    config.plugins.entries = config.plugins.entries ?? {};
-    config.plugins.entries.experienceengine = {
-      ...entry,
-      enabled: true,
-      config: {
-        ...(entry.config ?? {}),
-        dataDir: runtime.eeHome,
-        sqlitePath: join(runtime.eeHome, "sqlite", "experienceengine.db"),
-        captureDir: join(runtime.eeHome, "captures"),
-        hybridEnabled: false,
-        hybridSyncExplainEnabled: false,
-        hybridAsyncPostmortemEnabled: false
-      }
-    };
-  } else {
-    config.plugins = { allow: [], entries: {}, load: {} };
-  }
-  writeJson(runtime.configPath, config, 0o600);
-};
+const patchArmConfig = (armRuntime, arm) => patchOpenClawArmConfig({ armRuntime, arm });
 
 const seedEeFixture = (armRuntime, arm) => {
   if (arm === "no_ee") {
@@ -615,18 +480,6 @@ const seedEeFixture = (armRuntime, arm) => {
   }
 };
 
-const parseAgentJson = (stdout) => {
-  const trimmed = stdout.trim();
-  if (!trimmed) return null;
-  try { return JSON.parse(trimmed); } catch {}
-  const start = trimmed.indexOf("{");
-  const end = trimmed.lastIndexOf("}");
-  if (start >= 0 && end > start) {
-    try { return JSON.parse(trimmed.slice(start, end + 1)); } catch {}
-  }
-  return null;
-};
-
 const readInjectionEvidence = (armRuntime, arm) => {
   if (arm === "no_ee") return null;
   const runtime = armRuntime[arm];
@@ -677,7 +530,7 @@ const createDriver = ({ block, armRuntime }) => {
     const runtime = armRuntime[arm];
     let result = { exitCode: 0, stdout: "", stderr: "", durationMs: 0, timedOut: false };
     if (stage === "dependency_setup" && arm !== "no_ee" && !runtime.installed) {
-      result = run(openclawExecutable, [
+      result = runOpenClawCommand(openclawExecutable, [
         "plugins", "install", artifactPath, "--acknowledge-clawhub-risk", "--force"
       ], { env: armEnv(armRuntime, arm), timeoutMs: 600_000 });
       if (result.exitCode === 0) {
@@ -685,11 +538,11 @@ const createDriver = ({ block, armRuntime }) => {
         patchArmConfig(armRuntime, arm);
       }
     } else if (stage === "credential_validation") {
-      result = run(openclawExecutable, ["models", "status", "--json"], {
+      result = runOpenClawCommand(openclawExecutable, ["models", "status", "--json"], {
         env: armEnv(armRuntime, arm), timeoutMs: 120_000
       });
     } else if (stage === "host_startup") {
-      result = run(openclawExecutable, ["plugins", "list", "--json"], {
+      result = runOpenClawCommand(openclawExecutable, ["plugins", "list", "--json"], {
         env: armEnv(armRuntime, arm), timeoutMs: 120_000
       });
       if (result.exitCode === 0) {
@@ -754,7 +607,7 @@ const createDriver = ({ block, armRuntime }) => {
   prepareArm: async (context) => {
     const arm = context.plan.arm;
     const runtime = armRuntime[arm];
-    const list = run(openclawExecutable, ["plugins", "list", "--json"], {
+    const list = runOpenClawCommand(openclawExecutable, ["plugins", "list", "--json"], {
       env: armEnv(armRuntime, arm), timeoutMs: 120_000
     });
     const hasEe = list.exitCode === 0 && list.stdout.includes("experienceengine");
@@ -776,7 +629,7 @@ const createDriver = ({ block, armRuntime }) => {
     const runtime = armRuntime[arm];
     const messagePath = join(runtime.artifactRoot, "formal-task.txt");
     writeFileSync(messagePath, taskInput, "utf8");
-    const result = run(openclawExecutable, [
+    const result = runOpenClawCommand(openclawExecutable, [
       "agent",
       "--local",
       "--json",
@@ -788,7 +641,7 @@ const createDriver = ({ block, armRuntime }) => {
     ], { cwd: runtime.workspace, env: armEnv(armRuntime, arm), timeoutMs: 620_000 });
     writeFileSync(join(runtime.artifactRoot, "openclaw.stdout.jsonl"), result.stdout, "utf8");
     writeFileSync(join(runtime.artifactRoot, "openclaw.stderr.log"), result.stderr, "utf8");
-    const agentJson = parseAgentJson(result.stdout);
+    const agentJson = parseOpenClawAgentJson(result.stdout);
     const resultPath = join(runtime.workspace, "result.txt");
     const taskSuccess = result.exitCode === 0 && existsSync(resultPath) &&
       readFileSync(resultPath).equals(Buffer.from(TASK_CONTENT));

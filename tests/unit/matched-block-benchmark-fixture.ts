@@ -56,11 +56,14 @@ export const createMatchedBlockHarnessStoreFixture = (options: {
   seed?: string;
   blockId?: string;
   executionContract?: MatchedBlockHarnessExecutionContract;
+  benchmarkProtocolVersion?: string;
+  groundTruth?: BenchmarkGroundTruth;
 }) => {
   const executionContract = options.executionContract ?? DEFAULT_MATCHED_BLOCK_EXECUTION_CONTRACT;
   const campaign = withBenchmarkDigest({
     campaign_manifest_schema_version: MATCHED_BLOCK_SCHEMA_VERSIONS.campaign,
-    benchmark_protocol_version: MATCHED_BLOCK_BENCHMARK_PROTOCOL_VERSION,
+    benchmark_protocol_version:
+      options.benchmarkProtocolVersion ?? MATCHED_BLOCK_BENCHMARK_PROTOCOL_VERSION,
     benchmark_campaign_id: "campaign-harness-1",
     scenario_set_digest: "scenario-set-digest",
     analysis_plan_digest: "analysis-plan-digest",
@@ -69,7 +72,7 @@ export const createMatchedBlockHarnessStoreFixture = (options: {
     created_at: MATCHED_BLOCK_TEST_CREATED_AT,
     campaign_manifest_digest: ""
   } satisfies BenchmarkCampaignManifest, "campaign_manifest_digest");
-  const groundTruth = withBenchmarkDigest({
+  const groundTruth = options.groundTruth ?? withBenchmarkDigest({
     ground_truth_schema_version: MATCHED_BLOCK_SCHEMA_VERSIONS.groundTruth,
     ground_truth_id: "ground-truth-harness-1",
     scenario_id: "scenario-harness-1",
@@ -174,7 +177,7 @@ export const createMatchedBlockHarnessStoreFixture = (options: {
   const randomizationSeed = options.seed ?? "harness-seed-1";
   const block = withBenchmarkDigest({
     benchmark_manifest_schema_version: MATCHED_BLOCK_SCHEMA_VERSIONS.block,
-    benchmark_protocol_version: MATCHED_BLOCK_BENCHMARK_PROTOCOL_VERSION,
+    benchmark_protocol_version: campaign.benchmark_protocol_version,
     benchmark_campaign_id: campaign.benchmark_campaign_id,
     benchmark_profile_registry_digest: runtime.profile_registry_digest,
     benchmark_evidence_target_id: runtime.benchmark_evidence_target_id,
