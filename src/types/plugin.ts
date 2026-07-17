@@ -95,6 +95,18 @@ export type OpenClawPluginApi = {
       config?: Record<string, unknown>;
     }) => { text: string } | Promise<{ text: string }>;
   }) => void;
+  registerGatewayMethod?: (
+    method: string,
+    handler: (options: {
+      params: Record<string, unknown>;
+      respond: (
+        ok: boolean,
+        payload?: unknown,
+        error?: { code: string; message: string }
+      ) => void;
+    }) => void | Promise<void>,
+    options?: { scope?: "operator.admin" | "operator.read" | "operator.write" }
+  ) => void;
   on?: (
     event: string,
     handler: (payload: unknown, context?: unknown) => unknown | Promise<unknown>

@@ -6,6 +6,10 @@ import {
   OpenClawRuntimeNativeService
 } from "../../src/runtime/activation/native-service.js";
 import { OPENCLAW_NATIVE_OPERATIONS } from "../../src/runtime/activation/constants.js";
+import {
+  OPENCLAW_NATIVE_COMMAND_GATEWAY_METHOD,
+  createOpenClawNativeCommandGatewayRequest
+} from "../../src/runtime/activation/openclaw-native-command-gateway.js";
 
 describe("OpenClaw runtime service registration", () => {
   it("registers one package-local lifecycle service and delegates start and stop", async () => {
@@ -110,6 +114,57 @@ describe("OpenClaw runtime service registration", () => {
         expected_projection_revision: 7
       }
     });
+  });
+
+  it("registers a model-independent admin Gateway command probe", async () => {
+    const execute = vi.fn(async () => ({
+      ok: true,
+      operation: "status" as const,
+      code: "runtime_status",
+      result: { learning_runtime_active: true }
+    }));
+    const nativeService = new OpenClawRuntimeNativeService();
+    nativeService.execute = execute;
+    const registerGatewayMethod = vi.fn();
+    createExperiencePlugin({}, undefined, {}, nativeService).register({
+      registerGatewayMethod,
+      registerService: vi.fn(),
+      on: vi.fn()
+    });
+
+    expect(registerGatewayMethod).toHaveBeenCalledOnce();
+    const [method, handler, options] = registerGatewayMethod.mock.calls[0] as [
+      string,
+      (input: {
+        params: Record<string, unknown>;
+        respond: (
+          ok: boolean,
+          payload?: unknown,
+          error?: { code: string; message: string }
+        ) => void;
+      }) => Promise<void>,
+      { scope: string }
+    ];
+    expect(method).toBe(OPENCLAW_NATIVE_COMMAND_GATEWAY_METHOD);
+    expect(options).toEqual({ scope: "operator.admin" });
+    const respond = vi.fn();
+    const probe = createOpenClawNativeCommandGatewayRequest({
+      probeId: "plugin-registration-probe",
+      operation: "status"
+    });
+    await handler({ params: probe, respond });
+    expect(execute).toHaveBeenCalledWith({
+      operation: "status",
+      payload: {}
+    });
+    expect(respond).toHaveBeenCalledWith(true, expect.objectContaining({
+      probe_id: "plugin-registration-probe",
+      command_name: "experienceengine_status",
+      runtime_json: expect.objectContaining({
+        operation: "status",
+        code: "runtime_status"
+      })
+    }));
   });
 
   it("rejects unauthorized and malformed command requests before native authority evaluation", async () => {

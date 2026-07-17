@@ -58,6 +58,17 @@ import {
 import {
   initializeRuntimeHomeIdentity
 } from "../identity/control-plane-bootstrap.js";
+import {
+  OPENCLAW_NATIVE_COMMAND_GATEWAY_METHOD,
+  createOpenClawNativeCommandGatewayRequest,
+  parseOpenClawNativeCommandGatewayResponse
+} from "../activation/openclaw-native-command-gateway.js";
+import type {
+  OpenClawNativeOperation
+} from "../activation/constants.js";
+import type {
+  OpenClawNativeOperationResult
+} from "../activation/native-service.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -427,12 +438,7 @@ const runCommand = async (options: {
   timeoutMs: options.timeoutMs
 });
 
-type OpenClawNativeCommandResult = {
-  ok: boolean;
-  operation: string;
-  code: string;
-  result: unknown;
-};
+type OpenClawNativeCommandResult = OpenClawNativeOperationResult;
 
 type DirectGatewaySocket = {
   addEventListener: (
@@ -448,7 +454,6 @@ type DirectGatewaySocketConstructor = new (url: string) => DirectGatewaySocket;
 
 export type DirectGatewayRpcClient = {
   request: (method: string, params: Record<string, unknown>) => Promise<unknown>;
-  waitForChatFinal: (runId: string, timeoutMs: number) => Promise<unknown>;
   close: () => void;
 };
 
@@ -647,12 +652,6 @@ const createDirectGatewayRpcClient = async (options: {
     reject: (error: Error) => void;
     timer: NodeJS.Timeout;
   }>();
-  const chatFinals = new Map<string, unknown>();
-  const chatWaiters = new Map<string, {
-    resolve: (value: unknown) => void;
-    reject: (error: Error) => void;
-    timer: NodeJS.Timeout;
-  }>();
   let closed = false;
   let connected = false;
   let resolveConnected!: () => void;
@@ -668,11 +667,6 @@ const createDirectGatewayRpcClient = async (options: {
       entry.reject(error);
     }
     pending.clear();
-    for (const waiter of chatWaiters.values()) {
-      clearTimeout(waiter.timer);
-      waiter.reject(error);
-    }
-    chatWaiters.clear();
     if (!connected) {
       rejectConnected(error);
     }
@@ -768,25 +762,6 @@ const createDirectGatewayRpcClient = async (options: {
         }
         return;
       }
-      if (frame?.type === "event" && frame.event === "chat") {
-        const payload = asRecord(frame.payload);
-        const runId = payload?.runId;
-        if (
-          payload &&
-          typeof runId === "string" &&
-          (payload.state === "final" || payload.state === "error")
-        ) {
-          const waiter = chatWaiters.get(runId);
-          if (waiter) {
-            chatWaiters.delete(runId);
-            clearTimeout(waiter.timer);
-            waiter.resolve(payload);
-          } else {
-            chatFinals.set(runId, payload);
-          }
-        }
-        return;
-      }
       if (frame?.type !== "res" || typeof frame.id !== "string") {
         return;
       }
@@ -838,27 +813,6 @@ const createDirectGatewayRpcClient = async (options: {
 
   return {
     request: (method, params) => requestRaw(method, params),
-    waitForChatFinal: (runId, timeoutMs) => {
-      const existing = chatFinals.get(runId);
-      if (existing) {
-        chatFinals.delete(runId);
-        return Promise.resolve(existing);
-      }
-      return new Promise((resolveFinal, rejectFinal) => {
-        const timer = setTimeout(() => {
-          chatWaiters.delete(runId);
-          rejectFinal(new Error(
-            `Gateway chat final timed out for run ${runId}.`
-          ));
-        }, timeoutMs);
-        timer.unref();
-        chatWaiters.set(runId, {
-          resolve: resolveFinal,
-          reject: rejectFinal,
-          timer
-        });
-      });
-    },
     close: () => {
       closed = true;
       rejectAll(new Error("Gateway WebSocket closed by validator."));
@@ -881,106 +835,23 @@ const parseJsonCommandOutput = (options: {
   }
 };
 
-const parseNativeCommandText = (options: {
-  text: string;
-  expectedOperation: string;
+const parseNativeCommandGatewayResponse = (options: {
+  value: unknown;
+  request: ReturnType<typeof createOpenClawNativeCommandGatewayRequest>;
 }): OpenClawNativeCommandResult => {
   try {
-    const commandResult = asRecord(JSON.parse(options.text));
-    if (
-      commandResult &&
-      commandResult.operation === options.expectedOperation &&
-      typeof commandResult.ok === "boolean" &&
-      typeof commandResult.code === "string"
-    ) {
-      return {
-        ok: commandResult.ok,
-        operation: commandResult.operation,
-        code: commandResult.code,
-        result: commandResult.result
-      };
-    }
-  } catch {
-    // The caller decides whether to keep polling for a later exact result.
-  }
-  throw new PublishedRuntimeClosureError(
-    "EE_OPENCLAW_LIVE_HOST_NATIVE_COMMAND_INVALID",
-    `OpenClaw ${options.expectedOperation} command text was not the exact plugin JSON result.`
-  );
-};
-
-const extractHistoryMessageTexts = (message: unknown): string[] => {
-  const record = asRecord(message);
-  if (record?.role !== "assistant") {
-    return [];
-  }
-  if (typeof record.text === "string") {
-    return [record.text];
-  }
-  if (typeof record.content === "string") {
-    return [record.content];
-  }
-  if (!Array.isArray(record.content)) {
-    return [];
-  }
-  return record.content.flatMap((block) => {
-    const typed = asRecord(block);
-    return typed?.type === "text" && typeof typed.text === "string"
-      ? [typed.text]
-      : [];
-  });
-};
-
-const readChatHistory = async (options: {
-  runner: OpenClawHostCommandRunner;
-  executable: string;
-  env: NodeJS.ProcessEnv;
-  cwd?: string;
-  timeoutMs: number;
-  gatewayUrl: string;
-  gatewayToken: string;
-  sessionKey: string;
-}): Promise<unknown[]> => {
-  const commandTimeoutMs = boundedOpenClawCliTimeout(
-    options.timeoutMs,
-    20_000
-  );
-  const output = await runCommand({
-    runner: options.runner,
-    executable: options.executable,
-    args: [
-      "gateway",
-      "call",
-      "chat.history",
-      "--params",
-      JSON.stringify({
-        sessionKey: options.sessionKey,
-        limit: 100,
-        maxChars: 16_384
-      }),
-      "--url",
-      options.gatewayUrl,
-      "--token",
-      options.gatewayToken,
-      "--json",
-      "--timeout",
-      String(commandTimeoutMs)
-    ],
-    env: options.env,
-    cwd: options.cwd,
-    timeoutMs: commandTimeoutMs
-  });
-  const response = asRecord(parseJsonCommandOutput({
-    stdout: output.stdout,
-    label: "chat.history"
-  }));
-  if (!Array.isArray(response?.messages)) {
+    return parseOpenClawNativeCommandGatewayResponse({
+      value: options.value,
+      expectedRequest: options.request
+    }).runtime_json;
+  } catch (error) {
     throw new PublishedRuntimeClosureError(
       "EE_OPENCLAW_LIVE_HOST_NATIVE_COMMAND_INVALID",
-      "OpenClaw chat.history returned no messages array."
+      `OpenClaw ${options.request.operation} Gateway command probe was invalid: ${
+        error instanceof Error ? error.message : String(error)
+      }`
     );
   }
-  return response.messages;
 };
 
 const runNativeRuntimeCommandDirect = async (options: {
@@ -989,8 +860,7 @@ const runNativeRuntimeCommandDirect = async (options: {
   gatewayToken: string;
   stateDir: string;
   clientVersion: string;
-  sessionKey: string;
-  operation: string;
+  operation: OpenClawNativeOperation;
   payload?: Record<string, unknown>;
   acceptedFailureCodes?: readonly string[];
   directGatewayRpcClientFactory?: DirectGatewayRpcClientFactory;
@@ -1005,63 +875,18 @@ const runNativeRuntimeCommandDirect = async (options: {
     clientVersion: options.clientVersion
   });
   try {
-    const message = `/${"experienceengine_"}${options.operation}${
-      options.payload ? ` ${JSON.stringify(options.payload)}` : ""
-    }`;
-    const sendResult = asRecord(await client.request("chat.send", {
-      sessionKey: options.sessionKey,
-      message,
-      timeoutMs: options.timeoutMs,
-      idempotencyKey: `ee-native-${options.operation}-${
-        randomBytes(12).toString("hex")
-      }`
-    }));
-    const runId = sendResult?.runId;
-    if (typeof runId !== "string" || runId.trim().length === 0) {
-      throw new PublishedRuntimeClosureError(
-        "EE_OPENCLAW_LIVE_HOST_NATIVE_COMMAND_INVALID",
-        `OpenClaw ${options.operation} chat.send returned no runId.`
-      );
-    }
-    const final = asRecord(await client.waitForChatFinal(
-      runId,
-      options.timeoutMs
-    ));
-    if (final?.state === "error") {
-      throw new PublishedRuntimeClosureError(
-        "EE_OPENCLAW_LIVE_HOST_NATIVE_COMMAND_FAILED",
-        `OpenClaw ${options.operation} chat event failed: ${String(
-          final.errorMessage ?? "unknown error"
-        )}`
-      );
-    }
-    if (final?.state !== "final") {
-      throw new PublishedRuntimeClosureError(
-        "EE_OPENCLAW_LIVE_HOST_NATIVE_COMMAND_INVALID",
-        `OpenClaw ${options.operation} returned no final chat event.`
-      );
-    }
-    const observedTexts = extractHistoryMessageTexts(final.message);
-    let parsed: OpenClawNativeCommandResult | null = null;
-    for (const text of observedTexts) {
-      try {
-        parsed = parseNativeCommandText({
-          text,
-          expectedOperation: options.operation
-        });
-        break;
-      } catch {
-        // A final assistant message may contain multiple visible text blocks.
-      }
-    }
-    if (!parsed) {
-      throw new PublishedRuntimeClosureError(
-        "EE_OPENCLAW_LIVE_HOST_NATIVE_COMMAND_INVALID",
-        `OpenClaw ${options.operation} command returned no exact plugin command JSON result through the direct Gateway chat event. Observed: ${JSON.stringify(
-          observedTexts.slice(-4).map((text) => text.slice(0, 1_000))
-        )}`
-      );
-    }
+    const request = createOpenClawNativeCommandGatewayRequest({
+      probeId: randomUUID(),
+      operation: options.operation,
+      payload: options.payload
+    });
+    const parsed = parseNativeCommandGatewayResponse({
+      value: await client.request(
+        OPENCLAW_NATIVE_COMMAND_GATEWAY_METHOD,
+        request
+      ),
+      request
+    });
     if (
       !parsed.ok &&
       !options.acceptedFailureCodes?.includes(parsed.code)
@@ -1087,8 +912,7 @@ const runNativeRuntimeCommand = async (options: {
   gatewayToken: string;
   stateDir: string;
   clientVersion: string;
-  sessionKey: string;
-  operation: string;
+  operation: OpenClawNativeOperation;
   payload?: Record<string, unknown>;
   acceptedFailureCodes?: readonly string[];
   transport?: "cli" | "direct_gateway";
@@ -1097,30 +921,24 @@ const runNativeRuntimeCommand = async (options: {
   if (options.transport === "direct_gateway") {
     return runNativeRuntimeCommandDirect(options);
   }
-  const message = `/${"experienceengine_"}${options.operation}${
-    options.payload ? ` ${JSON.stringify(options.payload)}` : ""
-  }`;
-  const historyBefore = await readChatHistory(options);
+  const request = createOpenClawNativeCommandGatewayRequest({
+    probeId: randomUUID(),
+    operation: options.operation,
+    payload: options.payload
+  });
   const commandTimeoutMs = boundedOpenClawCliTimeout(
     options.timeoutMs,
     20_000
   );
-  await runCommand({
+  const output = await runCommand({
     runner: options.runner,
     executable: options.executable,
     args: [
       "gateway",
       "call",
-      "chat.send",
+      OPENCLAW_NATIVE_COMMAND_GATEWAY_METHOD,
       "--params",
-      JSON.stringify({
-        sessionKey: options.sessionKey,
-        message,
-        timeoutMs: options.timeoutMs,
-        idempotencyKey: `ee-native-${options.operation}-${
-          randomBytes(12).toString("hex")
-        }`
-      }),
+      JSON.stringify(request),
       "--url",
       options.gatewayUrl,
       "--token",
@@ -1133,38 +951,13 @@ const runNativeRuntimeCommand = async (options: {
     cwd: options.cwd,
     timeoutMs: commandTimeoutMs
   });
-  const deadline = Date.now() + options.timeoutMs;
-  let observedTexts: string[] = [];
-  let parsed: OpenClawNativeCommandResult | null = null;
-  while (Date.now() < deadline) {
-    const messages = await readChatHistory(options);
-    observedTexts = messages
-      .slice(historyBefore.length)
-      .flatMap(extractHistoryMessageTexts);
-    for (const text of observedTexts) {
-      try {
-        parsed = parseNativeCommandText({
-          text,
-          expectedOperation: options.operation
-        });
-        break;
-      } catch {
-        // The user command transcript may appear before the plugin reply.
-      }
-    }
-    if (parsed) {
-      break;
-    }
-    await sleep(100);
-  }
-  if (!parsed) {
-    throw new PublishedRuntimeClosureError(
-      "EE_OPENCLAW_LIVE_HOST_NATIVE_COMMAND_INVALID",
-      `OpenClaw ${options.operation} command returned no exact plugin command JSON result through chat.history. Observed: ${JSON.stringify(
-        observedTexts.slice(-4).map((text) => text.slice(0, 1_000))
-      )}`
-    );
-  }
+  const parsed = parseNativeCommandGatewayResponse({
+    value: parseJsonCommandOutput({
+      stdout: output.stdout,
+      label: OPENCLAW_NATIVE_COMMAND_GATEWAY_METHOD
+    }),
+    request
+  });
   if (
     !parsed.ok &&
     !options.acceptedFailureCodes?.includes(parsed.code)
@@ -1868,8 +1661,6 @@ export const runOpenClawHostValidation = async (options: {
       );
     }
     progress("plugin_loaded");
-    const nativeCommandSessionKey =
-      `agent:${agentId}:ee-native-activation-${Date.now()}`;
     await waitForNativeRuntimeServiceReady({
       runner,
       executable,
@@ -1880,7 +1671,6 @@ export const runOpenClawHostValidation = async (options: {
       gatewayToken,
       stateDir,
       clientVersion: options.artifact.package_version,
-      sessionKey: nativeCommandSessionKey,
       operation: "status",
       transport: nativeCommandTransport,
       directGatewayRpcClientFactory: options.directGatewayRpcClientFactory
@@ -1902,7 +1692,6 @@ export const runOpenClawHostValidation = async (options: {
       gatewayToken,
       stateDir,
       clientVersion: options.artifact.package_version,
-      sessionKey: nativeCommandSessionKey,
       operation: "prepare_package_activation",
       transport: nativeCommandTransport,
       directGatewayRpcClientFactory: options.directGatewayRpcClientFactory
@@ -1969,7 +1758,6 @@ export const runOpenClawHostValidation = async (options: {
       gatewayToken,
       stateDir,
       clientVersion: options.artifact.package_version,
-      sessionKey: nativeCommandSessionKey,
       operation: "initialize_package_activation",
       payload: initializationPayload,
       transport: nativeCommandTransport,
@@ -1997,7 +1785,6 @@ export const runOpenClawHostValidation = async (options: {
       gatewayToken,
       stateDir,
       clientVersion: options.artifact.package_version,
-      sessionKey: nativeCommandSessionKey,
       operation: "initialize_package_activation",
       payload: initializationPayload,
       transport: nativeCommandTransport,
@@ -2157,6 +1944,9 @@ export const OPENCLAW_HOST_VALIDATION_RUNNER_CONTRACT = Object.freeze({
   windows_batch_shim_uses_validated_node_entrypoint: true,
   windows_gateway_health_uses_direct_gateway_rpc: true,
   windows_native_commands_use_direct_gateway_rpc: true,
+  native_commands_bypass_agent_model: true,
+  native_command_gateway_probe_identity_required: true,
+  stale_native_command_gateway_probe_rejected: true,
   direct_gateway_protocol_range_is_negotiated: true,
   channel_native_install_closure_binding_required: true,
   shell_true_allowed: false

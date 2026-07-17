@@ -44,10 +44,14 @@ import {
 import {
   writeOpenClawRuntimeHealthEvidence
 } from "./openclaw-runtime-health.js";
+import {
+  OPENCLAW_NATIVE_COMMAND_GATEWAY_METHOD,
+  OPENCLAW_NATIVE_COMMAND_PREFIX,
+  createOpenClawNativeCommandGatewayResponse,
+  parseOpenClawNativeCommandGatewayRequest
+} from "../runtime/activation/openclaw-native-command-gateway.js";
 
 const loadOpenClawRoutineInteractionModule = () => import("./openclaw-routine-interaction.js");
-
-const OPENCLAW_RUNTIME_COMMAND_PREFIX = "experienceengine_" as const;
 
 const defaultInstalledRuntimeServices = new Map<
   string,
@@ -254,7 +258,7 @@ class OpenClawExperiencePlugin implements ExperiencePlugin {
 
     for (const operation of OPENCLAW_NATIVE_OPERATIONS) {
       api.registerCommand?.({
-        name: `${OPENCLAW_RUNTIME_COMMAND_PREFIX}${operation}`,
+        name: `${OPENCLAW_NATIVE_COMMAND_PREFIX}${operation}`,
         description: runtimeCommandDescription(operation),
         acceptsArgs: operation !== "status" && operation !== "repair_explanation",
         requireAuth: true,
@@ -290,6 +294,29 @@ class OpenClawExperiencePlugin implements ExperiencePlugin {
         }
       });
     }
+
+    api.registerGatewayMethod?.(
+      OPENCLAW_NATIVE_COMMAND_GATEWAY_METHOD,
+      async ({ params, respond }) => {
+        try {
+          const request = parseOpenClawNativeCommandGatewayRequest(params);
+          const runtimeResult = await this.nativeRuntimeService.execute({
+            operation: request.operation,
+            payload: request.payload
+          });
+          respond(true, createOpenClawNativeCommandGatewayResponse({
+            request,
+            runtimeResult
+          }));
+        } catch (error) {
+          respond(false, undefined, {
+            code: "INVALID_REQUEST",
+            message: error instanceof Error ? error.message : String(error)
+          });
+        }
+      },
+      { scope: "operator.admin" }
+    );
 
     api.on?.("before_prompt_build", async (payload, hookContext) => {
       const source = mergeHookPayload(payload, hookContext);
