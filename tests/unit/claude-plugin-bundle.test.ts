@@ -4,6 +4,11 @@ import { describe, expect, it } from "vitest";
 
 const repoRoot = resolve(import.meta.dirname, "..", "..");
 const pluginRoot = join(repoRoot, "plugins", "claude-code-experienceengine");
+const packageVersion = (
+  JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")) as {
+    version: string;
+  }
+).version;
 
 describe("Claude plugin bundle", () => {
   it("ships a self-contained plugin directory for marketplace installs", () => {
@@ -12,7 +17,7 @@ describe("Claude plugin bundle", () => {
     ) as Record<string, unknown>;
 
     expect(manifest.name).toBe("experienceengine");
-    expect(manifest.version).toBe("0.3.0");
+    expect(manifest.version).toBe(packageVersion);
   });
 
   it("uses plugin-local hooks and runtime scripts", () => {

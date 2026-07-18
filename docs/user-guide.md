@@ -102,7 +102,7 @@ Install ExperienceEngine through the host setup flow for:
     - `openclaw plugins install @alan512/experienceengine`
   - after installing, restart the gateway before the first real task:
     - `openclaw gateway restart`
-  - the `v0.5.x` line contains the package-local supervisor/worker runtime; the exact published npm and ClawHub `v0.5.1` artifacts independently passed native-channel and real-host validation
+  - the `v0.5.x` line contains the package-local supervisor/worker runtime; exact published npm `v0.5.2` passed native-channel and real-host validation, while the public ClawHub `v0.5.2` artifact is incomplete and must not be installed
   - use the authenticated package activation flow below when `learning_runtime_active` is not yet true
   - operator-managed fallback:
     - `ee install openclaw`
@@ -293,6 +293,8 @@ ee diagnose --prepare-bundle --include-model-id
 ```
 
 No upload or GitHub issue is created automatically. Review the exact manifest before attaching it. Use the repository's installation, runtime bug, harmful intervention, or feature request template. Security or privacy vulnerabilities must follow `SECURITY.md` and should not be disclosed in a public issue.
+
+The exact published npm `0.5.2` package independently passed this flow from its installed CLI on a clean native Windows home: diagnosis remained non-mutating, preparation created exactly one manifest, repeated archives were byte-identical and contained only that manifest, and overwrite/extra-file attempts failed closed. This validates the npm diagnostics distribution path only; it does not validate the incomplete public ClawHub `0.5.2` artifact or change the broader support/readiness flags.
 
 Their roles are intentionally different:
 
@@ -622,6 +624,7 @@ Environment variables:
 Notes:
 
 - The default embedding strategy on this branch is now `api` instead of `local`. Users who want fully local retrieval should install the optional local runtime and set `embeddingProvider = "local"` explicitly.
+- API embedding and provider-backed distillation/explanation/review send selected query, passage, decision, or task evidence to the configured remote provider. Do not enable remote providers for sensitive workloads unless that transfer is approved under the provider's data-handling and residency policy.
 - `ee install ...` and `ee doctor ...` warn when `npm` or `pnpm` is pointed at a non-official registry
 - the recommended registry for managed model downloads is `https://registry.npmjs.org`
 - `ee doctor ...` reports a first-value readiness summary so users can see how much captured evidence exists before the first durable node is promoted
@@ -640,6 +643,14 @@ ee maintenance embeddings-reset
 ```
 
 That command clears the configured managed embedding cache for the active model and immediately rebuilds it.
+
+### Installation trust and persistence boundary
+
+ExperienceEngine integrates at the host lifecycle boundary. Depending on the selected host, its hooks can observe prompt submission, tool use/results/failures, and session finalization so the product can retrieve guidance, attribute outcomes, and govern future delivery.
+
+Managed installation can write persistent user-level configuration under `~/.claude`, `~/.codex`, `~/.gemini`, or the OpenClaw plugin/config locations documented below. ExperienceEngine state persists under `~/.experienceengine` by default and can affect later sessions across workspaces. Review and back up the listed host configuration files before installation.
+
+Normal trace persistence is metadata-only and applies bounded redaction/retention rules. `captureRawPayloads` is a separate opt-in OpenClaw validation feature: raw payload files may contain prompts, tool data, secrets, personal data, or proprietary source context and must be treated as sensitive. Remote embedding/model features are another separate boundary and send selected content to the configured provider when enabled.
 
 ### OpenClaw Advanced Commands
 
@@ -769,10 +780,11 @@ Current publication evidence:
 - local-pack real-host preflight passed on OpenClaw `2026.4.1` under Linux/WSL and native Windows
 - local-pack real-host preflight also passed on OpenClaw `2026.7.1` under WSL with Node `24.18.0`
 - the superseded prepublication tarballs remain historical evidence and were not published
-- npm, GitHub Releases, and ClawHub received the exact evidence-bound `v0.5.1` artifacts
-- exact npm and ClawHub `v0.5.1` published validation passed independently through their native channels and real OpenClaw host paths
+- npm and GitHub Releases received the exact evidence-bound `v0.5.2` artifacts; a later public ClawHub `0.5.2` upload is incomplete, omits the built runtime, and must not be treated as accepted channel evidence
+- exact npm `v0.5.2` published validation passed through the native npm channel and real OpenClaw host path
+- the published-npm v5 campaign completed all nine arms across inject, correct-skip, and harm-recovery scenarios and passed independent runtime/governance validation
 - the matched-block benchmark/quality gate remains separate from runtime activation
-- one real matched treatment/forced-holdout/no-EE pilot passed infrastructure and isolation acceptance, but its sealed publication decision is `not_publishable` because it has one complete repetition and the plan requires five per scenario
+- the v5 directional campaign remains `not_publishable` because it has one repetition per scenario and intentionally includes a harmful exposure; the plan requires five repetitions per scenario for publication
 - `support_claim_allowed` and `production_learning_ready` therefore remain false
 
 Maintainer-only matched-block reporting reads an already sealed campaign database and external observations; it does not run arms or mutate runtime authority:

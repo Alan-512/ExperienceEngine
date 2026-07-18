@@ -1,7 +1,7 @@
 {
   "id": "experienceengine",
   "name": "ExperienceEngine",
-  "version": "0.5.2",
+  "version": "0.5.3",
   "description": "Helps coding agents avoid repeating failed execution paths by learning from real task outcomes and governing when prior guidance should be reused.",
   "icon": "https://raw.githubusercontent.com/Alan-512/ExperienceEngine/main/docs/assets/readme/experienceengine-icon.png",
   "activation": {
@@ -26,20 +26,20 @@
       },
       "captureRawPayloads": {
         "type": "boolean",
-        "description": "Persist raw OpenClaw lifecycle payloads for local runtime validation."
+        "description": "Opt in to persisting raw OpenClaw lifecycle payloads for local runtime validation. Raw payloads may contain prompts, tool data, secrets, or proprietary content; keep this disabled unless the capture is necessary and access-controlled."
       },
       "captureDir": {
         "type": "string",
-        "description": "Directory used to store raw runtime payload captures."
+        "description": "Directory used to store opt-in raw runtime payload captures. Treat files in this directory as sensitive because they may contain prompts, tool data, secrets, or proprietary content."
       },
       "distillerProvider": {
         "type": "string",
         "enum": ["openai", "anthropic", "gemini", "openrouter", "deepseek", "bedrock", "vertex_gemini", "groq", "openai_compatible"],
-        "description": "Provider used for semantic learning and provider-backed decision explanation."
+        "description": "Remote provider used for semantic learning and provider-backed decision explanation. When configured and enabled, selected task content is sent to that provider under its data-handling policy."
       },
       "distillerModel": {
         "type": "string",
-        "description": "Model used for semantic learning and provider-backed decision explanation."
+        "description": "Remote model used for semantic learning and provider-backed decision explanation. When configured and enabled, selected task content is sent to the provider."
       },
       "maxHints": {
         "type": "integer",
@@ -67,11 +67,11 @@
       },
       "hybridAsyncPostmortemLlmEnabled": {
         "type": "boolean",
-        "description": "Enable provider-backed posttask review for eligible completed runs."
+        "description": "Enable remote provider-backed posttask review for eligible completed runs. Selected task evidence is sent to the configured provider."
       },
       "hybridExplainLlmEnabled": {
         "type": "boolean",
-        "description": "Enable provider-backed explanation for eligible intervention decisions."
+        "description": "Enable remote provider-backed explanation for eligible intervention decisions. Selected decision context is sent to the configured provider."
       },
       "hybridExplainProviderMode": {
         "type": "string",

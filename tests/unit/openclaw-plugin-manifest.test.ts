@@ -46,5 +46,15 @@ describe("OpenClaw plugin manifest", () => {
     expect(properties).toHaveProperty("hybridPostmortemModelProfileVersion");
     expect(properties).toHaveProperty("distillerProvider");
     expect(properties).toHaveProperty("distillerModel");
+
+    expect(JSON.stringify(properties.captureRawPayloads)).toContain(
+      "may contain prompts, tool data, secrets"
+    );
+    expect(JSON.stringify(properties.distillerProvider)).toContain(
+      "selected task content is sent"
+    );
+    expect(JSON.stringify(properties.hybridAsyncPostmortemLlmEnabled)).toContain(
+      "Selected task evidence is sent"
+    );
   });
 });

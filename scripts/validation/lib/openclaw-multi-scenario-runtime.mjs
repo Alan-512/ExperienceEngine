@@ -779,6 +779,7 @@ export const executeOpenClawHarmFeedbackLocalPackPreflight = async (options) => 
 
 export const executeOpenClawMultiScenarioCampaign = async (options) => {
   const runtimeRoot = options.runtimeRoot;
+  const installSource = options.installSource ?? options.artifactPath;
   const {
     primaryModel,
     templateState,
@@ -868,7 +869,7 @@ export const executeOpenClawMultiScenarioCampaign = async (options) => {
           let result = { exitCode: 0, stdout: "", stderr: "", durationMs: 0, timedOut: false };
           if (stage === "dependency_setup" && arm !== "no_ee" && !runtime.installed) {
             result = runOpenClawCommand(options.openclawExecutable, [
-              "plugins", "install", options.artifactPath,
+              "plugins", "install", installSource,
               "--acknowledge-clawhub-risk", "--force"
             ], { env, timeoutMs: 600_000 });
             if (result.exitCode === 0) {

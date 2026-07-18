@@ -274,6 +274,8 @@ npm install -g @alan512/experienceengine
 
 Node.js `>=20` is required.
 
+> **Trust boundary:** ExperienceEngine host integrations install lifecycle hooks that can observe prompt, tool, and session events. Managed installs may modify persistent user-level agent configuration and store local state under `~/.experienceengine`. Normal trace persistence is metadata-only, but raw OpenClaw payload capture is an explicit sensitive-data opt-in. When remote embedding, distillation, explanation, or posttask-review providers are configured, selected task content is sent to those providers. Review the host-specific file changes below and back up relevant agent configuration before installation.
+
 ### 2. Choose your host
 
 #### Codex
@@ -354,7 +356,7 @@ Then verify current authority from the operator CLI:
 ee verify openclaw-production
 ```
 
-The implementation has passed local-pack real-host preflight on WSL/Linux and native Windows. The exact published npm and ClawHub `v0.5.1` artifacts independently passed the full OpenClaw `2026.7.1` WSL live-host sequence. The matched-block benchmark machinery then completed five sealed three-arm repetitions for one scenario: treatment delivered in all five blocks, forced holdout retained the same inject decision with zero delivery in all five, no-EE remained uncontaminated, and independent scorecard recomputation matched. That disclosed single-scenario campaign passed its sealed publication thresholds, but it contains one scenario cluster with unavailable confidence-interval bounds. It is directional evidence, not a general cross-scenario efficacy or full-support claim; `support_claim_allowed` and `production_learning_ready` remain false.
+The implementation has passed local-pack real-host preflight on WSL/Linux and native Windows. Exact published npm `v0.5.2` independently passed the full OpenClaw `2026.7.1` WSL live-host sequence. A later public ClawHub `v0.5.2` entry exists, but its uploaded archive is incomplete, omits the built runtime, and fails exact closure validation; do not install that channel version. `v0.5.3` is the immutable repair release. The earlier repeated single-scenario campaign passed its sealed thresholds, and the fresh published-npm v5 campaign completed all nine treatment/forced-holdout/no-EE arms across inject, correct-skip, and harm-recovery scenarios. Independent validation proved correct skip with zero false-positive delivery plus deterministic harmful exposure, production feedback/quarantine, and fresh-session recovery. V5 remains directional and `not_publishable` because it has one repetition per scenario and intentionally includes harmful exposure; it is not a general efficacy or full-support claim. `support_claim_allowed` and `production_learning_ready` remain false.
 
 The operator fallback is:
 
@@ -520,6 +522,8 @@ ee diagnose --archive <review-directory>
 `ee diagnose` is read-only and does not initialize a missing ExperienceEngine home, key, or database. Bundle preparation creates a new review directory containing only `manifest.json`. Archive creation revalidates that exact manifest and creates a local deterministic `.tar.gz` containing only that file.
 
 No upload or issue submission occurs automatically. Review the manifest before sharing. Do not attach raw SQLite files, settings, prompts, source code, paths, credentials, tool output, provider requests/responses, or unreviewed logs. Exact model identity is excluded unless you explicitly add `--include-model-id` during diagnosis or bundle preparation.
+
+The exact published npm `v0.5.2` CLI independently passed this clean-home diagnose/prepare/archive flow, including deterministic archive bytes, exact one-file content, privacy scans, overwrite refusal, and extra-file rejection. This is npm-channel diagnostics evidence, not a ClawHub `v0.5.2` or general support claim.
 
 Use the repository issue templates for installation problems, runtime bugs, harmful interventions, and feature requests. Use the private security-reporting guidance in [`SECURITY.md`](./SECURITY.md) for vulnerabilities or privacy leaks.
 

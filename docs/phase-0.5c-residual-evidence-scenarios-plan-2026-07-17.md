@@ -2,7 +2,7 @@
 
 Date: `2026-07-17`
 
-Status: C1 and C2 accepted; C3 runner/validator and local-pack feedback preflight complete; exact published-artifact campaign blocked on a new immutable release
+Status: complete; C1/C2 accepted and exact published npm `0.5.2` C3 campaign independently validated
 
 ## 1. Current Evidence Boundary
 
@@ -212,12 +212,18 @@ Validation before release preparation:
 - runtime closure remained `f5a88dfd14ba5e279badeeba9a644b7a8d0f616fa4d11a94803825ced94baa1f` with build id `build_16ad8bdc23633f6f9980161a00d66e58778d0b7f5ec2452964d23aa1a546a697`;
 - `support_claim_allowed=false` and `production_learning_ready=false` remain unchanged.
 
-### Still open
+### C3 exact published-artifact acceptance complete
 
-- publish a new immutable artifact containing the production feedback fallback;
-- seal and independently validate a fresh campaign plan against that exact artifact;
-- run the complete inject, correct-skip, and formal harm-recovery three-arm campaign;
-- require the formal treatment harm fixture to produce deterministic task failure before accepting recovery evidence;
-- independently validate the retained runtime and clean copied authentication/runtime state;
-- complete Tasks 3.1-4.3 and Phase 0.5C closeout without changing support/readiness flags.
+- Exact published npm artifact: `@alan512/experienceengine@0.5.2`, SHA-256 `6fe2cc3e69adda56186bafb0b0bd6565cb3b605f89334597d5402dbef745e9b1`.
+- Fresh sealed campaign: `phase-0.5c-openclaw-multi-scenario-v5`, plan digest `be526d64edc8ad77d7ad77024e76fd7d414229db321df0119725fb7c140a0251`.
+- All `9/9` formal attempts reached revision-two `completed`; all three blocks have the frozen `complete` disposition; no infrastructure failure or replacement occurred.
+- Correct-skip treatment retained a plausible candidate, delivered zero interventions, completed the task, and produced `correct_skip_rate=1.0` with `false_positive_injection_rate=0.0`.
+- Harm treatment delivered one harmful intervention and produced deterministic exposure `task_success=0`, authoritative production attribution/review evidence, `conservative_only -> quarantined`, fresh-session suppression, and successful recovery.
+- Independent validation accepted all nine arm evidence records, recomputed scorecard digest `73e2047e9efa3a05e279c50dbf0e15150e94e3f22896934c95f24357614cf1c8`, and produced validation digest `68ffdbb6ad6d218dc9c6d19d7709c88676d527b7317fb8f2a72e4c5b5cd741f0`.
+- The campaign remains `not_publishable`: one repetition per scenario is below the sealed minimum of five, and the intentionally harmful exposure fails the quality harmful-rate threshold.
+- Copied authentication/runtime state and both temporary relays were removed after independent validation.
+- Durable evidence is recorded in `docs/openclaw-multi-scenario-campaign-v5.md`.
+- Final repository closeout passed `243` test files / `1514` tests, TypeScript, production build, all three strict Phase 0.5C OpenSpec changes, runtime closure validation, OpenClaw production binding, and diff checks.
+- Runtime closure remained `2e91d1bf40d8d1773293a3ac81609469540239a7fdd5367e3945210628d6e54f` with build id `build_4ea8534110c00159af76428d07ba2c4e2b5c5b85599382aa50069ac263cbc2a7`.
+- Phase 0.5C is complete without changing `support_claim_allowed=false` or `production_learning_ready=false`.
 

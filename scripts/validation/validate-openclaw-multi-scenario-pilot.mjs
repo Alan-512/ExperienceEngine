@@ -30,6 +30,9 @@ import {
   sha256File,
   writeJson
 } from "./lib/openclaw-matched-block-host.mjs";
+import {
+  requireCompleteBlockDisposition
+} from "./lib/openclaw-multi-scenario-validator-contract.mjs";
 
 const parseArgs = (argv) => {
   const options = {};
@@ -209,10 +212,10 @@ try {
         throw new Error(`Block ${plannedBlock.block_id}/${arm} lacks one completed formal attempt.`);
       }
     }
-    const disposition = store.getBlockDisposition(plannedBlock.block_id);
-    if (!disposition || disposition.disposition !== "included_complete") {
-      throw new Error(`Block ${plannedBlock.block_id} lacks an included-complete disposition.`);
-    }
+    requireCompleteBlockDisposition(
+      store.getBlockDisposition(plannedBlock.block_id),
+      plannedBlock.block_id
+    );
   }
   persistedPublicationDecision = store.getPublicationDecision(campaign.benchmark_campaign_id);
   if (!persistedPublicationDecision) {

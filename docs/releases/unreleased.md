@@ -1,6 +1,13 @@
 # ExperienceEngine — Unreleased
 
-`v0.5.1` is published and immutable. Its exact npm and ClawHub artifacts passed the complete OpenClaw `2026.7.1` live-host sequence. The changes below are assigned to the local `v0.5.2` release-candidate line but are not yet published and must not be presented as available from the published `0.5.1` package.
+`v0.5.2` is published and immutable on npm and GitHub Releases. Its exact npm artifact passed the complete OpenClaw `2026.7.1` live-host sequence and a fresh three-scenario C3 campaign. A later public ClawHub `0.5.2` upload is invalid because it contains an incomplete source-only artifact without the built runtime. `v0.5.3` repairs that channel boundary, aligns the Claude marketplace installer with the package version, and strengthens install/privacy disclosures plus candidate completeness checks.
+
+## v0.5.3 three-channel repair
+
+- Aligns root package, OpenClaw manifest, Claude plugin manifests, Claude marketplace installer cache/state, and tests on one exact release version.
+- Rejects npm or ClawHub release candidates that omit mandatory built runtime entries; the reduced ClawHub artifact must also contain its bundled MCP SDK and Zod dependencies.
+- Adds explicit install-time warnings for persistent user-level agent configuration, broad lifecycle hook coverage, opt-in raw payload sensitivity, and remote-provider data transfer.
+- Corrects public documentation to distinguish the invalid ClawHub `0.5.2` upload from the previously accepted reduced candidate.
 
 ## Privacy-safe diagnostics and public feedback
 
@@ -52,7 +59,7 @@
 - Published ClawHub `0.5.0`: exact clean artifact bytes and closure passed; native install failed because OpenClaw installed the package without its declared runtime dependencies.
 - Published npm and ClawHub `0.5.1`: exact artifact validation passed.
 - Repeated matched-block v4: five complete single-scenario blocks passed the sealed campaign thresholds, with one-cluster limitations disclosed; general support/readiness claims remain disabled.
-- Unreleased diagnostics: source and clean local-pack validation passed; exact published-package validation remains pending a future release.
-- Unreleased multi-scenario evidence: decision-opportunity and harm-recovery contracts, sealed OpenClaw adapters, exact-plan execution, independent validation, and current-source local-pack feedback recovery passed source gates. Exact published-artifact C3 execution remains pending the immutable `0.5.2` artifacts.
+- `v0.5.2` diagnostics: source and clean local-pack functional validation passed; the exact published npm package then passed clean-home diagnose, exact review preparation, deterministic one-manifest archive, privacy, rejection, and no-upload acceptance.
+- `v0.5.2` multi-scenario evidence: the published-npm v5 campaign completed all nine arms and independently proved correct skip, zero false-positive delivery, deterministic harmful exposure, production feedback/quarantine, and fresh-session recovery. The directional campaign remains `not_publishable` and does not change support/readiness flags.
 
 See `docs/openclaw-runtime-support-matrix.md` for the exact evidence boundaries.

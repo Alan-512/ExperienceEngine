@@ -15,10 +15,10 @@ Current follow-up design:
   - S7 implementation, local-pack validation, WSL real-host validation, and native Windows real-host validation: complete
   - S7 exact published npm/ClawHub acceptance: complete
   - S8 matched-block benchmark implementation and repeated evidence acceptance: complete; the five-block real campaign passed its sealed single-scenario publication gate
-  - Phase 0.5B D1-D2 safe diagnostic manifest and reviewed archive: clean local-pack accepted; public issue/security flow remains open
-  - Phase 0.5B D3 public feedback assets: source and clean local-pack accepted; exact published-package acceptance remains pending a future release
+  - Phase 0.5B D1-D3 safe diagnostics, reviewed archive, and public feedback assets: source, clean local-pack, and exact published npm `0.5.2` acceptance complete
+  - Phase 0.5C residual multi-scenario evidence: exact published npm `0.5.2` campaign completed and independently validated; directional decision remains `not_publishable`
 
-The Phase 0.5A.1 S1-S8 implementation sequence is complete. Runtime publication and the matched-block benchmark machinery are validated. The retained v3 one-block pilot remains correctly `not_publishable`; the later v4 campaign completed five sealed three-arm blocks and passed every predeclared campaign threshold with deterministic scorecard recomputation. Its evidence is limited to one scenario cluster with unavailable confidence-interval bounds, so it supports a disclosed directional single-scenario result rather than a general full-support or cross-scenario efficacy claim. `support_claim_allowed=false` and `production_learning_ready=false` remain required.
+The Phase 0.5A.1 S1-S8 implementation sequence is complete. Runtime publication, privacy-safe diagnostics, and the matched-block benchmark machinery are validated. The retained v3 one-block pilot remains correctly `not_publishable`; the later v4 campaign completed five sealed three-arm blocks and passed every predeclared single-scenario threshold. The Phase 0.5C v5 campaign then completed nine arms across inject, correct-skip, and harm-recovery and independently validated the complete causal recovery path. V4 remains limited to one scenario cluster, while v5 has only one repetition per scenario and deliberately includes harmful exposure. Together they are directional evidence rather than a general full-support or cross-scenario efficacy claim. `support_claim_allowed=false` and `production_learning_ready=false` remain required.
 
 It is intentionally execution-oriented:
 

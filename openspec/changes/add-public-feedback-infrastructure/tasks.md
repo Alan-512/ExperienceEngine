@@ -16,7 +16,7 @@
 
 - [x] 3.1 Run a real operator prepare/review/archive fixture.
 - [x] 3.2 Validate an installed local-pack artifact.
-- [ ] 3.3 Validate the exact published channel before claiming support.
+- [x] 3.3 Validate the exact published channel before claiming support.
 - [x] 3.4 Run full repository, strict OpenSpec, package closure, and documentation consistency gates.
 
 ## Current Evidence Boundary
@@ -24,8 +24,8 @@
 - Public repository assets and English/Chinese/user-guide workflows are implemented and statically checked.
 - Source and clean local-pack diagnose/prepare/archive flows passed through D1-D2.
 - No remote telemetry, upload, or automatic issue submission exists.
-- Exact published-package validation remains open because published `0.5.1` is immutable and does not contain these unreleased changes.
-- Until a future version is published and its exact artifact passes, Phase 0.5B must be described as source/local-pack accepted rather than published supported.
+- Exact published npm `0.5.2` diagnostics validation passed against independently downloaded immutable bytes.
+- The public ClawHub `0.5.2` artifact is incomplete and fails closure, so this acceptance is explicitly npm-channel evidence rather than a cross-channel support claim.
 
 ## Source And Local-Pack Acceptance Evidence
 
@@ -37,4 +37,10 @@
 - Adding the CLI-only archive dependency exposed reduced OpenClaw package identity drift. The installer now regenerates the reduced stage's own profile registry and closure after dependency pruning; the OpenClaw packaged-runtime test passed `19/19` while keeping `tar` out of the reduced plugin bundle.
 - D1, D2, and D3 strict OpenSpec validation and `git diff --check` passed.
 - README, Chinese README, user guide, release notes, historical v3/v4 evidence wording, issue templates, contribution guidance, and security policy are aligned.
-- Exact published-package acceptance remains the only open D3 task and requires a future immutable published artifact.
+- Exact published npm `0.5.2` was installed into an isolated dependency tree and its installed CLI passed clean-home diagnose, exact one-file review preparation, deterministic archive creation, archive content equality, overwrite rejection, extra-file rejection, privacy scans, and no-upload assertions.
+- Published artifact SHA-256 is `6fe2cc3e69adda56186bafb0b0bd6565cb3b605f89334597d5402dbef745e9b1`; corrected-v2 deterministic archive SHA-256 is `65f616b7986e87a46cbf1b443619ec935470d64ccf82632f2b0d9c109e8f4d74`; acceptance validation digest is `7fb2a7937e82796d243aaaf0f2e43fb44b2ce463454a9072f627cecc5267c0b9`.
+- Submission review superseded the first evidence run after correcting the negative-command expectation helper so an unexpectedly successful rejection case fails the harness instead of being misclassified.
+- Temporary install, home, review, extraction, and archive roots were removed after validation. `support_claim_allowed=false` and `production_learning_ready=false` remain unchanged.
+- Durable evidence: `docs/published-diagnostics-v0.5.2.md`.
+- Final focused gate passed `4` files / `18` tests; the combined full repository gate passed `244` files / `1517` tests, TypeScript, production build, D1-D3 strict OpenSpec, runtime closure, OpenClaw production binding, and diff checks.
+- Runtime closure remained `2e91d1bf40d8d1773293a3ac81609469540239a7fdd5367e3945210628d6e54f` with build id `build_4ea8534110c00159af76428d07ba2c4e2b5c5b85599382aa50069ac263cbc2a7`.

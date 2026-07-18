@@ -274,6 +274,8 @@ npm install -g @alan512/experienceengine
 
 需要 Node.js `>=20`。
 
+> **信任边界：** ExperienceEngine 的宿主集成会安装生命周期 hooks，并可能读取 prompt、工具调用和 session 事件。托管安装可能修改持久化的用户级 Agent 配置，并在 `~/.experienceengine` 下保存本地状态。正常 trace 持久化默认只保存元数据；OpenClaw 原始 payload 捕获属于显式的敏感数据开关。配置远程 embedding、distillation、explanation 或 posttask review provider 后，选定的任务内容会发送给对应 provider。安装前请查看下方各宿主会修改的文件，并备份相关 Agent 配置。
+
 ### 2. 选择你的宿主
 
 #### Codex
@@ -354,7 +356,7 @@ prepare 命令是只读的。将其 `result` 字段返回的精确 JSON 对象�
 ee verify openclaw-production
 ```
 
-当前实现已在 WSL/Linux 和原生 Windows 通过 local-pack 真实宿主 preflight；精确发布的 npm 与 ClawHub `v0.5.1` artifact 也分别在 WSL 的 OpenClaw `2026.7.1` 通过完整真实宿主序列。matched-block 基准随后针对一个场景完成了五个封存三臂重复：treatment 在 5/5 block 中交付，forced holdout 在 5/5 中保留相同 inject 决策但交付为零，no-EE 始终无污染，独立 scorecard 重算完全一致。该单场景 campaign 通过了自身封存发布门槛，但只有一个 scenario cluster，置信区间上下界不可用，因此它只是方向性证据，不是跨场景通用效果或完整支持声明；`support_claim_allowed` 与 `production_learning_ready` 仍为 false。
+当前实现已在 WSL/Linux 和原生 Windows 通过 local-pack 真实宿主 preflight；精确发布的 npm `v0.5.2` 也在 WSL 的 OpenClaw `2026.7.1` 独立通过完整真实宿主序列。之后虽然出现了公开 ClawHub `v0.5.2` 条目，但其上传 archive 不完整、缺少已构建运行时，并且无法通过精确 closure 验证；不要安装该渠道版本。`v0.5.3` 是对应的不可变修复版本。此前的单场景重复 campaign 通过自身封存门槛；新的 published-npm v5 campaign 又在 inject、correct-skip、harm-recovery 三类场景中完成全部 9 个 treatment/forced-holdout/no-EE arm。独立验证证明了正确 skip、零误投递、确定性有害暴露、生产反馈与 quarantine，以及新 session recovery。v5 每个场景只有一次重复，并且刻意包含有害暴露，因此结论仍是方向性的 `not_publishable`，不能视为通用效果或完整支持声明；`support_claim_allowed` 与 `production_learning_ready` 仍为 false。
 
 operator 回退路径为：
 
@@ -510,6 +512,8 @@ ee diagnose --archive <review-directory>
 `ee diagnose` 是只读命令，不会为缺失的 ExperienceEngine home、machine key 或数据库执行初始化。prepare 只创建一个新的 review directory，其中只有 `manifest.json`；archive 会再次严格校验这个 manifest，并在本地创建只包含该文件的确定性 `.tar.gz`。
 
 系统不会自动上传文件或提交 issue。分享前必须先检查 manifest。不要附加原始 SQLite、settings、prompt、源码、路径、凭证、工具输出、provider 请求/响应或未经检查的日志。精确模型 ID 默认不包含，只有显式使用 `--include-model-id` 才会加入。
+
+精确发布的 npm `v0.5.2` CLI 已独立通过该 clean-home diagnose/prepare/archive 流程，包括确定性 archive 字节、精确单文件内容、隐私扫描、覆盖拒绝和额外文件拒绝。这只是 npm 渠道的 diagnostics 证据，不代表 ClawHub `v0.5.2` 或通用支持声明。
 
 安装问题、运行时 bug、有害 intervention 和功能建议请使用仓库 issue 模板；漏洞或隐私泄露请按照 [`SECURITY.md`](./SECURITY.md) 使用私密报告路径。
 

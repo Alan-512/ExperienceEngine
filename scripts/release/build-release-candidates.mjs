@@ -14,6 +14,7 @@ import { resolveExperienceEnginePaths } from "../../dist/config/path-resolver.js
 import { createOpenClawInstallTarball } from "../../dist/install/openclaw-installer.js";
 import { runNpmCli } from "../../dist/install/npm-cli.js";
 import { assertRuntimeClosureManifest } from "../../dist/runtime/package/closure-manifest.js";
+import { assertReleaseArtifactEntries } from "./release-candidate-contract.mjs";
 
 const repoRoot = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 const packageJson = JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8"));
@@ -84,6 +85,7 @@ const inspectArtifact = (channel, path) => {
   const entries = execFileSync("tar", ["-tzf", path], { encoding: "utf8" })
     .split(/\r?\n/)
     .filter(Boolean);
+  const entryContract = assertReleaseArtifactEntries(channel, entries);
   return {
     channel,
     filename: basename(path),
@@ -92,6 +94,7 @@ const inspectArtifact = (channel, path) => {
     sha256: hashFile(path, "sha256"),
     sha1: hashFile(path, "sha1"),
     integrity: `sha512-${hashFile(path, "sha512", "base64")}`,
+    ...entryContract,
     contains_bundled_sdk: entries.includes("package/node_modules/@modelcontextprotocol/sdk/package.json"),
     contains_bundled_zod: entries.includes("package/node_modules/zod/package.json")
   };

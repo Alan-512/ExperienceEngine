@@ -2,7 +2,7 @@
 
 **Created:** `2026-07-16`
 
-**Status:** D1-D3 source and clean local-pack acceptance complete. Exact published-package acceptance remains open for a future release.
+**Status:** complete. D1-D3 source, clean local-pack, and exact published npm `0.5.2` acceptance passed.
 
 **Depends on:** Phase 0.5A S1-S8 and the published `0.5.1` acceptance boundary.
 
@@ -315,7 +315,7 @@ Held closed until:
 
 - D2 archive validation proves the reviewed manifest is the only shareable payload
 
-Current implementation status, `2026-07-16`:
+Current implementation status, updated `2026-07-18`:
 
 - strict manifest, read-only collector, stable error aggregation, HMAC prefix, `ee diagnose`, and one-file review preparation are implemented
 - source and built CLI empty-home non-mutation smoke passed
@@ -364,7 +364,7 @@ Current implementation status, `2026-07-16`:
 - source and clean local-pack operator flows passed
 - full repository, strict OpenSpec, runtime closure, OpenClaw binding, and reduced-package identity gates passed
 - no automatic upload/submission exists
-- exact published-package acceptance is intentionally pending a future release; do not claim published support for diagnostics yet
+- exact published npm `0.5.2` acceptance passed through the installed package CLI; the later public ClawHub `0.5.2` artifact is incomplete and is not validated or implied by this result
 
 ## 9. Validation Strategy
 
@@ -396,3 +396,20 @@ Phase 0.5B is complete only when:
 - `support_claim_allowed=false` and `production_learning_ready=false` remain unchanged unless a later independently approved phase changes them
 
 Phase 0.6 does not begin automatically after this phase. It still requires a reproducible evidence-backed quality bottleneck and a separately approved optimization plan.
+
+## 11. Exact Published-Package Closeout — 2026-07-18
+
+- Independently downloaded npm `@alan512/experienceengine@0.5.2` bytes matched size `1245199`, SHA-256 `6fe2cc3e69adda56186bafb0b0bd6565cb3b605f89334597d5402dbef745e9b1`, and the accepted npm integrity value.
+- The exact archive was installed into an isolated dependency tree with scripts and global dependency leakage disabled.
+- The installed CLI's plain diagnosis remained read-only against an uninitialized home.
+- Review preparation created exactly one real directory containing exactly one regular `manifest.json`.
+- Independent privacy inspection rejected path/credential leakage and verified all default inclusion flags remained false.
+- Two archive executions over the same reviewed manifest produced byte-identical output containing exactly `manifest.json`; extracted bytes matched the reviewed file.
+- Existing-output overwrite and extra review-directory content were rejected without mutation or archive creation.
+- Corrected-v2 deterministic archive SHA-256 is `65f616b7986e87a46cbf1b443619ec935470d64ccf82632f2b0d9c109e8f4d74`; acceptance validation digest is `7fb2a7937e82796d243aaaf0f2e43fb44b2ce463454a9072f627cecc5267c0b9`.
+- The first run is superseded after submission review corrected a negative-command fail-closed defect; only the v2 evidence is accepted.
+- All temporary install, home, review, extraction, and archive state was cleaned. No upload or issue submission occurred.
+- Durable evidence: `docs/published-diagnostics-v0.5.2.md`.
+- Final focused gate passed `4` files / `18` tests; the combined repository gate passed `244` files / `1517` tests, TypeScript, production build, D1-D3 strict OpenSpec, runtime closure, OpenClaw production binding, and diff checks.
+- Runtime closure remained `2e91d1bf40d8d1773293a3ac81609469540239a7fdd5367e3945210628d6e54f` with build id `build_4ea8534110c00159af76428d07ba2c4e2b5c5b85599382aa50069ac263cbc2a7`.
+- Phase 0.5B is complete for exact published npm `0.5.2`; `support_claim_allowed=false` and `production_learning_ready=false` remain unchanged.

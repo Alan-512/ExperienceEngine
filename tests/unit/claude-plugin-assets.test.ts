@@ -3,6 +3,11 @@ import { join, resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 
 const repoRoot = resolve(import.meta.dirname, "..", "..");
+const packageVersion = (
+  JSON.parse(readFileSync(join(repoRoot, "package.json"), "utf8")) as {
+    version: string;
+  }
+).version;
 
 describe("Claude plugin assets", () => {
   it("defines a Claude plugin manifest with distributable metadata", () => {
@@ -12,7 +17,7 @@ describe("Claude plugin assets", () => {
 
     expect(manifest.name).toBe("experienceengine");
     expect(manifest.description).toBeTypeOf("string");
-    expect(manifest.version).toBe("0.3.0");
+    expect(manifest.version).toBe(packageVersion);
   });
 
   it("defines hooks that bootstrap dependencies and route Claude hook events into EE", () => {
@@ -46,6 +51,7 @@ describe("Claude plugin assets", () => {
     expect(installScript).not.toContain("CLAUDE_PLUGIN_DATA is required");
     expect(hookScript).not.toContain("CLAUDE_PLUGIN_DATA is required");
     expect(installScript).toContain("@alan512/experienceengine@${PACKAGE_VERSION}");
+    expect(installScript).toContain(`PACKAGE_VERSION="${packageVersion}"`);
     expect(installScript).not.toContain("EXPERIENCE_ENGINE_PLUGIN_GIT_URL");
     expect(installScript).toContain('[[ -f "${PACKAGE_ENTRY}" ]]');
     expect(installScript).toContain("--ignore-scripts");

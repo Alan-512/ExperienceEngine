@@ -25,6 +25,9 @@ import {
   executeOpenClawMultiScenarioCampaign
 } from "./lib/openclaw-multi-scenario-runtime.mjs";
 import {
+  resolveOpenClawMultiScenarioInstallSource
+} from "./lib/openclaw-multi-scenario-install-source.mjs";
+import {
   digest,
   runOpenClawCommand,
   sha256File,
@@ -273,7 +276,7 @@ if (planOnly) {
   })();
   const executionContract = {
     preflight_attempt_limit: 1,
-    harness_version: "openclaw-multi-scenario-real-host-v1",
+    harness_version: "openclaw-multi-scenario-real-host-v2",
     transcript_adapter_version: "openclaw-multi-opportunity-json-v1",
     scorer_version: "matched-block-scorecard-v2",
     observer_contract_digest: digest({ observer: "external-spawn-and-filesystem-v2" }),
@@ -300,6 +303,12 @@ if (planOnly) {
   const observationsPath = join(outputDir, "observations.json");
   const evidencePath = join(outputDir, "multi-scenario-evidence.json");
   try {
+    const installSource = resolveOpenClawMultiScenarioInstallSource({
+      publishedChannel: plan.artifact.published_channel,
+      packageName: plan.artifact.package_name,
+      packageVersion: plan.artifact.package_version,
+      artifactPath
+    });
     const result = await executeOpenClawMultiScenarioCampaign({
       plan,
       planPath,
@@ -312,6 +321,7 @@ if (planOnly) {
       observationsPath,
       evidencePath,
       artifactPath,
+      installSource,
       sourceConfigPath,
       sourceAuthPath,
       openclawExecutable,

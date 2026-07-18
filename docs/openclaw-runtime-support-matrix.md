@@ -27,6 +27,9 @@ This matrix separates routine plugin interaction, package-local runtime executio
 | Published ClawHub `0.5.0` | Failed at live-host import | The independently downloaded artifact is byte-identical and its closure is valid, but the ClawHub native installer did not install declared runtime dependencies. Runtime inspection reports missing `@modelcontextprotocol/sdk` and `zod`; plugin import fails before native commands can register. |
 | Published npm `0.5.1` | Passed all eight ordered steps | The independently downloaded `1138519`-byte npm artifact passed exact registry integrity, closure, isolated install, package-local runtime smoke, native OpenClaw `2026.7.1` activation, a real model turn, protected queue semantics, restart recovery, and graceful shutdown. |
 | Published ClawHub `0.5.1` | Passed all eight ordered steps | The independently downloaded `3152331`-byte reduced ClawPack passed exact ClawHub metadata and digest checks, bundled dependency closure, ClawHub-native install, native activation, a real model turn, semantic completion, stale-authority rejection, interruption recovery, Gateway restart recovery, and two authoritative shutdowns. |
+| Published npm `0.5.2` | Passed all eight ordered steps | The independently downloaded `1245199`-byte npm artifact matched SHA-256 `6fe2cc3e69adda56186bafb0b0bd6565cb3b605f89334597d5402dbef745e9b1` and passed closure, isolated install, deterministic native activation RPC, a real model turn, protected queue semantics, recovery, restart, and graceful shutdown. |
+| Published ClawHub `0.5.2` | Failed at closure step 1; do not install | A later public upload exists, but the artifact contains only `49` files / `234543` bytes, omits `dist/` and the embedded runtime closure manifest, and fails with `EE_PUBLISHED_CLOSURE_SCHEMA_INVALID` / `read_embedded_manifest:ENOENT`. It is not the previously accepted reduced candidate and is superseded by the `0.5.3` repair. |
+| Multi-scenario published-npm v5 | Independently validated; directional only | Nine completed arms across inject, correct-skip, and harm-recovery proved correct skip, zero false-positive delivery, deterministic harmful exposure, production feedback/quarantine, and fresh-session recovery. The one-repetition campaign is correctly `not_publishable`. |
 | Native Windows live host | Passed for local-pack preflight | OpenClaw `2026.4.1`, Node `v24.3.0`, validated `.cmd` entrypoint resolution, authenticated direct Gateway RPC, real activation commands and agent turn, fenced queue semantics, restart recovery, and OpenClaw-owned graceful Gateway shutdown through the Windows stdin-to-`SIGINT` lifecycle bridge. This is not published-artifact evidence. |
 
 ## Support conclusions
@@ -38,8 +41,10 @@ Current conclusion:
 ```text
 local_pack_live_host_preflight = passed
 published_npm_artifact_runtime_validated = true
-published_clawhub_artifact_runtime_validated = true
+published_clawhub_0_5_1_artifact_runtime_validated = true
+published_clawhub_0_5_2_available = true
+published_clawhub_0_5_2_artifact_runtime_validated = false
 support_claim_allowed = false
 ```
 
-The package-local production runtime and exact npm/ClawHub `0.5.1` channels are runtime-validated. This closes the published artifact gate but not the separate quality/benchmark publication gate, so `production_learning_ready=false` and `support_claim_allowed=false` remain required.
+The package-local production runtime and exact npm `0.5.2` channel are runtime-validated. Published ClawHub `0.5.1` remains the latest validated ClawHub marketplace version; the public `0.5.2` artifact is invalid and must not be installed. The `0.5.3` repair must pass independent public download, closure, installed-runtime, and live-host validation before replacing that boundary. The v5 multi-scenario campaign closes Phase 0.5C directional evidence, but it does not pass the separate general quality/publication gate, so `production_learning_ready=false` and `support_claim_allowed=false` remain required.
