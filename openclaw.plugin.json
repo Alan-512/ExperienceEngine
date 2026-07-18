@@ -3,6 +3,7 @@
   "name": "ExperienceEngine",
   "version": "0.5.2",
   "description": "Helps coding agents avoid repeating failed execution paths by learning from real task outcomes and governing when prior guidance should be reused.",
+  "icon": "https://raw.githubusercontent.com/Alan-512/ExperienceEngine/main/docs/assets/readme/experienceengine-icon.png",
   "activation": {
     "onStartup": true
   },
