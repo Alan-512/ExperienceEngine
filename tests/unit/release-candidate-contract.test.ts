@@ -36,4 +36,13 @@ describe("release candidate artifact contract", () => {
       assertReleaseArtifactEntries("unknown" as "npm", [])
     ).toThrow("EE_RELEASE_CHANNEL_INVALID");
   });
+
+  it("requires the CLI only in the npm distribution surface", () => {
+    expect(RELEASE_CANDIDATE_REQUIRED_ENTRIES.npm).toContain(
+      "package/dist/cli/index.js"
+    );
+    expect(RELEASE_CANDIDATE_REQUIRED_ENTRIES.clawhub).not.toContain(
+      "package/dist/cli/index.js"
+    );
+  });
 });
