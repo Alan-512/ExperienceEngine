@@ -11,6 +11,8 @@ ExperienceEngine 通过将先前的任务结果转化为简短且受治理的提
 
 当前支持的宿主：**Codex**、**Claude Code**、**OpenClaw** 和 **Google Antigravity**（通过不同的 hook / MCP / 插件路径）。
 
+> **ClawHub 临时安全公告（2026-07-19）：**请显式安装 `@alan512/experienceengine@0.5.1`。公开的 ClawHub `0.5.2` 制品不完整，禁止安装；ClawHub `0.5.3` 正等待 registry 侧恢复。等 `0.5.3` 正式公开并通过反向下载验证后，安装说明会恢复为不带版本号的 `latest` 命令。
+
 ---
 
 ## 10 秒理解
@@ -330,7 +332,7 @@ ee init
 #### OpenClaw
 
 ```bash
-openclaw plugins install @alan512/experienceengine
+openclaw plugins install @alan512/experienceengine@0.5.1
 openclaw gateway restart
 ee init
 ```
@@ -356,7 +358,7 @@ prepare 命令是只读的。将其 `result` 字段返回的精确 JSON 对象�
 ee verify openclaw-production
 ```
 
-当前实现已在 WSL/Linux 和原生 Windows 通过 local-pack 真实宿主 preflight；精确发布的 npm `v0.5.2` 也在 WSL 的 OpenClaw `2026.7.1` 独立通过完整真实宿主序列。之后虽然出现了公开 ClawHub `v0.5.2` 条目，但其上传 archive 不完整、缺少已构建运行时，并且无法通过精确 closure 验证；不要安装该渠道版本。`v0.5.3` 是对应的不可变修复版本。此前的单场景重复 campaign 通过自身封存门槛；新的 published-npm v5 campaign 又在 inject、correct-skip、harm-recovery 三类场景中完成全部 9 个 treatment/forced-holdout/no-EE arm。独立验证证明了正确 skip、零误投递、确定性有害暴露、生产反馈与 quarantine，以及新 session recovery。v5 每个场景只有一次重复，并且刻意包含有害暴露，因此结论仍是方向性的 `not_publishable`，不能视为通用效果或完整支持声明；`support_claim_allowed` 与 `production_learning_ready` 仍为 false。
+当前实现已在 WSL/Linux 和原生 Windows 通过 local-pack 真实宿主 preflight；精确发布的 npm `v0.5.2` 也在 WSL 的 OpenClaw `2026.7.1` 独立通过完整真实宿主序列。之后虽然出现了公开 ClawHub `v0.5.2` 条目，但其上传 archive 不完整、缺少已构建运行时，并且无法通过精确 closure 验证；这是已知故障渠道版本，禁止安装。在 ClawHub registry 恢复并公开 `v0.5.3` 之前，请显式安装已经独立验证的 ClawHub `v0.5.1`。此前的单场景重复 campaign 通过自身封存门槛；新的 published-npm v5 campaign 又在 inject、correct-skip、harm-recovery 三类场景中完成全部 9 个 treatment/forced-holdout/no-EE arm。独立验证证明了正确 skip、零误投递、确定性有害暴露、生产反馈与 quarantine，以及新 session recovery。v5 每个场景只有一次重复，并且刻意包含有害暴露，因此结论仍是方向性的 `not_publishable`，不能视为通用效果或完整支持声明；`support_claim_allowed` 与 `production_learning_ready` 仍为 false。
 
 operator 回退路径为：
 
@@ -724,7 +726,7 @@ ee repair antigravity
 OpenClaw 的宿主原生日常交互安装方式：
 
 ```bash
-openclaw plugins install @alan512/experienceengine
+openclaw plugins install @alan512/experienceengine@0.5.1
 openclaw gateway restart
 ```
 
@@ -807,7 +809,7 @@ ee install claude-code
 OpenClaw 提供宿主原生插件交互和 package-local supervisor/worker 运行时。该运行时已经通过 local-pack 真实宿主 preflight，以及精确 npm 与 ClawHub `0.5.1` 发布物验证，包括 Gateway 重启、fenced queue 完成、旧 authority 输出拒绝和优雅停机。公开披露的重复 matched-block campaign 已通过单场景封存门槛，但由于只有一个 scenario cluster，通用完整支持声明仍保持关闭，`production_learning_ready=false` 仍是权威状态。
 
 ```bash
-openclaw plugins install @alan512/experienceengine
+openclaw plugins install @alan512/experienceengine@0.5.1
 openclaw gateway restart
 ```
 

@@ -21,7 +21,7 @@ describe("public install guidance", () => {
     expect(buildHostInstallGuidance()).toEqual({
       openclaw: {
         ready: true,
-        command: "openclaw plugins install @alan512/experienceengine"
+        command: "openclaw plugins install @alan512/experienceengine@0.5.1"
       },
       codex: {
         ready: true,
@@ -45,6 +45,18 @@ describe("public install guidance", () => {
         ]
       }
     });
+  });
+
+  it("pins the unversioned ClawHub install to the last validated release", () => {
+    expect(buildOpenClawPublicInstallCommand()).toBe(
+      "openclaw plugins install @alan512/experienceengine@0.5.1"
+    );
+    expect(buildOpenClawPublicInstallCommand("@alan512/experienceengine")).toBe(
+      "openclaw plugins install @alan512/experienceengine@0.5.1"
+    );
+    expect(buildOpenClawPublicInstallCommand("@alan512/experienceengine@0.5.3")).toBe(
+      "openclaw plugins install @alan512/experienceengine@0.5.3"
+    );
   });
 
   it("keeps the raw Codex MCP command as a manual fallback", () => {

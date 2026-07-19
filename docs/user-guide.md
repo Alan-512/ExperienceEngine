@@ -99,10 +99,11 @@ Install ExperienceEngine through the host setup flow for:
 
 - `OpenClaw`
   - host-native plugin install:
-    - `openclaw plugins install @alan512/experienceengine`
+    - `openclaw plugins install @alan512/experienceengine@0.5.1`
   - after installing, restart the gateway before the first real task:
     - `openclaw gateway restart`
-  - the `v0.5.x` line contains the package-local supervisor/worker runtime; exact published npm `v0.5.2` passed native-channel and real-host validation, while the public ClawHub `v0.5.2` artifact is incomplete and must not be installed
+  - temporary ClawHub boundary: public `v0.5.2` is a known broken artifact and must not be installed; pin `v0.5.1` until registry-side recovery makes `v0.5.3` public and independent reverse-download validation passes
+  - the `v0.5.x` line contains the package-local supervisor/worker runtime; exact published npm `v0.5.2` passed native-channel and real-host validation, while published ClawHub `v0.5.1` remains the latest independently validated marketplace artifact
   - use the authenticated package activation flow below when `learning_runtime_active` is not yet true
   - operator-managed fallback:
     - `ee install openclaw`

@@ -11,6 +11,8 @@ ExperienceEngine helps coding agents avoid repeating the same failed execution p
 
 Supported hosts today: **Codex**, **Claude Code**, **OpenClaw**, and **Google Antigravity** through different hook / MCP / plugin paths.
 
+> **Temporary ClawHub safety notice (2026-07-19):** install `@alan512/experienceengine@0.5.1` explicitly. The public ClawHub `0.5.2` artifact is incomplete and must not be installed. ClawHub `0.5.3` is awaiting registry-side recovery. After `0.5.3` becomes public and passes reverse-download validation, these instructions will return to the unversioned `latest` install command.
+
 ---
 
 ## 10-Second Example
@@ -330,7 +332,7 @@ Start a fresh Claude Code session so plugin hooks and MCP config are loaded.
 #### OpenClaw
 
 ```bash
-openclaw plugins install @alan512/experienceengine
+openclaw plugins install @alan512/experienceengine@0.5.1
 openclaw gateway restart
 ee init
 ```
@@ -356,7 +358,7 @@ Then verify current authority from the operator CLI:
 ee verify openclaw-production
 ```
 
-The implementation has passed local-pack real-host preflight on WSL/Linux and native Windows. Exact published npm `v0.5.2` independently passed the full OpenClaw `2026.7.1` WSL live-host sequence. A later public ClawHub `v0.5.2` entry exists, but its uploaded archive is incomplete, omits the built runtime, and fails exact closure validation; do not install that channel version. `v0.5.3` is the immutable repair release. The earlier repeated single-scenario campaign passed its sealed thresholds, and the fresh published-npm v5 campaign completed all nine treatment/forced-holdout/no-EE arms across inject, correct-skip, and harm-recovery scenarios. Independent validation proved correct skip with zero false-positive delivery plus deterministic harmful exposure, production feedback/quarantine, and fresh-session recovery. V5 remains directional and `not_publishable` because it has one repetition per scenario and intentionally includes harmful exposure; it is not a general efficacy or full-support claim. `support_claim_allowed` and `production_learning_ready` remain false.
+The implementation has passed local-pack real-host preflight on WSL/Linux and native Windows. Exact published npm `v0.5.2` independently passed the full OpenClaw `2026.7.1` WSL live-host sequence. A later public ClawHub `v0.5.2` entry exists, but its uploaded archive is incomplete, omits the built runtime, and fails exact closure validation; it is a known broken channel release and must not be installed. Until the ClawHub registry restores and publishes `v0.5.3`, install the independently validated ClawHub `v0.5.1` explicitly. The earlier repeated single-scenario campaign passed its sealed thresholds, and the fresh published-npm v5 campaign completed all nine treatment/forced-holdout/no-EE arms across inject, correct-skip, and harm-recovery scenarios. Independent validation proved correct skip with zero false-positive delivery plus deterministic harmful exposure, production feedback/quarantine, and fresh-session recovery. V5 remains directional and `not_publishable` because it has one repetition per scenario and intentionally includes harmful exposure; it is not a general efficacy or full-support claim. `support_claim_allowed` and `production_learning_ready` remain false.
 
 The operator fallback is:
 
@@ -734,7 +736,7 @@ ee repair antigravity
 OpenClaw host-native routine interaction uses:
 
 ```bash
-openclaw plugins install @alan512/experienceengine
+openclaw plugins install @alan512/experienceengine@0.5.1
 openclaw gateway restart
 ```
 
@@ -817,7 +819,7 @@ Start a fresh Claude Code session after installation.
 OpenClaw exposes host-native plugin interaction and a package-local supervisor/worker runtime. The runtime has passed local-pack real-host preflight and exact published npm and ClawHub `0.5.1` validation, including Gateway restart, fenced queue completion, stale-output rejection, and graceful shutdown. The disclosed repeated matched-block campaign passed its sealed single-scenario thresholds, but the general full-support claim remains disabled because the evidence contains one scenario cluster and `production_learning_ready=false` remains authoritative.
 
 ```bash
-openclaw plugins install @alan512/experienceengine
+openclaw plugins install @alan512/experienceengine@0.5.1
 openclaw gateway restart
 ```
 
