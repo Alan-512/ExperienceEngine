@@ -21,7 +21,7 @@ describe("public install guidance", () => {
     expect(buildHostInstallGuidance()).toEqual({
       openclaw: {
         ready: true,
-        command: "openclaw plugins install @alan512/experienceengine@0.5.1"
+        command: "openclaw plugins install @alan512/experienceengine"
       },
       codex: {
         ready: true,
@@ -47,12 +47,12 @@ describe("public install guidance", () => {
     });
   });
 
-  it("pins the unversioned ClawHub install to the last validated release", () => {
+  it("uses the current ClawHub latest release while preserving explicit specs", () => {
     expect(buildOpenClawPublicInstallCommand()).toBe(
-      "openclaw plugins install @alan512/experienceengine@0.5.1"
+      "openclaw plugins install @alan512/experienceengine"
     );
     expect(buildOpenClawPublicInstallCommand("@alan512/experienceengine")).toBe(
-      "openclaw plugins install @alan512/experienceengine@0.5.1"
+      "openclaw plugins install @alan512/experienceengine"
     );
     expect(buildOpenClawPublicInstallCommand("@alan512/experienceengine@0.5.3")).toBe(
       "openclaw plugins install @alan512/experienceengine@0.5.3"

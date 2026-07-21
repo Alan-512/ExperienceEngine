@@ -18,16 +18,9 @@ type PostInstallOrientation = {
 
 const EXPERIENCEENGINE_PACKAGE_SPEC = "@alan512/experienceengine";
 
-// Temporary registry safety pin. Restore the unversioned spec only after public
-// ClawHub 0.5.3 is independently downloaded and runtime-validated.
-export const OPENCLAW_CLAWHUB_SAFE_PACKAGE_SPEC = "@alan512/experienceengine@0.5.1";
-
-const resolveOpenClawPublicPackageSpec = (packageSpec: string): string =>
-  packageSpec === EXPERIENCEENGINE_PACKAGE_SPEC ? OPENCLAW_CLAWHUB_SAFE_PACKAGE_SPEC : packageSpec;
-
 export const buildOpenClawPublicInstallCommand = (
   packageSpec = EXPERIENCEENGINE_PACKAGE_SPEC
-): string => `openclaw plugins install ${resolveOpenClawPublicPackageSpec(packageSpec)}`;
+): string => `openclaw plugins install ${packageSpec}`;
 
 export const buildCodexPublicInstallCommand = (
   _packageSpec = "@alan512/experienceengine",

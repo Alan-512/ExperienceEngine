@@ -176,7 +176,7 @@ describe("doctor command", () => {
         ["CLI summary:"],
         ["- Install entrypoint: use the host setup path that matches each host."],
         ["- OpenClaw install (host-native plugin): ready"],
-        ["  1. openclaw plugins install @alan512/experienceengine@0.5.1"],
+        ["  1. openclaw plugins install @alan512/experienceengine"],
         ["- Codex install (EE-managed setup): ready"],
         ["  1. ee install codex"],
         [

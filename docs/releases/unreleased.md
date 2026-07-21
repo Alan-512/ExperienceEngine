@@ -1,6 +1,6 @@
 # ExperienceEngine — Unreleased
 
-`v0.5.2` is published and immutable on npm and GitHub Releases. Its exact npm artifact passed the complete OpenClaw `2026.7.1` live-host sequence and a fresh three-scenario C3 campaign. A later public ClawHub `0.5.2` upload is invalid because it contains an incomplete source-only artifact without the built runtime. `v0.5.3` repairs that channel boundary, aligns the Claude marketplace installer with the package version, and strengthens install/privacy disclosures plus candidate completeness checks.
+`v0.5.2` is published and immutable on npm and GitHub Releases. Its exact npm artifact passed the complete OpenClaw `2026.7.1` live-host sequence and a fresh three-scenario C3 campaign. A later public ClawHub `0.5.2` upload is invalid because it contains an incomplete source-only artifact without the built runtime. `v0.5.3` is now published to npm, GitHub Releases, and ClawHub; its exact public ClawHub artifact passed independent reverse-download, closure, installed-runtime, and full OpenClaw `2026.7.1` WSL/Linux live-host validation.
 
 ## v0.5.3 three-channel repair
 
@@ -58,6 +58,7 @@
 - Published npm `0.5.0`: exact registry bytes, installed closure binding, and the complete OpenClaw `2026.7.1` live-host gate passed.
 - Published ClawHub `0.5.0`: exact clean artifact bytes and closure passed; native install failed because OpenClaw installed the package without its declared runtime dependencies.
 - Published npm and ClawHub `0.5.1`: exact artifact validation passed.
+- Published ClawHub `0.5.3`: exact `3156136`-byte public artifact matched SHA-256 `6cb0dc84568b07bd2f5d12bd426bf96199cb5205f596fc5145ece063af2f1cba` and passed all eight ordered closure, installed-runtime, native activation, real-agent, queue/recovery, restart, and shutdown steps.
 - Repeated matched-block v4: five complete single-scenario blocks passed the sealed campaign thresholds, with one-cluster limitations disclosed; general support/readiness claims remain disabled.
 - `v0.5.2` diagnostics: source and clean local-pack functional validation passed; the exact published npm package then passed clean-home diagnose, exact review preparation, deterministic one-manifest archive, privacy, rejection, and no-upload acceptance.
 - `v0.5.2` multi-scenario evidence: the published-npm v5 campaign completed all nine arms and independently proved correct skip, zero false-positive delivery, deterministic harmful exposure, production feedback/quarantine, and fresh-session recovery. The directional campaign remains `not_publishable` and does not change support/readiness flags.

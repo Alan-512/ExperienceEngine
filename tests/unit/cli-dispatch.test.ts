@@ -83,7 +83,7 @@ describe("CLI dispatch", () => {
     const output = consoleLog.mock.calls.map((call) => String(call[0] ?? "")).join("\n");
     expect(output).not.toContain("pack <");
     expect(output).toContain("Get started:");
-    expect(output).toContain("OpenClaw (host-native plugin): openclaw plugins install @alan512/experienceengine@0.5.1");
+    expect(output).toContain("OpenClaw (host-native plugin): openclaw plugins install @alan512/experienceengine");
     expect(output).toContain("Claude Code (host-native marketplace): /plugin marketplace add https://github.com/Alan-512/ExperienceEngine.git");
     expect(output).toContain("Then install the plugin: /plugin install experienceengine@experienceengine");
     expect(output).toContain("Codex (EE-managed wiring): ee install codex");
